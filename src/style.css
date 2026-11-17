@@ -166,3 +166,8 @@ a[data-act] { cursor: pointer; color: var(--ink); text-decoration: underline dot
 .over .sub { color: var(--dim); }
 .over .chron { max-height: none; columns: 2 340px; }
 .over > button { margin: 20px 0; padding: 12px 24px; }
+
+.run { border: 1px solid var(--line); padding: 8px; margin: 10px 0; }
+.run select { width: 100%; margin: 4px 0; }
+.run button { width: 100%; }
+.run h3 { margin-top: 0; }

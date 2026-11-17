@@ -29,6 +29,7 @@ let detail: string | null = null;
 export interface DayHandlers {
   onDusk: () => void;
   onChoice: (i: number) => void;
+  onRun: (site: string) => void;
   rerender: () => void;
 }
 
@@ -143,6 +144,18 @@ function detailHtml(s: Survivor) {
   </div>`;
 }
 
+function runHtml() {
+  const l = living().find((s) => s.isLeader);
+  if (!l) return '';
+  if (G.flags.ranToday === G.day) return '<div class="run dim">You have already been out today.</div>';
+  if (!canWork(l)) return `<div class="run dim">${esc(first(l))} is in no shape to go out.</div>`;
+  const sites = SITES.filter((x) => x.minDay <= G.day);
+  return `<div class="run"><h3>Lead a run yourself</h3>
+    <p class="dim">${esc(first(l))} goes alone, on foot, in daylight. More loot than a scavenging job, and you choose the risks. ${esc(first(l))} will do no other work today.</p>
+    <select data-act="runsite">${sites.map((x) => `<option value="${x.id}">${x.name} — ${x.risk < 0.2 ? 'low' : x.risk < 0.4 ? 'some' : x.risk < 0.6 ? 'high' : 'grave'} risk</option>`).join('')}</select>
+    <button data-act="run">Go ›</button></div>`;
+}
+
 function workshopHtml() {
   const builds = Object.values(BUILDINGS).map((b) => {
     const lvl = buildingLevel(b.id);
@@ -243,6 +256,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
         <div class="lines">${report.length ? report.map((l) => `<p>${esc(l)}</p>`).join('') : '<p class="dim">A quiet morning.</p>'}</div>
         ${fc ? `<p class="forecast">${esc(fc)}</p>` : ''}
         <div class="weather">The Weather: <b>${persona().name}</b><br><span class="dim">Tonight feels like ${threatPoints() > 60 ? 'a long one' : threatPoints() > 30 ? 'a bad one' : 'any other night'}.</span></div>
+        ${runHtml()}
         <button class="dusk" data-act="dusk">Go to the wall at dusk ›</button>
       </section>
     </main>
@@ -256,6 +270,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
 
   root.onchange = (e) => {
     const t = e.target as HTMLSelectElement;
+    if (t.dataset.act === 'runsite') return;
     const s = byId(t.dataset.id ?? '');
     if (!s) return;
     if (t.dataset.act === 'job') s.job = t.value as JobId;
@@ -299,6 +314,10 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
       }
     } else if (act === 'choice') {
       h.onChoice(+el.dataset.i!);
+      return;
+    } else if (act === 'run') {
+      const sel = root.querySelector('select[data-act=runsite]') as HTMLSelectElement;
+      h.onRun(sel.value);
       return;
     } else if (act === 'dusk') {
       h.onDusk();

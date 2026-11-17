@@ -7,6 +7,7 @@ import { resolveDayWork, dawnTick, nextWeather } from './sim/day';
 import { planNight, afterNight, PERSONAS } from './sim/director';
 import { rollIncident, resolveEvent, returnsTick } from './sim/events';
 import { Battle, W, H, type NightResult } from './night/battle';
+import { Expedition, type ExpeditionResult } from './night/expedition';
 import { living, displayName, first } from './sim/survivors';
 import { setMuted, muted, sfx } from './audio';
 
@@ -73,7 +74,39 @@ function day() {
       day();
     },
     onDusk: () => dusk(),
+    onRun: (site) => run(site),
   }, report);
+}
+
+function run(site: string) {
+  const l = living().find((s) => s.isLeader);
+  if (!l) return;
+  G.flags.ranToday = G.day;
+  l.job = 'rest';
+  save();
+  app.onclick = null;
+  app.onchange = null;
+  app.innerHTML = `<div class="stage"><canvas width="${W}" height="${H}"></canvas></div>`;
+  const ex = new Expedition(app.querySelector('canvas')!, l, site, (r) => afterRun(r));
+  ex.start();
+}
+
+function afterRun(r: ExpeditionResult) {
+  const lines: string[] = [];
+  const loot = Object.entries(r.loot).filter(([, v]) => v).map(([k, v]) => `${v} ${k}`).join(', ');
+  if (r.died) lines.push('They did not come back. Whatever they carried is out there in the road.');
+  else lines.push(loot ? `Brought home: ${loot}.` : 'Came home empty-handed.');
+  if (r.found) {
+    G.survivors.push(r.found);
+    log('arrival', `${displayName(r.found)} came home with the run. ${r.found.before}`);
+    lines.push(`${displayName(r.found)} came back too. ${r.found.before}`);
+  }
+  lines.push(...r.lines);
+  report.push(...lines);
+  save();
+  if (!living().length) return gameOver();
+  day();
+  overlay(`<h2>${r.died ? 'Lost' : 'Back before dark'}</h2>${lines.map((x) => `<p>${esc(x)}</p>`).join('')}`, () => day());
 }
 
 function overlay(html: string, onClose: () => void) {
