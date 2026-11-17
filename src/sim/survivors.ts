@@ -191,7 +191,7 @@ export function aimFactor(s: Survivor) {
 }
 
 export function canFight(s: Survivor) {
-  if (s.dead) return false;
+  if (s.dead || s.child) return false;
   if (s.breakState && ['catatonic', 'wander', 'sulk', 'away'].includes(s.breakState.kind)) return false;
   return pain(s) < 1.25;
 }

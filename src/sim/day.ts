@@ -6,6 +6,7 @@ import {
   living, first, displayName, workMult, skillOf, addThought, wound, canWork, rel, changeOpinion, setBond, hasTrait,
   computeMood, breakThresholds, killSurvivor, pain, they, their, tale, isBitten, PART_NAMES, closeTo, them, checkTitles,
 } from './survivors';
+import { bondLine, breakLine } from './chronicle';
 
 export interface DayReport { lines: string[] }
 
@@ -378,16 +379,17 @@ function socialTick(): string[] {
       const ab = rel(a, b), ba = rel(b, a);
       if (!ab.bond && ab.opinion > 55 && ba.opinion > 55 && a.sex !== b.sex && Math.abs(a.age - b.age) < 15 && R.chance(0.12)) {
         setBond(a, b, 'lover');
-        log('social', `${displayName(a)} and ${displayName(b)} have been sharing a cot by the stove. Nobody says anything about it.`);
+        log('social', bondLine(a, b, 'lover'));
         out.push(`${first(a)} and ${first(b)} are together now.`);
         tale(a, `Fell for ${first(b)} in the ${G.day < 15 ? 'last warm days' : 'cold'} of the Turn.`);
         tale(b, `Fell for ${first(a)} when the world was ending.`);
       } else if (!ab.bond && ab.opinion > 45 && ba.opinion > 45 && R.chance(0.1)) {
         setBond(a, b, 'friend');
+        log('social', bondLine(a, b, 'friend'));
         out.push(`${first(a)} and ${first(b)} have become friends.`);
       } else if ((!ab.bond || ab.bond === 'friend') && ab.opinion < -40 && ba.opinion < -30 && R.chance(0.15)) {
         setBond(a, b, 'rival');
-        log('social', `${displayName(a)} and ${displayName(b)} can no longer stand to be in the same room.`);
+        log('social', bondLine(a, b, 'rival'));
         out.push(`${first(a)} and ${first(b)} are at each other's throats.`);
       } else if (ab.bond === 'rival' && R.chance(0.12)) {
         const loser = R.chance(0.5) ? a : b;
@@ -427,7 +429,7 @@ function breaksTick(): string[] {
     if (R.chance(0.12 + (hasTrait(s, 'ironwill') ? 0.1 : 0) + (partner ? 0.06 : 0))) {
       addThought(s, { id: 'resolve', label: 'Found something to stand on', mood: 25, days: 4 }, 1);
       out.push(`${first(s)} was coming apart, and then wasn't. Said "${R.pick(['Not today.', 'Somebody has to.', 'I promised her.', 'Shift\'s not over.', 'Not like this.'])}" and went to work.`);
-      log('tale', `${displayName(s)} pulled ${them(s)}self back from the edge.`);
+      log('tale', breakLine(s, 'resolve'));
       tale(s, `Pulled back from the edge on day ${G.day}.`);
       continue;
     }
@@ -436,6 +438,7 @@ function breaksTick(): string[] {
       : tier === 2
         ? [{ k: 'catatonic', w: 2 }, { k: 'wander', w: 2 }, { k: 'smash', w: 1.2 }, { k: 'hidebite', w: isBitten(s) ? 5 : 0 }]
         : [{ k: 'wander', w: 2 }, { k: 'desert', w: living().length >= 3 ? 2 : 0 }, { k: 'catatonic', w: 1.5 }, { k: 'endit', w: hasTrait(s, 'fragile') || hasTrait(s, 'grim') ? 1 : 0.3 }];
+    if (s.child) { if (tier >= 2) { s.breakState = { kind: 'sulk', days: 1 }; out.push(`${first(s)} cried all day and would not come out from under the table.`); } continue; }
     const k = R.weighted(options, (o) => o.w)!.k;
     const name = first(s);
     switch (k) {
@@ -451,14 +454,14 @@ function breaksTick(): string[] {
         }
         break;
       }
-      case 'catatonic': s.breakState = { kind: 'catatonic', days: 2 }; out.push(`${name} has stopped speaking. Will not get up.`); log('break', `${displayName(s)} went somewhere inside and did not come out for two days.`); break;
-      case 'wander': s.breakState = { kind: 'wander', days: 1 }; out.push(`${name} walked out of the gate before dawn without a word.`); log('break', `${displayName(s)} walked out past the wall, toward the river.`); break;
+      case 'catatonic': s.breakState = { kind: 'catatonic', days: 2 }; out.push(`${name} has stopped speaking. Will not get up.`); log('break', breakLine(s, 'catatonic')); break;
+      case 'wander': s.breakState = { kind: 'wander', days: 1 }; out.push(`${name} walked out of the gate before dawn without a word.`); log('break', breakLine(s, 'wander')); break;
       case 'smash': G.craftQueue = []; out.push(`${name} smashed up the workbench. The queue is lost.`); log('break', `${displayName(s)} took a hammer to the workbench.`); break;
       case 'hidebite': for (const w of s.wounds) if (w.kind === 'bite') w.hidden = true; break;
       case 'desert': {
         const took: Partial<Record<Res, number>> = { food: Math.min(G.stores.food, 6), meds: Math.min(G.stores.meds, 2), light: Math.min(G.stores.light, 20) };
         pay(took);
-        log('break', `${displayName(s)} took a pack of food and medicine and left in the night. Gone east, maybe to the ferry.`);
+        log('break', breakLine(s, 'desert'));
         out.push(`${name} deserted with supplies.`);
         s.dead = { day: G.day, cause: 'deserted', epitaph: 'Left in the night. Nobody knows.' };
         G.graves.push(s);
