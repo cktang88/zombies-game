@@ -64,17 +64,30 @@ function bakeZ(sprite: string, h: number, lane: number, variant: number, kin: bo
 
 // Searched spots: a baked darker copy drawn opaque (no translucent box, no per-frame filter).
 const spotCache = new Map<string, HTMLCanvasElement>();
-function bakeSpot(id: string, h: number, dark: boolean): HTMLCanvasElement | null {
-  const key = `${id}|${h}|${dark ? 1 : 0}`;
+// dusk: the props fall with the backdrop (a cool, dim copy crossfaded in), so they don't stay lit
+const SPOT_LOOK = ['', 'brightness(0.5) saturate(0.6)', 'brightness(0.5) saturate(0.5) sepia(0.15) hue-rotate(180deg) saturate(0.6)', 'brightness(0.3) saturate(0.4)'];
+function bakeSpot(id: string, h: number, dark: boolean | number): HTMLCanvasElement | null {
+  const mode = typeof dark === 'number' ? dark : dark ? 1 : 0;
+  const key = `${id}|${h}|${mode}`;
   const hit = spotCache.get(key);
   if (hit) return hit;
   const im = img(id);
   if (!im) return null;
   const w = (im.width / im.height) * h;
   const [cv, x] = canvas(w, h);
-  if (dark) x.filter = 'brightness(0.5) saturate(0.6)';
+  if (mode) x.filter = SPOT_LOOK[mode];
   x.drawImage(im, 0, 0, cv.width, cv.height);
   spotCache.set(key, cv);
+  return cv;
+}
+/** A prop at (x, y top-left by its centre x), day copy with the dusk copy over it. */
+function drawSpot(c: CanvasRenderingContext2D, id: string, h: number, searched: boolean, dusk: number, x: number, y: number): HTMLCanvasElement | null {
+  const cv = bakeSpot(id, h, searched);
+  if (!cv) return null;
+  const X = Math.round(x - cv.width / 2);
+  c.drawImage(cv, X, y);
+  const a = Math.min(1, dusk) * 0.85;
+  if (a > 0.02) { const dv = bakeSpot(id, h, searched ? 3 : 2); if (dv) { c.globalAlpha = a; c.drawImage(dv, X, y); c.globalAlpha = 1; } }
   return cv;
 }
 
@@ -262,7 +275,7 @@ export class Expedition {
     };
     this.zoneB = [Math.round(this.len * 0.38), Math.round(this.len * 0.7)];
     for (let x = 520; x < this.len - 200; x += R.range(300, 520)) {
-      if (Math.abs(x - this.zoneB[0]) < 90 || Math.abs(x - this.zoneB[1]) < 90 || Math.abs(x - (this.zoneB[1] + 160)) < 140) continue;
+      if (Math.abs(x - this.zoneB[0]) < 210 || Math.abs(x - this.zoneB[1]) < 210 || Math.abs(x - (this.zoneB[1] + 160)) < 140) continue;
       const kind: Spot['kind'] = R.chance(G.day > 3 ? 0.12 : 0) ? 'kin' : R.pick(kinds);
       this.spots.push({ x, searched: false, kind, label: R.pick(labels[kind]), loot: fullness * R.range(0.5, 1.3), zone: this.zoneOf(x) });
     }
@@ -1322,8 +1335,7 @@ export class Expedition {
       if (x < -250 || x > W + 250) continue;
       const [id, h] = SPR[sp.kind];
       if (sp.kind === 'drop' && img('obj_duffel')) {
-        const cv = bakeSpot('obj_duffel', h, false);
-        if (cv) c.drawImage(cv, Math.round(x - cv.width / 2), GROUND - h + 4);
+        drawSpot(c, 'obj_duffel', h, false, dusk, x, GROUND - h + 4);
         if (Math.abs(sp.x - this.px) < 60) { c.font = '13px "Special Elite", monospace'; c.fillStyle = '#efe2c2'; c.textAlign = 'center'; c.fillText(`${keyCap('run.search')} pick up: ${(sp.items ?? []).map(itemLabel).join(', ')}`, x, GROUND - 40); c.textAlign = 'left'; }
         continue;
       }
@@ -1334,8 +1346,7 @@ export class Expedition {
         if (Math.abs(sp.x - this.px) < 60) { c.font = '13px "Special Elite", monospace'; c.fillStyle = '#efe2c2'; c.textAlign = 'center'; c.fillText(`${keyCap('run.search')} pick up: ${(sp.items ?? []).map(itemLabel).join(', ')}`, x, GROUND - 40); c.textAlign = 'left'; }
         continue;
       }
-      const cv = bakeSpot(id, h, sp.searched);
-      if (cv) c.drawImage(cv, Math.round(x - cv.width / 2), GROUND - h + (sp.kind === 'body' ? 6 : 4));
+      drawSpot(c, id, h, sp.searched, dusk, x, GROUND - h + (sp.kind === 'body' ? 6 : 4));
       if (!sp.searched && Math.abs(sp.x - this.px) < 60) {
         // the prompt is drawn after the people, so nobody's head covers it
         this.prompt = { text: sp.kind === 'truck' ? `${keyCap('run.search')} hotwire the pickup and drive home (2 fuel, 1 part; loud)` : `${keyCap('run.search')} search ${sp.label}${sp.kind === 'cache' ? ' (slow, loud)' : ''}`, x, y: GROUND - h - 14 };
@@ -1350,9 +1361,8 @@ export class Expedition {
       if (x < -200 || x > W + 200) return;
       // the rail crossing's crossbuck, then the four-way stop; the zone's name on a plate above
       const sign = i === 0 ? 'obj_sign_rail' : 'obj_sign_stop';
-      const sv = bakeSpot(sign, 200, false);
+      const sv = drawSpot(c, sign, 200, false, dusk, x, GROUND - 196);
       if (sv) {
-        c.drawImage(sv, Math.round(x - sv.width / 2), GROUND - 196);
         c.fillStyle = 'rgba(14,12,10,0.78)';
         c.fillRect(x - 74, GROUND - 238, 148, 34);
       } else {
