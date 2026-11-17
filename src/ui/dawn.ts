@@ -7,7 +7,8 @@ import { G, dateLabel } from '../state';
 import { portraitImg } from './portrait';
 import { RES_LABEL } from '../data/world';
 import { ammoLabel, AMMO_TYPES } from '../data/weapons';
-import { byId, displayName } from '../sim/survivors';
+import { byId, displayName, first } from '../sim/survivors';
+import { tip, ico, chip, fold } from './kit';
 import { sfx, stinger } from '../audio';
 import { countUp } from './juice';
 
@@ -36,24 +37,29 @@ export function showDawnReport(app: HTMLElement, d: DawnData, onClose: () => voi
 
   const div = document.createElement('div');
   div.className = 'overlay dawn';
+  const headline = r.fell ? 'They came through the house.'
+    : d.dead.length ? `We buried ${d.dead.length === 1 ? esc(first(d.dead[0])) : `${d.dead.length} of us`} this morning.`
+    : !r.wallHeld ? 'They came over the wall.'
+    : lost > max * 0.4 ? 'The wall took a beating, but it held.'
+    : r.kills ? 'The wall held. Everyone is here.' : 'A quiet night. Everyone is here.';
+  const wallTip = !r.wallHeld ? 'They came over the wall.' : lost > max * 0.4 ? 'The wall took a beating.' : lost ? 'The wall held.' : 'Not a board out of place.';
+
   div.innerHTML = `<div class="modal ledger dawnrep" role="dialog" aria-label="Dawn report">
     <h2>Dawn, ${dateLabel()} <small>the ${esc(dateLabel(d.night))} night</small></h2>
-    ${d.dead.map((s) => `<div class="st deathcard" data-pause="1300" data-bell="1">${portraitImg(s.sprite, 'portrait dead')}<div>
-      <div class="dn">${esc(displayName(s))}</div>
-      <div class="dc">${esc(s.dead?.cause ?? 'died in the night')}</div>
-      <div class="de">${esc(s.dead?.epitaph ?? '')}</div></div></div>`).join('')}
+    <p class="headline t-l">${headline}</p>
+    ${d.dead.length ? `<div class="st fallen" data-pause="1300" data-bell="1">${d.dead.map((s) => `<div class="deathcard"${tip(`<b>${esc(displayName(s))}</b><br>${esc(s.dead?.cause ?? 'died in the night')}${s.dead?.epitaph ? `<br><i>${esc(s.dead.epitaph)}</i>` : ''}`)}>${portraitImg(s.sprite, 'portrait dead')}<div class="dn">${esc(first(s))}</div><div class="dc">${esc(s.dead?.cause ?? 'died in the night')}</div></div>`).join('')}</div>` : ''}
     <div class="st tally" data-pause="900">
-      <div><b data-count="${r.kills}">0</b><span>put down</span></div>
-      <div><b data-count="${r.headshots}">0</b><span>through the head${r.headshots >= 5 ? '<i class="hsstamp">clean</i>' : ''}</span></div>
-      <div><b data-count="${totalSpent}">0</b><span>rounds spent</span></div>
+      <div${tip('Turned put down at the wall tonight.')}>${ico('st_dead')}<b data-count="${r.kills}">0</b><span>put down</span></div>
+      <div${tip('Clean kills through the head. Five or more earns the stamp.')}>${ico('st_perk')}<b data-count="${r.headshots}">0</b><span>headshots${r.headshots >= 5 ? '<i class="hsstamp">clean</i>' : ''}</span></div>
+      <div${tip(spent.length ? `Spent: ${spent.map(([k, v]) => `${v} ${esc(ammoName(k))}`).join(', ')}.` : 'Not a round fired.')}>${ico('ammo')}<b data-count="${totalSpent}">0</b><span>rounds</span></div>
+      <div${tip(`${wallTip} The wall stands at ${Math.ceil(hpNow)} of ${max}.`)}>${ico('st_wall')}<b data-count="${lost}">0</b><span>wall lost</span></div>
     </div>
     <div class="st wallrow" data-pause="1100" data-wall="1">
-      <div class="wallbar"><div style="width:${(before / max) * 100}%"></div><span>${Math.ceil(hpNow)} / ${max}${lost ? ` · −${lost}` : ''}</span></div>
-      <div class="dim small">${!r.wallHeld ? 'They came over the wall.' : lost > max * 0.4 ? 'The wall took a beating.' : lost ? 'The wall held.' : 'Not a board out of place.'}</div>
+      <div class="wallbar"${tip(wallTip)}><div style="width:${(before / max) * 100}%"></div><span>${Math.ceil(hpNow)} / ${max}${lost ? ` · −${lost}` : ''}</span></div>
     </div>
-    ${spent.length ? `<div class="st spent" data-pause="600">Spent: ${spent.map(([k, v]) => `${v} ${esc(ammoName(k))}`).join(', ')}.</div>` : ''}
-    ${mvp ? `<div class="st mvp" data-pause="900">${portraitImg(mvp.sprite, `portrait${mvp.dead ? ' dead' : ''}`)}<div><small>Carried the night</small><b>${esc(displayName(mvp))}</b><div class="dim">${top[1]} put down${r.kills ? `, ${Math.round((top[1] / r.kills) * 100)}% of the night` : ''}.${mvp.dead ? ' Buried this morning.' : ''}</div></div></div>` : ''}
-    <div class="st lines" data-pause="500">${d.lines.map((l) => `<p>${esc(l)}</p>`).join('')}</div>
+    ${spent.length ? `<div class="st spent" data-pause="600">${spent.map(([k, v]) => chip(AMMO_TYPES[k as Res]?.icon.replace('icon_', '') ?? 'ammo', `${v} ${esc(AMMO_TYPES[k as Res]?.short ?? ammoName(k))}`, `${v} ${esc(ammoName(k))}`)).join('')}</div>` : ''}
+    ${mvp ? `<div class="st mvp" data-pause="900"${tip(`${top[1]} put down${r.kills ? `, ${Math.round((top[1] / r.kills) * 100)}% of the night` : ''}.${mvp.dead ? ' Buried this morning.' : ''}`)}>${portraitImg(mvp.sprite, `portrait${mvp.dead ? ' dead' : ''}`)}<div><small>Carried the night</small><b>${esc(displayName(mvp))}</b> <span class="t-s">${top[1]} put down</span></div></div>` : ''}
+    ${d.lines.length ? `<div class="st lines" data-pause="500">${fold(`<span class="t-s">The night's log</span> <span class="t-xs">${d.lines.length} entries</span>`, d.lines.map((l) => `<p>${esc(l)}</p>`).join(''), { id: 'dawn-log' })}</div>` : ''}
     ${d.teaser ? `<div class="st teaser" data-pause="300"><b>This morning</b>${esc(d.teaser)}</div>` : ''}
     <div class="skiphint">click to skip</div>
     <button class="go" style="visibility:hidden">Continue ›</button>
@@ -124,6 +130,7 @@ export function showDawnReport(app: HTMLElement, d: DawnData, onClose: () => voi
   };
   window.addEventListener('keydown', onKey, true);
   div.addEventListener('click', (e) => {
+    if (done && (e.target as HTMLElement).closest('summary')) return;
     if ((e.target as HTMLElement).closest('.go')) {
       if (done) close();
       return;

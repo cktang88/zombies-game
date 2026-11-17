@@ -3,7 +3,7 @@ import { G, R, setState, save, loadSave, clearSave, log, dateLabel, ICE_DAY } fr
 import { loadAssets, spriteUrl } from './assets';
 import { newGame } from './sim/newgame';
 import { renderDay } from './ui/day';
-import { installKit } from './ui/kit';
+import { installKit, tip, ico, chip, fold } from './ui/kit';
 import { resolveDayWork, dawnTick, nextWeather, prepareRun, tomorrowTeaser, restoreRunMate } from './sim/day';
 import { dailySeed, parseSeed } from './rng';
 import { planNight, afterNight, PERSONAS, nightIntel } from './sim/director';
@@ -211,13 +211,46 @@ function dusk() {
   G.phase = 'night';
   save();
   if (big) window.setTimeout(() => stinger('dread'), 250);
-  overlay(`<h2>Dusk, ${dateLabel()}</h2>${lines.map((l) => `<p>${esc(l)}</p>`).join('')}
-    ${big ? `<p class="stamp threat">${esc(plan.special === 'crossing' ? 'The Crossing. Everything on the east bank is coming over the ice.' : plan.special === 'tide' ? 'A tide night. The whole east bank moves.' : 'A horde on the road tonight.')}</p>` : ''}
-    <p class="forecast">${esc(plan.label)}</p>
+  const threat = big ? (plan.special === 'crossing' ? 'The Crossing. Everything on the east bank is coming over the ice.' : plan.special === 'tide' ? 'A tide night. The whole east bank moves.' : 'A horde on the road tonight.') : '';
+  const gunRounds = [...rounds.values()].reduce((a, b) => a + b, 0);
+  overlay(`<div class="duskrep"><h2>Dusk, ${dateLabel()}</h2>
+    <p class="headline t-l">${esc(plan.label)}</p>
+    ${big ? `<p class="stamp threat">${esc(threat)}</p>` : ''}
+    <div class="duskchips">
+      ${chip('st_danger', esc(plan.special ?? 'the usual'), 'What the road is sending tonight.', big ? 'warn' : '')}
+      ${chip('st_wall', `${Math.ceil(G.fort.hp)}/${G.fort.maxHp}`, 'The wall at dusk.')}
+      ${chip('job_guard', wall.length, `${wall.length} at the wall tonight.`)}
+      ${chip('ammo', gunRounds, `${gunRounds} rounds for the guns we carry; ${totalRounds} in the house.`, gunRounds < wall.length * 20 ? 'warn' : '')}
+    </div>
     ${intel.length ? `<div class="intel"><b>What we know</b>${intel.map((l, i) => `<p class="${i === 0 && intel.length > 1 ? 'who' : ''}">${esc(l)}</p>`).join('')}</div>` : ''}
-    <div class="tonight">${esc(tonight)}</div>
+    ${lines.length ? `<div class="duskwork"><div class="t-xs">The day's work</div>${duskFolds(lines)}</div>` : ''}
+    <div class="tonight" hidden>${esc(tonight)}</div>
     <div class="teaser"><b>Tomorrow</b>${esc(teaser)}</div>
-    <div class="saved">Saved at dusk. Quitting now costs you the night.</div>`, () => deployStep());
+    <div class="saved"${tip('Saved at dusk. Quitting now costs you the night.')}>saved at dusk</div></div>`, () => deployStep());
+}
+
+
+/** The day's work at dusk, sorted into folds by job (a line per worker; read on demand). */
+const DUSK_CATS: [string, string, RegExp][] = [
+  ['job_repair', 'The wall', /wall|patch|barricade|board/i],
+  ['job_farm', 'Food', /food|frames|snare|kale|ate|hungry|starv|cook/i],
+  ['job_scavenge', 'Scavenging', /search|scaveng|brought in|picked clean|site|houses/i],
+  ['job_doctor', 'The wounded', /tend|wound|fever|septic|stitch|medic|bite/i],
+  ['job_craft', 'Workshop', /bench|craft|queue|built|made|workshop|finished/i],
+  ['job_radio', 'The radio', /radio|voice|signal|contact/i],
+];
+function duskFolds(lines: string[]): string {
+  const groups = new Map<string, string[]>();
+  for (const l of lines) {
+    const c = DUSK_CATS.find(([, , re]) => re.test(l));
+    const k = c ? c[0] : 'job_rest';
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k)!.push(l);
+  }
+  return [...groups].map(([k, ls]) => {
+    const name = DUSK_CATS.find((c) => c[0] === k)?.[1] ?? 'The house';
+    return fold(`${ico(k)}<span>${name}</span><span class="t-xs">${ls.length}</span><span class="t-s fold-peek">${esc(ls[0])}</span>`, ls.map((l) => `<p>${esc(l)}</p>`).join(''), { id: `dusk-${k}` });
+  }).join('');
 }
 
 // ---------- traps and gun nests, before the night (docs/research/08-traps.md §3) ----------

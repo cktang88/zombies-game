@@ -1,3 +1,4 @@
+import { eventModal } from './eventcard';
 import type { Survivor, JobId, SkillId, Res, WeaponItem, ModSlot } from '../types';
 import { G, R, dateLabel, ICE_DAY, has, pay, ordinal, docsFound, rep } from '../state';
 import { DOCS, FACTIONS } from '../data/lore';
@@ -774,11 +775,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
         <button class="dusk" data-act="dusk">${duskArmed && stale.length ? 'Yesterday\'s jobs are marked. Go anyway ›' : 'Go to the wall at dusk ›'}<small>${esc(keyLabel(keyOf('day.dusk')))}</small></button>
       </section>
     </main>
-    ${G.pendingEvent ? `<div class="overlay"><div class="modal event">
-      <h2>${esc(G.pendingEvent.title)}</h2>
-      <p>${nl(G.pendingEvent.text)}</p>
-      <div class="choices">${G.pendingEvent.choices.map((c, i) => `<button data-act="choice" data-i="${i}">${esc(c.label)}${c.hint ? `<small>${esc(c.hint)}</small>` : ''}</button>`).join('')}</div>
-    </div></div>` : ''}
+    ${G.pendingEvent ? eventModal(G.pendingEvent) : ''}
     ${sel ? `<div class="overlay" data-act="closedetail">${detailHtml(sel)}</div>` : ''}
     ${G.pendingEvent || sel ? '' : hintHtml()}
   </div>`;
