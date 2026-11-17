@@ -356,6 +356,6 @@ export function fireProfile(w: WeaponItem): FireProfile {
     jam: (d.jam ?? 0) + (cond < 0.5 ? (0.5 - cond) * 0.08 : 0),
     recoverable: a?.recoverable ?? d.recoverable ?? 0,
     limbMul: a?.limbMul ?? d.limbMul ?? (pellets > 1 ? 1.2 : 1),
-    stagger: Math.max(0, Math.min(1, a?.stagger ?? d.stagger ?? (knock * (pellets > 1 ? pellets * 0.25 : 1)) / 45)),
+    stagger: Math.max(0, Math.min(1, a?.stagger ?? d.stagger ?? (knock * (pellets > 1 ? pellets * 0.25 : 1)) / (pellets > 1 ? 90 : 45))),
   };
 }
