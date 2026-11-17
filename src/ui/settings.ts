@@ -47,13 +47,15 @@ export interface Settings {
   focusMode: 'hold' | 'toggle';
   /** The threat ribbon at the top of the night screen (what's coming, from where). */
   threatRibbon: boolean;
+  /** Keycap prompts on the night HUD (reload, swap, firebomb…). */
+  keyHints: boolean;
 }
 
 export const SETTINGS_KEY = 'vessey-settings-v1';
 const DEFAULTS: Settings = {
   master: 0.7, music: 0.55, sfx: 0.8, ambience: 0.8, muted: false,
   animation: 'rigged', reduceShake: false, reduceGore: false, flashes: true, hitMarkers: true, zoneMarkers: true, textSize: 'M', highContrast: false, showFps: false, fxQuality: 'high',
-  realism: 'standard', autoReload: true, focusMode: 'hold', threatRibbon: true,
+  realism: 'standard', autoReload: true, focusMode: 'hold', threatRibbon: true, keyHints: true,
 };
 
 let cache: Settings | null = null;
@@ -89,6 +91,7 @@ export function getSettings(): Settings {
     autoReload: bool(s.autoReload, true),
     focusMode: s.focusMode === 'toggle' ? 'toggle' : 'hold',
     threatRibbon: bool(s.threatRibbon, true),
+    keyHints: bool(s.keyHints, true),
   };
   return cache;
 }
@@ -275,6 +278,7 @@ export function openSettings(host: HTMLElement = document.body, onClose?: () => 
         ${check('autoReload', 'Reload when empty', 'The gun reloads by itself when it runs dry. Off: it clicks until you press reload.', s.autoReload)}
         ${choice('focusMode', 'Focus (right mouse)', [['hold', 'Hold'], ['toggle', 'Toggle']], s.focusMode)}
         ${check('threatRibbon', 'Threat ribbon', 'The strip at the top of the night: what is coming up the road and from which side.', s.threatRibbon)}
+        ${check('keyHints', 'Key hints at the wall', 'Small keycaps on the night screen showing which key reloads, swaps, throws.', s.keyHints)}
         <div class="set-row choice" data-tip="The notes clipped to the first day's ledger."><span>Tutorial hints<span class="qi" aria-hidden="true">i</span></span><span class="seg"><button type="button" data-act="hints">Show them again</button></span></div>`;
       case 'controls': {
         const clash = conflicts();
