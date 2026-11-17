@@ -6,6 +6,7 @@
 // Battle helpers for modules: laneY(i), LANES, wallX(), nearestLane(), damage(z, dmg, head, knock, g,
 // pellet, px, py, isPlayer, fx?, zone?, weak?), kill(), stagger(z, s), cripple(z, isPlayer), piles[lane].
 import type { Battle, NightResult } from './battle';
+import type { Hint } from './hud';
 
 export type Zed = Battle['zombies'][number];
 export type Guardian = Battle['guards'][number];
@@ -30,6 +31,8 @@ export interface BattleHook {
   onKill?(z: Zed, g: Guardian | null): void;
   /** the night is over; write into the result */
   onEnd?(r: NightResult): void;
+  /** keycap hints that matter right now ([H] nest when one is near); the HUD shows them bottom left */
+  hints?(): Hint[];
   /** true while the leader's mouse drives something else (a gun nest), so their own gun stays quiet */
   blockFire?(): boolean;
 }

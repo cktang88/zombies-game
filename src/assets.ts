@@ -1,5 +1,6 @@
 import { ARSENAL_ICONS } from './data/weapons';
 import { PROP_IDS } from './data/props';
+import { UI_ICONS } from './ui/icons';
 
 declare const __SPRITE_FILES__: string[]; // vite.config.ts: sprite ids present in public/sprites
 const SPRITE_FILES = new Set(typeof __SPRITE_FILES__ === 'undefined' ? PROP_IDS : __SPRITE_FILES__);
@@ -14,6 +15,8 @@ const IDS = [...new Set([
   'icon_pistol', 'icon_revolver', 'icon_shotgun', 'icon_rifle', 'icon_smg', 'icon_carbine', 'icon_nailgun', 'icon_molotov',
   'icon_scrap', 'icon_food', 'icon_meds', 'icon_ammo', 'icon_fuel', 'icon_wood', 'icon_parts', 'icon_cloth',
   ...ARSENAL_ICONS,
+  // status markers for the canvas HUDs (guard states, the wall, the clock, noise)
+  ...UI_ICONS.filter((id) => id.startsWith('st_')).map((id) => `icon_${id}`),
   // world props: emplacements, fortifications, trap objects, run landmarks (those generated so far)
   ...PROP_IDS.filter((id) => SPRITE_FILES.has(id)),
 ])];

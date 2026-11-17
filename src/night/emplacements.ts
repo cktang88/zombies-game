@@ -6,6 +6,7 @@
 // spray, cook the barrel and jam; trained crews fire short bursts and keep it cool. Heavy XP
 // goes to whoever worked it.
 import { is, keyCap } from '../ui/keys';
+import { caps, dot, type Hint } from './hud';
 import type { Battle } from './battle';
 import type { BattleHook, Zed, Guardian, SortedDraw } from './hook';
 import type { Traps } from './traps';
@@ -551,25 +552,40 @@ export class Emplacements implements BattleHook {
     c.font = '11px "Special Elite", monospace';
     c.textAlign = 'left';
     let y = 98; // below the nerve bar
+    // one compact row per nest: the gun in small caps, who is on it, the rounds big; full words on the forge screen
     for (const m of crewable) {
-      const who = m.crew ? (m.byPlayer ? 'you' : first(m.crew.s)) : 'unmanned';
-      const ammo = m.def.id === 'flamer' ? `fuel ${Math.floor(G.stores.fuel ?? 0)}` : `${m.mag}/${m.def.mag}${m.reload > 0 ? ' loading' : ''}`;
-      c.fillStyle = 'rgba(10,9,8,0.6)';
-      c.fillRect(20, y - 11, 300, 26);
-      c.fillStyle = m.crew ? '#d9cdb0' : '#8f846e';
-      c.fillText(`${m.def.short.toUpperCase()} · ${who}${m.crew ? ` (heavy ${level(m.crew.s, 'heavy')})` : ''} · ${ammo}${m.jam > 0 ? ' · JAMMED' : ''}`, 26, y);
+      const who = m.crew ? (m.byPlayer ? 'you' : first(m.crew.s)) : '—';
+      const ammo = m.def.id === 'flamer' ? `${Math.floor(G.stores.fuel ?? 0)}` : `${m.mag}`;
+      c.fillStyle = 'rgba(10,9,8,0.55)';
+      c.beginPath(); c.roundRect(20, y - 13, 210, 24, 3); c.fill();
+      caps(c, m.def.short, 26, y + 2, m.crew ? '#c9a95a' : '#7a6e58');
+      c.font = '11px "Special Elite", monospace';
+      c.fillStyle = m.crew ? '#d9cdb0' : '#7a6e58';
+      c.fillText(who, 62, y + 2);
+      c.textAlign = 'right';
+      c.font = '15px "Special Elite", monospace';
+      c.fillStyle = m.reload > 0 ? '#8f846e' : m.mag === 0 && m.def.id !== 'flamer' ? '#c04030' : '#efe2c2';
+      c.fillText(ammo, 222, y + 3);
+      c.textAlign = 'left';
+      if (m.jam > 0) dot(c, 160, y - 2, '#e05040', 3.5);
       if (m.def.heat) {
-        c.fillStyle = 'rgba(80,70,60,0.5)'; c.fillRect(26, y + 5, 200, 4);
+        c.fillStyle = 'rgba(80,70,60,0.5)'; c.fillRect(62, y + 6, 110, 3);
         c.fillStyle = m.swap > 0 ? '#e07040' : m.heat > 0.75 ? '#d09040' : '#8f7a55';
-        c.fillRect(26, y + 5, 200 * (m.swap > 0 ? 1 : m.heat), 4);
-        if (m.swap > 0) { c.fillStyle = '#e0a070'; c.fillText('swapping barrel', 232, y + 10); }
+        c.fillRect(62, y + 6, 110 * (m.swap > 0 ? 1 : m.heat), 3);
       }
-      y += 30;
+      y += 28;
     }
-    const pm = this.playerMount();
-    c.fillStyle = '#a89c84';
-    c.fillText(pm ? `${keyCap('night.nest')} leave the ${pm.def.short}   ${keyCap('night.reload')} ${pm.def.heat ? 'swap barrel / ' : ''}reload` : `${keyCap('night.nest')} man the nearest gun nest`, 26, y);
     c.restore();
+  }
+
+  /** [H] when a nest is within a few steps (or you are on one): leave / reload. */
+  hints(): Hint[] {
+    const b = this.b, p = b.player;
+    if (!p || b.done || b.intro > 0) return [];
+    const pm = this.playerMount();
+    if (pm) return [{ key: 'night.nest', label: 'leave' }, { key: 'night.reload', label: pm.def.heat ? 'barrel' : 'reload', hot: pm.mag === 0 || pm.heat > 0.85 }];
+    const near = this.mounts.some((m) => m.def.crew && m.item && Math.abs(m.x - p.x) < 240);
+    return near ? [{ key: 'night.nest', label: 'nest' }] : [];
   }
 
   onEnd() {

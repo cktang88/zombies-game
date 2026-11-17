@@ -10,6 +10,8 @@
 //   knock / stagger (a stagger stops it, and breaks a grab) / bleed (BLEED_TIME s) /
 //   finisher (crawlers die outright) / wear (breaks at 0) / chainsaw: fuel per swing, noise.
 import { is, keyCap } from '../ui/keys';
+import { keycap, caps, capOf } from './hud';
+import { img } from '../assets';
 import type { Battle } from './battle';
 import { LANES } from './battle';
 import type { BattleHook, Zed, Guardian, SortedDraw } from './hook';
@@ -230,7 +232,7 @@ export class Melee implements BattleHook {
       const n = this.b.guards.filter((q) => q !== g && q.homeX >= WALL_X - 90).length;
       g.homeX = WALL_X - 46 - n * 24;
       g.cd = 0.4;
-      if (!this.stepped.has(g.s.id)) { this.stepped.add(g.s.id); this.b.say(`${first(g.s)} is out of rounds and goes up to the wall with ${itemOf(g) ? `the ${MELEE[itemOf(g)!.def].name.toLowerCase()}` : 'bare hands'}.`, 3); }
+      if (!this.stepped.has(g.s.id)) { this.stepped.add(g.s.id); this.b.say(`${first(g.s)}: dry — ${itemOf(g) ? MELEE[itemOf(g)!.def].name.toLowerCase() : 'bare hands'}`, 3); }
       return;
     }
     if (!cands.length) {
@@ -278,17 +280,20 @@ export class Melee implements BattleHook {
     if (!p || this.b.intro > 0) return;
     const { prof, item } = profOf(p);
     const st = this.sta(p);
-    const x = 1280 - 330, y = 720 - 104;
+    // [V] + the tool's picture + a thin stamina line: the name only on the armory screen
+    const x = 1280 - 320, y = 720 - 100;
     c.save();
+    c.globalAlpha = st < 100 ? 1 : 0.7;
+    const kw = keycap(c, capOf('night.melee'), x, y);
+    const ic = img(item ? MELEE[item.def].icon : '');
+    let bx = x + kw + 6;
+    if (ic) { const ih = 16, iw = Math.min(40, (ic.width / ic.height) * ih); c.drawImage(ic, bx, y - 13, iw, ih); bx += iw + 6; } else bx += caps(c, 'fists', bx, y - 1) + 6;
     c.fillStyle = 'rgba(10,9,8,0.7)';
-    c.fillRect(x, y, 310, 12);
+    c.fillRect(bx, y - 7, 120, 5);
     c.fillStyle = st < prof.stamina ? '#a8322a' : '#7d8a5a';
-    c.fillRect(x + 2, y + 2, 306 * (st / 100), 8);
-    c.font = '11px "Special Elite", monospace';
-    c.textAlign = 'left';
-    c.fillStyle = '#d9cdb0';
-    const name = item ? MELEE[item.def].name.toLowerCase() : 'fists';
-    c.fillText(`${keyCap('night.melee')} ${name}${item && item.cond < 0.35 ? ' (worn)' : ''}${prof.fuel ? ` · fuel ${Math.floor(G.stores.fuel ?? 0)}` : ''}`, x, y - 4);
+    c.fillRect(bx, y - 7, 120 * (st / 100), 5);
+    if (item && item.cond < 0.35) caps(c, 'worn', bx + 126, y - 2, '#c08040');
+    if (prof.fuel) caps(c, `fuel ${Math.floor(G.stores.fuel ?? 0)}`, bx + 126, y - 2, '#c9a95a');
     c.restore();
     void depthScale;
   }

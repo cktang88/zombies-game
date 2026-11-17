@@ -12,6 +12,7 @@
 // Costs nerve; a cooldown between sorties.
 import { keyCap, keyOf, normKey } from '../ui/keys';
 import type { Battle } from './battle';
+import { hintRow, type Hint } from './hud';
 import { LANES, wallX } from './battle';
 import type { BattleHook, Zed, Guardian } from './hook';
 import type { Traps } from './traps';
@@ -273,10 +274,11 @@ export class Sally implements BattleHook {
     c.fillRect(x - 32, y, 64, 5);
     c.fillStyle = left < 2 ? '#d06040' : '#d8b860';
     c.fillRect(x - 32, y, 64 * (this.phase === 'out' ? left / SALLY.out : 0), 5);
-    c.textAlign = 'center';
-    c.font = '10px "Special Elite", monospace';
-    c.fillStyle = '#d8cdb0';
-    c.fillText(this.phase === 'out' ? `${keyCap('night.melee')} swing · ${keyCap('night.sally')} back over` : 'back to the wall', x, y - 4);
+    if (this.phase === 'out') hintRow(c, [{ key: 'night.melee', label: 'swing' }, { key: 'night.sally', label: 'back' }], x, y - 6, 'center');
     c.restore();
+  }
+  /** The bottom-left keycap: [O] sally when it is ready. */
+  hints(): Hint[] {
+    return this.ready() ? [{ key: 'night.sally', label: 'sally', hot: true }] : [];
   }
 }

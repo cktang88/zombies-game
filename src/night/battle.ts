@@ -27,7 +27,8 @@ import { depthScale, bakeSprite, bakeComposite, bakeEdge, bakeLayer, bakeGround,
 import { drawProp, drawGunBase, drawGunPart, has, propW } from './props';
 import { QuadRig } from '../anim'; // the dog's quadruped rig
 import { BattleActors } from './actors'; // rigged bodies (src/anim): drawing, deaths, corpses
-import { Sally, SALLY } from './sally'; // the sortie over the wall
+import { Sally, SALLY } from './sally';
+import { Ticker, caps, hintRow, keySheet, keyHintsOn, coarsePointer, dot, FONT, type Hint } from './hud'; // the sortie over the wall
 import { react, slideStep, classicPose, IMPACT, type Reaction } from './impact'; // flinch / stagger / stumble / knockdown
 
 export const W = 1280, H = 720;
@@ -44,13 +45,6 @@ export const LANES = [604, 628, 655, 685];
 /** Two rows of defenders behind the wall. */
 export const DEF_LANES = [662, 688];
 export const GROUND_TOP = 596, GROUND_BOT = 704;
-/** Moods said in full even when shared (battle drawGuardLabels); the rest collapse to a glyph when two or more share one. */
-const MOOD_ACUTE = new Set(['in agony']);
-const MOOD_GLYPH: Record<string, string> = {
-  starving: '∅', hungry: '°', exhausted: 'Z', tired: 'z', 'in pain': '+', feverish: '≈', 'needs a drink': '¬', freezing: '*',
-  grieving: '†', haunted: '§', shaken: '!', bitter: '#', heartsick: '♡', troubled: '?', low: '↓',
-};
-const moodGlyph = (w: string) => MOOD_GLYPH[w] ?? w[0];
 const LANE_TOL = 16; // a shot only finds bodies within this many px of its lane's feet
 const WALL_KEY = 700; // the barricade's sort key: in front of every walking lane
 /** 0 far … 1 near. */
@@ -294,7 +288,10 @@ export class Battle {
   playerMag = new Map<string, number>();
   turnAt = -1;
   cryT = 0;
-  messages: { text: string; life: number }[] = [];
+  /** The one-line news ticker at the top (night/hud.ts): queued, never stacked. */
+  messages = new Ticker();
+  /** The key sheet is up while the help key ([F1]) is held. */
+  keySheetHeld = false;
   keyHandler: (e: KeyboardEvent) => void;
   slowmo = 0;
   intro = 4;
@@ -318,6 +315,7 @@ export class Battle {
   hover?: Zombie; // the body under the crosshair
   keyUp = (e: KeyboardEvent) => {
     const k = normKey(e);
+    if (k === 'F1' || k === '?') this.keySheetHeld = false;
     if (k === keyOf('night.hurry')) this.fast = false;
     if (k === keyOf('night.reload')) {
       // a tap is the smart reload (or tap-rack); a hold already did a speed reload
@@ -578,7 +576,7 @@ export class Battle {
     window.addEventListener('keyup', this.keyUp);
     window.addEventListener('blur', this.blurHandler);
   }
-  blurHandler = () => { this.mouse.down = false; this.focusing = false; this.ducking = false; this.rDown = -1; };
+  blurHandler = () => { this.keySheetHeld = false; this.mouse.down = false; this.focusing = false; this.ducking = false; this.rDown = -1; };
 
   /** Hold RMB: Focus. Time ×0.6, spread ×0.4, kick ×0.5; drains nerve. Can't start below 10. */
   setFocus(on: boolean) {
@@ -592,6 +590,8 @@ export class Battle {
   //   [1-9]/[Tab] select guard · [Z]/[X]/[C]/[K] order (Shift = everyone; V is melee, L lures, G deadfall/pipe mine, H gun nest) · [Y] guard's post · Space hurry · [O] sally (Shift: + selected) · [P]/Esc pause
   onKey(e: KeyboardEvent) {
     const k = normKey(e);
+    // hold [F1] (or ?): every key, as a sheet of keycaps
+    if (k === 'F1' || k === '?') { e.preventDefault(); this.keySheetHeld = true; return; }
     // paused: the pause menu has the keyboard (night/pause overlay); nothing reaches the wall
     if (this.paused) return;
     if (k === 'Escape' || k === keyOf('night.pause')) { e.preventDefault(); this.pause(); return; }
@@ -676,8 +676,7 @@ export class Battle {
     if (!g) return;
     this.sel = i;
     sfx.ui();
-    const mag = g.w ? `${g.mag}/${this.prof(g.w, g.s).mag}` : '';
-    this.say(`${first(g.s)} — ${g.w ? (g.w.name ?? WEAPONS[g.w.def].name).toLowerCase() : 'no gun'} ${mag} — ${POST_NAMES[g.post].toLowerCase()}, ${ORDER_NAMES[g.order].toLowerCase()}`, 2.5);
+    // the selected guard's label opens to full words (drawGuardLabels); no banner
   }
   selected(): Guard | undefined { return this.sel >= 0 ? this.orderable()[this.sel] : undefined; }
   giveOrder(o: Order, all: boolean) {
@@ -719,8 +718,7 @@ export class Battle {
     sfx.bell();
   }
   say(text: string, life = 5) {
-    this.messages.push({ text, life });
-    if (this.messages.length > 4) this.messages.shift();
+    this.messages.push(text, life);
   }
 
   start() {
@@ -835,8 +833,7 @@ export class Battle {
     this.lights = this.lights.filter((l) => l.life > 0);
     for (const t of this.texts) { t.life -= dt; t.y -= dt * 22; }
     this.texts = this.texts.filter((t) => t.life > 0);
-    for (const m of this.messages) m.life -= dt;
-    this.messages = this.messages.filter((m) => m.life > 0);
+    this.messages.tick(dt);
     if (G.fort.hp <= 0 && this.res.wallHeld) {
       this.res.wallHeld = false;
       this.say('THE WALL IS DOWN. They are coming over.', 6);
@@ -915,7 +912,7 @@ export class Battle {
     } else if (def.ranged) {
       z.stopX = R.range(800, 1000);
       z.seen = 0;
-      if (!this.zombies.some((o) => o.def.ranged && o.state !== 'dying')) this.say('Men on the road. Living men, with rifles.', 4);
+      if (!this.zombies.some((o) => o.def.ranged && o.state !== 'dying')) this.say('Living men on the road, armed', 3);
     } else if (def.boss) {
       z.x = W + 60;
       z.lane = 2;
@@ -930,9 +927,9 @@ export class Battle {
     } else if (def.spit) {
       z.stopX = R.range(820, 1000); // out past where the guards can make it out without floodlights
       z.spitT = R.range(0.9, 1.4);
-      if (!this.hints.has('biler')) { this.hints.add('biler'); this.say(`A Biler. It spits over the wall — hold ${keyCap('night.duck')} to duck, or shoot the glob.`, 5); }
+      if (!this.hints.has('biler')) { this.hints.add('biler'); this.say(`Biler — it spits. ${keyCap('night.duck')} duck`, 4); }
     } else if (def.leap) {
-      if (!this.hints.has('buck')) { this.hints.add('buck'); this.say('A Buck. When it crouches and its eyes catch the light, it jumps. Shoot it in the crouch.', 5); }
+      if (!this.hints.has('buck')) { this.hints.add('buck'); this.say('Buck — shoot it in the crouch', 4); }
     }
     this.zombies.push(z);
     if (name) {
@@ -947,7 +944,7 @@ export class Battle {
     if (darkX) {
       // the telegraph: a chorus out in the dark, closer than it should be
       if (v && this.t - this.alertT > 0.25) { this.alertT = this.t; sfx.zombieVoice(v, 'alert', { pan: panOf(z.x), volume: 0.8 }); }
-      if (this.t - this.darkSaid > 12) { this.darkSaid = this.t; this.say('Out in the dark, close: a lot of them, all at once.', 3); }
+      if (this.t - this.darkSaid > 12) { this.darkSaid = this.t; this.say('Many, close, in the dark', 3); }
     } else if (v && (def.cost >= 3 || R.chance(0.2))) sfx.zombieVoice(v, 'alert', { far: true, pan: 0.75, volume: def.cost >= 3 ? 0.9 : 0.55 });
   }
   darkSaid = -99;
@@ -1716,7 +1713,7 @@ export class Battle {
     z.stun = Math.max(z.stun, 0.4);
     this.text(z.x, z.y - this.zh(z) * 0.5, z.def.id === 'ferryman' ? 'LIMPING' : 'LEGS', '#d0a050', 12);
     sfx.impact('bone');
-    if (isPlayer && !this.hints.has('legs')) { this.hints.add('legs'); this.say("Legs gone. It'll crawl now — slower, and lower.", 3); }
+    if (isPlayer && !this.hints.has('legs')) { this.hints.add('legs'); this.say('Legs gone — it crawls now', 3); }
     if (z.def.id !== 'ferryman' && z.state === 'wall') z.state = 'walk';
   }
 
@@ -1811,7 +1808,7 @@ export class Battle {
           this.nerveGain(6);
           if (++this.streak >= 5) {
             this.streak = 0;
-            if (this.rally < 2) { this.rally++; this.say(`Rally ready — ${keyCap('night.rally')} to call the line together.`, 3); }
+            if (this.rally < 2) { this.rally++; this.say(`Rally ready ${keyCap('night.rally')}`, 3); }
           }
         } else this.nerveGain(2);
         sfx.impact(head ? 'head' : mark === 'plate' ? 'armor' : 'flesh');
@@ -2196,7 +2193,7 @@ export class Battle {
       z.screamT -= dt;
       if (z.screamT <= 1.2 && !(z.windup && z.windup > 0) && z.screamT > 0) {
         z.windup = z.screamT;
-        if (!this.hints.has('crier')) { this.hints.add('crier'); this.say('The Crier is drawing breath — hit it now and the keen chokes off.', 3); }
+        if (!this.hints.has('crier')) { this.hints.add('crier'); this.say('Crier drawing breath — hit it now', 3); }
       }
       if (z.windup && z.windup > 0) z.windup = Math.max(0, z.screamT);
       if (z.screamT <= 0) {
@@ -2960,7 +2957,7 @@ export class Battle {
     }
     if (burning) {
       G.fort.hp = Math.max(0, G.fort.hp - 3 * dt);
-      if (!this.hints.has('pileburn')) { this.hints.add('pileburn'); this.say('The pile is burning down — and the planks with it.', 3); }
+      if (!this.hints.has('pileburn')) { this.hints.add('pileburn'); this.say('The pile burns — and the planks', 3); }
     }
     if (!this.pileWarned && this.piles.some((m) => m >= this.pileLimit() * 0.8)) {
       this.pileWarned = true;
@@ -3546,12 +3543,9 @@ export class Battle {
     const hovered = gs.find((g) => Math.abs(mx - g.x) < 22 * g.sc && my < g.y && my > g.y - SH * g.sc - 30);
     c.save();
     c.textAlign = 'center';
-    type Lab = { g: Guard; x: number; top: number; name: string; l: number; r: number; lines: { t: string; c: string; moodle?: boolean }[]; full: boolean; y0: number; y1: number; glyph?: string };
+    type Lab = { g: Guard; x: number; top: number; name: string; l: number; r: number; lines: { t: string; c: string; moodle?: boolean; info?: boolean }[]; full: boolean; y0: number; y1: number };
     const labs: Lab[] = [];
-    // a mood two or more guards share is a glyph by each bar and one legend line; a lone or acute one is said in full
-    const shared = new Map<string, number>();
-    for (const g of gs) if (g.moodle && !g.mode && !MOOD_ACUTE.has(g.moodle)) shared.set(g.moodle, (shared.get(g.moodle) ?? 0) + 1);
-    const legend: string[] = [];
+    const focus = (g: Guard) => g === hovered || g === sel;
     for (const g of gs) {
       const isP = g === this.player;
       c.font = '11px "Special Elite", monospace';
@@ -3561,19 +3555,14 @@ export class Battle {
       else if (g.mode) lines.push({ t: g.mode === 'panic' ? 'panicking' : 'enraged', c: g.mode === 'panic' ? '#d0a040' : '#e05040' });
       else if (g.reload > 0 || (isP && this.playerReload > 0)) lines.push({ t: 'reloading', c: '#d9c9a0' });
       if (isBitten(g.s) && !g.s.wounds.some((w) => w.hidden)) lines.push({ t: 'bitten', c: '#b8862f' });
-      let glyph: string | undefined;
-      if (g.moodle && !g.mode) {
-        if ((shared.get(g.moodle) ?? 0) >= 2) {
-          glyph = moodGlyph(g.moodle);
-          const key = `${glyph} ${g.moodle}`;
-          if (!legend.includes(key)) legend.push(key);
-        } else lines.push({ t: g.moodle, c: g.moodleC, moodle: true });
-      }
-      // the box: the name centred on the guard, the order glyph (and the post word) to its right
+      // the mood is a coloured dot by the bar like every other state; its word on hover / select
+      if (g.moodle && !g.mode) lines.push({ t: g.moodle, c: g.moodleC, moodle: true });
+      // the one under the mouse or selected also says its order and post in words
+      if (!isP && (g === hovered || g === sel)) lines.push({ t: `${ORDER_NAMES[g.order].toLowerCase()}${g.post !== 'step' ? ` · ${POST_NAMES[g.post].toLowerCase()}` : ''}`, c: '#a89c84', info: true });
+      // the box: the name centred on the guard, the order glyph and the state dots to its right
       const nw = c.measureText(name).width;
       let r = nw / 2 + (isP ? 3 : 14);
-      if (!isP && g.post !== 'step') { c.font = '9px "Special Elite", monospace'; r += 7 + c.measureText(g.post === 'roof' ? 'roof' : g.post === 'loop' ? 'loophole' : 'runner').width; }
-      labs.push({ g, x: g.x, top: g.y - SH * g.sc, name, l: -Math.max(22, nw / 2 + 3), r: Math.max(glyph ? 32 : 22, r), lines, full: false, y0: 0, y1: 0, glyph });
+      labs.push({ g, x: g.x, top: g.y - SH * g.sc, name, l: -Math.max(22, nw / 2 + 3), r: Math.max(22 + lines.filter((q) => !q.info).length * 8, r), lines, full: false, y0: 0, y1: 0 });
     }
     // the important ones first: they keep their place, the rest step around them
     const pri = (l: Lab) => (l.g === this.player ? 0 : l.g === hovered ? 1 : l.g === sel ? 2 : 3 + (DEF_LANES[1] - l.g.y) * 0.01);
@@ -3581,14 +3570,13 @@ export class Battle {
     const placed: Lab[] = [];
     const hit = (l: Lab, x: number, y1: number, y0: number) => placed.some((o) => x + l.l < o.x + o.r + 4 && x + l.r > o.x + o.l - 4 && y0 < o.y1 && y1 > o.y0);
     for (const l of labs) {
-      const focus = l.g === this.player || l.g === hovered || l.g === sel;
+      const focus = l.g === hovered || l.g === sel;
       // the block: name (baseline top-14) and bar (top-9..top-5); each extra line 12 px above
       let base = l.top;
       const want = (full: boolean) => 22 + (full ? l.lines.length * 12 + (l.lines.some((q) => q.moodle) ? 2 : 0) : 0);
       // a full label if it fits where it stands (or it is the one being looked at)
-      let full = focus || !hit(l, l.x, base - 4, base - 4 - want(true));
-      const urgent = l.lines.some((q) => !q.moodle && q.c !== '#d9c9a0');
-      if (!full && urgent) full = true; // panic, bitten, hauling: always said
+      // words only for the one being looked at; everyone else is a name, a bar and coloured dots
+      const full = focus && l.lines.length > 0;
       // first a small sideways step, then up
       if (hit(l, l.x, base - 4, base - 4 - want(full))) {
         const dx = [14, -14, 26, -26, 40, -40].find((d) => !hit(l, l.x + d, base - 4, base - 4 - want(full)));
@@ -3609,26 +3597,21 @@ export class Battle {
         c.strokeStyle = 'rgba(207,198,176,0.25)'; c.lineWidth = 1;
         c.beginPath(); c.moveTo(x, top - 4); c.lineTo(g.x, natural - 2); c.stroke();
       }
-      c.font = '11px "Special Elite", monospace';
+      c.font = `${focus(l.g) ? 11 : 10}px "Special Elite", monospace`;
       c.textAlign = 'center';
       c.fillStyle = 'rgba(8,8,10,0.5)';
       const nw = c.measureText(l.name).width;
       c.fillRect(x - nw / 2 - 3, top - 24, nw + 6, 13);
       c.fillStyle = isP ? '#f0d890' : '#cfc6b0';
       c.fillText(l.name, x, top - 14);
-      if (!isP) this.drawOrderGlyph(c, g, x + nw / 2 + 9, top - 18, l.full || g === sel);
+      if (!isP) this.drawOrderGlyph(c, g, x + nw / 2 + 9, top - 18, false);
       const hp = Math.max(0, 1 - pain(g.s) / DOWN_PAIN);
       c.fillStyle = 'rgba(0,0,0,0.6)';
       c.fillRect(x - 20, top - 9, 40, 4);
       c.fillStyle = hp > 0.5 ? '#9db070' : hp > 0.25 ? '#d0a040' : '#c04030';
       c.fillRect(x - 20, top - 9, 40 * hp, 4);
-      if (l.glyph) {
-        c.font = '11px "Special Elite", monospace';
-        c.textAlign = 'left';
-        c.fillStyle = g.moodleC;
-        c.fillText(l.glyph, x + 23, top - 4);
-        c.textAlign = 'center';
-      }
+      // states as dots right of the bar: hauling / panic / reloading / bitten / mood, in their colours
+      l.lines.filter((q) => !q.info).forEach((q, i) => dot(c, x + 26 + i * 8, top - 7, q.c, 2.6, q.c === '#e05040' || q.c === '#d0a040' ? 0.5 + 0.5 * Math.sin(this.t * 8) : 0));
       if (!l.full) continue;
       let line = top - 26;
       for (const q of l.lines) {
@@ -3638,20 +3621,11 @@ export class Battle {
           c.fillStyle = 'rgba(8,8,10,0.55)';
           c.fillRect(x - tw / 2 - 4, line - 10, tw + 8, 13);
         } else c.font = '11px "Special Elite", monospace';
+        if (!q.info && !q.moodle) dot(c, x - c.measureText(q.t).width / 2 - 7, line - 4, q.c, 2.6);
         c.fillStyle = q.c;
         c.fillText(q.t, x, line);
         line -= 12;
       }
-    }
-    // the legend for the shared moods: one line above the key lines, bottom left
-    if (legend.length) {
-      c.textAlign = 'left';
-      c.font = 'italic 12px "Crimson Text", Georgia, serif';
-      const t = legend.join('   ·   ');
-      c.fillStyle = 'rgba(8,8,10,0.6)';
-      c.fillRect(14, H - 54, c.measureText(t).width + 12, 15);
-      c.fillStyle = '#b8ad94';
-      c.fillText(t, 20, H - 43);
     }
     c.restore();
   }
@@ -4206,12 +4180,36 @@ export class Battle {
     }
     c.restore();
   }
-  /** The key line's word for the sally (night/sally.ts): ready, out, or how long until it is. */
-  sallyHint() {
-    const sa = this.hooks.find((h): h is Sally => h instanceof Sally);
-    if (!sa) return '';
-    const k = keyCap('night.sally');
-    return sa.active ? `${k} back over` : sa.cd > 0 ? `sally ${Math.ceil(sa.cd)}s` : this.nerve < SALLY.nerve ? 'sally (no nerve)' : `${k} sally`;
+  /** The keycap hints that matter right now: an empty gun, a banked rally, a pressed wall, a selected guard; and the modules' own (nest, sally). */
+  contextHints(): Hint[] {
+    const p = this.player, out: Hint[] = [];
+    if (p?.w && !this.jam && this.playerReload <= 0) {
+      const prof = this.eff(p);
+      const mag = this.playerMag.get(p.w.uid) ?? 0;
+      const reserve = prof.ammoRes ? roundsInStores(prof, G.stores) : Infinity;
+      if (reserve > 0 && mag <= Math.max(0, Math.floor(prof.mag * 0.3))) out.push({ key: 'night.reload', label: 'reload', hot: mag === 0 });
+      else if (mag === 0 && ammoTypesFor(p.w.def).length > 1) out.push({ key: 'night.ammo', label: 'other ammo', hot: true });
+    }
+    for (const h of this.hooks) out.push(...(h.hints?.() ?? []));
+    if (this.rally > 0 && this.rallyT <= 0) out.push({ key: 'night.rally', label: 'rally', hot: true });
+    if (G.stores.molotov > 0 && this.laneQ.reduce((a, b) => a + b, 0) >= 4) out.push({ key: 'night.firebomb', label: '', icon: 'icon_molotov', n: G.stores.molotov });
+    if (this.selected()) out.push({ key: 'night.free', label: 'free' }, { key: 'night.hold', label: 'hold' }, { key: 'night.heads', label: 'heads' }, { key: 'night.wall', label: 'wall' });
+    // the first nights teach the basics for the first half-minute
+    if (G.day <= 2 && this.t < 30) {
+      for (const h of [{ key: 'night.reload', label: 'reload' }, { key: 'night.duck', label: 'duck' }, { key: 'RMB', label: 'focus' }, { key: '1-9', label: 'guard' }])
+        if (!out.some((o) => o.key === h.key)) out.push(h);
+    }
+    return out.slice(0, 6);
+  }
+  /** The full key sheet ([F1] held / paused), grouped. */
+  keyGroups(): { title: string; rows: Hint[] }[] {
+    const multiAmmo = !!(this.player?.w && ammoTypesFor(this.player.w.def).length > 1);
+    return [
+      { title: 'your gun', rows: [{ key: 'LMB', label: 'fire' }, { key: 'RMB', label: 'focus' }, { key: 'night.reload', label: 'reload (hold: speed)' }, { key: 'night.weapon', label: 'next gun' }, ...(multiAmmo ? [{ key: 'night.ammo', label: 'ammo' }] : []), { key: 'night.selector', label: 'selector' }] },
+      { title: 'you', rows: [{ key: 'night.duck', label: 'duck' }, { key: 'night.firebomb', label: `firebomb ×${G.stores.molotov}` }, { key: 'night.melee', label: 'melee' }, { key: 'night.nest', label: 'gun nest' }, { key: 'night.rally', label: 'rally' }, { key: 'night.sally', label: 'sally' }] },
+      { title: 'the guards', rows: [{ key: '1-9', label: 'select (Tab: next)' }, { key: 'night.free', label: 'free fire' }, { key: 'night.hold', label: 'hold' }, { key: 'night.heads', label: 'heads' }, { key: 'night.wall', label: 'wall (Shift: all)' }, { key: 'night.post', label: 'post' }] },
+      { title: 'the night', rows: [{ key: 'night.mark', label: 'mark target' }, { key: 'night.hurry', label: 'hurry' }, { key: 'night.pause', label: 'pause' }, { key: 'F1', label: 'this sheet' }] },
+    ];
   }
   drawHud(c: CanvasRenderingContext2D) {
     c.save();
@@ -4225,31 +4223,32 @@ export class Battle {
     }
     const wj = this.wallFlash > 0 ? Math.sin(this.wallFlash * 60) * 1.5 * shakeScale() : 0;
     c.fillStyle = 'rgba(10,9,8,0.7)';
-    c.fillRect(20, 18, 300, 30);
+    c.beginPath(); c.roundRect(20, 14, 300, 38, 4); c.fill();
+    const wallIc = img('icon_st_wall');
+    if (wallIc) c.drawImage(wallIc, 26, 18, 16, 16);
+    caps(c, 'wall', wallIc ? 46 : 28, 29, '#a89c84');
+    c.font = `20px ${FONT}`;
+    c.fillStyle = frac > 0.5 ? '#efe2c2' : frac > 0.25 ? '#e0a050' : '#e06050';
+    c.fillText(`${Math.ceil(G.fort.hp)}`, 27, 49);
     const segs = 12;
     for (let i = 0; i < segs; i++) {
       const on = frac * segs > i;
       const ghost = !on && this.wallShown * segs > i;
       c.fillStyle = on ? (frac > 0.5 ? '#8f7a55' : frac > 0.25 ? '#b0702c' : '#a8322a') : ghost ? `rgba(240,220,190,${0.35 + 0.5 * Math.min(1, this.wallFlash * 3)})` : 'rgba(80,70,60,0.3)';
-      c.fillRect(26 + i * 24 + wj, 30, 20, 12);
+      c.fillRect(92 + i * 19 + wj, 30, 15, 14);
     }
-    if (this.wallFlash > 0) { c.strokeStyle = `rgba(220,90,60,${this.wallFlash * 2})`; c.lineWidth = 2; c.strokeRect(21, 19, 298, 28); }
-    c.font = '11px "Special Elite", monospace';
-    c.fillStyle = '#d9cdb0';
-    c.fillText(`THE WALL  ${Math.ceil(G.fort.hp)}/${G.fort.maxHp}`, 26, 27);
-    // clock
+    if (this.wallFlash > 0) { c.strokeStyle = `rgba(220,90,60,${this.wallFlash * 2})`; c.lineWidth = 2; c.strokeRect(21, 15, 298, 36); }
+    // clock: the big number; under it, the night in small caps
     const k = Math.min(1, this.t / this.duration);
     const mins = 18 * 60 + k * 11.5 * 60;
     const hh = Math.floor(mins / 60) % 24, mm = Math.floor(mins % 60);
     c.textAlign = 'center';
-    c.font = '20px "Special Elite", monospace';
+    c.font = `24px ${FONT}`;
     c.fillStyle = '#e8dcc0';
-    c.fillText(`${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`, W / 2, 36);
-    c.font = '11px "Special Elite", monospace';
-    c.fillStyle = '#a89c84';
+    c.fillText(`${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`, W / 2, 38);
     // the Turned and the County men are counted apart; a man running for the trees is not "out there"
     const left = Math.max(0, this.plan.spawns.length - Math.min(this.spawnIdx, this.plan.spawns.length)) + this.zombies.filter((z) => z.state !== 'dying' && z.state !== 'flee').length;
-    c.fillText(`night ${G.day}   ·   ${this.res.kills} down${this.raidersDown ? `   ·   ${this.raidersDown} County ${this.raidersDown === 1 ? 'man' : 'men'}` : ''}   ·   ${left} still out there`, W / 2, 54);
+    caps(c, `night ${G.day}  ·  ${this.res.kills} down${this.raidersDown ? `  ·  ${this.raidersDown} county` : ''}  ·  ${left} left`, W / 2, 54, '#a89c84', 'center');
     // the Bellwether
     const b = this.boss;
     if (b && b.state !== 'dying' && b.x < W + 20) {
@@ -4310,48 +4309,57 @@ export class Battle {
         c.drawImage(icon, W - 320, H - 84, iw, (icon.height / icon.width) * iw);
       }
       c.textAlign = 'right';
-      c.font = '13px "Special Elite", monospace';
-      c.fillStyle = '#d9cdb0';
-      c.fillText(p.w.name ? `"${p.w.name}"` : def.name, W - 30, H - 70);
+      // the name, small; the mag, big; the reserve, small beside it
+      caps(c, p.w.name ? `"${p.w.name}"` : def.name, W - 30, H - 78, '#9a8e76', 'right');
       const mag = this.playerMag.get(p.w.uid) ?? 0;
       const cap = prof.mag;
       const chamber = hasChamber(p.w, prof) && mag > cap ? 1 : 0;
       const punch = this.ammoPunch;
-      c.font = `${Math.round(26 + punch * 5)}px "Special Elite", monospace`;
+      const magX = W - 104;
+      c.font = `${Math.round(38 + punch * 6)}px ${FONT}`;
       c.fillStyle = mag === 0 ? '#c04030' : mag <= Math.max(1, cap * 0.3) ? '#d09040' : punch > 0.5 ? '#fff6dc' : '#efe2c2';
       const reserve = prof.ammoRes ? roundsInStores(prof, G.stores) : '∞';
       const pouch = (this.pouch.get(`${p.w.uid}|${prof.ammoRes}`) ?? []).reduce((a, b) => a + b, 0);
       if (hard) {
         // Hardcore: you feel the weight of the gun, you don't count it
         const f = mag / Math.max(1, cap);
-        c.font = '17px "Special Elite", monospace';
-        c.fillText(mag === 0 ? 'empty' : f >= 0.85 ? 'full' : f >= 0.5 ? 'most' : f >= 0.25 ? 'half' : mag === 1 ? 'last' : 'low', W - 110, H - 30);
-      } else c.fillText(chamber ? `${mag - 1}+1` : `${mag}`, W - 110 + punch * 2, H - 30 - punch * 2);
-      c.font = '14px "Special Elite", monospace';
+        c.font = `20px ${FONT}`;
+        c.fillText(mag === 0 ? 'empty' : f >= 0.85 ? 'full' : f >= 0.5 ? 'most' : f >= 0.25 ? 'half' : mag === 1 ? 'last' : 'low', magX, H - 28);
+      } else c.fillText(chamber ? `${mag - 1}+1` : `${mag}`, magX + punch * 2, H - 26 - punch * 2);
+      c.font = `14px ${FONT}`;
       c.fillStyle = '#a89c84';
-      c.fillText(`/ ${reserve}${pouch ? ` +${pouch}` : ''}`, W - 30, H - 30);
-      // what is in the gun tonight; the selector; the tube's shells
-      c.font = '11px "Special Elite", monospace';
-      c.fillStyle = prof.incendiary ? '#d08040' : '#8f846e';
+      c.textAlign = 'left';
+      c.fillText(`/${reserve}`, magX + 6, H - 28);
+      if (pouch) caps(c, `+${pouch} loose`, magX + 6, H - 44, '#8f846e');
+      // what is in the gun: the ammo's picture and its short name; the selector as pips
+      const at = prof.ammoRes ? AMMO_TYPES[prof.ammoRes] : undefined;
+      const aic = at ? img(at.icon) : undefined;
+      let ax = W - 30;
+      if (prof.ammoRes) {
+        const aw = caps(c, at?.short ?? ammoLabel(prof.ammoRes), ax, H - 60, prof.incendiary ? '#d08040' : '#b8ab90', 'right');
+        ax -= aw + 4;
+        if (aic) { const ih = 14, iw = (aic.width / aic.height) * ih; c.drawImage(aic, ax - iw, H - 71, iw, ih); ax -= iw + 4; }
+      }
       const modes = fireModes(p.w, this.prof(p.w, p.s));
-      const mode = modes.length > 1 ? `  ${(this.modes.get(p.w.uid) ?? modes[0]).toUpperCase()}` : '';
-      c.fillText((prof.ammoRes ? (AMMO_TYPES[prof.ammoRes]?.short ?? ammoLabel(prof.ammoRes)) : '') + mode, W - 30, H - 52);
+      if (modes.length > 1) {
+        const m = this.modes.get(p.w.uid) ?? modes[0];
+        const n = m === 'semi' ? 1 : m === 'burst' ? 3 : 6;
+        ax -= 8;
+        c.fillStyle = '#d9cdb0';
+        for (let i = 0; i < n; i++) c.fillRect(ax - i * (m === 'auto' ? 3 : 5), H - 68, m === 'auto' ? 2 : 3, 8);
+      }
       if (this.usesTube(p.w, prof) && !hard) {
         const tube = this.tubeOf(p.w, mag);
         const col: Partial<Record<Res, string>> = { shell: '#b04030', shell_slug: '#a0a0a0', shell_fire: '#d08030', shell_flech: '#6080c0' };
-        tube.forEach((r, i) => { c.fillStyle = col[r] ?? '#c9b88a'; c.fillRect(W - 190 + i * 9, H - 60, 7, 10); });
+        tube.forEach((r, i) => { c.fillStyle = col[r] ?? '#c9b88a'; c.fillRect(W - 200 + i * 9, H - 58, 7, 10); });
       }
-      if (p.w.cond < 0.4) { c.font = '14px "Special Elite", monospace'; c.fillStyle = '#c08040'; c.fillText('worn', W - 200, H - 30); }
+      if (p.w.cond < 0.4) caps(c, 'worn', magX - 50, H - 30, '#c08040', 'right');
       // reload / clearing bar
       if (this.playerReload > 0) {
         c.fillStyle = this.reloadKind === 'speed' ? '#d0a050' : '#d9c9a0';
         c.fillRect(W - 320, H - 24, 290 * Math.max(0, 1 - this.playerReload / Math.max(0.01, prof.reloadPerRound ? prof.reload : this.reloadTotal)), 3);
       }
-      if (this.jam) {
-        c.font = '13px "Special Elite", monospace';
-        c.fillStyle = '#e0a060';
-        c.fillText(this.jam.clearing > 0 ? 'clearing…' : this.jam.kind === 'barrel' ? `BARREL HOT — ${keyCap('night.reload')} swap` : this.jam.kind === 'double' ? `DOUBLE-FEED — ${keyCap('night.reload')}` : `JAMMED — tap ${keyCap('night.reload')}`, W - 30, H - 98);
-      }
+      if (this.jam) hintRow(c, [{ key: 'night.reload', label: this.jam.clearing > 0 ? 'clearing…' : this.jam.kind === 'barrel' ? 'barrel hot — swap' : this.jam.kind === 'double' ? 'double-feed' : 'jammed', hot: true }], W - 30, H - 122, 'right');
     }
     c.shadowBlur = 0; c.shadowColor = 'transparent';
     // nerve and rally, bottom left above the key line
@@ -4368,36 +4376,25 @@ export class Battle {
       c.fillRect(x + 54, y - 4, 100 * Math.min(f, this.nerveShown + 0.01), 6);
       c.strokeStyle = 'rgba(200,190,160,0.3)';
       c.strokeRect(x + 54, y - 4, 100, 6);
-      c.font = '10px "Special Elite", monospace';
-      c.textAlign = 'left';
-      c.fillStyle = '#a89c84';
-      c.fillText(this.focusing ? 'FOCUS' : 'nerve', x + 6, y + 3);
+      caps(c, this.focusing ? 'focus' : 'nerve', x + 6, y + 3, this.focusing ? '#e0d4b0' : '#a89c84');
       // the headshot streak as tally marks, then banked rallies
       c.fillStyle = '#d9c9a0';
       for (let i = 0; i < this.streak; i++) c.fillRect(x + 160 + i * 4, y - 6, 2, 10);
-      if (this.rally > 0) { c.fillStyle = '#e0c070'; c.fillText(`RALLY ×${this.rally} ${keyCap('night.rally')}`, x + 160 + this.streak * 4 + 4, y + 3); }
-      if (this.rallyT > 0) { c.fillStyle = '#e0c070'; c.fillText('RALLY', x + 160, y + 3); }
+      if (this.rally > 0) caps(c, `rally ×${this.rally}`, x + 160 + this.streak * 4 + 4, y + 3, '#e0c070');
+      if (this.rallyT > 0) caps(c, 'rally', x + 160, y + 3, '#e0c070');
     }
-    c.textAlign = 'left';
-    c.font = '11px "Special Elite", monospace';
-    c.fillStyle = '#a89c84';
-    const multiAmmo = !!(p?.w && ammoTypesFor(p.w.def).length > 1);
-    // on a phone-width canvas (≈0.3× scale) the key list is 3 px noise over the near lane, and
-    // there is no keyboard: drop it, and set the messages larger so they stay readable
-    const narrow = (this.canvas.getBoundingClientRect().width || W) < 700; // the stage may be CSS-transformed: measure what shows
-    // the full key list early in the night (and when paused); afterwards one short line
-    if (narrow) { /* no key list */ }
-    else if (this.t < 30 || this.paused) {
-      c.fillText(`${keyCap('night.reload')} reload (hold: speed) · ${keyCap('night.weapon')}/wheel gun${multiAmmo ? ` · ${keyCap('night.ammo')} ammo` : ''} · ${keyCap('night.selector')} selector · RMB focus · ${keyCap('night.duck')} duck · ${keyCap('night.firebomb')}/MMB firebomb ${G.stores.molotov}`, 20, H - 24);
-      c.fillText(`[1-9]/[Tab] guard · ${keyCap('night.free')} free ${keyCap('night.hold')} hold ${keyCap('night.heads')} heads ${keyCap('night.wall')} wall (Shift: all) · ${keyCap('night.post')} post · ${keyCap('night.mark')} mark · ${keyCap('night.rally')} rally · ${keyCap('night.sally')} sally · ${keyCap('night.hurry')} hurry · ${keyCap('night.pause')} pause`, 20, H - 10);
-    } else c.fillText(`firebombs ${G.stores.molotov} ${keyCap('night.firebomb')}   ·   ${keyCap('night.reload')} reload   ${keyCap('night.duck')} duck   RMB focus   ${this.sallyHint()}   ${keyCap('night.pause')} keys`, 20, H - 12);
-    // messages
-    c.textAlign = 'center';
-    this.messages.forEach((m, i) => {
-      c.font = `${narrow ? 30 : 17}px "Special Elite", monospace`;
-      c.fillStyle = `rgba(232,220,192,${Math.min(1, m.life)})`;
-      c.fillText(m.text, W / 2, 110 + i * (narrow ? 38 : 26), W - 40);
-    });
+    // keys: no wall of them. Only what matters this second, as keycap glyphs, bottom left; the
+    // whole sheet while [F1] is held (or paused). A phone, or a canvas too small to read, shows none.
+    const narrow = (this.canvas.getBoundingClientRect().width || W) < 700 || coarsePointer(); // the stage may be CSS-transformed: measure what shows
+    if (!narrow) {
+      if (this.keySheetHeld || this.paused) keySheet(c, W, H, this.keyGroups());
+      else if (keyHintsOn()) {
+        const hs = this.contextHints();
+        const x = hs.length ? 20 + hintRow(c, hs, 20, H - 14) + 18 : 20;
+        hintRow(c, [{ key: 'F1', label: 'keys' }], x, H - 14, 'left', 0.45);
+      }
+    }
+    this.messages.draw(c, W, 104, narrow ? 30 : 17);
     // crosshair: circle sized by real spread, at where the hand points
     if (p && p.w && !this.done) {
       const prof = this.eff(p);
