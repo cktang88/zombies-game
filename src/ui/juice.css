@@ -119,3 +119,45 @@
   .floatnum, .carryover.flash, .day.armed .card.surv.stale { animation: none; }
   .dawnrep .st { transition: none; }
 }
+
+/* dawn report: picture-first (headline, icon tally, busts of the fallen; the log folds away) */
+.dawnrep .headline { margin: 2px 0 10px; color: #e6dcc6; }
+.dawnrep .fallen { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.dawnrep .fallen .deathcard { flex-direction: column; gap: 4px; margin: 0; padding: 8px; width: 112px; text-align: center; cursor: help; }
+.dawnrep .fallen .deathcard .dc { font-size: 11px; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.modal.dawnrep .tally { grid-template-columns: repeat(4, 1fr); }
+.dawnrep .tally > div { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 8px; align-items: center; cursor: help; }
+.dawnrep .tally > div .ico { grid-row: span 2; width: 30px; height: 30px; }
+.dawnrep .tally span { font-size: 10px; }
+.dawnrep .spent { display: flex; flex-wrap: wrap; gap: 6px; }
+.dawnrep .mvp { cursor: help; }
+.dawnrep .lines .fold-body { max-height: 30vh; overflow: auto; }
+@media (max-width: 600px) { .modal.dawnrep .tally { grid-template-columns: repeat(2, 1fr); } .dawnrep .fallen .deathcard { width: 96px; } }
+
+/* incident card: a face, a hook, the choices with consequence icons (the hint on hover) */
+.modal.event .evhead { display: flex; gap: 14px; align-items: flex-start; }
+.modal.event .evface { flex: none; width: 72px; }
+.modal.event .evface img { width: 72px; height: 96px; object-fit: contain; }
+.modal.event .evico { display: flex; justify-content: center; padding-top: 6px; }
+.modal.event .evico .ico.lg { width: 56px; height: 56px; }
+.modal.event .evhook { font-size: 17px; line-height: 26px; margin: 0 0 10px; }
+.modal.event .evmore { border-top-color: rgba(42,36,28,.3); margin-bottom: 8px; }
+.modal.event .evmore p { font-size: 15px; line-height: 24px; margin: 0; }
+.modal.event .evmore > summary { color: #5a4e3c; }
+.modal.event .choices button { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.modal.event .evcons { display: inline-flex; gap: 8px; align-items: center; font-family: var(--type); font-size: 11px; letter-spacing: .04em; color: #6a5c46; }
+.modal.event .evcons i { font-style: normal; margin: 0 4px 0 2px; }
+@media (max-width: 600px) { .modal.event .evface, .modal.event .evface img { width: 52px; height: auto; } }
+
+/* dusk: a headline and chips first, the day's work folded by job */
+.duskrep .headline { margin: 0 0 8px; color: #e6dcc6; }
+.duskchips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }
+.duskchips .chip { cursor: help; }
+.duskwork { margin: 10px 0; }
+.duskwork .fold > summary { font-size: var(--fs-s); }
+.duskwork .fold > summary .ico { width: 20px; height: 20px; }
+.duskwork .fold-peek { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--serif); }
+.duskwork .fold[open] .fold-peek { visibility: hidden; }
+.duskwork .fold-body p { margin: 3px 0; font-size: 15px; }
+.duskrep .saved { cursor: help; }
+.modal.event .choices button small { flex-basis: 100%; margin-top: 0; font-size: 13px; }
