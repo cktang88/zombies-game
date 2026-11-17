@@ -58,9 +58,41 @@ const LANE_LOOK: Look[] = [
   { b: 1, s: 1, fog: 0, outline: 2 },
 ];
 
+/** The lane looks as the light goes (stepped, so the graded atlases bake a handful of times, not
+ * every frame): darker, greyer and toward the dusk fog, to match the props' and backdrop's dusk copies. */
+const duskLooks = new Map<number, Look[]>();
+function looksAt(dusk: number): Look[] {
+  const q = Math.round(Math.max(0, Math.min(1, dusk)) * 6);
+  if (!q) return LANE_LOOK;
+  let ls = duskLooks.get(q);
+  if (!ls) {
+    const d = q / 6, r3 = (v: number) => Math.round(v * 1000) / 1000;
+    ls = LANE_LOOK.map((l) => ({ ...l, b: r3(l.b * (1 - 0.42 * d)), s: r3(l.s * (1 - 0.4 * d)), fog: r3(l.fog + 0.22 * d) }));
+    duskLooks.set(q, ls);
+  }
+  return ls;
+}
+
+// Scale (docs/gfx-audit.md round 3): a survivor (SH = 158 px) is 1.75 m, so 90 px/m on the walking
+// lane. Street props stand at the kerb, just behind the far lane, so everyone walks in front of them
+// and they take that depth's perspective scale. Heights are the whole sprite's, in metres
+// (a car's roof is ~80% of its sprite, which has the open tailgate above it).
+const PX_M = SH / 1.75;
+const KERB = LANES[0] - 12;
+const KERB_K = depthScale(KERB);
+const PROP_M: Record<string, number> = {
+  obj_door: 2.55, obj_car: 1.8, obj_shed: 2.6, obj_kin: 1.35, obj_cache: 1.85, obj_truck: 1.95,
+  obj_sign_rail: 4.0, obj_sign_stop: 2.85, obj_body: 0.62, obj_duffel: 0.36,
+};
+/** Spots lie in the road (the bodies, a dropped pack) or stand at the kerb (everything else). */
+const inRoad = (kind: string) => kind === 'body' || kind === 'drop';
+const propH = (id: string, road: boolean) => Math.round(PROP_M[id] * PX_M * (road ? 1 : KERB_K));
+/** each spot's footprint along the street, px (sprite aspect × its height; placement spacing) */
+const SPOT_W: Record<string, number> = { door: 175, car: 410, shed: 220, body: 175, kin: 110, cache: 120, truck: 390, drop: 60 };
+
 // Baked zombie: outline stamps + lane grade + fog + variant tint, at the lane's display size.
-function bakeZ(sprite: string, h: number, lane: number, variant: number, kin: boolean): Baked | null {
-  return bakeSprite(sprite, h, LANE_LOOK[lane], variant, kin ? { b: 0.8, s: 0.4 } : {});
+function bakeZ(sprite: string, h: number, lane: number, variant: number, kin: boolean, looks: Look[] = LANE_LOOK): Baked | null {
+  return bakeSprite(sprite, h, looks[lane], variant, kin ? { b: 0.8, s: 0.4 } : {});
 }
 
 // Searched spots: a baked darker copy drawn opaque (no translucent box, no per-frame filter).
@@ -82,13 +114,15 @@ function bakeSpot(id: string, h: number, dark: boolean | number): HTMLCanvasElem
   return cv;
 }
 /** A prop at (x, y top-left by its centre x), day copy with the dusk copy over it. */
-function drawSpot(c: CanvasRenderingContext2D, id: string, h: number, searched: boolean, dusk: number, x: number, y: number): HTMLCanvasElement | null {
+function drawSpot(c: CanvasRenderingContext2D, id: string, h: number, searched: boolean, dusk: number, x: number, y: number, flip = false): HTMLCanvasElement | null {
   const cv = bakeSpot(id, h, searched);
   if (!cv) return null;
   const X = Math.round(x - cv.width / 2);
+  if (flip) { c.save(); c.translate(Math.round(x) * 2, 0); c.scale(-1, 1); }
   c.drawImage(cv, X, y);
   const a = Math.min(1, dusk) * 0.85;
   if (a > 0.02) { const dv = bakeSpot(id, h, searched ? 3 : 2); if (dv) { c.globalAlpha = a; c.drawImage(dv, X, y); c.globalAlpha = 1; } }
+  if (flip) c.restore();
   return cv;
 }
 
@@ -268,25 +302,32 @@ export class Expedition {
     const fullness = Math.max(0.2, stock / this.site.stock);
     const kinds: Spot['kind'][] = ['door', 'door', 'car', 'shed', 'body'];
     const labels: Record<Spot['kind'], string[]> = {
-      door: ['a kitchen door', 'a mudroom', 'a back porch', 'a storefront', 'a basement hatch', 'a garage'],
-      car: ['a station wagon', 'a pickup bed', 'a county cruiser', 'a minivan'],
-      shed: ['a tool shed', 'an ice-fishing shanty', 'a woodpile'],
+      // what the sprites show: a house door, a station wagon with its tailgate up, a plank shed
+      door: ['a kitchen door', 'a mudroom', 'a back porch', 'a front door', 'a side door'],
+      car: ['a station wagon', 'an open tailgate', 'a wagon\'s back seat'],
+      shed: ['a tool shed', 'an ice-fishing shanty', 'a garden shed'],
       body: ['a body in a hunting jacket', 'a body in scrubs', 'a body by the mailbox'],
       kin: ['a kitchen window'],
       cache: ['a locked cabinet'], truck: ['a pickup'], drop: ['what you left'],
     };
     this.zoneB = [Math.round(this.len * 0.38), Math.round(this.len * 0.7)];
+    // props at true scale are wide (a wagon is ~400 px): keep a gap between neighbours
+    const gap = (a: Spot['kind'], b: Spot['kind']) => (SPOT_W[a] + SPOT_W[b]) / 2 + 30;
     for (let x = 520; x < this.len - 200; x += R.range(300, 520)) {
-      if (Math.abs(x - this.zoneB[0]) < 210 || Math.abs(x - this.zoneB[1]) < 210 || Math.abs(x - (this.zoneB[1] + 160)) < 140) continue;
+      if (Math.abs(x - this.zoneB[0]) < 210 || Math.abs(x - this.zoneB[1]) < 210 || Math.abs(x - (this.zoneB[1] + 250)) < 140) continue;
       const kind: Spot['kind'] = R.chance(G.day > 3 ? 0.12 : 0) ? 'kin' : R.pick(kinds);
+      const prev = this.spots[this.spots.length - 1];
+      if (prev) x = Math.max(x, prev.x + gap(prev.kind, kind));
+      if (x >= this.len - 200 || Math.abs(x - this.zoneB[0]) < 140 || Math.abs(x - this.zoneB[1]) < 140) continue;
       this.spots.push({ x, searched: false, kind, label: R.pick(labels[kind]), loot: fullness * R.range(0.5, 1.3), zone: this.zoneOf(x) });
     }
     // zone 3 always has a cache (slow, loud), and a pickup you can hotwire out of here
-    const cx = Math.round(R.range(this.zoneB[1] + 440, Math.max(this.zoneB[1] + 460, this.len - 260)));
+    const cx = Math.round(R.range(this.zoneB[1] + 540, Math.max(this.zoneB[1] + 560, this.len - 260)));
     // the cache and the pickup stand on their own: no shed or car in front of them
-    this.spots = this.spots.filter((sp) => Math.abs(sp.x - cx) > 240 && Math.abs(sp.x - (this.zoneB[1] + 160)) > 220);
+    this.spots = this.spots.filter((sp) => Math.abs(sp.x - cx) > gap(sp.kind, 'cache') && Math.abs(sp.x - (this.zoneB[1] + 250)) > gap(sp.kind, 'truck'));
     this.spots.push({ x: cx, searched: false, kind: 'cache', label: R.pick(['a locked gun cabinet', 'a pharmacy cage', 'a deer-camp footlocker']), loot: fullness, zone: 2 });
-    this.spots.push({ x: this.zoneB[1] + 160, searched: false, kind: 'truck', label: 'a pickup with keys gone', loot: 0, zone: 2 });
+    // clear of the stop sign at the boundary (the pickup is ~4.8 m long at true scale)
+    this.spots.push({ x: this.zoneB[1] + 250, searched: false, kind: 'truck', label: 'a pickup with keys gone', loot: 0, zone: 2 });
     this.spots.sort((a, b) => a.x - b.x);
     const doors = this.spots.filter((s) => s.kind === 'door');
     if (doors.length && R.chance(this.site.survivorChance * 1.6)) R.pick(doors).survivor = true;
@@ -1267,6 +1308,8 @@ export class Expedition {
   }
 
   // ---------- draw ----------
+  /** this frame's lane looks (looksAt(dusk)) */
+  looks: Look[] = LANE_LOOK;
   draw() {
     const c = this.c;
     c.save();
@@ -1274,6 +1317,7 @@ export class Expedition {
     if (sk > 0) c.translate(R.range(-sk, sk), R.range(-sk, sk) * 0.6);
     bakeBackgrounds();
     const dusk = Math.max(0, Math.min(1, 1 - this.daylight / Math.min(150, this.dayMax)));
+    this.looks = looksAt(dusk); // people fall with the light too (not only the props and backdrop)
     if (bgBakes) {
       // far: slow parallax; mid: baked with its mirrored copy (3200 wide), tiled
       for (const [bk, al] of [[bgBakes.day, 1], [bgBakes.dusk, dusk]] as [BgBake, number][]) {
@@ -1306,18 +1350,24 @@ export class Expedition {
     }
     // contact shadows: one path, one fill (spots, zombies, player, follower)
     // the cache, the pickup and a dropped pack have their own sprites (tools/sprites-world.json); older stand-ins if missing
-    const SPR: Record<Spot['kind'], [string, number]> = {
-      door: ['obj_door', 200], car: ['obj_car', 120], shed: ['obj_shed', 190], body: ['obj_body', 44], kin: ['obj_kin', 175],
-      cache: img('obj_cache') ? ['obj_cache', 150] : ['obj_shed', 205], truck: img('obj_truck') ? ['obj_truck', 135] : ['obj_car', 140], drop: img('obj_duffel') ? ['obj_duffel', 30] : ['obj_body', 20],
+    const SPR: Record<Spot['kind'], string> = {
+      door: 'obj_door', car: 'obj_car', shed: 'obj_shed', body: 'obj_body', kin: 'obj_kin',
+      cache: img('obj_cache') ? 'obj_cache' : 'obj_shed', truck: img('obj_truck') ? 'obj_truck' : 'obj_car', drop: img('obj_duffel') ? 'obj_duffel' : 'obj_body',
     };
+    /** base y (feet) and display height of a spot's prop */
+    const at = (sp: Spot): [number, number] => { const road = inRoad(sp.kind); return [road ? GROUND : KERB, propH(SPR[sp.kind], road)]; };
+    // the same few sprites along a street: every other car, door, shed and body is mirrored
+    const flipOf = (sp: Spot) => (sp.kind === 'car' || sp.kind === 'door' || sp.kind === 'shed' || sp.kind === 'body') && ((Math.round(sp.x) >> 5) & 1) === 1;
     c.fillStyle = 'rgba(0,0,0,0.45)';
     c.beginPath();
     for (const sp of this.spots) {
       const x = sp.x - this.cam;
       if (x < -250 || x > W + 250) continue;
-      const im = img(SPR[sp.kind][0]);
-      const w = im ? (im.width / im.height) * SPR[sp.kind][1] : 80;
-      c.moveTo(x + w * 0.45, GROUND + 3); c.ellipse(x, GROUND + 3, w * 0.45, 7, 0, 0, 7);
+      const im = img(SPR[sp.kind]);
+      const [by, ph] = at(sp);
+      const w = im ? (im.width / im.height) * ph : 80;
+      const ry = inRoad(sp.kind) ? 6 : 7 * KERB_K;
+      c.moveTo(x + w * 0.45, by + 2); c.ellipse(x, by + 2, w * 0.45, ry, 0, 0, 7);
     }
     for (const z of this.zs) {
       const x = z.x - this.cam;
@@ -1333,9 +1383,10 @@ export class Expedition {
     for (const sp of this.spots) {
       const x = sp.x - this.cam;
       if (x < -250 || x > W + 250) continue;
-      const [id, h] = SPR[sp.kind];
+      const id = SPR[sp.kind];
+      const [by, h] = at(sp);
       if (sp.kind === 'drop' && img('obj_duffel')) {
-        drawSpot(c, 'obj_duffel', h, false, dusk, x, GROUND - h + 4);
+        drawSpot(c, 'obj_duffel', h, false, dusk, x, by - h + 4);
         if (Math.abs(sp.x - this.px) < 60) { c.font = '13px "Special Elite", monospace'; c.fillStyle = '#efe2c2'; c.textAlign = 'center'; c.textAlign = 'left'; this.prompt = { hints: [{ key: 'run.search', label: 'pick up', n: (sp.items ?? []).length }], x, y: GROUND - 40 }; }
         continue;
       }
@@ -1346,13 +1397,13 @@ export class Expedition {
         if (Math.abs(sp.x - this.px) < 60) { c.font = '13px "Special Elite", monospace'; c.fillStyle = '#efe2c2'; c.textAlign = 'center'; c.textAlign = 'left'; this.prompt = { hints: [{ key: 'run.search', label: 'pick up', n: (sp.items ?? []).length }], x, y: GROUND - 40 }; }
         continue;
       }
-      drawSpot(c, id, h, sp.searched, dusk, x, GROUND - h + (sp.kind === 'body' ? 6 : 4));
+      drawSpot(c, id, h, sp.searched, dusk, x, by - h + (sp.kind === 'body' ? 6 : 4), flipOf(sp));
       if (!sp.searched && Math.abs(sp.x - this.px) < 60) {
         // the prompt is drawn after the people, so nobody's head covers it
-        this.prompt = { hints: [sp.kind === 'truck' ? { key: 'run.search', label: 'drive home', icon: 'icon_fuel', hot: true } : { key: 'run.search', label: `search ${sp.label}`, icon: sp.kind === 'cache' ? 'icon_st_noise' : undefined }], x, y: GROUND - h - 14 };
+        this.prompt = { hints: [sp.kind === 'truck' ? { key: 'run.search', label: 'drive home', icon: 'icon_fuel', hot: true } : { key: 'run.search', label: `search ${sp.label}`, icon: sp.kind === 'cache' ? 'icon_st_noise' : undefined }], x, y: Math.min(by - h - 14, GROUND - SH - 30) };
       } else if (!sp.searched) {
         c.fillStyle = 'rgba(232,200,120,0.7)';
-        c.beginPath(); c.arc(x, GROUND - h - 10, 3, 0, 7); c.fill();
+        c.beginPath(); c.arc(x, by - h - 10, 3, 0, 7); c.fill();
       }
     }
     // zone landmarks: a post and a sign at each boundary
@@ -1361,10 +1412,13 @@ export class Expedition {
       if (x < -200 || x > W + 200) return;
       // the rail crossing's crossbuck, then the four-way stop; the zone's name on a plate above
       const sign = i === 0 ? 'obj_sign_rail' : 'obj_sign_stop';
-      const sv = drawSpot(c, sign, 200, false, dusk, x, GROUND - 196);
+      const sh = propH(sign, false), top = KERB - sh + 4;
+      const sv = drawSpot(c, sign, sh, false, dusk, x, top);
+      // the plate floats over the sign's top (the old 2.2 m sign had it at a fixed height)
+      const py = sv ? top - 10 : GROUND - 202;
       if (sv) {
         c.fillStyle = 'rgba(14,12,10,0.78)';
-        c.fillRect(x - 74, GROUND - 238, 148, 34);
+        c.fillRect(x - 74, py - 34, 148, 34);
       } else {
         c.fillStyle = '#16130f';
         c.fillRect(x - 4, GROUND - 230, 8, 232);
@@ -1373,15 +1427,15 @@ export class Expedition {
       c.font = '12px "Special Elite", monospace';
       c.fillStyle = '#d8c89a';
       c.textAlign = 'center';
-      c.fillText(ZONE_NAMES[i + 1], x, GROUND - 222);
+      c.fillText(ZONE_NAMES[i + 1], x, py - 20);
       c.fillStyle = '#b0502c';
-      c.fillText(`loot ×${ZONE_LOOT[i + 1]} · more of them`, x, GROUND - 208);
+      c.fillText(`loot ×${ZONE_LOOT[i + 1]} · more of them`, x, py - 6);
       c.textAlign = 'left';
     });
     // actors, y-sorted by feet (id epsilon breaks ties)
     const list: { y: number; f: () => void }[] = [];
     for (const z of this.zs) list.push({ y: z.y + z.id * 1e-4, f: () => this.drawZ(z) });
-    list.push(...this.actors.drawCorpses(c, this.cam, LANE_LOOK, (y) => Math.max(0, Math.min(2, Math.round((y - LANES[0]) / 24)))));
+    list.push(...this.actors.drawCorpses(c, this.cam, this.looks, (y) => Math.max(0, Math.min(2, Math.round((y - LANES[0]) / 24)))));
     list.push({ y: GROUND + 0.5, f: () => this.drawP() });
     if (this.found) list.push({ y: LANES[0] + 0.4, f: () => this.drawFollower() });
     if (this.mate) list.push({ y: LANES[0] + 0.6, f: () => this.drawMate() });
@@ -1477,7 +1531,7 @@ export class Expedition {
     }
     const alive = new Set<number>();
     for (const z of this.zs) if (z.state !== 'dying') { alive.add(z.id); A.driveZed(z, dt); }
-    A.update(dt, alive, LANE_LOOK, (y) => Math.max(0, Math.min(2, Math.round((y - LANES[0]) / 24))));
+    A.update(dt, alive, this.looks, (y) => Math.max(0, Math.min(2, Math.round((y - LANES[0]) / 24))));
   }
 
   drawP() {
@@ -1488,7 +1542,7 @@ export class Expedition {
     const x = this.px - this.cam;
     const moving = this.held('run.left') || this.held('run.right');
     const bob = moving ? -Math.abs(Math.sin(this.t * 9)) * 4 : 0;
-    if (!this.actors.drawBody(c, 'p', x, GROUND, h, this.face < 0 ? -1 : 1, LANE_LOOK[2])) {
+    if (!this.actors.drawBody(c, 'p', x, GROUND, h, this.face < 0 ? -1 : 1, this.looks[2])) {
       c.save();
       c.translate(x - this.face * this.recoil * this.recoil * this.kick * 0.7, GROUND + bob);
       if (this.downed > 0 || this.dragging) c.rotate(1.45);
@@ -1527,7 +1581,7 @@ export class Expedition {
     const x = Math.round(this.mateX - this.cam);
     const tz = this.zs.find((z) => z.state !== 'dying' && z.state !== 'sleep' && Math.abs(z.x - this.mateX) < 620);
     const mf = (tz ? Math.sign(tz.x - this.mateX) || 1 : this.face) < 0 ? -1 : 1;
-    if (!this.actors.drawBody(c, 'm', x, LANES[0], h * k, mf, LANE_LOOK[0])) {
+    if (!this.actors.drawBody(c, 'm', x, LANES[0], h * k, mf, this.looks[0])) {
       c.save();
       c.translate(x, LANES[0]);
       if (this.mateDown > 0) { c.rotate(-1.45); c.globalAlpha = 0.9; }
@@ -1553,7 +1607,7 @@ export class Expedition {
     this.fx = this.fx ? this.fx + (target - this.fx) * 0.05 : target;
     const h = SH, w = (im.width / im.height) * h;
     const k = depthScale(LANES[0]);
-    if (this.actors.drawBody(c, 'f', Math.round(this.fx - this.cam), LANES[0], h * k, this.face < 0 ? -1 : 1, LANE_LOOK[0])) return;
+    if (this.actors.drawBody(c, 'f', Math.round(this.fx - this.cam), LANES[0], h * k, this.face < 0 ? -1 : 1, this.looks[0])) return;
     c.save();
     c.translate(Math.round(this.fx - this.cam), LANES[0]);
     c.scale(this.face * k, k);
@@ -1565,13 +1619,13 @@ export class Expedition {
     const c = this.c;
     const lane = Math.max(0, Math.min(2, z.lane));
     const bh = Math.round(z.def.height * ZS * depthScale(LANES[lane]));
-    const bk = bakeZ(z.sprite, bh, lane, z.variant, z.state === 'kin');
+    const bk = bakeZ(z.sprite, bh, lane, z.variant, z.state === 'kin', this.looks);
     if (!bk) return;
     const h = this.zh(z), k = h / bk.h;
     const w = (bk.cv.width - bk.pad * 2) * k;
     const x = Math.round(z.x - this.cam);
     if (x < -200 || x > W + 200) return;
-    if (this.actors.drawZed(c, z, this.cam, LANE_LOOK[lane], z.state === 'kin')) {
+    if (this.actors.drawZed(c, z, this.cam, this.looks[lane], z.state === 'kin')) {
       if (z.state === 'sleep') { c.font = '11px "Special Elite", monospace'; c.fillStyle = 'rgba(200,190,170,0.6)'; c.textAlign = 'center'; c.fillText('standing still', x, z.y - h - 8); c.textAlign = 'left'; }
       return;
     }
