@@ -19,10 +19,12 @@ Vessey is a dying paper-mill town on the St. Aubin River, in November. The Guard
 - Research: [Last Stand & genre](docs/research/01-last-stand-and-genre.md) · [RimWorld & emergent story](docs/research/02-rimworld-emergent-story.md) · [Art style & lore](docs/research/03-art-style-and-lore.md)
 
 ## Dev
+Everything is TypeScript: the game is Vite + strict TS (`src/`), and the tooling scripts (`tools/*.ts`) run through `tsx` and are typechecked by `tools/tsconfig.json`.
 ```
 npm install
 npm run dev
-npx tsx tools/simtest.ts 9                         # headless 30-day soak test of the sim layer
-OPENROUTER_API_KEY=… node tools/gen-sprites.mjs    # (re)generate missing sprites; see tools/sprites.json
+npm run typecheck                                  # strict TS for src/ and tools/
+npm run simtest -- 9                               # headless 30-day soak test of the sim layer
+OPENROUTER_API_KEY=… npm run sprites               # (re)generate missing sprites; see tools/sprites.json
 ```
 Sprites are generated with OpenRouter's cheapest image model on flat magenta, then chroma-keyed, trimmed and downscaled with `sharp`. They cost about $0.03 each, and the whole set so far cost under $2.

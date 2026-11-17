@@ -118,7 +118,7 @@ Every notable event is logged with its day and kind (death, arrival, tale, break
 
 ## 9. Art direction
 
-See research 03. In short: graphic-novel cel shading, heavy ink, two-tone hard shadows, a desaturated cold grey-brown base, and accents of fire orange, blood, and ochre for the infection. Sprites come from `tools/gen-sprites.mjs` using OpenRouter's cheapest image model (≈ $0.03/image), on a flat magenta background that is chroma-keyed, trimmed and downscaled; the manifest is in `tools/sprites.json`. The UI is a ledger in typewriter (Special Elite) and Crimson Text.
+See research 03. In short: graphic-novel cel shading, heavy ink, two-tone hard shadows, a desaturated cold grey-brown base, and accents of fire orange, blood, and ochre for the infection. Sprites come from `tools/gen-sprites.ts` using OpenRouter's cheapest image model (≈ $0.03/image), on a flat magenta background that is chroma-keyed, trimmed and downscaled; the manifest is in `tools/sprites.json`. The UI is a ledger in typewriter (Special Elite) and Crimson Text.
 
 ## 10. Roadmap
 

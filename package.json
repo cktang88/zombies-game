@@ -5,11 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && tsc -p tools && vite build",
     "preview": "vite preview",
-    "sprites": "node tools/gen-sprites.mjs"
+    "sprites": "tsx tools/gen-sprites.ts",
+    "simtest": "tsx tools/simtest.ts",
+    "typecheck": "tsc --noEmit && tsc -p tools"
   },
   "devDependencies": {
+    "@types/node": "^26.6.6",
     "sharp": "^0.35.5",
     "tsx": "^4.23.15",
     "typescript": "^5.6.3",
