@@ -96,7 +96,7 @@ export const ZOMBIES: Record<string, ZombieDef> = {
     lore: 'Farm boys, mostly. They used to vault the cattle gates for a dare. Now they don\'t stop at the gate.',
   },
   spitter: {
-    id: 'spitter', name: 'Biler', sprites: ['z_spitter'], hp: 85, speed: 26, dps: 4, cost: 3.5, minDay: 7,
+    id: 'spitter', name: 'Biler', sprites: ['z_spitter'], hp: 100, speed: 26, dps: 4, cost: 3.5, minDay: 7,
     head: 0.16, width: 54, height: 124, spit: true, mass: 1.1, role: 'Lobs bile from range. Duck [S], or shoot the glob.',
     lore: 'Whatever was in the settling ponds, they drank it. It comes back up hot enough to blister paint.',
   },

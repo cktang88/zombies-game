@@ -840,8 +840,8 @@ export class Battle {
     } else if (def.lunge) {
       this.dogBark('a runner');
     } else if (def.spit) {
-      z.stopX = R.range(560, 780);
-      z.spitT = R.range(1.5, 3);
+      z.stopX = R.range(820, 1000); // out past where the guards can make it out without floodlights
+      z.spitT = R.range(0.9, 1.4);
       if (!this.hints.has('biler')) { this.hints.add('biler'); this.say('A Biler. It spits over the wall — hold [S] to duck, or shoot the glob.', 5); }
     } else if (def.leap) {
       if (!this.hints.has('buck')) { this.hints.add('buck'); this.say('A Buck. When it crouches and its eyes catch the light, it jumps. Shoot it in the crouch.', 5); }
@@ -1789,7 +1789,7 @@ export class Battle {
       if (order === 'wall' && !inside && !(z.state === 'wall' || dw < 120)) continue;
       // never pop a Pulper inside the kill line unless it is already on the planks
       if ((order === 'wall' || order === 'heads') && z.def.burst && dw < 180 && z.state !== 'wall' && !inside) continue;
-      let pri = (z.def.scream ? -400 : 0) + (inside ? -800 : 0) + (z.def.ranged ? -120 : 0) + (z.def.spit ? -150 : 0) + (z.def.leap && (z.windup ?? 0) > 0 ? -300 : 0) + Math.abs(z.x - g.x) + (z.def.burst && dw < 140 ? 300 : 0);
+      let pri = (z.def.scream ? -400 : 0) + (inside ? -800 : 0) + (z.def.ranged ? -120 : 0) + (z.def.leap && (z.windup ?? 0) > 0 ? -300 : 0) + Math.abs(z.x - g.x) + (z.def.burst && dw < 140 ? 300 : 0);
       if (order === 'wall') pri = -z.def.dps * 40 + dw + (inside ? -800 : 0);
       if (isMarked && order !== 'wall') pri -= 2000;
       if (pri < bp) { bp = pri; tgt = z; }
@@ -2005,7 +2005,7 @@ export class Battle {
       return;
     }
     // a Buck: short of the wall it crouches (eyes flaring) and then clears it, into the guards
-    if (z.def.leap && !z.crippled && !z.leapt && z.state === 'walk' && G.fort.hp > 0 && z.x - wallX(z.lane) < 170) {
+    if (z.def.leap && !z.crippled && !z.leapt && z.state === 'walk' && G.fort.hp > 0 && z.x - wallX(z.lane) < 220) {
       if (!(z.windup && z.windup > 0)) z.windup = 0.8;
       z.windup -= dt;
       if (z.windup <= 0) {
