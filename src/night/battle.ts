@@ -316,7 +316,7 @@ export class Battle {
   hover?: Zombie; // the body under the crosshair
   keyUp = (e: KeyboardEvent) => {
     const k = normKey(e);
-    if (k === 'F1' || k === '?') this.keySheetHeld = false;
+    if (k === 'F1' || k === '?' || k === '/' || e.code === 'Slash') this.keySheetHeld = false; // '?' let go after Shift reads as '/'
     if (k === keyOf('night.hurry')) this.fast = false;
     if (k === keyOf('night.reload')) {
       // a tap is the smart reload (or tap-rack); a hold already did a speed reload
