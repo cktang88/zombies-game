@@ -21,6 +21,15 @@ import { setMuted, muted, sfx, music } from './audio';
 import { openSettings } from './ui/settings';
 import { openHelp } from './ui/help';
 import { startAsh } from './ui/titlefx';
+import { renderDeploy } from './ui/deploy';
+import { TRAPS, placementsAllowed, spendStock, dawnRetrieve, migrateTrapStock, type Placement } from './data/traps';
+import { takeSpent } from './night/traps';
+import { EMPLACEMENTS, parseEmplacements, stringifyEmplacements, type Post } from './data/emplacements';
+import { crewPlan } from './night/emplacements';
+import { level } from './sim/survivors';
+import { buildingLevel } from './sim/day';
+import { add } from './state';
+const WALL_X = 372; // the battle's wall face (night/battle.ts)
 
 const app = document.getElementById('app')!;
 let report: string[] = [];
@@ -55,6 +64,7 @@ function title() {
     if (el.dataset.act === 'continue' && saved) {
       setState(saved);
       for (const s of [...G.survivors, ...G.graves]) migrateSurvivor(s);
+      migrateTraps();
       report = ['You return to the house on Ferry Road.'];
       if (G.phase === 'over') return G.flags.ending ? epilogue() : gameOver();
       if (G.flags.crossingChoice === 'pending') return crossing(!!G.flags.crossingFell);
@@ -69,6 +79,7 @@ function title() {
         G.flags.daily = daily.label;
       } else if (typed !== null) newGame(el.dataset.id, typed);
       else newGame(el.dataset.id);
+      migrateTraps();
       const boons = applyBoons();
       report = [
         `${displayName(living()[0])} leads. ${living().slice(1).map(displayName).join(' and ')} came with ${living()[0].sex === 'm' ? 'him' : 'her'}.`,
@@ -186,7 +197,102 @@ function dusk() {
     <p class="forecast">${esc(plan.label)}</p>
     <div class="tonight">${esc(tonight)}</div>
     <div class="teaser"><b>Tomorrow</b>${esc(teaser)}</div>
-    <div class="saved">Saved at dusk. Quitting now costs you the night.</div>`, () => night());
+    <div class="saved">Saved at dusk. Quitting now costs you the night.</div>`, () => deployStep());
+}
+
+// ---------- traps and gun nests, before the night (docs/research/08-traps.md §3) ----------
+/** Old saves kept nail bombs as G.fort.traps: fold them into the kit stock (the legacy recipe still feeds it). */
+function migrateTraps() {
+  if ((G.fort.traps ?? 0) > 0 || !G.trapStock) {
+    G.trapStock = migrateTrapStock(G.trapStock, G.fort.traps ?? 0);
+    G.fort.traps = 0;
+  }
+}
+
+const ROAD_MAX_X = 1240;
+
+/** Dusk, step two: lay the trap kits on the road and put a crew on each gun nest. Then the night. */
+function deployStep() {
+  migrateTraps();
+  const stock = G.trapStock ?? {};
+  const emps = parseEmplacements(G.flags.emplacements).filter((e) => EMPLACEMENTS[e.id]?.crew);
+  const kits = Object.values(stock).some((v) => v > 0);
+  if (!kits && !emps.length) return night();
+  app.onclick = null;
+  app.onchange = null;
+  app.innerHTML = '<div class="deploywrap" style="min-height:100vh;overflow:auto;padding:12px 0;background:#0e0d0b"><div class="dep-crew"></div><div class="dep-root"></div></div>';
+  const crewEl = app.querySelector('.dep-crew') as HTMLElement;
+  const rootEl = app.querySelector('.dep-root') as HTMLElement;
+  const fighters = living().filter(canFight);
+  const plan = crewPlan();
+  if (emps.length) {
+    crewEl.innerHTML = `<div class="dep" style="margin-bottom:10px"><header class="dep-h"><h2>The guns</h2><span class="dep-count">heavy-weapons training decides how well a crew works one</span></header>
+      ${emps.map((e, i) => {
+        const d = EMPLACEMENTS[e.id];
+        const want = plan[String(i)] ?? 'auto';
+        return `<p style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:6px 0"><b style="min-width:13em">${esc(d.name)}</b>
+          <span class="dim">${Math.round(e.cond * 100)}%</span>
+          <label>post <select data-emp-post="${i}">${d.posts.map((p) => `<option value="${p}" ${p === e.post ? 'selected' : ''}>${p === 'roof' ? 'roof scaffold' : 'firestep'}</option>`).join('')}</select></label>
+          <label>crew <select data-emp-crew="${i}">
+            <option value="auto" ${want === 'auto' ? 'selected' : ''}>best heavy-trained</option>
+            <option value="none" ${want === 'none' ? 'selected' : ''}>nobody (I'll take it: [H])</option>
+            ${fighters.map((s) => `<option value="${esc(s.id)}" ${want === s.id ? 'selected' : ''}>${esc(first(s))} · heavy ${level(s, 'heavy')}${s.isLeader ? ' (you)' : ''}</option>`).join('')}
+          </select></label>
+          <span class="dim">${esc(d.niche)}</span></p>`;
+      }).join('')}</div>`;
+  }
+  const readCrew = () => {
+    if (!emps.length) return;
+    const crew: Record<string, string> = {};
+    const all = parseEmplacements(G.flags.emplacements);
+    let k = 0;
+    all.forEach((it) => {
+      if (!EMPLACEMENTS[it.id]?.crew) return;
+      const i = k++;
+      const c = crewEl.querySelector(`[data-emp-crew="${i}"]`) as HTMLSelectElement | null;
+      const p = crewEl.querySelector(`[data-emp-post="${i}"]`) as HTMLSelectElement | null;
+      if (c) crew[String(i)] = c.value;
+      if (p) it.post = p.value as Post;
+    });
+    G.flags.empCrew = JSON.stringify(crew);
+    G.flags.emplacements = stringifyEmplacements(all);
+  };
+  const finish = (ps: Placement[]) => {
+    readCrew();
+    // the electric fence needs the generator and a can of fuel a night
+    const kept: Placement[] = [];
+    const dropped: string[] = [];
+    for (const p of ps) {
+      const t = TRAPS[p.trap];
+      if (!t) continue;
+      if (t.requires?.building && !buildingLevel(t.requires.building)) { dropped.push(`${t.name} (no ${t.requires.building})`); continue; }
+      const up = Object.entries(t.upkeep ?? {}) as [keyof typeof G.stores, number][];
+      if (up.some(([k, v]) => (G.stores[k] ?? 0) < v)) { dropped.push(`${t.name} (no fuel)`); continue; }
+      for (const [k, v] of up) add(k, -v);
+      kept.push(p);
+    }
+    G.deploy = kept;
+    G.trapStock = spendStock(stock, kept);
+    G.flags.lastPlan = JSON.stringify(kept);
+    if (dropped.length) report.push(`Left in the shed tonight: ${dropped.join(', ')}.`);
+    save();
+    night();
+  };
+  if (kits) {
+    let last: Placement[] = [];
+    try { last = JSON.parse((G.flags.lastPlan as string) ?? '[]'); } catch { last = []; }
+    const left: Record<string, number> = { ...stock };
+    const initial = last.filter((p) => TRAPS[p.trap] && (left[p.trap] = (left[p.trap] ?? 0) - 1) >= 0);
+    const bestBuilding = Math.max(0, ...fighters.map((s) => s.skills.building ?? 0), ...living().map((s) => s.skills.building ?? 0));
+    renderDeploy(rootEl, {
+      stock, laneCount: 4, roadMinX: WALL_X, roadMaxX: ROAD_MAX_X, wallX: WALL_X,
+      placementsAllowed: placementsAllowed(bestBuilding), initial, title: `Dusk, ${dateLabel()}. The road.`,
+      onDone: (ps) => finish(ps),
+    });
+  } else {
+    rootEl.innerHTML = '<div class="dep" style="text-align:right"><button type="button" class="dep-done">To the wall. Night falls.</button></div>';
+    rootEl.querySelector('.dep-done')!.addEventListener('click', () => { sfx.ui(); finish([]); });
+  }
 }
 
 function night() {
@@ -238,6 +344,7 @@ function dawn(r: NightResult) {
   nightXp(r);
   const lines: string[] = [];
   lines.push(...r.lines);
+  lines.push(...retrieveTraps());
   // morning report: who carried the night, who broke
   const panicked = living().filter((s) => G.chronicle.some((e) => e.day === G.day && e.kind === 'break' && e.text.startsWith(displayName(s)) && e.text.includes('panicked')));
   lines.push(...morningSummary(r.killsBy, [...living(), ...G.graves], panicked, r.deaths));
@@ -269,6 +376,24 @@ function dawn(r: NightResult) {
 }
 
 const SPRING_DAY = 40;
+
+/** Dawn: take up what is left on the road (docs/research/08-traps.md §3.4). */
+function retrieveTraps(): string[] {
+  const ps = G.deploy ?? [];
+  if (!ps.length) { takeSpent(); return []; }
+  const spent = new Set(takeSpent());
+  const back = dawnRetrieve(ps, spent, () => R.next());
+  const st = (G.trapStock ??= {});
+  for (const [k, v] of Object.entries(back)) st[k] = (st[k] ?? 0) + v;
+  G.deploy = [];
+  const who = living().slice().sort((a, b) => (b.skills.building ?? 0) - (a.skills.building ?? 0))[0];
+  const got = Object.entries(back).map(([k, v]) => `${v > 1 ? `${v} ` : 'the '}${TRAPS[k].name.toLowerCase()}${v > 1 ? 's' : ''}`);
+  const lost = ps.filter((p, i) => spent.has(i) || !(back[p.trap] > 0)).map((p) => TRAPS[p.trap]?.name.toLowerCase()).filter(Boolean);
+  const out: string[] = [];
+  if (got.length) out.push(`${who ? first(who) : 'Someone'} took up ${got.join(', ')} off the road.`);
+  if (lost.length) out.push(`Spent or ruined on the road: ${[...new Set(lost)].join(', ')}.`);
+  return out;
+}
 
 const ENDINGS: Record<string, { title: string; text: (went: Survivor[], stayed: Survivor[]) => string }> = {
   ferry: {
