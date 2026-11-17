@@ -6,6 +6,7 @@ import type { Survivor } from '../types';
 import { G, R, log, add, pay, rep, ICE_DAY } from '../state';
 import { living, first, displayName, makeSurvivor, addThought, wound, byId, tale, they } from './survivors';
 import { buildingLevel } from './day';
+import { tip, ico } from '../ui/kit';
 import { type Incident, shiftRep, admit, lowestSpotlight } from './incident';
 
 export interface ThreadState { id: string; stage: number; started: number; deadline: number; progress: number; done?: 'won' | 'failed' }
@@ -200,9 +201,9 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 export function threadsHtml(): string {
   const list = activeThreads();
   if (!list.length) return '';
-  return `<div class="threads" style="margin:.8em 0;padding:.5em .7em;border-left:2px solid rgba(200,160,90,.5)"><b>Threads</b>${list.map((t) => {
+  return `<div class="threads">${list.map((t) => {
     const left = t.deadlineDay - G.day;
-    return `<p style="margin:.35em 0"><b>${esc(t.title)}</b> <span class="dim">${left > 0 ? `${left} day${left === 1 ? '' : 's'} left` : 'last day'}</span><br><span class="dim">${esc(t.text)}</span></p>`;
+    return `<div class="thread ${left <= 1 ? 'urgent' : ''}"${tip(`<b>${esc(t.title)}</b><br>${esc(t.text)}`)}>${ico('st_radio')}<span class="tt">${esc(t.title)}</span><b class="tl">${left > 0 ? `${left}d` : 'today'}</b></div>`;
   }).join('')}</div>`;
 }
 

@@ -6,6 +6,7 @@ import { persona, cyclePos, campWealth } from './director';
 import { WEAPONS } from '../data/weapons';
 import { living, canFight, addThought, first } from './survivors';
 import { activeThreads } from './threads';
+import { tip } from '../ui/kit';
 import { type Incident, lowestSpotlight } from './incident';
 
 export type CalKind = 'night' | 'tide' | 'band' | 'crossing' | 'ice' | 'raiders' | 'horde' | 'tunnel' | 'unknown';
@@ -178,7 +179,7 @@ export function calendarHtml(): string {
     const red = c.kind === 'tide' || c.kind === 'horde' || c.kind === 'raiders' || c.kind === 'band';
     const ice = c.kind === 'crossing' || c.kind === 'ice';
     const title = `${c.date}: ${c.label} Weather: ${c.weather}.${c.deadlines.length ? ` Deadline: ${c.deadlines.join(', ')}.` : ''}`;
-    return `<div class="calday ${i === 0 ? 'today' : ''} ${red ? 'red' : ice ? 'ice' : ''} ${c.kind === 'crossing' ? 'crossing' : ''}" title="${esc(title)}">
+    return `<div class="calday ${i === 0 ? 'today' : ''} ${red ? 'red' : ice ? 'ice' : ''} ${c.kind === 'crossing' ? 'crossing' : ''}"${tip(esc(title))}>
       <div class="cd">${i === 0 ? 'tonight' : c.date.split(' ')[1]}</div>
       <div class="cg ${c.certainty === 'likely' ? 'likely' : ''}">${GLYPH[c.kind]}</div>
       <div class="cdl">${c.deadlines.length ? '◆' : ''}</div></div>`;
@@ -187,12 +188,11 @@ export function calendarHtml(): string {
   const key = cal.some((c) => c.kind === 'tide') ? `<span style="color:${BLOOD}">●</span> tide` : cal.some((c) => c.kind === 'band') ? `<span style="color:${BLOOD}">◌</span> tide, roughly` : cal.some((c) => c.kind === 'unknown') ? '? the Coin keeps no calendar' : '';
   return `<div class="calendar">
     <div class="calstrip">${cal.map(cell).join('')}</div>
-    <div class="calkey">${esc(today.label)}${key ? ` · ${key}` : ''}${cal.some((c) => c.kind === 'crossing') ? ' · ❄ the Crossing' : ''}${cal.some((c) => c.deadlines.length) ? ' · ◆ thread deadline' : ''}</div>
-    <div class="smell" title="${esc(n.reasons.join('; '))}">
-      <div class="row"><span style="white-space:nowrap">Smell of the house</span>
+    <div class="calkey"${tip(`${key}${cal.some((c) => c.kind === 'crossing') ? ' · ❄ the Crossing' : ''}${cal.some((c) => c.deadlines.length) ? ' · ◆ thread deadline' : ''}`)}>${esc(today.label)}</div>
+    <div class="smell"${tip(`<b>Smell of the house</b><br>${n.reasons.length ? esc(n.reasons.join('. ')) + '. Hoarding draws bigger nights.' : 'A lean house. Nothing much to smell.'}`)}>
+      <div class="row"><span class="t-xs" style="white-space:nowrap">Smell</span>
         <div class="bar"><div style="width:${Math.round(n.level * 100)}%;background:${n.level > 0.7 ? BLOOD : '#c8a05a'}"></div></div>
         <b style="white-space:nowrap">+${n.pct}%</b></div>
-      <div class="dim" style="font-size:.9em">${n.reasons.length ? esc(n.reasons.join('. ')) + '. Hoarding draws bigger nights.' : 'A lean house. Nothing much to smell.'}</div>
     </div></div>`;
 }
 

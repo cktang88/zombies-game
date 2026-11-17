@@ -28,6 +28,7 @@ import { hintHtml, markHintTarget, nextHint, skipHints } from './onboarding';
 import { threadsHtml } from '../sim/threads';
 import { calendarHtml } from '../sim/calendar';
 import { juiceAfterRender } from './juice';
+import { tip, ico, fold, chip, pips } from './kit';
 
 const JOBS: { id: JobId; label: string; hint: string }[] = [
   { id: 'repair', label: 'Repair the wall', hint: 'Building. Uses timber. Hard on the back.' },
@@ -96,14 +97,15 @@ function moodWhy(s: Survivor, n = 2) {
     .slice(0, n);
 }
 
-function warnings(): string[] {
-  const w: string[] = [];
+interface Warn { icon: string; short: string; text: string }
+function warnings(): Warn[] {
+  const w: Warn[] = [];
   const eat = living().length;
   if (eat) {
     const days = Math.floor(G.stores.food / eat);
     const farmers = living().filter((s) => s.job === 'farm' && canWork(s)).length;
-    if (days < 2) w.push(`Food for ${days ? 'one more day' : 'less than a day'}.${farmers ? '' : ' Nobody is on the Food job.'}`);
-    else if (days < 4) w.push(`Food for ${days} days.`);
+    if (days < 2) w.push({ icon: 'food', short: `${days}d`, text: `Food for ${days ? 'one more day' : 'less than a day'}.${farmers ? '' : ' Nobody is on the Food job.'}` });
+    else if (days < 4) w.push({ icon: 'food', short: `${days}d`, text: `Food for ${days} days.` });
   }
   // ammo: what each equipped gun actually loads (fireProfile.ammoRes), in rounds it can fire
   const ammoNeed = new Map<Res, { guns: number; perShot: number }>();
@@ -118,15 +120,22 @@ function warnings(): string[] {
   }
   for (const [a, { guns, perShot }] of ammoNeed) {
     const have = Math.floor((G.stores[a] ?? 0) / (perShot || 1));
-    if (have < 12 * guns) w.push(`${have ? `Only ${have}` : 'No'} ${ammoLabel(a).toLowerCase()} for ${guns === 1 ? 'one gun' : `${guns} guns`} on the wall.`);
+    if (have < 12 * guns) w.push({ icon: RES_ICON[a]?.replace(/^icon_/, '') ?? 'ammo', short: `${have}`, text: `${have ? `Only ${have}` : 'No'} ${ammoLabel(a).toLowerCase()} for ${guns === 1 ? 'one gun' : `${guns} guns`} on the wall.` });
   }
-  if (G.fort.hp / G.fort.maxHp < 0.4 && !living().some((s) => s.job === 'repair' && canWork(s))) w.push('The wall is barely standing and nobody is repairing it.');
-  if (G.craftQueue.length && !living().some((s) => s.job === 'craft' && canWork(s))) w.push('Work is queued but nobody is at the bench.');
+  if (G.fort.hp / G.fort.maxHp < 0.4 && !living().some((s) => s.job === 'repair' && canWork(s))) w.push({ icon: 'st_wall', short: `${Math.round((G.fort.hp / G.fort.maxHp) * 100)}%`, text: 'The wall is barely standing and nobody is repairing it.' });
+  if (G.craftQueue.length && !living().some((s) => s.job === 'craft' && canWork(s))) w.push({ icon: 'job_craft', short: 'idle', text: 'Work is queued but nobody is at the bench.' });
   const ragged = living().filter((s) => s.rest < 0.25 && s.job !== 'rest' && canWork(s));
-  if (ragged.length) w.push(`${ragged.map(first).join(', ')} ${ragged.length === 1 ? 'is' : 'are'} worn out. Give ${ragged.length === 1 ? 'them' : 'them'} short hours or a day of rest.`);
+  if (ragged.length) w.push({ icon: 'st_tired', short: `${ragged.length}`, text: `${ragged.map(first).join(', ')} ${ragged.length === 1 ? 'is' : 'are'} worn out. Give them short hours or a day of rest.` });
   const heat = heatNeed();
-  if (heat > G.stores.fuel) w.push(`The stove needs ${heat} fuel tonight and there is ${Math.floor(G.stores.fuel)}.`);
+  if (heat > G.stores.fuel) w.push({ icon: 'fuel', short: `${Math.floor(G.stores.fuel)}/${heat}`, text: `The stove needs ${heat} fuel tonight and there is ${Math.floor(G.stores.fuel)}.` });
   return w;
+}
+
+function warningsHtml() {
+  const w = warnings();
+  if (!w.length) return '';
+  const head = `<span class="wcount">⚠ ${w.length}</span>${w.map((x) => `<span class="wchip"${tip(esc(x.text))}>${ico(x.icon)}<b>${esc(x.short)}</b></span>`).join('')}`;
+  return fold(head, w.map((x) => `<p class="stamp" role="alert">${esc(x.text)}</p>`).join(''), { cls: 'warns', id: 'warns' });
 }
 
 let tab = 'workshop';
@@ -144,10 +153,11 @@ const nl = (s: string) => esc(s).replace(/\n/g, '<br>');
 
 function costHtml(cost: Partial<Record<Res, number>>) {
   const parts = Object.entries(cost).map(([k, v]) => {
-    const ok = (G.stores[k as Res] ?? 0) >= (v ?? 0);
-    return `<span class="cost ${ok ? '' : 'short'}"><img src="${spriteUrl(RES_ICON[k as Res])}" alt="">${v} ${RES_LABEL[k as Res].toLowerCase()}</span>`;
+    const have = Math.floor(G.stores[k as Res] ?? 0);
+    const ok = have >= (v ?? 0);
+    return `<span class="cost ${ok ? '' : 'short'}"${tip(`${v} ${RES_LABEL[k as Res].toLowerCase()} · have ${have}`)}><img src="${spriteUrl(RES_ICON[k as Res])}" alt="${RES_LABEL[k as Res]}">${v}</span>`;
   });
-  return parts.length ? parts.join(' ') : '<span class="cost">free</span>';
+  return parts.length ? parts.join('') : '<span class="cost">free</span>';
 }
 
 // ---- survivor: a picture and a number first, the sentence on hover (src/ui/kit.ts, survivor.css)
@@ -396,9 +406,9 @@ function runMateSelect(l: Survivor) {
   const mates = living().filter((s) => s !== l && canWork(s) && !s.breakState);
   if (!mates.length) return '';
   const cur = G.flags.runMate as string | undefined;
-  return `<select data-act="runmate" title="Take one along: they shoot, carry 6 more, and can drag you home. They keep your hours: home work until you leave, then the road.">
-    <option value="">— go alone —</option>
-    ${mates.map((s) => `<option value="${s.id}" ${cur === s.id ? 'selected' : ''}>with ${esc(first(s))}${s.weapon ? '' : ' (unarmed)'}</option>`).join('')}</select>`;
+  return `<select data-act="runmate" aria-label="Companion"${tip('Take one along: they shoot, carry 6 more, and can drag you home. They keep your hours: home work until you leave, then the road.')}>
+    <option value="">alone</option>
+    ${mates.map((s) => `<option value="${s.id}" ${cur === s.id ? 'selected' : ''}>+ ${esc(first(s))}${s.weapon ? '' : ' (unarmed)'}</option>`).join('')}</select>`;
 }
 
 let runLeave = 0;
@@ -406,68 +416,95 @@ let runSite = 'route9';
 function runHtml() {
   const l = living().find((s) => s.isLeader);
   if (!l) return '';
-  if (ranToday()) return '<div class="run dim">You have already been out today.</div>';
-  if (!canWork(l)) return `<div class="run dim">${esc(first(l))} is in no shape to go out.</div>`;
+  if (ranToday()) return '<div class="run dim t-s">Already out today.</div>';
+  if (!canWork(l)) return `<div class="run dim t-s">${esc(first(l))} is in no shape to go out.</div>`;
   const sites = SITES.filter((x) => x.minDay <= G.day);
   if (!sites.some((x) => x.id === runSite)) runSite = sites[0].id;
   const secs = runDaylightFor(runSite, runLeave);
   const streetH = Math.max(0, DAY_HOURS - runLeave - travelHours(runSite));
-  return `<div class="run"><h3>Lead a run yourself</h3>
-    <p class="dim">${esc(first(l))} goes on foot, alone or with one other. Far sites eat the day in walking; leaving late leaves less light on the street. ${runLeave ? `${esc(first(l))} works ${runLeave}h at home first.` : `${esc(first(l))} does no other work today.`}</p>
+  const site = SITES.find((x) => x.id === runSite)!;
+  const st = siteStock(runSite);
+  const why = `${esc(first(l))} goes on foot, alone or with one other. Far sites eat the day in walking; leaving late leaves less light on the street. ${runLeave ? `${esc(first(l))} works ${runLeave}h at home first.` : `${esc(first(l))} does no other work today.`}`;
+  return `<div class="run"><div class="t-l rhead"${tip(why)}>Lead a run <span class="qm">?</span></div>
     <select data-act="runsite" aria-label="Run destination">${sites.map((x) => {
-      const st = siteStock(x.id);
-      return `<option value="${x.id}" ${x.id === runSite ? 'selected' : ''}>${x.name} · ${travelHours(x.id)}h walk · ${st.left <= 0 ? 'picked clean' : `${st.left}/${st.max} left`} · ${riskWord(x.risk)} risk</option>`;
+      const s2 = siteStock(x.id);
+      return `<option value="${x.id}" ${x.id === runSite ? 'selected' : ''}>${x.name} · ${travelHours(x.id)}h · ${s2.left <= 0 ? 'picked clean' : `${s2.left}/${s2.max}`} · ${riskWord(x.risk)} risk</option>`;
     }).join('')}</select>
-    <select data-act="runleave" aria-label="Leave at">${[0, 2, 4, 6].map((h) => `<option value="${h}" ${h === runLeave ? 'selected' : ''}>Leave at ${clockLabel(h)}${h ? ` (work ${h}h first)` : ''}</option>`).join('')}</select>
-    ${runMateSelect(l)}
-    <div class="rundl"><div class="hstrip">${Array.from({ length: DAY_HOURS }, (_, i) => `<i class="${i < runLeave ? 'wk' : i < runLeave + travelHours(runSite) / 2 ? 'tr' : i < DAY_HOURS - travelHours(runSite) / 2 ? 'st' : 'tr'}"></i>`).join('')}</div>
-    <span>${streetH}h on the street · ${secs}s of daylight</span></div>
+    <div class="runrow">
+      <select data-act="runleave" aria-label="Leave at">${[0, 2, 4, 6].map((h) => `<option value="${h}" ${h === runLeave ? 'selected' : ''}>leave ${clockLabel(h)}</option>`).join('')}</select>
+      ${runMateSelect(l)}
+    </div>
+    <div class="runchips">${chip('st_time', `${travelHours(runSite)}h`, 'Walking there and back')}${chip('st_danger', riskWord(site.risk), `Risk at ${esc(site.name)}`, site.risk >= 0.4 ? 'warn' : '')}<span class="chip"${tip(`Loot left at ${esc(site.name)}: ${st.left} of ${st.max}`)}>${pips(st.left, st.max)}</span></div>
+    <div class="rundl"${tip('Grey: work at home · hatched: walking · gold: on the street')}><div class="hstrip">${Array.from({ length: DAY_HOURS }, (_, i) => `<i class="${i < runLeave ? 'wk' : i < runLeave + travelHours(runSite) / 2 ? 'tr' : i < DAY_HOURS - travelHours(runSite) / 2 ? 'st' : 'tr'}"></i>`).join('')}</div>
+    <span class="t-xs">${streetH}h street · ${secs}s light</span></div>
     <button data-act="run" ${secs < 30 ? 'disabled title="Not enough daylight left to make it worth the walk"' : ''}>Go ›</button></div>`;
 }
+
+// The picture for a recipe: what it makes.
+const SPECIAL_ICON: Record<string, string> = {
+  spikes: 'icon_trap_pit', wire: 'icon_trap_snare', light: 'icon_mod_flashlight', trap: 'icon_trap_nails', molotov: 'icon_molotov', liquor: 'icon_molotov',
+  fortify: 'icon_st_wall', repair: 'icon_parts', turret: 'icon_nailgun', duffel: 'icon_cloth', repairMelee: 'icon_m_hatchet', roofnest: 'icon_wood', armor: 'icon_scrap',
+};
+function recipeIcon(r: (typeof RECIPES)[number]): string {
+  if (r.weapon && WEAPONS[r.weapon]) return WEAPONS[r.weapon].icon;
+  if (r.melee && MELEE[r.melee]) return MELEE[r.melee].icon;
+  if (r.mod && MODS[r.mod]) return MODS[r.mod].icon;
+  if (r.trap) return `icon_trap_${r.trap}`;
+  const g = r.gives && (Object.keys(r.gives)[0] as Res | undefined);
+  if (g) return RES_ICON[g];
+  return SPECIAL_ICON[r.special ?? ''] ?? 'icon_parts';
+}
+const BUILD_ICON: Record<string, string> = { workbench: 'icon_parts', forge: 'icon_scrap', garden: 'icon_food', infirmary: 'icon_meds', still: 'icon_molotov', generator: 'icon_fuel', radio: 'icon_st_radio' };
+const pic = (sprite: string, cls = '') => `<img class="pic ${cls}" src="${spriteUrl(sprite)}" alt="" onerror="this.style.visibility='hidden'">`;
 
 function workshopHtml() {
   const builds = Object.values(BUILDINGS).map((b) => {
     const lvl = buildingLevel(b.id);
     const next = b.cost[lvl];
-    return `<div class="build ${lvl ? 'built' : ''}">
-      <div class="bh"><b>${b.name}</b>${lvl ? `<span class="lvl">${'●'.repeat(lvl)}${'○'.repeat(b.maxLevel - lvl)}</span>` : ''}</div>
-      <div class="bd">${b.desc}</div>
-      ${lvl < b.maxLevel ? `<div class="bc">${costHtml(next)} <button data-act="build" data-id="${b.id}" ${has(next) ? '' : 'disabled'}>${lvl ? 'Upgrade' : 'Build'}</button></div>` : ''}
+    return `<div class="wcard build ${lvl ? 'built' : 'unbuilt'}"${tip(`<b>${esc(b.name)}</b><br>${esc(b.desc)}`)}>
+      ${pic(BUILD_ICON[b.id] ?? 'icon_parts')}
+      <div class="cbody"><div class="cname">${b.name}</div>${pips(lvl, b.maxLevel)}
+      ${lvl < b.maxLevel ? `<div class="ccost">${costHtml(next)}</div>` : '<div class="t-xs">full</div>'}</div>
+      ${lvl < b.maxLevel ? `<button class="mini" data-act="build" data-id="${b.id}" ${has(next) ? '' : 'disabled'}>${lvl ? '▲' : 'Build'}</button>` : ''}
     </div>`;
   }).join('');
   const recipes = RECIPES.filter((r) => !r.hidden && !(r.special === 'roofnest' && G.flags.roofNest) && buildingLevel(r.needs) >= (r.level ?? 1));
   const locked = RECIPES.filter((r) => !r.hidden && buildingLevel(r.needs) < (r.level ?? 1));
   const crafters = living().filter((s) => s.job === 'craft' && canWork(s));
+  const queue = G.craftQueue.length ? G.craftQueue.map((q, i) => {
+    const r = RECIPES.find((x) => x.id === q.recipe)!;
+    return `<div class="q">${pic(recipeIcon(r), 'sm')}<span class="t-s">${r.name}</span><div class="qbar"><div style="width:${(q.progress / r.work) * 100}%"></div></div><button data-act="unqueue" data-i="${i}" title="Cancel (refund)">×</button></div>`;
+  }).join('') : '<div class="t-s">Bench idle.</div>';
+  const card = (r: (typeof RECIPES)[number]) => `<div class="wcard recipe ${has(r.cost) ? '' : 'cant'}"${tip(`<b>${esc(r.name)}</b> · ${r.work} work<br>${esc(r.desc)}`)}>
+      ${pic(recipeIcon(r))}
+      <div class="cbody"><div class="cname">${r.name}</div><div class="ccost">${costHtml(r.cost)}</div></div>
+      <button class="mini" data-act="queue" data-id="${r.id}" ${has(r.cost) ? '' : 'disabled'} aria-label="Queue ${esc(r.name)}">+</button></div>`;
   return `<div class="ws">
-    <div class="wscol">
-      <h3>Queue <span class="dim">${crafters.length ? `${crafters.map(first).join(', ')} at the bench` : 'nobody assigned to the workshop'}</span></h3>
-      ${G.craftQueue.length ? G.craftQueue.map((q, i) => {
-        const r = RECIPES.find((x) => x.id === q.recipe)!;
-        return `<div class="q"><span>${r.name}</span><div class="qbar"><div style="width:${(q.progress / r.work) * 100}%"></div></div><button data-act="unqueue" data-i="${i}" title="Cancel (refund)">×</button></div>`;
-      }).join('') : '<div class="dim">The bench is idle.</div>'}
-      <h3>Make</h3>
-      ${recipes.map((r) => `<div class="recipe"><div><b>${r.name}</b> <span class="dim">${r.work} work</span><div class="bd">${r.desc}</div><div>${costHtml(r.cost)}</div></div><button data-act="queue" data-id="${r.id}" ${has(r.cost) ? '' : 'disabled'}>Queue</button></div>`).join('')}
-      ${locked.length ? `<div class="dim small">Needs more machinery: ${locked.map((r) => r.name).join(', ')}.</div>` : ''}
-    </div>
-    <div class="wscol"><h3>Machinery</h3>${builds}</div>
+    <div class="wsq"><span class="t-l">Queue</span> ${crafters.length ? chip('job_craft', crafters.map(first).join(', '), 'At the bench today') : chip('st_danger', 'nobody', 'Nobody on the Workshop job', 'warn')}
+      ${queue}</div>
+    ${fold(`<span class="t-l">Make</span> <span class="t-xs">${recipes.length}</span>`, `<div class="cards">${recipes.map(card).join('')}</div>
+      ${locked.length ? `<div class="t-xs"${tip(`Needs more machinery: ${esc(locked.map((r) => r.name).join(', '))}.`)}>+${locked.length} locked</div>` : ''}`, { id: 'ws-make', open: true })}
+    ${fold(`<span class="t-l">Machinery</span> <span class="t-xs">${G.buildings.length}/${Object.keys(BUILDINGS).length}</span>`, `<div class="cards">${builds}</div>`, { id: 'ws-mach', open: true })}
   </div>`;
 }
 
 function wallHtml() {
   const f = G.fort;
   const repairers = living().filter((s) => s.job === 'repair' && canWork(s));
+  const frac = f.hp / f.maxHp;
+  const fortRow: [string, number, string][] = [
+    ['icon_st_wall', f.level, 'Reinforcements: more wall. Forge: reinforce the wall.'],
+    ['icon_trap_pit', f.spikes, 'Spike rows: the dead hurt themselves at the wall.'],
+    ['icon_trap_snare', f.wire, 'Wire belts: slow them in the road.'],
+    ['icon_mod_flashlight', f.lights, 'Floodlights: better aim, less dark. Burn fuel.'],
+    ['icon_nailgun', f.turrets ?? 0, 'Nail turrets: auto-fire from the wall, eat scrap.'],
+    ['icon_trap_nails', f.traps, 'Nail-bomb traps: one use each, out in the road.'],
+    ['icon_molotov', G.stores.molotov, 'Firebombs: [F] or right-click at night.'],
+  ];
   return `<div class="wall">
-    <div class="wallbar"><div data-tw="wall" style="width:${(f.hp / f.maxHp) * 100}%"></div><span>${Math.ceil(f.hp)} / ${f.maxHp}</span></div>
-    <p>${f.hp / f.maxHp > 0.8 ? 'The wall is sound.' : f.hp / f.maxHp > 0.4 ? 'The wall is chewed. Planks split, the car door hangs.' : 'The wall is barely a wall.'} ${repairers.length ? `${repairers.map(first).join(' and ')} will work on it today.` : '<b>Nobody is assigned to repair it.</b>'} Timber: ${G.stores.wood}.</p>
-    <ul class="fort">
-      <li>Reinforcements: <b>${f.level}</b> <span class="dim">(Forge: reinforce the wall)</span></li>
-      <li>Spike rows: <b>${f.spikes}</b> <span class="dim">— the dead hurt themselves at the wall</span></li>
-      <li>Wire belts: <b>${f.wire}</b> <span class="dim">— slows them in the road</span></li>
-      <li>Floodlights: <b>${f.lights}</b> <span class="dim">— better aim, less dark; burns fuel</span></li>
-      <li>Nail turrets: <b>${f.turrets ?? 0}</b> <span class="dim">— auto-fire from the wall, eat scrap</span></li>
-      <li>Nail-bomb traps: <b>${f.traps}</b> <span class="dim">— one use each, out in the road</span></li>
-      <li>Firebombs: <b>${G.stores.molotov}</b> <span class="dim">— [F] or right-click at night</span></li>
-    </ul>
+    <div class="wallbar"${tip(frac > 0.8 ? 'The wall is sound.' : frac > 0.4 ? 'The wall is chewed. Planks split, the car door hangs.' : 'The wall is barely a wall.')}><div data-tw="wall" style="width:${frac * 100}%"></div><span>${Math.ceil(f.hp)} / ${f.maxHp}</span></div>
+    <div class="chips">${repairers.length ? chip('job_repair', repairers.map(first).join(', '), 'Repairing today') : chip('st_danger', 'no repairs', 'Nobody is assigned to repair it.', 'warn')}${chip('wood', G.stores.wood, 'Timber for repairs')}</div>
+    <div class="fortgrid">${fortRow.map(([icon, n, t]) => `<span class="ftile ${n ? '' : 'none'}"${tip(t)}>${pic(icon)}<b>${n}</b></span>`).join('')}</div>
     ${choresHtml()}
   </div>`;
 }
@@ -476,21 +513,21 @@ function wallHtml() {
 function choresHtml() {
   const out: string[] = [];
   const cold = G.weather === 'cold' || G.weather === 'snow' || G.day >= 20;
-  if (G.flags.oiledDay === G.day) out.push('<li>The guns are oiled for tonight. <span class="dim">The cold will not seize them.</span></li>');
+  if (G.flags.oiledDay === G.day) out.push(`<span class="chip good"${tip('The cold will not seize them tonight.')}>✓ guns oiled</span>`);
   else {
     const hand = choreHand(1);
     const can = !!hand && ((G.stores.cloth ?? 0) >= 1 || (G.stores.fuel ?? 0) >= 1);
-    out.push(`<li><button class="mini" data-act="oil" ${can ? '' : 'disabled'}>Oil the guns</button> <span class="dim">1 hour${hand ? ` (${esc(first(hand))})` : ''} · a rag or 1 fuel${cold ? ' · <b>dry guns jam in this cold</b>' : ' · fewer stoppages in the cold'}</span></li>`);
+    out.push(`<button class="mini ${cold ? 'urgent' : ''}" data-act="oil" ${can ? '' : 'disabled'}${tip(`1 hour${hand ? ` (${esc(first(hand))})` : ''} · a rag or 1 fuel · ${cold ? '<b>dry guns jam in this cold</b>' : 'fewer stoppages in the cold'}`)}>Oil the guns</button>`);
   }
   if (G.flags.pileCarry) {
     let tot = 0;
     try { tot = (JSON.parse(G.flags.pileCarry as string) as number[]).reduce((a, b) => a + b, 0); } catch { tot = 0; }
     const h3 = choreHand(3), h1 = choreHand(1);
-    out.push(`<li>Bodies against the wall from last night <span class="dim">(${tot >= 6 ? 'a ramp by tonight' : 'a low heap'})</span><br>
-      <button class="mini" data-act="pile" data-how="haul" ${h3 ? '' : 'disabled'}>Haul them off</button> <span class="dim">3 hours, grim work</span>
-      <button class="mini" data-act="pile" data-how="burn" ${h1 && (G.stores.fuel ?? 0) >= 2 ? '' : 'disabled'}>Burn the pile</button> <span class="dim">2 fuel, 1 hour</span></li>`);
+    const pile = `Bodies against the wall from last night (${tot >= 6 ? 'a ramp by tonight' : 'a low heap'}).`;
+    out.push(`<button class="mini" data-act="pile" data-how="haul" ${h3 ? '' : 'disabled'}${tip(`${pile} 3 hours, grim work.`)}>Haul bodies</button>`);
+    out.push(`<button class="mini" data-act="pile" data-how="burn" ${h1 && (G.stores.fuel ?? 0) >= 2 ? '' : 'disabled'}${tip(`${pile} 2 fuel, 1 hour.`)}>Burn pile</button>`);
   }
-  return `<h3>Chores <span class="dim">done by whoever has the hours: the leader first</span></h3><ul class="fort chores">${out.join('')}</ul>`;
+  return `<div class="chores"><span class="t-l"${tip('Done by whoever has the hours: the leader first.')}>Chores</span> ${out.join(' ')}</div>`;
 }
 
 // Hand weapon carried alongside the gun (Survivor.melee → G.melee).
@@ -515,19 +552,20 @@ function ammoSelect(w: WeaponItem | undefined, compact = false) {
   }).join('')}</select>`;
 }
 
-// Attachment slots for one gun: icon box + attach/detach dropdown per slot.
+// Attachment slots for one gun: a small icon per slot; an invisible dropdown over it attaches/detaches.
 function modSlotsHtml(w: WeaponItem) {
   const slots = slotsFor(w.def);
   if (!slots.length) return '';
   const stock = G.modStock ?? [];
-  return `<div class="stats" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">${slots.map((slot) => {
+  return `<div class="mslots">${slots.map((slot) => {
     const cur = w.mods?.[slot];
     const md = cur ? MODS[cur.def] : null;
     const spare = stock.filter((m) => MODS[m.def]?.slot === slot && MODS[m.def].fits(w.def));
     const name = MOD_SLOTS.find((x) => x.id === slot)!.name;
-    return `<span title="${esc(md ? `${md.name}: ${md.niche}` : `${name}: empty`)}" style="display:inline-flex;align-items:center;gap:4px;border:1px ${md ? 'solid #6a5d45' : 'dashed #4a4235'};padding:2px 4px;border-radius:3px">
-      ${md ? `<img src="${spriteUrl(md.icon)}" alt="" style="width:34px;height:20px;object-fit:contain">` : `<i style="min-width:34px;white-space:nowrap;text-align:center;opacity:.5">${name}</i>`}
-      <select data-act="mod" data-w="${w.uid}" data-slot="${slot}" style="max-width:150px;font-size:12px">
+    const t = md ? `<b>${esc(md.name)}</b> (${esc(name)})<br>${esc(md.niche)}` : `${esc(name)}: empty${spare.length ? ` · ${spare.length} spare fits` : ''}`;
+    return `<span class="mslot ${md ? 'full' : ''} ${!md && spare.length ? 'avail' : ''}"${tip(t)}>
+      ${md ? `<img src="${spriteUrl(md.icon)}" alt="">` : `<i>${esc(name.slice(0, 1))}</i>`}
+      <select data-act="mod" data-w="${w.uid}" data-slot="${slot}" aria-label="${esc(name)} slot">
         <option value="">${md ? '— detach —' : '— empty —'}</option>
         ${cur ? `<option value="${cur.uid}" selected>${esc(md!.name)}${cur.cond < 1 ? ` ${Math.round(cur.cond * 100)}%` : ''}</option>` : ''}
         ${spare.map((m) => `<option value="${m.uid}">${esc(MODS[m.def].name)}${m.cond < 1 ? ` ${Math.round(m.cond * 100)}%` : ''}</option>`).join('')}
@@ -535,7 +573,7 @@ function modSlotsHtml(w: WeaponItem) {
   }).join('')}</div>`;
 }
 
-// What the attachments change, green when better and red when worse.
+// What the attachments change, green when better and red when worse (shown in the gun's tooltip).
 function modDeltaHtml(w: WeaponItem) {
   if (!w.mods || !Object.keys(w.mods).length) return '';
   const a = fireProfile(w, { noMods: true }), b = fireProfile(w);
@@ -557,26 +595,25 @@ function modDeltaHtml(w: WeaponItem) {
     else txt = `${y > x ? '+' : '−'}${Math.round(Math.abs(y / x - 1) * 100)}%`;
     out.push(`<span style="color:${better ? '#9db070' : '#c0604a'}">${label} ${txt}</span>`);
   }
-  return out.length ? `<div class="stats">mods: ${out.join(' · ')}</div>` : '';
+  return out.length ? `<div>mods: ${out.join(' · ')}</div>` : '';
 }
 
+const condBar = (c: number) => `<span class="cond ${c < 0.4 ? 'bad' : c < 0.7 ? 'mid' : ''}"><i style="width:${Math.round(c * 100)}%"></i></span>`;
+
 function armoryHtml() {
+  let total = 0;
   const stock = Object.values(CALIBERS).map((c) => {
     const items = c.types.map((t) => {
       const n = Math.floor(G.stores[t] ?? 0);
-      return `<span class="cost ${n ? '' : 'short'}" title="${esc(AMMO_TYPES[t]!.desc)}"><img src="${spriteUrl(AMMO_TYPES[t]!.icon)}" alt="">${n} ${esc(ammoLabel(t).toLowerCase())}</span>`;
-    }).join(' ');
-    return `<div class="stats" style="padding:2px 0"><b style="color:var(--ink)">${esc(c.name)}</b> · ${items}</div>`;
+      total += t === 'scrap' ? 0 : n;
+      return `<span class="chip ${n ? '' : 'none'}"${tip(`<b>${esc(ammoLabel(t))}</b><br>${esc(AMMO_TYPES[t]!.desc)}`)}><img src="${spriteUrl(AMMO_TYPES[t]!.icon)}" alt=""><b>${n}</b></span>`;
+    }).join('');
+    return `<div class="calrow"><span class="t-s">${esc(c.name.replace(/\s*\(.*\)/, ''))}</span>${items}</div>`;
   }).join('');
   const order = Object.keys(WEAPONS);
   const guns = [...G.weapons].sort((a, b) => order.indexOf(a.def) - order.indexOf(b.def));
-  return `<div class="armory">
-  <h3>Ammunition <span class="dim">by caliber · hover a type for what it does</span></h3>
-  ${stock}
-  <h3>On the bench <span class="dim">spare attachments · fit them in a gun's slots below</span></h3>
-  <div class="stats">${(G.modStock ?? []).length ? (G.modStock ?? []).map((m) => `<span class="cost" title="${esc(MODS[m.def].niche)}"><img src="${spriteUrl(MODS[m.def].icon)}" alt="">${esc(MODS[m.def].name.toLowerCase())}${m.cond < 1 ? ` ${Math.round(m.cond * 100)}%` : ''}</span>`).join(' ') : 'Nothing spare. Craft attachments at the workbench and forge, or find them on runs.'}</div>
-  <h3>Guns</h3>
-  ${guns.map((w) => {
+  const spare = G.modStock ?? [];
+  const gunCards = guns.map((w) => {
     const d = WEAPONS[w.def];
     const p = fireProfile(w);
     const holder = living().find((s) => s.weapon === w.uid);
@@ -596,15 +633,18 @@ function armoryHtml() {
     else if (p.noise >= 2.5) tags.push('loud');
     if (p.jam >= 0.02) tags.push(`jams ${Math.round(p.jam * 100)}%`);
     const types = ammoTypesFor(w.def);
-    return `<div class="gun"><img src="${spriteUrl(d.icon)}" alt=""><div><b>${w.name ? `"${esc(w.name)}" ` : ''}${d.name}</b> <span class="dim">${CLASS_NAMES[d.cls].toLowerCase()} · ${Math.round(w.cond * 100)}% · ${w.kills} kills · ${holder ? first(holder) : 'on the rack'}</span>
-      ${d.niche ? `<div class="bd"><i>${esc(d.niche)}</i></div>` : ''}
-      <div class="bd dim">${esc(d.desc)}</div>
-      <div class="stats">dmg ${Math.round(p.dmg)}${p.pellets > 1 ? `×${p.pellets}` : ''} · ${+p.rof.toFixed(2)}/s · mag ${p.mag} · reload ${p.reloadPerRound ? `${p.reload.toFixed(2)}s/round` : `${+p.reload.toFixed(1)}s`}${p.pierce ? ` · pierce ${p.pierce}` : ''}${p.perShot !== 1 ? ` · ${p.perShot} ${ammoLabel(p.ammoRes).toLowerCase()}/shot` : ''}${tags.length ? ` · ${tags.join(' · ')}` : ''}</div>
-      <div class="stats">${types.length > 1 ? `loaded with ${ammoSelect(w)}` : `ammo: ${esc(ammoLabel(p.ammoRes).toLowerCase())} (${Math.floor(G.stores[p.ammoRes!] ?? 0)})`}${p.ammoRes && AMMO_TYPES[p.ammoRes] ? ` <span class="dim">— ${esc(AMMO_TYPES[p.ammoRes]!.desc)}</span>` : ''}</div>
-      ${modSlotsHtml(w)}${modDeltaHtml(w)}</div></div>`;
-  }).join('')}
-  <h3>Hand weapons <span class="dim">one per survivor, beside the gun · [V] / right-click on runs</span></h3>
-  ${(G.melee ?? []).length ? (G.melee ?? []).map((k) => {
+    const stats = `dmg ${Math.round(p.dmg)}${p.pellets > 1 ? `×${p.pellets}` : ''} · ${+p.rof.toFixed(2)}/s · mag ${p.mag} · reload ${p.reloadPerRound ? `${p.reload.toFixed(2)}s/round` : `${+p.reload.toFixed(1)}s`}${p.pierce ? ` · pierce ${p.pierce}` : ''}${p.perShot !== 1 ? ` · ${p.perShot} ${ammoLabel(p.ammoRes).toLowerCase()}/shot` : ''}`;
+    const t = `<b>${esc(d.name)}</b> · ${esc(CLASS_NAMES[d.cls].toLowerCase())}${d.niche ? `<br><i>${esc(d.niche)}</i>` : ''}<br>${stats}${tags.length ? `<br>${tags.join(' · ')}` : ''}${modDeltaHtml(w)}<br><span class="dim">${esc(d.desc)}</span>`;
+    const n = p.ammoRes ? Math.floor(G.stores[p.ammoRes] ?? 0) : 0;
+    const ammo = types.length > 1 ? ammoSelect(w, true) : p.ammoRes ? `<span class="chip ${n ? '' : 'warn'}"${tip(`${esc(ammoLabel(p.ammoRes))}${AMMO_TYPES[p.ammoRes] ? `<br>${esc(AMMO_TYPES[p.ammoRes]!.desc)}` : ''}`)}><img src="${spriteUrl(RES_ICON[p.ammoRes] ?? 'icon_ammo')}" alt=""><b>${n}</b></span>` : '';
+    return `<div class="gcard ${holder ? 'held' : ''}">
+      <div class="gpic"${tip(t)}><img src="${spriteUrl(d.icon)}" alt="${esc(d.name)}"></div>
+      <div class="gname"${tip(t)}>${w.name ? `"${esc(w.name)}"` : esc(d.name)}</div>
+      <div class="gmeta">${condBar(w.cond)}<span class="t-xs"${tip(`${Math.round(w.cond * 100)}% condition · ${w.kills} kills`)}>${holder ? esc(first(holder)) : 'rack'}</span></div>
+      <div class="gfoot">${ammo}${modSlotsHtml(w)}</div>
+    </div>`;
+  }).join('');
+  const melee = (G.melee ?? []).map((k) => {
     const d = MELEE[k.def];
     const p = meleeProfile(k);
     const holder = living().find((s) => s.melee === k.uid);
@@ -616,12 +656,17 @@ function armoryHtml() {
     if (p.pry > 1) tags.push(`pries ×${p.pry}`);
     if (p.fuel) tags.push(`${p.fuel} fuel/swing`);
     if (p.noise >= 1) tags.push('loud');
-    return `<div class="gun"><img src="${spriteUrl(d.icon)}" alt=""><div><b>${esc(d.name)}</b> <span class="dim">melee · ${Math.round(k.cond * 100)}% · ${k.kills} kills · ${holder ? first(holder) : 'on the rack'}</span>
-      <div class="bd"><i>${esc(d.niche)}</i></div>
-      <div class="bd dim">${esc(d.desc)}</div>
-      <div class="stats">dmg ${p.dmg} · reach ${p.reach}px · swing ${+(p.swingTime + p.recovery).toFixed(2)}s · shove ${p.knock} · stagger ${Math.round(p.stagger * 100)}% · overhead ×${p.crit} · stamina ${p.stamina}${tags.length ? ` · ${tags.join(' · ')}` : ''}</div></div></div>`;
-  }).join('') : '<p class="dim">None. Hatchets and crowbars turn up at the hardware store and the mill; the forge can make a few.</p>'}
-  <p class="dim">Weapons on the rack can be picked up on the wall at night with [Q] or number keys. Worn guns jam. On a daylight run, [T] switches bullet type. Blades and handles wear: sharpen and re-haft at the workbench.</p></div>`;
+    const t = `<b>${esc(d.name)}</b><br><i>${esc(d.niche)}</i><br>dmg ${p.dmg} · reach ${p.reach}px · swing ${+(p.swingTime + p.recovery).toFixed(2)}s · shove ${p.knock} · stagger ${Math.round(p.stagger * 100)}% · overhead ×${p.crit} · stamina ${p.stamina}${tags.length ? `<br>${tags.join(' · ')}` : ''}<br><span class="dim">${esc(d.desc)}</span>`;
+    return `<div class="gcard sm ${holder ? 'held' : ''}"${tip(t)}><div class="gpic"><img src="${spriteUrl(d.icon)}" alt=""></div><div class="gname">${esc(d.name)}</div>
+      <div class="gmeta">${condBar(k.cond)}<span class="t-xs">${holder ? esc(first(holder)) : 'rack'}</span></div></div>`;
+  }).join('');
+  return `<div class="armory">
+  <div class="sechead"><span class="t-l">Guns</span> <span class="t-xs">${guns.length}</span><span class="qm"${tip('Weapons on the rack can be picked up on the wall at night with [Q] or number keys. Worn guns jam. On a daylight run, [T] switches bullet type. Hover a gun for its numbers; click a slot to fit an attachment.')}>?</span></div>
+  <div class="gungrid">${gunCards}</div>
+  ${fold(`<span class="t-l">Ammunition</span> <span class="t-xs">${total} rounds</span>`, stock, { id: 'arm-ammo' })}
+  ${fold(`<span class="t-l">Spare attachments</span> <span class="t-xs">${spare.length}</span>`, `<div class="chips">${spare.length ? spare.map((m) => `<span class="chip"${tip(`<b>${esc(MODS[m.def].name)}</b><br>${esc(MODS[m.def].niche)}`)}><img src="${spriteUrl(MODS[m.def].icon)}" alt=""><b>${esc(MODS[m.def].name.toLowerCase())}</b>${m.cond < 1 ? ` ${Math.round(m.cond * 100)}%` : ''}</span>`).join('') : '<span class="t-s">None. Craft them or find them on runs.</span>'}</div>`, { id: 'arm-mods' })}
+  ${fold(`<span class="t-l">Hand weapons</span> <span class="t-xs">${(G.melee ?? []).length}</span>`, melee ? `<div class="gungrid">${melee}</div>` : '<p class="t-s">None. Hatchets and crowbars turn up at the hardware store and the mill; the forge can make a few.</p>', { id: 'arm-melee' })}
+  </div>`;
 }
 
 function chronicleHtml() {
@@ -630,30 +675,36 @@ function chronicleHtml() {
     if (!byDay.has(e.day)) byDay.set(e.day, []);
     byDay.get(e.day)!.push(`<p class="ce ${e.kind}">${esc(e.text)}</p>`);
   }
-  return `<div class="chron">${[...byDay.entries()].reverse().map(([d, l]) => `<h3>${dateLabel(d)} — the ${ordinal(d)} day</h3>${l.join('')}`).join('')}</div>`;
+  const days = [...byDay.entries()].reverse();
+  if (!days.length) return '<p class="t-s">Nothing written yet.</p>';
+  const head = (d: number, l: string[]) => `<span class="t-m">${dateLabel(d)}</span> <span class="t-xs">day ${d} · ${l.length}</span>`;
+  const [d0, l0] = days[0];
+  return `<div class="chron">${fold(head(d0, l0), l0.join(''), { open: true })}${days.slice(1).map(([d, l]) => fold(head(d, l), l.join(''))).join('')}</div>`;
 }
 
 function townHtml() {
   const found = docsFound();
   const word = (v: number) => (v >= 40 ? 'friendly' : v >= 10 ? 'warm' : v > -10 ? 'unknown' : v > -40 ? 'cold' : 'hostile');
   return `<div class="town">
-    <h3>Vessey</h3>
-    ${FACTIONS.map((f) => `<div class="faction"><b>${f.name}</b> <span class="rep r${word(rep(f.id))}">${word(rep(f.id))}</span><div class="bd">${f.desc}</div></div>`).join('')}
-    <h3>Papers <span class="dim">${found.length} of ${DOCS.length} found — searched from the ruins on runs</span></h3>
-    ${found.length ? found.map((id) => DOCS.find((d) => d.id === id)!).map((d) => `<div class="doc"><b>${esc(d.title)}</b><p>${esc(d.text)}</p></div>`).join('') : '<p class="dim">Nothing yet. Lead runs and search doors, sheds and bodies.</p>'}
+    <div class="sechead"><span class="t-l">Vessey</span></div>
+    <div class="factions">${FACTIONS.map((f) => `<div class="faction"${tip(esc(f.desc))}>${ico('st_faction')}<b>${f.name}</b> <span class="rep r${word(rep(f.id))}">${word(rep(f.id))}</span></div>`).join('')}</div>
+    ${fold(`<span class="t-l">Papers</span> <span class="t-xs">${found.length} / ${DOCS.length}</span>`, found.length ? found.map((id) => DOCS.find((d) => d.id === id)!).map((d) => fold(`<span class="t-m">${esc(d.title)}</span>`, `<div class="doc"><p>${esc(d.text)}</p></div>`)).join('') : '<p class="t-s">Nothing yet. Lead runs and search doors, sheds and bodies.</p>', { id: 'town-papers' })}
   </div>`;
 }
 
 function gravesHtml() {
-  if (!G.graves.length) return '<p class="dim">No graves yet behind the house.</p>';
-  return `<div class="graves">${G.graves.map((g) => `<div class="grave" data-act="detail" data-id="${g.id}">
+  if (!G.graves.length) return '<p class="t-s">No graves yet behind the house.</p>';
+  return `<div class="graves">${G.graves.map((g) => `<div class="grave" data-act="detail" data-id="${g.id}"${tip(`<b>${esc(displayName(g))}</b>, ${g.age}<br>${dateLabel(g.arrivedDay)} – ${dateLabel(g.dead!.day)}<br>${esc(g.dead!.cause)}<br><i>${esc(g.dead!.epitaph)}</i>`)}>
     ${portraitImg(g.sprite, 'portrait dead')}<div class="gtext"><div class="gn">${esc(displayName(g))}</div>
-    <div class="gd">${g.age} · ${dateLabel(g.arrivedDay)} – ${dateLabel(g.dead!.day)}</div>
-    <div class="gc">${esc(g.dead!.cause)}</div>
-    <div class="ge">${esc(g.dead!.epitaph)}</div></div></div>`).join('')}</div>`;
+    <div class="gd">${dateLabel(g.dead!.day)}</div></div></div>`).join('')}</div>`;
 }
 
 const STORE_RES: Res[] = ['food', 'wood', 'scrap', 'parts', 'cloth', 'fuel', 'meds', 'liquor', 'molotov'];
+const STORE_USE: Partial<Record<Res, string>> = {
+  food: 'One a day for every mouth.', wood: 'Repairs the wall; builds frames and machinery.', scrap: 'Ammo, traps, the forge.', parts: 'Machinery, guns, upgrades.',
+  cloth: 'Bandages, rags to oil the guns, wicks.', fuel: 'The stove at night; reloading powder; the still.', meds: 'The doctor heals and fights infection with these.',
+  liquor: 'Courage for the breaking; the still makes it.', molotov: 'Firebombs: [F] or right-click at night.',
+};
 
 // One compact chip for every round in the house, with a per-caliber breakdown on hover/focus.
 function ammoChip() {
@@ -664,10 +715,9 @@ function ammoChip() {
   }).filter((r) => r.types.length);
   const total = rows.reduce((a, r) => a + r.n, 0);
   const keys = rows.flatMap((r) => r.types).join(' ');
-  return `<span class="ammochip" tabindex="0" data-res-group="${keys}" title="Ammunition by caliber"><img src="${spriteUrl(RES_ICON.light)}" alt=""><span class="n">${total}</span><em>rounds ▾</em>
-    <span class="ammopop" role="tooltip">${rows.map((r) => `<span class="${r.n ? '' : 'dim'}"><b>${esc(r.c.name)}</b> ${r.types.map((t) => `${Math.floor(G.stores[t] ?? 0)} ${esc((AMMO_TYPES[t]?.short ?? ammoLabel(t)).toLowerCase())}`).join(' · ')}</span>`).join('')}</span></span>`;
+  const t = `<b>Ammunition</b><br>${rows.filter((r) => r.n).map((r) => `${esc(r.c.name.replace(/\s*\(.*\)/, ''))}: ${r.types.filter((x) => (G.stores[x] ?? 0) >= 1).map((x) => `${Math.floor(G.stores[x] ?? 0)} ${esc((AMMO_TYPES[x]?.short ?? ammoLabel(x)).toLowerCase())}`).join(' · ')}`).join('<br>')}`;
+  return `<span class="schip ammochip" data-res-group="${keys}"${tip(t)}><img src="${spriteUrl(RES_ICON.light)}" alt="rounds"><span class="n">${total}</span></span>`;
 }
-
 
 let duskArmed = false; // first dusk press with carried-over plans only highlights them
 
@@ -692,14 +742,18 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
   const sky = dread ? 'linear-gradient(rgba(70,14,10,.62),rgba(24,8,8,.78) 45%,rgba(10,10,12,.92))' : 'linear-gradient(rgba(10,10,12,.72),rgba(10,10,12,.9))';
   root.innerHTML = `<div class="day ${duskArmed && stale.length ? 'armed' : ''} ${dread ? 'dread' : ''}" style="background-image:${sky},url(${spriteUrl('bg_far')})">
     <header>
-      <div class="date"><b>${dateLabel()}</b> · day ${G.day} · ${WEATHER_LABEL[G.weather] ?? G.weather} <span class="seed" title="This town's seed. Start a new game from it on the title screen to replay the same Vessey.">seed ${G.seed}${G.flags.daily ? ` · daily ${esc(String(G.flags.daily))}` : ''}</span></div>
-      <div class="ice">${ice > 0 ? `River freezes in <b>${ice}</b> day${ice === 1 ? '' : 's'}` : ice === 0 ? '<b>The river is freezing tonight.</b>' : 'The river is ice.'}</div>
+      <div class="date"${tip(`${WEATHER_LABEL[G.weather] ?? G.weather}<br>This town's seed: ${G.seed}${G.flags.daily ? ` · daily ${esc(String(G.flags.daily))}` : ''}. Start a new game from it on the title screen to replay the same Vessey.`)}><b class="t-xl">${dateLabel()}</b> <span class="t-xs">day ${G.day}</span> <span class="t-s wx">${WEATHER_LABEL[G.weather] ?? G.weather}</span></div>
+      <div class="ice"${tip(ice > 0 ? `The river freezes in ${ice} day${ice === 1 ? '' : 's'}. Then the dead can cross.` : ice === 0 ? 'The river is freezing tonight.' : 'The river is ice.')}>${ico('st_cold')}<b>${ice > 0 ? `${ice}d` : ice === 0 ? 'tonight' : 'ice'}</b></div>
       <div class="hbtns"><button class="icon" data-act="help" aria-label="Help and controls" title="Help and controls">?</button><button class="icon" data-act="settings" aria-label="Settings" title="Settings">⚙</button></div>
-      <div class="stores">${STORE_RES.map((r) => `<span data-res="${r}" title="${RES_LABEL[r]}${r === 'fuel' && heat ? ` · the stove burns ${heat} tonight` : ''}" class="${(r === 'food' && G.stores.food < eat * 2) || (r === 'fuel' && G.stores.fuel < heat) ? 'low' : ''}"><img src="${spriteUrl(RES_ICON[r])}" alt=""><span class="n">${Math.floor(G.stores[r] ?? 0)}</span><em>${RES_LABEL[r].replace(' ammo', '').toLowerCase()}${r === 'fuel' && heat ? ` <b class="heat">−${heat}/night</b>` : ''}</em></span>`).join('')}${ammoChip()}</div>
+      <div class="stores">${STORE_RES.map((r) => {
+        const low = (r === 'food' && G.stores.food < eat * 2) || (r === 'fuel' && G.stores.fuel < heat);
+        const use = r === 'food' ? `Eat ${eat}/day.` : r === 'fuel' && heat ? `The stove burns ${heat} tonight.` : '';
+        return `<span data-res="${r}" class="schip ${low ? 'low' : ''}"${tip(`<b>${RES_LABEL[r]}</b><br>${STORE_USE[r] ?? ''}${use ? `<br>${use}` : ''}`)}><img src="${spriteUrl(RES_ICON[r])}" alt="${RES_LABEL[r]}"><span class="n">${Math.floor(G.stores[r] ?? 0)}</span>${r === 'fuel' && heat ? `<em class="heat">−${heat}</em>` : r === 'food' && eat ? `<em>−${eat}</em>` : ''}</span>`;
+      }).join('')}${ammoChip()}</div>
     </header>
     <main>
       <section class="people">
-        <h2>The house <span class="dim">${living().length} living · eat ${eat}/day${G.flags.dog ? ` · and ${G.flags.dog}` : ''} · daylight ${clockLabel(0)}–${clockLabel(DAY_HOURS)}</span></h2>
+        <h2 class="t-l">The house <span class="t-xs"${tip(`${living().length} living · eat ${eat}/day${G.flags.dog ? ` · and ${esc(String(G.flags.dog))}` : ''} · daylight ${clockLabel(0)}–${clockLabel(DAY_HOURS)}`)}>${living().length} living${G.flags.dog ? ' + dog' : ''}</span></h2>
         ${stale.length ? `<div class="carryover ${duskArmed ? 'flash' : ''}"><span>${stale.length === 1 ? `${esc(first(stale[0]))}'s job` : `${stale.length} jobs`} carried over from yesterday.</span><button class="mini" data-act="keepplans">Keep ${stale.length === 1 ? 'it' : 'them'}</button></div>` : ''}
         ${living().map(survivorCard).join('')}
       </section>
@@ -708,13 +762,13 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
         <div class="tabbody">${tab === 'workshop' ? workshopHtml() : tab === 'wall' ? wallHtml() : tab === 'armory' ? armoryHtml() : tab === 'town' ? townHtml() : tab === 'chronicle' ? chronicleHtml() : gravesHtml()}</div>
       </section>
       <section class="report">
-        <h2>This morning</h2>
-        ${warnings().map((w) => `<p class="stamp" role="alert">${esc(w)}</p>`).join('')}
-        <div class="lines">${report.length ? report.map((l) => `<p>${esc(l)}</p>`).join('') : '<p class="dim">A quiet morning.</p>'}</div>
+        <h2 class="t-l">This morning</h2>
+        ${warningsHtml()}
+        <div class="lines">${report.length ? report.slice(0, 2).map((l) => `<p>${esc(l)}</p>`).join('') + (report.length > 2 ? fold(`<span class="t-xs">+${report.length - 2} more</span>`, report.slice(2).map((l) => `<p>${esc(l)}</p>`).join('')) : '') : '<p class="t-s">A quiet morning.</p>'}</div>
         ${fc ? `<p class="forecast">${esc(fc)}</p>` : ''}
         ${calendarHtml()}
         ${threadsHtml()}
-        <div class="weather">The Weather: <b>${persona().name}</b><br><span class="dim">Tonight feels like ${tp > 60 ? 'a long one' : tp > 30 ? 'a bad one' : 'any other night'}.${heat ? ` The stove will want ${heat} fuel.` : ''}</span></div>
+        <div class="weather"${tip(`Tonight feels like ${tp > 60 ? 'a long one' : tp > 30 ? 'a bad one' : 'any other night'}.${heat ? ` The stove will want ${heat} fuel.` : ''}`)}><span class="t-xs">The Weather</span> <b>${persona().name}</b> ${pips(Math.min(5, Math.ceil(tp / 20)), 5, tp > 60 ? 'red' : '')}</div>
         ${runHtml()}
         <button class="dusk" data-act="dusk">${duskArmed && stale.length ? 'Yesterday\'s jobs are marked. Go anyway ›' : 'Go to the wall at dusk ›'}<small>${esc(keyLabel(keyOf('day.dusk')))}</small></button>
       </section>

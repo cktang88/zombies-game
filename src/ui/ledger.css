@@ -298,3 +298,126 @@ ul.fort { list-style: none; padding: 0; margin: 8px 0; }
 ul.fort li { margin: 0; padding: 5px 0 5px 14px; border-bottom: 1px dotted rgba(90, 79, 60, .55); position: relative; }
 ul.fort li::before { content: '—'; position: absolute; left: 0; color: #6a5d45; }
 ul.fort li b { font-family: var(--type); font-weight: normal; color: #efe4cc; }
+
+/* ---- day ledger, scan-first (day.ts): pictures and numbers up front, sentences on hover ---- */
+.day header { gap: 6px 16px; }
+.day header .date { display: flex; align-items: baseline; gap: 8px; cursor: default; }
+.day header .date .t-xl { font-size: 22px; }
+.day header .date .wx { font-family: var(--serif); }
+.day header .ice { display: inline-flex; align-items: center; gap: 4px; }
+.day header .ice .ico { width: 18px; height: 18px; }
+.stores { gap: 4px 6px; }
+.stores .schip { display: inline-flex; align-items: center; gap: 3px; padding: 2px 6px 2px 3px; border: 1px solid rgba(90, 79, 60, .55); background: rgba(255, 255, 255, .03); border-radius: 3px; font-size: 14px; cursor: default; }
+.stores .schip .n { font-family: var(--type); }
+.stores .schip em { font-style: normal; font-size: 10px; color: var(--dim); }
+.stores .schip em.heat { color: #e0705a; }
+.stores .schip.low { border-color: rgba(192, 96, 80, .8); color: #e07a5a; }
+.stores img, .cost img { height: 20px; width: 20px; }
+
+/* warnings: one icon row, the sentences folded */
+.warns.fold { border: 1px solid rgba(168, 50, 42, .6); background: rgba(142, 27, 27, .08); padding: 0 8px; margin: 6px 0 10px; }
+.warns > summary { flex-wrap: wrap; gap: 6px; padding: 5px 0; }
+.warns .wcount { font-family: var(--type); color: #e0705a; }
+.warns .wchip { display: inline-flex; align-items: center; gap: 2px; color: #e0a48c; font-family: var(--type); font-size: var(--fs-s); }
+.warns .wchip .ico { width: 18px; height: 18px; }
+.warns .fold-body { padding-left: 0; }
+.warns .stamp { font-size: 11px; margin: 4px 0; transform: none; }
+.report .lines p { font-size: var(--fs-m); }
+.report .lines .fold { border: 0; }
+.report .lines .fold > summary { padding: 0; }
+.weather { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; cursor: default; }
+.pips.red i.on { background: #c0503c; }
+.threads { margin: 8px 0; display: grid; gap: 4px; }
+.thread { display: flex; align-items: center; gap: 6px; padding: 3px 6px; border-left: 2px solid rgba(200, 160, 90, .5); background: rgba(255, 255, 255, .02); cursor: default; font-size: var(--fs-s); }
+.thread .tt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.thread .tl { font-family: var(--type); font-weight: normal; color: var(--ochre); }
+.thread.urgent { border-color: #c0503c; } .thread.urgent .tl { color: #e0705a; }
+.thread .ico { width: 18px; height: 18px; }
+.calendar .smell { cursor: default; }
+
+/* run */
+.run .rhead { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; cursor: default; }
+.qm { display: inline-grid; place-items: center; width: 16px; height: 16px; border: 1px solid var(--line); border-radius: 50%; font-size: 11px; color: var(--dim); cursor: help; font-family: var(--type); }
+.run .runrow { display: flex; gap: 6px; }
+.run .runrow select { flex: 1 1 0; min-width: 0; }
+.runchips { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+.runchips .ico { width: 16px; height: 16px; }
+
+/* shared section heads + cards */
+.sechead { display: flex; align-items: center; gap: 8px; margin: 4px 0 8px; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+.chip img { height: 18px; width: 18px; object-fit: contain; }
+.chip.none { opacity: .45; }
+.tabbody .fold > summary .t-l { font-size: 16px; }
+.ws { display: block; }
+.wsq { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.wsq > .t-l, .wsq > .chip { align-self: flex-start; }
+.wsq > .chip { margin-top: -2px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 6px; }
+.wcard { display: flex; align-items: center; gap: 6px; padding: 5px 6px; border: 1px solid rgba(90, 79, 60, .55); background: rgba(255, 255, 255, .025); border-radius: 3px; cursor: default; min-width: 0; }
+.wcard:hover, .wcard:focus { border-color: #8a7a5a; background: rgba(255, 255, 255, .05); }
+.wcard.cant .pic { opacity: .45; }
+.wcard.unbuilt .pic { filter: grayscale(1); opacity: .6; }
+.wcard .cbody { flex: 1; min-width: 0; }
+.wcard .cname { font-family: var(--type); font-size: 13px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wcard .ccost { display: flex; flex-wrap: wrap; gap: 0 2px; margin-top: 2px; }
+.wcard .cost { font-size: 12px; margin-right: 4px; font-family: var(--type); }
+.wcard .cost img { width: 16px; height: 16px; }
+.wcard button { flex: none; min-width: 30px; }
+.pic { width: 34px; height: 34px; object-fit: contain; flex: none; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .8)); }
+.pic.sm { width: 20px; height: 20px; }
+.q .pic.sm { margin-right: 2px; }
+
+/* wall */
+.fortgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; margin: 8px 0 12px; }
+.ftile { display: flex; flex-direction: column; align-items: center; padding: 6px 2px 4px; border: 1px solid rgba(90, 79, 60, .55); background: rgba(255, 255, 255, .025); cursor: default; }
+.ftile b { font-family: var(--type); font-weight: normal; font-size: 18px; color: #efe4cc; }
+.ftile.none { opacity: .4; }
+.chores { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.chores .t-l { margin-right: 4px; cursor: default; }
+button.mini.urgent { border-color: #c0603c; color: #f0b090; }
+
+/* armory */
+.gungrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.gcard { display: flex; flex-direction: column; gap: 3px; padding: 6px; border: 1px solid rgba(90, 79, 60, .55); background: rgba(255, 255, 255, .025); border-radius: 3px; min-width: 0; }
+.gcard.held { border-color: #7a6a48; }
+.gcard .gpic { height: 46px; display: grid; place-items: center; cursor: default; }
+.gcard .gpic img { max-width: 100%; height: 44px; object-fit: contain; filter: drop-shadow(0 0 1px rgba(232, 220, 196, .35)) drop-shadow(0 1px 1px rgba(0, 0, 0, .8)); }
+.gcard.sm .gpic { height: 34px; } .gcard.sm .gpic img { height: 32px; }
+.gcard .gname { font-family: var(--type); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default; }
+.gcard .gmeta { display: flex; align-items: center; gap: 6px; }
+.gcard .gfoot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 2px; }
+.gcard .gfoot select { font-size: 12px; padding: 1px 2px; max-width: 100%; }
+.cond { flex: 1; height: 5px; background: #0e0d0b; border: 1px solid rgba(90, 79, 60, .55); display: block; }
+.cond i { display: block; height: 100%; background: #8f9a5a; }
+.cond.mid i { background: var(--ochre); } .cond.bad i { background: #c0503c; }
+.mslots { display: flex; gap: 3px; }
+.mslot { position: relative; width: 28px; height: 22px; display: grid; place-items: center; border: 1px dashed #4a4235; border-radius: 3px; }
+.mslot.full { border-style: solid; border-color: #6a5d45; }
+.mslot.avail { border-color: var(--ochre); }
+.mslot img { width: 26px; height: 18px; object-fit: contain; }
+.mslot i { font-style: normal; font-family: var(--type); font-size: 10px; color: var(--dim); text-transform: uppercase; }
+.mslot select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.calrow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 2px 0; }
+.calrow > .t-s { min-width: 110px; }
+.armory .fold { margin-top: 8px; }
+
+/* chronicle / town / graves */
+.chron .fold-body p { margin: 4px 0; }
+.factions { display: grid; gap: 4px; }
+.faction { display: flex; align-items: center; gap: 6px; padding: 4px 0; cursor: default; }
+.faction .ico { width: 20px; height: 20px; }
+.town .fold .fold { border-top: 1px dotted rgba(90, 79, 60, .55); }
+.graves { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.grave { display: flex; gap: 8px; align-items: center; padding: 6px; }
+.grave img.portrait { width: 44px; height: auto; }
+.grave .gn { font-size: 13px; }
+.grave .gd { font-size: 11px; }
+@media (max-width: 600px) {
+  .stores { gap: 3px 4px; }
+  .stores .schip { font-size: 13px; padding: 1px 4px 1px 2px; }
+  .stores img { height: 16px; width: 16px; }
+  .cards { grid-template-columns: 1fr 1fr; }
+  .gungrid { grid-template-columns: 1fr 1fr; }
+  .wcard .pic { width: 26px; height: 26px; }
+}
