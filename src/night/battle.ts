@@ -6,7 +6,7 @@ import { img, flashImg, shadeImg } from '../assets';
 import { sfx, wind, gunSoundFor, muffle, ambienceLayer } from '../audio';
 import { flashKind, gunFeel, voiceOf, panOf, isSuppressed, type FlashKind } from './gunfx';
 import { Vfx } from './vfx'; // gunfire & effects (docs/research/10-vfx.md)
-import { reduceGore, shakeScale, realism, screenFx, fxQuality, hitMarkers, zoneMarkers, autoReload, focusToggle, threatRibbon } from '../ui/settings';
+import { webglFx, reduceGore, shakeScale, realism, screenFx, fxQuality, hitMarkers, zoneMarkers, autoReload, focusToggle, threatRibbon } from '../ui/settings';
 import { keyOf, normKey, keyCap } from '../ui/keys';
 import { openPause } from '../ui/pause';
 import {
@@ -404,6 +404,7 @@ export class Battle {
       light: (x, y, r, life, color) => this.lights.push({ x, y, r, life, max: life, color }),
       snow: () => G.weather === 'snow' || this.plan.special === 'crossing',
     }, fxQuality());
+    this.vfx.glWanted = webglFx();
     this.dark = document.createElement('canvas');
     this.dark.width = W / 2;
     this.dark.height = H / 2;

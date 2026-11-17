@@ -36,6 +36,8 @@ export interface Settings {
   textSize: TextSize;
   highContrast: boolean;
   showFps: boolean;
+  /** WebGL2 effects layer (cel-shaded fire/smoke fields, heat haze, bloom) at High; opt-in until measured on real GPUs */
+  webgl: boolean;
   /** Gunfire & effects detail (docs/research/10-vfx.md): particle budget, smoke, shock rings, the scene wash. */
   fxQuality: 'high' | 'medium' | 'low';
   // ---- gameplay
@@ -54,7 +56,7 @@ export interface Settings {
 export const SETTINGS_KEY = 'vessey-settings-v1';
 const DEFAULTS: Settings = {
   master: 0.7, music: 0.55, sfx: 0.8, ambience: 0.8, muted: false,
-  animation: 'rigged', reduceShake: false, reduceGore: false, flashes: true, hitMarkers: true, zoneMarkers: true, textSize: 'M', highContrast: false, showFps: false, fxQuality: 'high',
+  animation: 'rigged', reduceShake: false, reduceGore: false, flashes: true, hitMarkers: true, zoneMarkers: true, textSize: 'M', highContrast: false, showFps: false, webgl: false, fxQuality: 'high',
   realism: 'standard', autoReload: true, focusMode: 'hold', threatRibbon: true, keyHints: true,
 };
 
@@ -86,6 +88,7 @@ export function getSettings(): Settings {
     textSize: s.textSize === 'S' || s.textSize === 'L' ? s.textSize : 'M',
     highContrast: bool(s.highContrast, false),
     showFps: bool(s.showFps, false),
+    webgl: bool(s.webgl, false),
     fxQuality: s.fxQuality === 'medium' || s.fxQuality === 'low' ? s.fxQuality : 'high',
     realism: s.realism === 'hardcore' ? 'hardcore' : 'standard',
     autoReload: bool(s.autoReload, true),
@@ -118,6 +121,8 @@ export const shakeScale = () => (getSettings().reduceShake ? 0.2 : 1);
 export const realism = (): 'standard' | 'hardcore' => getSettings().realism;
 /** Effects quality: 'high' (default), 'medium' or 'low'. */
 export const fxQuality = (): 'high' | 'medium' | 'low' => getSettings().fxQuality;
+/** The WebGL effects layer is wanted (it also needs Effects High and a WebGL2 context; a frame-time governor steps it down). */
+export const webglFx = (): boolean => getSettings().webgl;
 /** Character animation the player chose: 'rigged' (bone rigs) or 'classic' (single images).
  * The night code asks night/actors.ts rigsOn(), which also honours the automatic fallback. */
 export const animationSetting = (): 'rigged' | 'classic' => getSettings().animation;
@@ -262,6 +267,7 @@ export function openSettings(host: HTMLElement = document.body, onClose?: () => 
       case 'video': return `${fold('Look', `
         ${choice('animation', 'Animation', [['rigged', 'Rigged'], ['classic', 'Classic']], s.animation, 'Rigged: bone rigs that aim, reload, walk and fall. Classic: single images, lighter (used by itself if the rigs can\'t load or run too slowly).')}
         ${choice('fxQuality', 'Effects quality', [['high', 'High'], ['medium', 'Medium'], ['low', 'Low']], s.fxQuality, 'Muzzle flashes, tracers, smoke, fire and blasts. Lower it if the night stutters.')}
+        ${check('webgl', 'WebGL effects (experimental)', 'At High: cel-shaded fire and smoke fields, heat haze and bloom on the GPU. Steps itself down if frames run long.', s.webgl)}
         ${choice('textSize', 'Text size', [['S', 'S'], ['M', 'M'], ['L', 'L']], s.textSize)}
         ${check('highContrast', 'High-contrast text', 'Brighter ink, darker paper, no ruled lines.', s.highContrast)}
         <div class="set-row choice" data-tip="Not saved: the browser asks each time."><span>Fullscreen<span class="qi" aria-hidden="true">i</span></span><span class="seg"><button type="button" data-act="fullscreen" aria-pressed="${fsOn()}">${fsOn() ? 'Leave fullscreen' : 'Go fullscreen'}</button></span></div>`, { open: true, id: 'set-look' })}
