@@ -31,8 +31,10 @@ export function campWealth() {
   return goods + guns + builds + fort;
 }
 
-/** Balance knobs (docs/balance.md §9): days for the early ramp to reach full strength, and how long each surge takes to arrive (share of the night). */
-export const DIRECTOR_TUNE = { rampDays: 9, span: 0.08, mul: 1, early: 0.5, at: [0.0, 0.42, 0.78], share: [0.25, 0.4, 0.35] };
+/** Balance knobs (docs/balance.md §9–10): days for the early ramp to reach full strength, and how long each surge takes to arrive (share of the night).
+ *  late: from day 13 (eased in from day 9) the nights are × this (tide nights × lateTide: they stay the big nights); crossing: the Crossing's × on threat.
+ *  tideMid: the tide's middle wave × this. dark / darkBig: share of a later surge (ordinary nights from darkDay / tide, horde, Crossing) that forms up close in the dark. */
+export const DIRECTOR_TUNE = { rampDays: 9, span: 0.08, mul: 1, early: 0.6, at: [0.0, 0.42, 0.78], share: [0.25, 0.4, 0.35], tideMid: 2, dark: 0.25, darkDay: 6, darkBig: 0.6, late: 0.7, lateTide: 0.85, crossing: 2.2 };
 (globalThis as unknown as { __directorTune: typeof DIRECTOR_TUNE }).__directorTune = DIRECTOR_TUNE; // debug handle (balance harness)
 export function threatPoints(day = G.day) {
   const p = persona();
@@ -46,10 +48,11 @@ export function threatPoints(day = G.day) {
   const jitter = R.range(p.jitter[0], p.jitter[1]);
   // early and mid nights run heavier (a full wall of guards otherwise never lets one reach the planks); it tapers off by day 18, where ammunition is the squeeze
   const early = 1 + DIRECTOR_TUNE.early * Math.min(1, Math.max(0, (18 - day) / 10));
-  let pts = (base + wealth + pawns) * ramp * adaptF * phase * jitter * p.diff * DIRECTOR_TUNE.mul * early;
+  const late = 1 - (1 - (cyclePos(day).peak ? DIRECTOR_TUNE.lateTide : DIRECTOR_TUNE.late)) * Math.min(1, Math.max(0, (day - 9) / 4));
+  let pts = (base + wealth + pawns) * ramp * adaptF * phase * jitter * p.diff * DIRECTOR_TUNE.mul * early * late;
   // mercy: right after a death the Weather eases off
   if (G.flags.lastDeathDay !== undefined && day - (G.flags.lastDeathDay as number) <= 1) pts *= 0.8;
-  if (day === ICE_DAY) pts *= 2.2;
+  if (day === ICE_DAY) pts *= DIRECTOR_TUNE.crossing;
   if (day > ICE_DAY) pts *= 1.35;
   return Math.max(8, Math.round(pts));
 }
@@ -79,7 +82,7 @@ export function planNight(): NightPlan {
     label = 'Scraping in the storm drain under Ferry Road. Under the wall.';
   } else if (peak && day >= 5) {
     special = 'tide';
-    label = 'A tide night. The radio says the whole east bank is moving.';
+    label = 'A tide night. The radio says the whole east bank is moving, and the middle of the night comes twice as thick.';
   } else if (G.weather === 'fog' || (day > 3 && R.chance(0.12))) {
     special = 'fog';
     label = 'Fog off the river. You will hear them before you see them.';
@@ -93,8 +96,10 @@ export function planNight(): NightPlan {
   const duration = Math.min(210, 70 + pts * 0.55);
   const surgeAt = DIRECTOR_TUNE.at;
   const surgeShare = DIRECTOR_TUNE.share;
+  const big = special === 'tide' || special === 'horde' || special === 'crossing';
   for (let s = 0; s < 3; s++) {
-    let sb = pts * surgeShare[s];
+    let sb = pts * surgeShare[s] * (special === 'tide' && s === 1 ? DIRECTOR_TUNE.tideMid : 1);
+    const n0 = spawns.length;
     const t0 = duration * surgeAt[s];
     const span = duration * DIRECTOR_TUNE.span;
     // part of the budget goes on combination packs
@@ -117,6 +122,9 @@ export function planNight(): NightPlan {
       budget -= z.cost;
       spawns.push({ type: z.id, t: t0 + R.range(0, span) });
     }
+    // the later surges of a big night (and, from darkDay, part of any) form up close, inside the dark
+    const dk = s === 0 ? 0 : big ? DIRECTOR_TUNE.darkBig : day >= DIRECTOR_TUNE.darkDay ? DIRECTOR_TUNE.dark : 0;
+    for (let i = n0; i < spawns.length; i++) if (R.chance(dk)) spawns[i].dark = true;
   }
   if (special === 'crossing') {
     for (let i = 0; i < 3; i++) spawns.push({ type: 'ferryman', t: duration * (0.5 + i * 0.15) });
@@ -290,7 +298,7 @@ export function nightIntel(plan: NightPlan | null = G.nextNight): string[] {
   if (tier === 0) return ['Nobody was on the radio or watching the road today. We will see them when they come.'];
   const out: string[] = [];
   const end = Math.max(1, ...plan.spawns.map((s) => s.t));
-  const waves = ['First wave', 'Second wave', 'Late'];
+  const waves = ['First wave', plan.special === 'tide' ? 'Second wave, the tide itself (twice the first)' : 'Second wave', 'Late'];
   const fuzz = (n: number) => {
     const s = radio ?? look;
     if (s && s.traits.includes('grim')) return Math.ceil(n * 1.3);
@@ -317,6 +325,7 @@ export function nightIntel(plan: NightPlan | null = G.nextNight): string[] {
         return p === 'Reload trap' ? 'A herd held back to hit us mid-reload.' : `${p}: ${d?.desc ?? p.toLowerCase()}.`;
       }).join(' ')}`;
     }
+    if (part.some((s) => s.dark)) line += ' Some of them will be close before we see them.';
     out.push(line);
   }
   if (tier >= 3) {
