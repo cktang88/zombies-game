@@ -237,7 +237,7 @@ function deployStep() {
   if (!kits && !emps.length && !guards.length) return night();
   app.onclick = null;
   app.onchange = null;
-  app.innerHTML = '<div class="deploywrap" style="min-height:100vh;overflow:auto;padding:12px 0;background:#0e0d0b"><div class="dep-posts"></div><div class="dep-crew"></div><div class="dep-root"></div></div>';
+  app.innerHTML = `<div class="deploywrap" style="background-image:linear-gradient(rgba(10,9,8,.84),rgba(10,9,8,.95)),url(${spriteUrl('bg_far')})"><div class="dep-posts"></div><div class="dep-crew"></div><div class="dep-root"></div></div>`;
   const postsEl = app.querySelector('.dep-posts') as HTMLElement;
   const crewEl = app.querySelector('.dep-crew') as HTMLElement;
   const rootEl = app.querySelector('.dep-root') as HTMLElement;
@@ -293,11 +293,11 @@ function deployStep() {
   });
   const plan = crewPlan();
   if (emps.length) {
-    crewEl.innerHTML = `<div class="dep" style="margin-bottom:10px"><header class="dep-h"><h2>The guns</h2><span class="dep-count">heavy-weapons training decides how well a crew works one</span></header>
+    crewEl.innerHTML = `<div class="dep crew"><header class="dep-h"><h2>The guns</h2><span class="dep-count">heavy-weapons training decides how well a crew works one</span></header>
       ${emps.map((e, i) => {
         const d = EMPLACEMENTS[e.id];
         const want = plan[String(i)] ?? 'auto';
-        return `<p style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:6px 0"><b style="min-width:13em">${esc(d.name)}</b>
+        return `<p class="crewrow"><b>${esc(d.name)}</b>
           <span class="dim">${Math.round(e.cond * 100)}%</span>
           <label>post <select data-emp-post="${i}">${d.posts.map((p) => `<option value="${p}" ${p === e.post ? 'selected' : ''}>${p === 'roof' ? 'roof scaffold' : 'firestep'}</option>`).join('')}</select></label>
           <label>crew <select data-emp-crew="${i}">
@@ -360,7 +360,7 @@ function deployStep() {
       onDone: (ps) => finish(ps.slice(0, allowed)),
     });
   } else {
-    rootEl.innerHTML = '<div class="dep" style="text-align:right"><button type="button" class="dep-done">To the wall. Night falls.</button></div>';
+    rootEl.innerHTML = '<div class="dep dep-end"><button type="button" class="dep-done">To the wall. Night falls.</button></div>';
     rootEl.querySelector('.dep-done')!.addEventListener('click', () => { sfx.ui(); finish([]); });
   }
 }

@@ -18,7 +18,8 @@
 }
 
 /* ---------- pages and panels ---------- */
-body { background: #0c0b0a var(--grain-l); }
+html, body { background: #0c0b0a var(--grain-l); }
+body { background: transparent; }
 .day section, .modal, .dep, .over .score, .grave {
   background-image: var(--grain-l), linear-gradient(rgba(255, 244, 220, .025), rgba(0, 0, 0, .06));
 }
@@ -195,6 +196,7 @@ img.portrait.big { width: 128px; height: 160px; border-width: 4px; border-bottom
 .pausebtns button { text-align: center; }
 
 /* ---------- dusk and dawn ---------- */
+.dawnrep .tally { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .dawnrep .tally > div { background: rgba(0, 0, 0, .18); border-color: #4a4235; text-align: center; padding: 10px 8px 8px; }
 .dawnrep .tally b { font-size: 34px; line-height: 1.05; }
 .dawnrep .deathcard { gap: 14px; }
@@ -237,7 +239,7 @@ img.portrait.big { width: 128px; height: 160px; border-width: 4px; border-bottom
 .over h1 { margin-top: -1.9em; font-size: clamp(32px, 5vw, 52px); text-shadow: 0 2px 0 #000, 0 4px 30px #000; letter-spacing: .06em; }
 .over .sub { font-family: var(--type); font-size: 13px; letter-spacing: .04em; margin: 4px 0 0; }
 .over .epi { max-width: 44em; margin: 1.2em 0 1.6em; font-size: 18px; line-height: 1.6; color: #ddd2b8; }
-.over .epi::first-letter { font-family: var(--type); font-size: 2.6em; float: left; line-height: .9; margin: .06em .1em 0 0; color: var(--brass); }
+.over .epi::first-letter { font-family: var(--type); font-size: 3.4em; float: left; line-height: .82; margin: .1em .12em 0 0; color: var(--brass); }
 .over > h2 { margin-top: 26px; border-bottom: 3px double #4a4235; padding-bottom: 6px; }
 .over .score { max-width: 34em; border: 1px solid #5a4f3c; padding: 10px 18px 12px; margin: 8px 0 14px; background-color: #15130f; box-shadow: 0 8px 26px rgba(0, 0, 0, .5); }
 .over .score .srow { display: flex; align-items: baseline; justify-content: space-between; gap: 1em; border-bottom: 1px dotted rgba(230, 220, 198, .14); padding: 4px 0; }
@@ -274,8 +276,19 @@ img.portrait.big { width: 128px; height: 160px; border-width: 4px; border-bottom
   .over h1 { margin-top: -1.6em; }
   .center nav button { padding: 6px 9px; }
   .gun img { width: 96px; height: 42px; }
+  .htabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .htabs::-webkit-scrollbar { display: none; }
+  .htabs button, .overlay.settings .htabs button { flex: none; padding: 6px 10px; font-size: 12px; }
+  .dawnrep .tally span { font-size: 10px; letter-spacing: .04em; }
+  .dawnrep .tally b { font-size: 26px; }
 }
 :root.hc .modal.event { background: #f2ead8; }
 @media (prefers-reduced-motion: reduce) { .tart i { animation: none; } }
 
 h3 .dim { font-size: 11px; letter-spacing: .02em; }
+.stats { font-size: 12px; }
+.stats .cost.short { color: var(--dim); opacity: .75; }
+ul.fort { list-style: none; padding: 0; margin: 8px 0; }
+ul.fort li { margin: 0; padding: 5px 0 5px 14px; border-bottom: 1px dotted rgba(90, 79, 60, .55); position: relative; }
+ul.fort li::before { content: '—'; position: absolute; left: 0; color: #6a5d45; }
+ul.fort li b { font-family: var(--type); font-weight: normal; color: #efe4cc; }
