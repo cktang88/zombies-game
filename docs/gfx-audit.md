@@ -1,4 +1,4 @@
-# Graphics audit: round 1 (the non-night screens)
+# Graphics audit (round 1: the non-night screens; round 2: everything in play)
 
 **Method.** I staged a day-12 save and a day-24 save with `tools/stage-save.ts`, plus a fresh game. I drove each screen with Playwright using the debug handles (`__G`, `__story`, `window.__battle`). Every screen was captured at 1280×720, 1920×1080 and 390×844 at deviceScaleFactor 2, then inspected, fixed and captured again.
 
@@ -43,3 +43,67 @@ These went through OpenRouter (`google/gemini-3.1-flash-lite-image`) with `tools
 - **Survivor sprite reuse.** Two founders can share a sprite, and therefore a portrait: Renee and Colette in the day-24 save. More survivor generations would fix it. That needs new world sprites, so it belongs to the other agents.
 - **Survivor sheet.** The middle and right columns are short while the left column (skills) runs long. A two-column layout at 1280+ would balance it.
 - **Score card.** At desktop width there is empty space to the right of the score card. It could sit beside the fates, or the chronicle could move up.
+
+
+---
+
+# Round 2: everything in play (night, runs, rigs, VFX, deploy)
+
+**Method.** I staged a day-12 save (`tools/stage-save.ts`) and drove each scene with Playwright and the debug handles (`__G`, `__story`, `window.__battle`, `__EX`, `__impact`). Each scene was captured as a sequence of frames at deviceScaleFactor 2. Night and run scenes were taken at 1280×720, the HUD also at 1920×1080 and 390×844, and the deploy page and help at 390×844. I looked at every frame, fixed what I found, and captured again.
+
+Scenes covered:
+- **Nights:** unlit night 1, floodlit, fog, snow, rain, tide peak, raiders, tunnel, horde, the Crossing with the Bellwether's toll, and every trap kit laid and triggered.
+- **The wall:** the manned MG nest, crews on the roof scaffold and the firestep, the corpse pile and climbing, the wall at 60% with its gouges, melee at the wall, and ducking under bile.
+- **The Turned:** the Buck's vault, Biler globs, the Crier's keen, the Pulper's burst, the Ferryman knocked down and getting up, ragdoll deaths and hit reactions.
+- **The defenders:** reloads per weapon class, guard poses with a full six-person line, downed / drag / haul, and the dawn transition.
+- **Daylight run:** walk, search, zones, the cache and pickup, the companion, gunfire and melee hits.
+- **Screens:** the survivor sheet, the help ledger's Turned, the epilogue, and the deploy planner on desktop and phone.
+
+Checks:
+- Value bands were sampled per doc 04: background 16–31% luminance, actors' darks 2–10%, actors' highlights 44–52%. All are inside the targets.
+- No sprite in `public/sprites` has magenta pixels, neither opaque nor on the alpha edge (scripted scan).
+- The arm and pose numbers are in `tools/e2e/pose-check.cjs`.
+
+Severity: **H** = looks broken or unfinished, **M** = clearly below the bar, **L** = polish.
+
+| Scene | Sev | Issue | Fix |
+|---|---|---|---|
+| Every rig with a gun (user report) | H | Arms scrunched: hand at the chin, elbow folded to 45–60°, support hand slid back to the magwell. I measured every human rig. Forearms were 0.12–0.14 H and whole arms 0.27–0.32 H, because segmentation took lengths from foreshortened side-view arms. The butt sat at the neck and the far shoulder *behind* the near one. | Bones are set to real proportions (upper arm 0.175–0.19 H, forearm 0.148–0.158 H) and the arm art is **stretched along the bone** (`Rig.part`). The butt pocket is set relative to the near shoulder, the far shoulder sits forward in bladed stances (`farSh`), support reach is measured to the wrist, and pistols are held at near-locked elbows. Pump and hunting grips moved onto the stock wrist, and the LMG support hand is on the handguard. New `src/anim/armcheck.ts`, an `animlab ?closeup&debug` overlay, and `tools/e2e/pose-check.cjs` (15 rigs × 8 guns, all in range). Numbers in research 11 §4b. |
+| Shotgun reload | M | Shells were fed with the gun at the chest. | Per the reference, the gun now comes down to the hip, muzzle level, trigger hand at the hip (`shellIn`: ready 1, gunDY +16). |
+| Far arm | M | One arm art serves both sides, so a near-sleeve patch showed mirrored on the far arm. | The far-limb copy is desaturated (0.3), lower in contrast, softened 0.6 px and darkened 46% (`assets.ts farCopy`). Patches no longer read. |
+| Wall: guard labels | H | Names, bars, moodles and status lines of a crowded line overlapped ("Pauline ○ runTinker"). They were drawn inside each body's draw, so later bodies covered them. | One label pass after the actors (`drawGuardLabels`). Boxes use real extents (including the post word). Each label tries a sideways step, then lifts, with a hairline back to its owner. When crowded a label shrinks to name + bar. The leader, the selected guard and the one under the mouse always get the full label, and panic / bitten / hauling are always shown. |
+| Wall: scaffold & poles | H | Floodlight poles (sort key 650) cut through the roof crews. The left roof gun's long barrel went through the next crew's body. | Poles sort behind the scaffold. Each roof gun sorts just after its own crew. |
+| Wall: firestep crowding | M | Slots 50 px apart on whatever row the guard's index gave, so neighbours stood on the same line and merged. | Slots are handed out afresh from the wall back: 58 px apart (50 with five or more), alternating near/far rows. |
+| HUD: nests | M | The emplacement panel (y 63) covered the nerve bar. | Panel starts at y 98. |
+| Nests | M | Double muzzle flash: the pooled `vfx.muzzle` burst plus an old small flash shape. | Old shapes removed (sprite and fallback paths). |
+| HUD | L | "−999999914 still out there". The cause was the round-1 capture forcing `spawnIdx = 1e9`, not the game. | Counter clamped at 0. |
+| HUD: weapon panel | M | The 0.7 black panel at bottom right sits over the near lanes and hid Turned walking in under it. | A light scrim fading in from the left (0.32–0.45), with shadowed text. |
+| Rain nights | M | Rain weather had no visual at night at all. | Slanted streaks (near ones faster and longer) plus splash ticks on the lanes. |
+| Snow | M | Flakes were flat, faint, and drawn *under* the darkness pass, so flashes never lit them. | Rain and snow are drawn over the darkness. Each flake or streak takes the light it is in (muzzle flashes, flares, fires, the bell's glow, the floodlight throw). |
+| Barricade | M | Holes came only from raider fire. Nothing showed the Turned's work, and the wall looked whole until the 45% swap. | Claw rakes (furrow + torn lip) and pound dents (dark pit, splinter rim, split) land where a body at the face strikes. Bile and Pulper bursts leave rot stains. As wall HP drops, splinters stand out of the face and planks split (0–16 and 0–7 by HP). The 45% broken-image swap stays. |
+| Pulper burst, smoke, dust | M | Spore and smoke particles were flat discs with hard edges, which read as yellow coins. | Soft radial puffs (cached sprite per colour). |
+| Bellwether under MG fire | H | Under sustained fire the rig hit flash stayed on, and the body read as a pale white blob (README crossing shot). | The flash fires at most every 0.22 s and is lighter (0.30). |
+| Named Turned / texts | L | Names and floating texts ran off the right edge ("LEOS"). "hands shaking" landed on the name labels. | Clamped inside the screen. The status text sits over the body. |
+| Runs: hit reactions | H | Turned on runs had no flinch, stagger or fall. Only a fixed 0.6 s stagger on a melee roll. | Runs use `impact.ts`: shots and swings call `react()` with zone and direction, the slide eases out, knocked-down bodies lie and get up, and hits on the down take ×1.3. Rigs play the same reaction clips as the wall plus a flinch on every hit. Classic sprites tilt, kneel and fall (`classicPose`). |
+| Runs: casings | M | Brass and blood vanished on landing (the run's `Vfx` had no ground layer). | A world-space decal band (6400×200) under everything. Brass, blood and chips stay where they land. |
+| Runs: cache | M | The cache could spawn on top of a shed or car and hide behind it. | No other spot within 240 px of the cache or 220 px of the pickup. |
+| Runs: prompts | L | The "[E] search …" prompt was drawn before the actors, so the leader's head covered it. | Drawn after the actors on a dark backing, kept on screen. |
+| Deploy (phone) | M | Kit buttons were icon + count only. The road was a flat gradient. | Phone kits are a 4-up grid of icon over a short name, with the count in the corner. The road is the night backdrop's asphalt, tiled and mirrored (both widths). |
+| Help › The Turned | M | Tiny full-body sprites. | Bust photographs cut by `make-portraits.py turned` (11 sprites; crawlers framed head-first), pinned like the survivors'. |
+| Survivor sheet | L | Left column long, middle and right short. | Two columns at ≥ 900 px: the long column left, mood/body over people/memories right. |
+| End screen | L | Empty space beside the score card. | The story and the score card sit side by side at ≥ 1100 px. |
+
+**Checked and left as is.**
+- Lane depth grade: rigs, props and fx use the same `LOOK[lane]`.
+- Contact shadows: every actor, spot and trap sits on one.
+- Ragdoll deaths and the get-up after a knockdown read correctly.
+- Prop and character scale: the scaffold deck, the nest guns and the firestep sandbags are consistent with the 240-unit bodies.
+- Frame time: no hitches seen in the sequences. The runs' new decal band costs one `drawImage` a frame.
+
+## Round 2 art spend
+None. The Turned busts are cut from the existing sprites, so the image model was not needed. **Total this round: $0.00.**
+
+## Left after round 2
+- **Hit reactions on a downed body**: the hitbox stays the standing one while a Turned lies in the road, so an aimed head shot at a fallen body hits where its head *was*. This needs `hitbox()` to follow the rig's fall.
+- **Foreshortening**: the trigger arm can't foreshorten in 2D, so its elbow sits low and slightly behind the grip (71–83° at the elbow). That reads naturally. A drawn near-arm foreshortening (a shorter upper-arm sprite when the elbow points at the camera) would match the photos more closely.
+- **Survivor sprite reuse** (from round 1) still needs new generations.
