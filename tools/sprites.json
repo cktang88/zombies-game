@@ -1,0 +1,208 @@
+{
+  "model": "google/gemini-3.1-flash-lite-image",
+  "prefix": "2D side-scrolling game sprite, strict side profile view, full body, single character centered, mature graphic-novel cel-shaded style, thick confident black ink outlines, two-tone hard-edged shadows, gritty texture, muted desaturated palette of olive, rust, bone and slate with sparing accent colour, grounded realistic proportions, not cartoony, not chibi, serious tone.",
+  "suffix": "Isolated on a perfectly flat solid pure magenta #FF00FF background, no ground, no cast shadow, no scenery, no text, no border.",
+  "bgPrefix": "Wide 2D side-scrolling video game background layer, mature graphic-novel cel-shaded painting, thick ink lines, two-tone hard shadows, limited desaturated palette, late autumn, overcast, melancholic, lived-in, no characters, no text, no UI.",
+  "sprites": [
+    {
+      "id": "surv_rifle",
+      "height": 230,
+      "prompt": "A weary bearded man in his forties in a patched waxed canvas jacket, wool scarf, cargo trousers and work boots, standing and aiming a bolt-action hunting rifle to the right, facing right."
+    },
+    {
+      "id": "surv_pistol",
+      "height": 230,
+      "prompt": "A gaunt woman in her thirties with cropped dark hair, wearing a stained nurse's scrub top under a quilted vest and jeans, standing and aiming a revolver with both hands to the right, facing right."
+    },
+    {
+      "id": "surv_shotgun",
+      "height": 230,
+      "prompt": "A heavyset older man in his sixties with a grey stubble, flat cap, mill worker overalls and a heavy wool coat, standing holding a pump shotgun at the ready pointing right, facing right."
+    },
+    {
+      "id": "surv_smg",
+      "height": 230,
+      "prompt": "A lean young man in his twenties with a shaved head, wearing a torn county sheriff's department jacket over a hoodie and improvised cardboard-and-duct-tape arm guards, aiming a submachine gun to the right, facing right."
+    },
+    {
+      "id": "surv_idle",
+      "height": 230,
+      "prompt": "A tired young woman in her twenties with a long braid, oversized army surplus parka and wool beanie, standing holding a claw hammer and a bag of nails, facing right."
+    },
+    {
+      "id": "z_shambler",
+      "height": 240,
+      "flip": true,
+      "prompt": "A shambling zombie, a dead man in a torn flannel shirt and muddy work trousers, grey-green mottled skin, slack jaw, clouded eyes, one arm reaching forward, walking to the left, facing left."
+    },
+    {
+      "id": "z_shambler2",
+      "height": 240,
+      "prompt": "A shambling zombie, a dead woman in a ruined waitress uniform and torn tights, one shoe missing, grey bloated mottled skin, matted hair over face, arms reaching forward, walking to the left, facing left."
+    },
+    {
+      "id": "z_runner",
+      "height": 240,
+      "prompt": "A fast emaciated zombie, wiry and skeletal with taut grey skin, in shredded jogging clothes, mouth wide open screaming, sprinting hunched forward to the left, facing left."
+    },
+    {
+      "id": "z_bloater",
+      "height": 260,
+      "prompt": "A grotesquely swollen bloated zombie, waterlogged pale blue-grey distended belly with dark veins, tattered fishing waders and rubber boots, dripping, lumbering to the left, facing left."
+    },
+    {
+      "id": "z_brute",
+      "height": 300,
+      "prompt": "A huge hulking zombie, a former slaughterhouse worker in a blood-crusted rubber apron with exposed bone on one shoulder and a broken chain around its wrist, massive arms, lumbering to the left, facing left."
+    },
+    {
+      "id": "z_crawler",
+      "height": 110,
+      "prompt": "A legless zombie dragging itself along the ground on its arms, torn torso trailing rags, crawling to the left, facing left, low horizontal pose."
+    },
+    {
+      "id": "z_riot",
+      "height": 240,
+      "prompt": "A zombie former riot police officer in cracked black body armor, helmet with a shattered visor, torn uniform, grey dead skin, shuffling to the left, facing left."
+    },
+    {
+      "id": "z_shrieker",
+      "height": 240,
+      "prompt": "A thin tall zombie woman in a ragged hospital gown, elongated neck, jaw unhinged mid shriek, hair falling out, arms limp at sides, walking to the left, facing left."
+    },
+    {
+      "id": "barricade",
+      "height": 300,
+      "prompt": "A makeshift defensive barricade wall seen from the side: stacked weathered timber planks, a rusted car door, corrugated sheet metal, sandbags at the base, coils of barbed wire on top, wooden stakes, sturdy."
+    },
+    {
+      "id": "barricade_broken",
+      "height": 300,
+      "prompt": "A badly damaged makeshift defensive barricade wall seen from the side: splintered timber planks, a dented rusted car door hanging loose, torn sandbags spilling sand, sagging barbed wire, blood smears."
+    },
+    {
+      "id": "corpse",
+      "height": 70,
+      "prompt": "A dead zombie body lying flat on its side on the ground, horizontal, limp, torn clothes, dark blood pool."
+    },
+    {
+      "id": "bg_sky",
+      "key": false,
+      "width": 1600,
+      "height": 720,
+      "prompt": "Sky layer only: a heavy overcast dusk sky over a distant flat horizon, bruised purple-grey clouds with a thin band of sick orange light near the horizon, smoke columns far away."
+    },
+    {
+      "id": "bg_far",
+      "key": false,
+      "width": 1600,
+      "height": 720,
+      "prompt": "Distant layer: silhouetted small rust-belt river town skyline at dusk, a brick textile mill with a tall smokestack, a church steeple, water tower, a steel truss bridge over a grey river, bare trees, fog."
+    },
+    {
+      "id": "bg_mid",
+      "key": false,
+      "width": 1600,
+      "height": 720,
+      "prompt": "Middle ground street scene at dusk, side view: abandoned two-storey clapboard houses with boarded windows, a burnt-out pickup truck, leaning power poles with sagging lines, a faded diner sign, overgrown weeds, autumn leaves, flat cracked asphalt road running horizontally across the bottom third."
+    },
+    {
+      "id": "icon_pistol",
+      "height": 96,
+      "prompt": "a worn semi-automatic service pistol, side view, pointing right.",
+      "kind": "icon",
+      "flip": true
+    },
+    {
+      "id": "icon_revolver",
+      "height": 96,
+      "prompt": "an old six-shot revolver with a wooden grip, side view, pointing right.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_shotgun",
+      "height": 96,
+      "prompt": "a pump-action shotgun with a scratched wooden stock, side view, pointing right.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_rifle",
+      "height": 96,
+      "prompt": "a bolt-action hunting rifle with a scope, side view, pointing right.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_smg",
+      "height": 96,
+      "prompt": "a compact submachine gun, side view, pointing right.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_carbine",
+      "height": 96,
+      "prompt": "a semi-automatic military carbine rifle with a taped magazine, side view, pointing right.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_nailgun",
+      "height": 96,
+      "prompt": "an improvised nail-launcher made from a pneumatic nail gun, pipes and a gas canister, side view, pointing right.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_molotov",
+      "height": 96,
+      "prompt": "a molotov cocktail, a glass liquor bottle with a burning rag in the neck.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_scrap",
+      "height": 80,
+      "prompt": "a small pile of salvaged scrap metal, bolts, pipes and gears.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_food",
+      "height": 80,
+      "prompt": "dented tin cans of food and a jar of home-canned beans.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_meds",
+      "height": 80,
+      "prompt": "a battered first-aid tin, rolled bandages and an amber pill bottle.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_ammo",
+      "height": 80,
+      "prompt": "a cardboard box of ammunition with brass cartridges spilling out.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_fuel",
+      "height": 80,
+      "prompt": "a dented red jerry can of fuel.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_wood",
+      "height": 80,
+      "prompt": "a bundle of salvaged timber planks with nails.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_parts",
+      "height": 80,
+      "prompt": "a handful of mechanical parts: springs, a small motor and wires.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_cloth",
+      "height": 80,
+      "prompt": "a folded stack of rags, canvas and leather scraps.",
+      "kind": "icon"
+    }
+  ],
+  "iconPrefix": "Single game inventory icon of an object (no people, no hands, no characters), centered, mature graphic-novel cel-shaded style, thick black ink outlines, two-tone hard shadows, gritty worn texture, muted desaturated palette with a sparing accent colour, realistic not cartoony."
+}

@@ -10,6 +10,7 @@
     "sprites": "node tools/gen-sprites.mjs"
   },
   "devDependencies": {
+    "sharp": "^0.35.5",
     "typescript": "^5.6.3",
     "vite": "^5.4.11"
   }
