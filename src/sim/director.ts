@@ -54,8 +54,9 @@ export function planNight(): NightPlan {
   let pts = threatPoints(day);
   const { peak } = cyclePos(day);
   // an incident may have promised something for tonight; consume it
-  const forced = G.flags.forceSpecial as string | undefined;
-  delete G.flags.forceSpecial;
+  // (the Crossing outranks everything; a promise made for that night keeps until the next)
+  const forced = day === ICE_DAY ? undefined : (G.flags.forceSpecial as string | undefined);
+  if (day !== ICE_DAY) delete G.flags.forceSpecial;
   let special: string | undefined;
   let label = 'They will come tonight, like every night.';
   if (day === ICE_DAY) {
