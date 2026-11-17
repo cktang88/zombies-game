@@ -160,3 +160,4 @@
 .duskwork .fold[open] .fold-peek { visibility: hidden; }
 .duskwork .fold-body p { margin: 3px 0; font-size: 15px; }
 .duskrep .saved { cursor: help; }
+.modal.event .choices button small { flex-basis: 100%; margin-top: 0; font-size: 13px; }

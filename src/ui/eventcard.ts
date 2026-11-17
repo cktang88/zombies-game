@@ -1,5 +1,5 @@
 // The incident card: a headline, a face (or an icon), a short hook, and the choices as buttons
-// with consequence icons. The full text folds away; each choice's hint shows on hover / long press.
+// with consequence icons and a one-line hint. The rest of the text folds away.
 import type { PendingEvent } from '../types';
 import { byId, displayName } from '../sim/survivors';
 import { portraitImg } from './portrait';
@@ -46,7 +46,8 @@ export function eventModal(ev: PendingEvent) {
       ${rest ? fold('<span class="t-s">Read on</span>', `<p>${nl(rest)}</p>`, { cls: 'evmore', open: rest.length < 260 }) : ''}
       <div class="choices">${ev.choices.map((c, i) => {
         const cs = conseq(c.hint);
-        return `<button data-act="choice" data-i="${i}"${tip(c.hint ? esc(c.hint) : '')}><span class="evlabel">${esc(c.label)}</span>${cs.length ? `<span class="evcons">${cs.map(([, id, l]) => ico(id, '', 'sm') + `<i>${l}</i>`).join('')}</span>` : c.hint ? `<small>${esc(c.hint)}</small>` : ''}</button>`;
+        // the hint stays visible (a long press on a button would also choose it); icons say what is at stake
+        return `<button data-act="choice" data-i="${i}"><span class="evlabel">${esc(c.label)}</span>${cs.length ? `<span class="evcons">${cs.map(([, id, l]) => ico(id, '', 'sm') + `<i>${l}</i>`).join('')}</span>` : ''}${c.hint ? `<small>${esc(c.hint)}</small>` : ''}</button>`;
       }).join('')}</div>
     </div></div>`;
 }
