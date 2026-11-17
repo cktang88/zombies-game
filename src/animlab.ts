@@ -2,6 +2,7 @@
 import { createRig, QuadRig, gradedAtlas, loadAllGuns, loadRig, measureArms, SPRITE_RIGS, type Rig } from './anim';
 import { WEAPONS } from './data/weapons';
 import { spriteUrl } from './assets';
+import { ZOMBIES, sizeVar } from './data/zombies';
 
 const cv = document.getElementById('cv') as HTMLCanvasElement;
 const ctx = cv.getContext('2d')!;
@@ -537,8 +538,69 @@ function dogFrame(now: number) {
   requestAnimationFrame(dogFrame);
 }
 
+// ---------------------------------------------------------------- crowd audit (?crowd)
+// docs/research/09-animation.md §Crowd audit. Each Turned type at battle scale (lane 2: def.height
+// x 1.3 x depth, beside a 1.75 m survivor), walking at its def.speed: one row of panels 1/10 s
+// apart (?dt=), the ground ticks scrolling with the body's real travel, so a planted foot that stays
+// on its tick is glued and one that drifts skates. `&lineup` draws only the sizes (min/mid/max jitter).
+const CROWD = [['sleeper', 'z_shambler'], ['sleeper', 'z_hunter'], ['deer', 'z_runner'], ['drag', 'z_crawler'], ['pulper', 'z_bloater'], ['crier', 'z_shrieker'],
+  ['deputy', 'z_riot'], ['ferryman', 'z_brute'], ['leaper', 'z_leaper'], ['spitter', 'z_spitter']] as const;
+const LANE_SC = (655 - 330) / (664 - 330);
+async function crowdAudit() {
+  const ids = [...new Set(CROWD.map((c) => c[1])), 'surv_rifle'];
+  await Promise.all(ids.map(loadRig));
+  const lineup = params.has('lineup');
+  const PANELS = 10, PW = 104, RH = 190, dtP = +(params.get('dt') ?? 0.1);
+  cv.width = lineup ? 1280 : 150 + PANELS * PW; cv.height = lineup ? 300 : CROWD.length * RH + 10;
+  ctx.fillStyle = '#8fa0a6'; ctx.fillRect(0, 0, cv.width, cv.height);
+  ctx.font = '12px system-ui';
+  const survH = 158 * LANE_SC;
+  const draw = (rig: Rig, x: number, y: number, h: number) => rig.draw(ctx, x, y, h / (rig.asset?.meta.height ?? 240), -1);
+  if (lineup) {
+    const gy = 260;
+    ctx.fillStyle = '#4a4436'; ctx.fillRect(0, gy, cv.width, 12);
+    for (let m = 0; m <= 2.5; m += 0.5) { const y = gy - (m / 1.75) * survH; ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(0, y, cv.width, 1); ctx.fillStyle = '#222'; ctx.fillText(`${m} m`, 4, y - 2); }
+    const s = createRig('survivor', 'surv_rifle', { seed: 3 }); s.update(0.016); draw(s, 70, gy, survH); ctx.fillStyle = '#111'; ctx.fillText('survivor 1.75', 40, gy + 26);
+    CROWD.forEach(([type, sprite], i) => {
+      const def = ZOMBIES[type], v = sizeVar(def);
+      [-1, 0, 1].forEach((j) => {
+        const rig = createRig('turned', sprite, { style: type, seed: 7 + i * 13 + j });
+        rig.setSpeed(0); rig.update(0.016); rig.update(0.016);
+        const h = (def.crawl ? ZOMBIES.sleeper.height : def.height) * 1.3 * LANE_SC * (1 + j * v);
+        draw(rig, 150 + i * 112 + j * 26, gy, h);
+      });
+      ctx.fillStyle = '#111'; ctx.fillText(type, 140 + i * 112, gy + 26);
+    });
+  } else {
+    CROWD.forEach(([type, sprite], i) => {
+      const def = ZOMBIES[type];
+      const y0 = 10 + i * RH + RH - 30;
+      const h = (def.crawl ? ZOMBIES.sleeper.height : def.height) * 1.3 * LANE_SC * 0.8; // 0.8: the Ferryman fits a row
+      const rig = createRig('turned', sprite, { style: type, seed: 5 + i });
+      const v = def.speed; // px/s on screen
+      rig.setSpeed(v);
+      for (let k = 0; k < 120; k++) { rig.ds = h / (rig.asset?.meta.height ?? 240); rig.update(1 / 60); }
+      ctx.fillStyle = '#111'; ctx.fillText(`${type}`, 6, y0 - 60); ctx.fillText(`${sprite.slice(2)} ${rig.gait.id}`, 6, y0 - 44); ctx.fillText(`${v} px/s`, 6, y0 - 28);
+      let travel = 0;
+      for (let p = 0; p < PANELS; p++) {
+        const x = 150 + p * PW + PW * 0.55;
+        ctx.save(); ctx.beginPath(); ctx.rect(150 + p * PW, y0 - RH + 30, PW - 2, RH); ctx.clip();
+        ctx.fillStyle = '#4a4436'; ctx.fillRect(150 + p * PW, y0, PW, 10);
+        // ground ticks fixed to the world: they slide back (right, the body faces left) by the travel
+        ctx.fillStyle = '#e8d890';
+        for (let t = -6; t < 8; t++) { const tx = x + ((travel % 12) + t * 12); ctx.fillRect(tx, y0, 1.5, 6); }
+        draw(rig, x, y0, h);
+        ctx.restore();
+        for (let k = 0; k < dtP * 120; k++) { rig.update(1 / 120); travel += v / 120; }
+      }
+    });
+  }
+  (window as unknown as { __crowd: boolean }).__crowd = true;
+}
+
 // ---------------------------------------------------------------- boot
-if (params.has('dogs')) (async () => {
+if (params.has('crowd')) void crowdAudit();
+else if (params.has('dogs')) (async () => {
   await loadRig('dog');
   dogSetup();
   (window as unknown as { __dogs: unknown }).__dogs = { dogs: DOGS, step: dogStep, render: dogRender };
