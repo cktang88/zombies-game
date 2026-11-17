@@ -213,6 +213,26 @@ function draw() {
   vfxSum += vc; vfxMax = Math.max(vfxMax, vc); nMax = Math.max(nMax, vfx.P.n);
   (document.getElementById('status') as HTMLElement).textContent =
     `particles ${vfx.P.n}/${vfx.P.limit}  vfx update ${vfx.cost.update.toFixed(2)} ms  vfx draw ${vfx.cost.draw.toFixed(2)} ms  frame ${frameMs.toFixed(2)} ms  sprites built in ${vfx.S.ms.toFixed(0)} ms`;
+  perf();
+}
+
+// ---------- the GL readout ----------
+let fps = 0, fpsN = 0, fpsT = 0;
+function perf() {
+  const el = document.getElementById('perf');
+  if (!el) return;
+  const G = vfx.gl;
+  const now = performance.now();
+  fpsN++;
+  if (now - fpsT > 500) { fps = (fpsN * 1000) / (now - fpsT); fpsN = 0; fpsT = now; }
+  const gl = !G ? 'WebGL2 unavailable: Canvas2D only'
+    : `GL ${vfx.glWanted ? 'wanted' : 'off (toggle)'}  level: ${G.levelName}${G.pinned ? ' (pinned)' : ' (governed)'}  ` +
+      `sprites ${G.stats.sprites}  smoke blobs ${G.stats.smoke}  heat blobs ${G.stats.heat}  haze sources ${G.stats.haze}  scene uploads ${G.stats.uploads}  GL CPU ${G.ms.toFixed(2)} ms`;
+  el.textContent = `${fps.toFixed(0)} fps  path: ${vfx.path.toUpperCase()}  quality: ${vfx.quality}   ${gl}`;
+}
+function setGL(on: boolean) {
+  vfx.glWanted = on;
+  document.querySelectorAll<HTMLButtonElement>('[data-s=gl]').forEach((b) => { b.textContent = `GL: ${on ? 'on' : 'off'}`; });
 }
 
 let last = performance.now();
@@ -233,7 +253,7 @@ function ui() {
     bar('guns', GUNS.map((g) => `<button data-g="${g}">${WEAPONS[g]?.name ?? g}</button>`).join('')) +
     bar('ammo', '<button data-a="slug">pump: slug</button><button data-a="dragon">pump: dragon\'s breath</button><button data-a="firebolt">crossbow: fire bolt</button><button data-a="supp">service9 suppressed</button>') +
     bar('effects', Object.keys(EFFECTS).map((k) => `<button data-e="${k}">${k}</button>`).join('')) +
-    bar('scene', '<button data-s="lit">floodlit</button><button data-s="snow">snow</button><button data-s="gore">reduce gore</button><button data-s="auto">hold trigger</button><button data-s="lane">lane</button><button data-s="clear">clear decals</button><button data-s="heavy">perf: heavy scene</button>') +
+    bar('scene', '<button data-s="lit">floodlit</button><button data-s="snow">snow</button><button data-s="gore">reduce gore</button><button data-s="auto">hold trigger</button><button data-s="lane">lane</button><button data-s="clear">clear decals</button><button data-s="heavy">perf: heavy scene</button><button data-s="gl">GL: on</button><button data-s="pin">governor: on</button>') +
     bar('quality', ['high', 'medium', 'low'].map((q) => `<button data-q="${q}">${q}</button>`).join(''));
   el.addEventListener('click', (e) => {
     const b = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
@@ -253,6 +273,8 @@ function ui() {
     if (s === 'lane') lane = (lane + 1) % 4;
     if (s === 'clear') { gctx.clearRect(0, 0, W, H); vfx.clear(); }
     if (s === 'heavy') heavy();
+    if (s === 'gl') setGL(!vfx.glWanted);
+    if (s === 'pin') { const G = vfx.gl; if (G) { G.setLevel(3, !G.pinned); b.textContent = `governor: ${G.pinned ? 'off (full GL)' : 'on'}`; } }
     b.blur();
   });
 }
@@ -279,7 +301,9 @@ function heavy() {
   quality: (q: Quality) => vfx.setQuality(q), clear: () => { clearInterval(heavyId); gctx.clearRect(0, 0, W, H); vfx.clear(); fires = []; lights = []; lobs = []; for (const d of dummies) d.burn = 0; flaming = 0; auto = false; },
   heavy, stats: () => ({ n: vfx.P.n, nMax, frames, frameAvg: frameSum / Math.max(1, frames), frameMax, vfxAvg: vfxSum / Math.max(1, frames), vfxMax }), resetStats: () => { frames = 0; frameSum = 0; frameMax = 0; vfxSum = 0; vfxMax = 0; nMax = 0; },
   ready: false, laneScale,
+  gl: (on: boolean, level?: 0 | 1 | 2 | 3) => { setGL(on); const G = vfx.gl; if (G && level !== undefined) G.setLevel(level, true); return { path: vfx.path, level: G?.levelName ?? 'none' }; },
 };
+addEventListener('keydown', (e) => { if (e.key === 'g') setGL(!vfx.glWanted); });
 void loadAssets().then(() => {
   ui();
   requestAnimationFrame(loop);
