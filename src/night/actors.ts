@@ -954,7 +954,7 @@ export class RunActors {
     cv.width = R * 2; cv.height = up + down;
     const g = cv.getContext('2d');
     if (!g || !rig.ready) { cp.img = cv; cp.ox = R; cp.oy = up; return; }
-    applyLook(rig, { look: { ...look, b: 0.6, s: 0.6 }, variant: 0, lit: false, shade: true, rimColor: COOL, rimA: 0, rimDx: 0, rimDy: 0 }, cp.scale, cp.facing);
+    applyLook(rig, { look: { ...look, b: look.b * 0.6, s: 0.6 }, variant: 0, lit: false, shade: true, rimColor: COOL, rimA: 0, rimDx: 0, rimDy: 0 }, cp.scale, cp.facing);
     rig.outline = null; rig.rim = null; rig.overlay = null;
     g.globalAlpha = 0.92;
     rig.bakeCorpse(g, R, up, cp.scale, cp.facing);
@@ -1012,7 +1012,7 @@ export class RunActors {
     return this.corpses.filter((cp) => cp.x - cam > -300 && cp.x - cam < W_RUN + 300).map((cp) => cp.img ? { y: cp.y - 40, f: () => {
       c.drawImage(cp.img!, Math.round(cp.x - cam - cp.ox!), Math.round(cp.y - cp.oy!));
     } } : { y: cp.y - 0.3, f: () => {
-      applyLook(cp.rig, { look: { ...looks[laneOf(cp.y)], b: 0.6, s: 0.6 }, variant: 0, lit: false, shade: false, rimColor: COOL, rimA: 0, rimDx: 0, rimDy: 0 }, cp.scale, cp.facing);
+      applyLook(cp.rig, { look: { ...looks[laneOf(cp.y)], b: looks[laneOf(cp.y)].b * 0.6, s: 0.6 }, variant: 0, lit: false, shade: false, rimColor: COOL, rimA: 0, rimDx: 0, rimDy: 0 }, cp.scale, cp.facing);
       cp.rig.overlay = null;
       cp.rig.draw(c, cp.x - cam, cp.y, cp.scale, cp.facing, undefined, c.getTransform());
     } });
