@@ -31,6 +31,7 @@ export const ACTIONS: KeyAction[] = [
   { id: 'night.lure', ctx: 'night', label: 'Pull a lure', def: 'l' },
   { id: 'night.trap', ctx: 'night', label: 'Drop the deadfall / pipe mine', def: 'g' },
   { id: 'night.nest', ctx: 'night', label: 'Take / leave the gun nest', def: 'h' },
+  { id: 'night.sally', ctx: 'night', label: 'Sally over the wall / back (Shift: take the selected guard)', def: 'o' },
   { id: 'night.hurry', ctx: 'night', label: 'Hurry the night along (hold)', def: ' ', hold: true },
   { id: 'night.pause', ctx: 'night', label: 'Pause', def: 'p' },
   // ---- daylight runs

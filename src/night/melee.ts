@@ -33,7 +33,7 @@ interface Slash { x: number; y: number; t: number; r: number; crit: boolean }
 function itemOf(g: Guardian): WeaponItem | undefined {
   return g.s.melee ? (G.melee ?? []).find((m) => m.uid === g.s.melee && MELEE[m.def]) : undefined;
 }
-function profOf(g: Guardian): { prof: MeleeProfile; item?: WeaponItem } {
+export function profOf(g: Guardian): { prof: MeleeProfile; item?: WeaponItem } {
   const item = itemOf(g);
   const lv = level(g.s, 'prof_melee');
   const mods = { dmgMul: 1 + lv * 0.03, speedMul: 1 - lv * 0.02, staminaMul: 1 - lv * 0.03 };

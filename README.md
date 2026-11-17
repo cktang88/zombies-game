@@ -67,6 +67,7 @@ All keys below are defaults; every one can be changed in **Settings › Controls
 | `Z` `X` `C` `K` | orders: free, hold, heads, wall (Shift: everyone) | `Enter` | go to the wall at dusk |
 | `Y` | the selected guard's post | `?` | help |
 | `L` / `G` / `H` | pull a lure / drop the deadfall or pipe mine / take the gun nest | | |
+| `O` | sally: drop over the wall for a few seconds (`V` swings on the road, re-sets traps underfoot, `O` again to climb back; Shift: take the selected guard) | | |
 | hold `Space` | hurry the night along | | |
 | `P` / `Esc` | pause menu | | |
 

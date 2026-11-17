@@ -151,7 +151,7 @@ See research 03. In short: graphic-novel cel shading, heavy ink, two-tone hard s
 - [x] Daylight runs with depth lanes, baked backgrounds, contact shadows (research 04)
 - [x] Night depth & readability pass (research 04): 4 lanes, baked background, shadows, crowd tint variants, lane hit tests
 - [x] Combat tactics (research 05): body zones & visible weakspots, enemy roles & telegraphs, accuracy rework, Focus/nerve, guard posts & orders, reload choices (tactical / speed / smart), corpse ramps, pre-night deployment (trap planner), scouting intel, rally, crewed emplacements (MG nest, swivel rifle, flame projector, nail turret), Leapers & Spitters (duck to dodge)
-- [ ] Combat tactics, still open: the sally (a sortie over the wall)
+- [x] Combat tactics: the sally (`O`, `src/night/sally.ts`): the leader (Shift: + the selected guard) drops over the wall for ~7 s; the landing shoves the road back, `V` swings on the road, sprung bear traps / snares / deadfalls underfoot are re-set, kills may leave rounds; anything in reach bites; costs nerve, 22 s cooldown
 - [x] Survivor progression: XP per skill, psych/courage/grit, weapon-class proficiency, Drill job
 - [x] Survivor progression: perks at skill 4/7 (`src/data/perks.ts`: two offered per skill and tier, pick on the survivor sheet or they pick at the second dawn; effects read through `perkFx` / `perkMul`)
 - [x] Day loop (research 06): hour budget, dawn ledger juice, scarcity, seeds/daily, teaser
@@ -162,4 +162,3 @@ See research 03. In short: graphic-novel cel shading, heavy ink, two-tone hard s
 - [x] Settings page (audio / video / gameplay / controls / data) from the title, the day screen and the pause menu; rebindable keys (`src/ui/keys.ts`); pause menu at night and on runs; save export / import; Playwright check (`tools/e2e/settings-check.cjs`)
 - [x] Gamepad input (`src/input/gamepad.ts`, bindings in `src/ui/keys.ts` PAD): right stick aims, triggers fire / focus, face buttons, guards on the bumpers, orders on the D-pad, left stick walks on runs, D-pad / A / B in menus
 - [x] Touch controls for the wall beyond tap-to-fire (`src/input/stage.ts`): Duck / Focus / Reload / Gun / Pause buttons (walk / search / reload / swing / shove on runs); a portrait phone gets "turn your phone" with Play sideways (the playfield rotated to fill the screen) or play small
-- [ ] Later: the sally

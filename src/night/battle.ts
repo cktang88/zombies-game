@@ -27,6 +27,7 @@ import { depthScale, bakeSprite, bakeComposite, bakeEdge, bakeLayer, bakeGround,
 import { drawProp, drawGunBase, drawGunPart, has, propW } from './props';
 import { QuadRig } from '../anim'; // the dog's quadruped rig
 import { BattleActors } from './actors'; // rigged bodies (src/anim): drawing, deaths, corpses
+import { Sally, SALLY } from './sally'; // the sortie over the wall
 import { react, slideStep, classicPose, IMPACT, type Reaction } from './impact'; // flinch / stagger / stumble / knockdown
 
 export const W = 1280, H = 720;
@@ -588,7 +589,7 @@ export class Battle {
   // Controls (the HUD's key line mirrors this):
   //   LMB fire · RMB (hold) Focus · MMB/[F] firebomb · [R] reload / clear (hold: speed reload) · [T] ammo / slug swap
   //   [B] fire selector · [Q]/wheel weapon · [S]/[Ctrl] (hold) duck · [E] rally · [M] mark target
-  //   [1-9]/[Tab] select guard · [Z]/[X]/[C]/[K] order (Shift = everyone; V is melee, L lures, G deadfall/pipe mine, H gun nest) · [Y] guard's post · Space hurry · [P]/Esc pause
+  //   [1-9]/[Tab] select guard · [Z]/[X]/[C]/[K] order (Shift = everyone; V is melee, L lures, G deadfall/pipe mine, H gun nest) · [Y] guard's post · Space hurry · [O] sally (Shift: + selected) · [P]/Esc pause
   onKey(e: KeyboardEvent) {
     const k = normKey(e);
     // paused: the pause menu has the keyboard (night/pause overlay); nothing reaches the wall
@@ -4184,6 +4185,13 @@ export class Battle {
     }
     c.restore();
   }
+  /** The key line's word for the sally (night/sally.ts): ready, out, or how long until it is. */
+  sallyHint() {
+    const sa = this.hooks.find((h): h is Sally => h instanceof Sally);
+    if (!sa) return '';
+    const k = keyCap('night.sally');
+    return sa.active ? `${k} back over` : sa.cd > 0 ? `sally ${Math.ceil(sa.cd)}s` : this.nerve < SALLY.nerve ? 'sally (no nerve)' : `${k} sally`;
+  }
   drawHud(c: CanvasRenderingContext2D) {
     c.save();
     c.textAlign = 'left';
@@ -4360,8 +4368,8 @@ export class Battle {
     if (narrow) { /* no key list */ }
     else if (this.t < 30 || this.paused) {
       c.fillText(`${keyCap('night.reload')} reload (hold: speed) · ${keyCap('night.weapon')}/wheel gun${multiAmmo ? ` · ${keyCap('night.ammo')} ammo` : ''} · ${keyCap('night.selector')} selector · RMB focus · ${keyCap('night.duck')} duck · ${keyCap('night.firebomb')}/MMB firebomb ${G.stores.molotov}`, 20, H - 24);
-      c.fillText(`[1-9]/[Tab] guard · ${keyCap('night.free')} free ${keyCap('night.hold')} hold ${keyCap('night.heads')} heads ${keyCap('night.wall')} wall (Shift: all) · ${keyCap('night.post')} post · ${keyCap('night.mark')} mark · ${keyCap('night.rally')} rally · ${keyCap('night.hurry')} hurry · ${keyCap('night.pause')} pause`, 20, H - 10);
-    } else c.fillText(`firebombs ${G.stores.molotov} ${keyCap('night.firebomb')}   ·   ${keyCap('night.reload')} reload   ${keyCap('night.duck')} duck   RMB focus   ${keyCap('night.pause')} keys`, 20, H - 12);
+      c.fillText(`[1-9]/[Tab] guard · ${keyCap('night.free')} free ${keyCap('night.hold')} hold ${keyCap('night.heads')} heads ${keyCap('night.wall')} wall (Shift: all) · ${keyCap('night.post')} post · ${keyCap('night.mark')} mark · ${keyCap('night.rally')} rally · ${keyCap('night.sally')} sally · ${keyCap('night.hurry')} hurry · ${keyCap('night.pause')} pause`, 20, H - 10);
+    } else c.fillText(`firebombs ${G.stores.molotov} ${keyCap('night.firebomb')}   ·   ${keyCap('night.reload')} reload   ${keyCap('night.duck')} duck   RMB focus   ${this.sallyHint()}   ${keyCap('night.pause')} keys`, 20, H - 12);
     // messages
     c.textAlign = 'center';
     this.messages.forEach((m, i) => {
