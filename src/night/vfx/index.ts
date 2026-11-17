@@ -17,6 +17,7 @@ import {
 } from './pool';
 import { gunLook, type FlashSpec, type GunLook, type RoundKind } from './looks';
 import type { FireProfile } from '../../data/weapons';
+import { sharedGL, type VfxGL } from './gl';
 
 export type Surface = 'flesh' | 'head' | 'armor' | 'wood' | 'ground' | 'metal' | 'snow';
 export type Quality = 'high' | 'medium' | 'low';
@@ -35,6 +36,7 @@ export interface VfxHost {
 }
 
 const PUFF_KEYS = Object.keys(PUFF) as PuffCol[];
+const PUFF_TONES = PUFF_KEYS.map((k) => PUFF[k] as string);
 const GLOW_KEYS = Object.keys(GLOW) as GlowCol[];
 const pc = (k: PuffCol) => PUFF_KEYS.indexOf(k);
 const gc = (k: GlowCol) => GLOW_KEYS.indexOf(k);
@@ -116,6 +118,12 @@ export class Vfx {
   private pools: { x: number; y: number; w: number; k: number }[] = [];
   /** frame cost probe (ms): update + draw, for the perf report */
   cost = { update: 0, draw: 0 };
+  /** allow the WebGL2 layer (gl.ts) at High; false forces the Canvas2D paths (fxlab's toggle) */
+  glWanted = true;
+  /** which path drew last frame ('gl' | '2d'), for the perf readout and tests */
+  path: 'gl' | '2d' = '2d';
+  private frameNo = 0;
+  private fieldsFrame = -1;
 
   constructor(host: VfxHost, quality: Quality = 'high') {
     this.host = host;
@@ -137,6 +145,13 @@ export class Vfx {
   /** n scaled by quality, at least `min` */
   private q(n: number, min = 1) { return Math.max(min, Math.round(n * this.qk)); }
   private gore() { return this.host.gore?.() ?? false; }
+  /** The shared WebGL2 layer, or null when it is unavailable / lost / governed off / quality below High. */
+  get gl(): VfxGL | null { return sharedGL(PUFF_TONES); }
+  private glLayer(): VfxGL | null {
+    if (!this.glWanted || this.quality !== 'high') return null;
+    const G = this.gl;
+    return G && G.on ? G : null;
+  }
 
   clear() {
     this.P.clear();
@@ -806,7 +821,21 @@ export class Vfx {
     const t0 = performance.now();
     const P = this.P, S = this.S;
     const m = c.getTransform();
-    this.drawSmoke(c, m);
+    const G = this.glLayer();
+    if (G) {
+      // metaball smoke + heat fields (gl.ts); the smoke is cel-shaded and drawn back here, the heat waits for drawAdd
+      G.gather(P, m, this.t);
+      G.fields(c.canvas.width, c.canvas.height, S, this.t);
+      this.fieldsFrame = this.frameNo;
+      if (G.smokeComposite(this.t, this.wind)) {
+        c.setTransform(1, 0, 0, 1, 0, 0);
+        c.globalAlpha = 1;
+        c.drawImage(G.cv, 0, 0);
+        c.setTransform(m);
+      }
+      if (this.dirty[2] > 0 && this.smokeCx) { this.smokeCx.setTransform(1, 0, 0, 1, 0, 0); this.smokeCx.clearRect(...this.dirty); this.dirty[2] = 0; }
+    } else this.drawSmoke(c, m);
+    const realHaze = !!G && G.haze;
     let fill = '';
     for (let i = 0; i < P.n; i++) {
       const k = P.kind[i];
@@ -841,6 +870,7 @@ export class Vfx {
         // buried a third of its length in the road
         rot(c, m, im, x, y, L, L * (16 / im.width), P.rot[i], 0.72, 0.5, Math.min(1, (1 - u) * 6));
       } else if (k === SHOCK) {
+        if (realHaze) continue; // the GL layer refracts the scene instead of faking it with a dark band
         const s = P.s0[i] + (P.s1[i] - P.s0[i]) * easeOut(u);
         rot(c, m, S.shock, x, y, s * 2, s * 2, 0, 0.5, 0.5, (1 - u) * P.a0[i]);
       }
@@ -935,6 +965,25 @@ export class Vfx {
     const P = this.P, S = this.S;
     const m = c.getTransform();
     const prev = c.globalCompositeOperation;
+    const G = this.glLayer();
+    this.path = G ? 'gl' : '2d';
+    if (G) {
+      G.govern(performance.now());
+      if (this.fieldsFrame !== this.frameNo) { G.gather(P, m, this.t); G.fields(c.canvas.width, c.canvas.height, S, this.t); }
+      // heat haze / shockwave refraction: sample the 2D scene once, draw it back displaced
+      if (G.haze) {
+        G.beginHaze();
+        this.collectHaze(G, m);
+        if (G.hazeComposite(c.canvas, this.t)) {
+          c.setTransform(1, 0, 0, 1, 0, 0);
+          c.globalAlpha = 1;
+          c.drawImage(G.cv, 0, 0);
+        }
+      }
+      // every blit below goes into the GL sprite batch instead of the canvas (see rot())
+      G.beginAdd();
+      BATCH = G;
+    }
     c.globalCompositeOperation = 'lighter';
     // the scene wash: one frame of warm light over everything near a big gun or a blast
     if (this.washA > 0.004) {
@@ -977,14 +1026,14 @@ export class Vfx {
         const stage = Math.min(3, ((u * 3.6) | 0) + P.col[i]);
         const im = S.fire[stage][(P.seed[i] * 4) | 0];
         const a = (u < 0.1 ? 1 : 1 - (u - 0.1) / 0.9) * 0.95;
-        rot(c, m, im, x, y, s * 2, s * 2, this.gk === 1 ? P.rot[i] : 0, 0.5, 0.5, a);
+        if (!G) rot(c, m, im, x, y, s * 2, s * 2, this.gk === 1 ? P.rot[i] : 0, 0.5, 0.5, a); // GL: the heat field
         if (u < 0.35 && this.gk === 1) rot(c, m, S.glow.orange, x, y, s * 3.4, s * 3.4, 0, 0.5, 0.5, (0.35 - u) * 0.9);
       } else if (k === FLAME) {
         const s = P.s0[i] * (1 - u * 0.6);
         const h = s * P.asp[i];
         const a = u < 0.15 ? u / 0.15 : 1 - (u - 0.15) / 0.85;
         const sway = Math.sin(this.t * 7 + P.seed[i] * 20) * 0.12;
-        rot(c, m, S.flame[P.col[i] % 6], x, y, (P.seed[i] > 0.5 ? 1.45 : -1.45) * s, h, sway, 0.5, 1, a);
+        if (!G) rot(c, m, S.flame[P.col[i] % 6], x, y, (P.seed[i] > 0.5 ? 1.45 : -1.45) * s, h, sway, 0.5, 1, a); // GL: the heat field
         if (P.seed[i] < 0.4 * this.gk) rot(c, m, S.glow.orange, x, y - h * 0.4, s * 3, h * 1.4, 0, 0.5, 0.5, a * 0.35);
       } else if (k === GLOWK) {
         const s = P.s0[i] + (P.s1[i] - P.s0[i]) * u;
@@ -1003,10 +1052,48 @@ export class Vfx {
     }
     this.drawRounds(c, m);
     this.drawFlashes(c, m);
+    if (G) {
+      BATCH = null;
+      G.endAdd(this.t, this.wind, 0.7 * this.gk);
+      c.setTransform(1, 0, 0, 1, 0, 0);
+      c.globalAlpha = 1;
+      c.drawImage(G.cv, 0, 0);
+    }
     c.setTransform(m);
     c.globalAlpha = 1;
     c.globalCompositeOperation = prev;
+    this.frameNo++;
     this.cost.draw += performance.now() - t0;
+    if (G) G.ms = performance.now() - t0;
+  }
+
+  /** Heat-haze sources for the GL layer, in canvas px: shock rings, muzzle blasts, fire pools, flares, fireballs. */
+  private collectHaze(G: VfxGL, m: DOMMatrix) {
+    const P = this.P;
+    const X = (x: number) => m.a * x + m.e, Y = (y: number) => m.d * y + m.f, k = m.a;
+    for (let i = 0; i < P.n; i++) {
+      if (P.kind[i] !== SHOCK || P.delay[i] > 0) continue;
+      const u = P.age[i] / P.life[i];
+      const s = P.s0[i] + (P.s1[i] - P.s0[i]) * easeOut(u);
+      G.hazeSrc(0, X(P.x[i]), Y(P.y[i]), s * 0.82 * k, 30 * (1 - u) * P.a0[i] * k);
+    }
+    for (const f of this.flashes) {
+      if (!f.on || f.age > 0.09) continue;
+      const sp = f.spec;
+      const big = Math.max(sp.plume ?? 0, (sp.ball ?? 0) * 1.6, (sp.back ?? 0) * 0.8);
+      if (big < 26) continue;
+      const ca = Math.cos(f.ang), sa = Math.sin(f.ang);
+      G.hazeSrc(2, X(f.x + ca * big * 0.45 * f.s), Y(f.y + sa * big * 0.45 * f.s), big * 0.55 * f.s * k, 5 * (1 - f.age / 0.09) * k);
+    }
+    for (const p of this.pools) G.hazeSrc(1, X(p.x), Y(p.y - 6), p.w * 0.62 * k, 2.4 * p.k * k);
+    for (const b of this.burners) G.hazeSrc(1, X(b.x), Y(b.y - 4), 18 * k, 1.2 * Math.min(1, b.life / 1.2) * k);
+    for (let i = 0; i < P.n && G.hazeCount < 16; i++) {
+      if (P.kind[i] !== FIRE || P.delay[i] > 0 || P.s1[i] < 50) continue;
+      const u = P.age[i] / P.life[i];
+      if (u > 0.7) continue;
+      const s = P.s0[i] + (P.s1[i] - P.s0[i]) * easeOut(u);
+      G.hazeSrc(1, X(P.x[i]), Y(P.y[i]), s * 0.9 * k, 2.6 * (1 - u) * k);
+    }
   }
 
   private drawRounds(c: CanvasRenderingContext2D, m: DOMMatrix) {
@@ -1155,13 +1242,18 @@ export class Vfx {
 
 // ---------- blitting helpers: rotate/scale around an anchor without save/restore ----------
 /** drawImage `im` at (x, y), w×h, rotated by `a` about the anchor (ax, ay) in 0..1 of the image, with alpha. */
+// While the GL layer is collecting the additive pass, rot() feeds its instanced sprite batch instead of the canvas.
+let BATCH: VfxGL | null = null;
 function rot(c: CanvasRenderingContext2D, m: DOMMatrix, im: CanvasImageSource, x: number, y: number, w: number, h: number, a: number, ax: number, ay: number, alpha: number) {
   // a negative width mirrors the image about the anchor
   const fl = w < 0 ? -1 : 1;
   if (fl < 0) w = -w;
   if (alpha <= 0.004 || w < 0.3 || h < 0.3) return;
   const cs = Math.cos(a), sn = Math.sin(a);
-  c.setTransform((m.a * cs + m.c * sn) * fl, (m.b * cs + m.d * sn) * fl, m.c * cs - m.a * sn, m.d * cs - m.b * sn, m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f);
+  const A = (m.a * cs + m.c * sn) * fl, B = (m.b * cs + m.d * sn) * fl, C = m.c * cs - m.a * sn, D = m.d * cs - m.b * sn;
+  const E = m.a * x + m.c * y + m.e, F = m.b * x + m.d * y + m.f;
+  if (BATCH) { BATCH.sprite(im, A, B, C, D, E, F, -ax * w, -ay * h, w, h, alpha > 1 ? 1 : alpha); return; }
+  c.setTransform(A, B, C, D, E, F);
   c.globalAlpha = alpha > 1 ? 1 : alpha;
   c.drawImage(im, -ax * w, -ay * h, w, h);
 }

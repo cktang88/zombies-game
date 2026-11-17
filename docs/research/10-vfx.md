@@ -2,7 +2,8 @@
 
 Status: shipped in `src/night/vfx/` (system) and `src/night/gunfx.ts` (feel numbers), hooked into the night
 (`battle.ts`, `emplacements.ts`) and the daylight run (`expedition.ts`). Dev page: `fxlab.html`
-(`npm run dev`, then `/fxlab.html`). Settings → Video → **Effects quality: High / Medium / Low**.
+(`npm run dev`, then `/fxlab.html`). Settings → Video → **Effects quality: High / Medium / Low**; High adds the
+WebGL2 layer (§6) where available.
 
 The brief was: *"why are bullets just lines — really realistic muzzle flash, bullet trails with velocity, AAA."*
 Before this pass a shot was a 1.6 px line for 0.07 s plus one of five flat flash shapes; impacts were
@@ -212,21 +213,84 @@ JS-side cost of the effects system alone (update + record draw calls) is 0.1–0
 GPU-less container, so absolute numbers are pessimistic; on a GPU-composited Canvas2D the additive glows and the
 smoke layer are cheap and High is the default.
 
-## 6. WebGL — considered, deferred
+## 6. WebGL2 layer (`vfx/gl.ts`)
 
-The user allowed WebGL. A WebGL2 layer would buy (a) siege-game's **metaball fire and smoke fields** (heat and
-density rendered into half-resolution float targets, then thresholded and cel-shaded in one composite pass), (b)
-real **heat-haze / shockwave refraction** by sampling the scene, and (c) instanced particles. We did not ship it
-in this pass because: the scene is a Canvas2D composite whose layer order (darkness A, actors, darkness B,
-glow) the effects must interleave with, so a GL layer would mean a GL canvas drawn back into the 2D context
-twice a frame (normal and additive) or porting the whole battle composite; in this container WebGL runs on
-SwiftShader, so it could not be measured honestly; and the Canvas2D version already reaches the look with
-banded sprites. The design if we do it: a single offscreen WebGL2 canvas owned by `vfx`, fed from the same SoA
-pool (`Float32Array` → instance buffers, no copies), rendering the fire/smoke fields and the additive pass;
-`drawNormal`/`drawAdd` then `drawImage` the GL canvas at the same two points in the layer order; fall back to the
-current Canvas2D paths when `getContext('webgl2')` fails or Effects quality is Low.
+Shipped as an optional layer over the Canvas2D system, on at **Effects quality High** (no new "Ultra" tier: the
+setting lives in `src/ui/settings.ts`, owned elsewhere; adding a tier there is a three-line follow-up). The
+Canvas2D paths of §2–§5 remain the fallback and are unchanged.
+
+**Shape.** One offscreen WebGL2 canvas, shared by every `Vfx` (a new night does not make a new context; browsers
+cap them), sized to the 2D canvas. It never owns the composite: `drawNormal` and `drawAdd` still run at the same
+two points in the battle's layer order and `drawImage` the GL canvas back into the 2D context.
+
+- **Fields, at `drawNormal`** (after siege-game `src/fx.ts`). `gather()` walks the SoA pool once and writes
+  smoke / dust / mist and fire / flame-tongue particles into two preallocated `Float32Array` instance buffers
+  (12 floats each, no per-particle objects), uploaded with one `bufferSubData` each. Each instance splats a
+  noise-lumped blob additively into a **half-resolution** field (RGBA16F when `EXT_color_buffer_float` is there,
+  else RGBA8): smoke writes premultiplied tone + density, fire writes heat (opacity × a temperature that drops
+  through the four stages as it ages; tongues are teardrops whose tips lean). The smoke field is then
+  **thresholded and cel-shaded** in one full-screen pass — two tones and a dark rim from the density gradient
+  (lit top-left), two opacity steps (wisps 0.5, body 0.88), noise-eroded edges as it thins, an orange under-glow
+  where it sits over heat — and drawn back source-over (premultiplied). Many puffs read as one cloud with one
+  outline instead of a pile of discs.
+- **Heat haze / shockwave refraction, at `drawAdd`** (before the additive light). Up to 16 sources a frame,
+  gathered in canvas px: shock rings (a lens ring at the ring's radius that pushes out on its leading edge and in
+  behind it, ±12% brightness at the crest), muzzle blasts of the big guns for 90 ms (radial puff), fire pools,
+  burning flares and big fireballs (a rising, wavering column above them). Only when at least one is live, the 2D
+  canvas is uploaded **once** (`texImage2D` of the canvas) and the displaced scene is drawn back inside the
+  sources' scissor box; outside the distortion the shader discards. The fake dark "refraction band" sprite of
+  the shock ring is skipped while real haze is on.
+- **The additive pass.** Nothing about what is drawn changed: the same `drawAdd` code runs, but its `rot()` blit
+  helper feeds an **instanced sprite batch** (origin + two axes + atlas rect + alpha, 12 floats) instead of
+  `drawImage`. All procedural sprites (§4) are shelf-packed once into a 2048-wide atlas (premultiplied, 2 px
+  gutters, half-texel inset). Fire and flame-tongue particles skip their sprite and come from the **heat field**,
+  thresholded into the **banded ramp** (deep-red rim → red → orange → yellow → pale core, `fwidth`-antialiased
+  band edges, licks from upward-scrolling fbm sheared by the wind), so merged fire has one hard toon outline.
+  Everything lands in an RGBA16F target (ONE, ONE blending ≈ `'lighter'`).
+- **Bloom.** Bright pass (soft knee on the max channel) while downsampling to quarter resolution with 4 bilinear
+  taps, then a separable 5-tap Gaussian folded into **3 linear taps**, two H+V iterations, added at 0.7 × the
+  quality's glow factor. The final blit writes alpha = the brightest channel, so the GL canvas is valid
+  premultiplied data and `'lighter'` adds exactly its colour.
+
+**Fallback and switches.** Canvas2D whenever `getContext('webgl2')` fails or a shader does not compile, after
+`webglcontextlost` (the restore handler rebuilds programs, targets and atlas; tested with `WEBGL_lose_context`),
+at Effects quality Medium / Low, with `?gl=0` in the URL, or with `vfx.glWanted = false` (fxlab's toggle).
+`vfx.path` says which path drew the last frame.
+
+**Governor.** `govern()` runs once a frame from `drawAdd` while GL draws: it averages the frame interval over 2 s
+windows (intervals over 1 s — a hidden tab — are ignored); two windows in a row over budget (default 22 ms,
+≈45 fps) step the layer down one level — **bloom off → haze off → GL off** — each step logged once via
+`console.info('[vfx] …')`. It never steps back up within the session (a new tab does). `G.setLevel(l, pin)` pins
+a level (fxlab, tests).
+
+**fxlab.** A *GL: on/off* button (or **G**) flips between the two paths on the same live scene; *governor* pins
+full GL; a second readout line shows fps, which path drew, the GL level, sprite / smoke-blob / heat-blob / haze
+counts, the number of scene uploads and the CPU ms of the GL work. `__fx.gl(on, level)` drives it from tests.
+
+![GL layer vs Canvas2D](../screenshots/vfx_gl_explosion.jpg)
+*fxlab, GL (left) vs Canvas2D (right), same seed: a blast at frame 18 (the heat field merges the lobes into one
+banded fireball with a single rim), the same blast at frame 60 (the smoke field as one cel-shaded cloud: lit
+top-left, shadow, dark rim, two opacity steps), a fire pool (the GL tongues merge into a banded bed; the Canvas2D
+tongue sprites still read as taller, separate flames — the heat blobs of tongues could be stretched further).*
+
+**Performance — not measured honestly here.** This container has no GPU: Chromium runs WebGL on SwiftShader
+(CPU) and the 2D canvas is software, so every `drawImage` of the GL canvas is a GPU→CPU readback (Chromium logs
+"GPU stall due to ReadPixels"). In fxlab's heavy scene that makes GL **≈ 3 fps vs 43 fps** for Canvas2D, and
+the governor duly walks GL off within ~12 s, in the night as well as in fxlab (which also exercises the
+fallback in `tools/e2e/smoke.cjs`). On a real GPU with an accelerated 2D canvas the three blits per frame are
+texture copies and the fields are a few hundred instanced quads at half resolution; this is expected to be cheap
+but has **not** been measured — check the fxlab readout on real hardware before making it the default for
+everyone; the governor is the safety net meanwhile. The JS cost is one pool walk plus the batch writes (the
+existing draw code minus the `drawImage` calls).
 
 ## 7. Verification
+
+- GL layer: `npx tsc --noEmit`, `npm run build`, `tools/e2e/smoke.cjs` against `vite preview` clean (GL on at
+  the default High; the governor steps it off on SwiftShader mid-run, so both paths run). Playwright: fxlab GL vs
+  Canvas2D for blast / smoke / fire / LMG / shotgun / rifle / flamer / burning bodies, pixel diffs confirming bloom
+  and haze each change the frame, `WEBGL_lose_context` lose → Canvas2D → restore → GL, Medium → Canvas2D, a
+  staged night moment GL vs Canvas2D, the governor's three logged steps; no page errors, no non-finite particle
+  fields.
 
 - `npx tsc --noEmit && npm run build && npm run simtest -- 3` pass; `tools/e2e/settings-check.cjs` passes
   (new check: Effects quality changes the particle budget the night uses).
@@ -237,7 +301,8 @@ current Canvas2D paths when `getContext('webgl2')` fails or Effects quality is L
 
 ## 8. Not done / next
 
-- Heat shimmer and true refraction (needs the WebGL layer, §6).
+- An "Ultra" effects tier in Settings for the GL layer (it rides on High today), and a governor that steps
+  back up; GL perf on real GPUs (§6).
 - Rain interaction (the game has snow, not rain): falling flakes are not yet lit by flashes.
 - Barricade bullet holes only from raider fire (the leader's rounds go out over the road); casings in the
   daylight run vanish when they land (no ground decal canvas there).
