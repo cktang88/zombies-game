@@ -427,3 +427,5 @@ button.mini.urgent { border-color: #c0603c; color: #f0b090; }
   .center nav { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   .center nav button { flex: none; padding: 6px 8px; font-size: 12px; }
 }
+.thread .tico { color: #d8b060; font-size: 11px; }
+.wcard.recipe button { font-size: 16px; line-height: 1; padding: 3px 0; }

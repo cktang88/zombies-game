@@ -6,7 +6,8 @@ import { persona, cyclePos, campWealth } from './director';
 import { WEAPONS } from '../data/weapons';
 import { living, canFight, addThought, first } from './survivors';
 import { activeThreads } from './threads';
-import { tip } from '../ui/kit';
+// data-tip attribute (same as ui/kit tip(); kept here so the sim graph stays free of import.meta.env)
+export const tip = (h: string) => ` data-tip="${h.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}" tabindex="0"`;
 import { type Incident, lowestSpotlight } from './incident';
 
 export type CalKind = 'night' | 'tide' | 'band' | 'crossing' | 'ice' | 'raiders' | 'horde' | 'tunnel' | 'unknown';
