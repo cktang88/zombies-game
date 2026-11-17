@@ -97,6 +97,7 @@
   .dep-info { gap: 8px; padding: 6px; }
   .dep-ci { width: 40px; height: 40px; }
   .dep-info { flex-wrap: wrap; }
+  .dep-cm { flex-basis: calc(100% - 52px); }
   .dep-remove { margin-left: 48px; }
   .dep-f button { flex: 1; }
 }
