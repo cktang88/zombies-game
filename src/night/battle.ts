@@ -4281,17 +4281,21 @@ export class Battle {
     c.font = '11px "Special Elite", monospace';
     c.fillStyle = '#a89c84';
     const multiAmmo = !!(p?.w && ammoTypesFor(p.w.def).length > 1);
+    // on a phone-width canvas (≈0.3× scale) the key list is 3 px noise over the near lane, and
+    // there is no keyboard: drop it, and set the messages larger so they stay readable
+    const narrow = (this.canvas.clientWidth || W) < 700;
     // the full key list early in the night (and when paused); afterwards one short line
-    if (this.t < 30 || this.paused) {
+    if (narrow) { /* no key list */ }
+    else if (this.t < 30 || this.paused) {
       c.fillText(`${keyCap('night.reload')} reload (hold: speed) · ${keyCap('night.weapon')}/wheel gun${multiAmmo ? ` · ${keyCap('night.ammo')} ammo` : ''} · ${keyCap('night.selector')} selector · RMB focus · ${keyCap('night.duck')} duck · ${keyCap('night.firebomb')}/MMB firebomb ${G.stores.molotov}`, 20, H - 24);
       c.fillText(`[1-9]/[Tab] guard · ${keyCap('night.free')} free ${keyCap('night.hold')} hold ${keyCap('night.heads')} heads ${keyCap('night.wall')} wall (Shift: all) · ${keyCap('night.post')} post · ${keyCap('night.mark')} mark · ${keyCap('night.rally')} rally · ${keyCap('night.hurry')} hurry · ${keyCap('night.pause')} pause`, 20, H - 10);
     } else c.fillText(`firebombs ${G.stores.molotov} ${keyCap('night.firebomb')}   ·   ${keyCap('night.reload')} reload   ${keyCap('night.duck')} duck   RMB focus   ${keyCap('night.pause')} keys`, 20, H - 12);
     // messages
     c.textAlign = 'center';
     this.messages.forEach((m, i) => {
-      c.font = '17px "Special Elite", monospace';
+      c.font = `${narrow ? 30 : 17}px "Special Elite", monospace`;
       c.fillStyle = `rgba(232,220,192,${Math.min(1, m.life)})`;
-      c.fillText(m.text, W / 2, 110 + i * 26);
+      c.fillText(m.text, W / 2, 110 + i * (narrow ? 38 : 26), W - 40);
     });
     // crosshair: circle sized by real spread, at where the hand points
     if (p && p.w && !this.done) {
