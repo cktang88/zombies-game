@@ -8,7 +8,10 @@ import { planNight, afterNight, PERSONAS } from './sim/director';
 import { rollIncident, resolveEvent, returnsTick } from './sim/events';
 import { Battle, W, H, type NightResult } from './night/battle';
 import { Expedition, type ExpeditionResult } from './night/expedition';
-import { living, displayName, first } from './sim/survivors';
+import { living, displayName, first, byId } from './sim/survivors';
+import { morningSummary, fateLine, type Fate } from './sim/chronicle';
+import { parseIds } from './sim/incident';
+import type { Survivor } from './types';
 import { setMuted, muted, sfx, music } from './audio';
 import { openSettings } from './ui/settings';
 import { openHelp } from './ui/help';
@@ -44,7 +47,7 @@ function title() {
     if (el.dataset.act === 'continue' && saved) {
       setState(saved);
       report = ['You return to the house on Ferry Road.'];
-      if (G.phase === 'over') return gameOver();
+      if (G.phase === 'over') return G.flags.ending ? epilogue() : gameOver();
       day();
     } else if (el.dataset.act === 'new') {
       clearSave();
@@ -76,6 +79,8 @@ function day() {
       G.pendingEvent = null;
       const outcome = resolveEvent(ev, i);
       if (outcome) report.push(outcome);
+      // an incident can end the story (the ferry, the mill)
+      if (G.flags.ending) return epilogue();
       // events can chain (e.g. found survivor + a bite)
       if (!living().length) return gameOver();
       save();
@@ -167,6 +172,9 @@ function dawn(r: NightResult) {
   if (r.deaths.length) lines.push(`We lost ${r.deaths.join(', ')}.`);
   if (!r.wallHeld) lines.push('They came over the wall.');
   lines.push(...r.lines);
+  // morning report: who carried the night, who broke
+  const panicked = living().filter((s) => G.chronicle.some((e) => e.day === G.day && e.kind === 'break' && e.text.startsWith(displayName(s)) && e.text.includes('panicked')));
+  lines.push(...morningSummary(r.killsBy, [...living(), ...G.graves], panicked, r.deaths));
   const used = Object.entries(r.ammoUsed).map(([k, v]) => `${v} ${k === 'light' ? 'pistol rounds' : k === 'shell' ? 'shells' : k === 'rifle' ? 'rifle rounds' : k}`).join(', ');
   if (used) lines.push(`Spent: ${used}.`);
   if (!living().length) return gameOver();
@@ -174,8 +182,15 @@ function dawn(r: NightResult) {
   nextWeather();
   const morning = [...returnsTick(), ...dawnTick()];
   if (!living().length) return gameOver();
-  G.pendingEvent = rollIncident();
   report = [...lines, ...morning];
+  // holding: forty days on Ferry Road is the third way out
+  if (G.day >= SPRING_DAY) {
+    G.flags.ending = 'spring';
+    G.flags.endWent = JSON.stringify(living().map((s) => s.id));
+    log('event', 'The fortieth morning. We are still here.');
+    return epilogue();
+  }
+  G.pendingEvent = rollIncident();
   save();
   if (wasIce) return iceEpilogue(r.fell);
   overlay(`<h2>Dawn, ${dateLabel()}</h2>${report.map((l) => `<p>${esc(l)}</p>`).join('')}`, () => day());
@@ -189,6 +204,65 @@ function iceEpilogue(fell: boolean) {
     <p>${alive.map((s) => esc(displayName(s))).join(', ')} saw the first light of December.</p>
     <p>${G.graves.length ? `Behind the house: ${G.graves.map((g) => esc(first(g))).join(', ')}.` : 'Nobody is buried behind the house. Nobody.'}</p>
     <p class="forecast">The ice will hold until April. Winter has only begun. (The game continues as long as you can hold.)</p>`, () => day());
+}
+
+const SPRING_DAY = 40;
+
+const ENDINGS: Record<string, { title: string; text: (went: Survivor[], stayed: Survivor[]) => string }> = {
+  ferry: {
+    title: 'The last crossing',
+    text: (went, stayed) => `At two in the morning the Doucette boat pushed off from the landing below Ferry Road with ${went.length} of us aboard, low in the black water, ice already whispering against the hull at the edges. Marie Doucette ran without lights. We passed Grace Island close enough to hear something moving on the shore, and then the east channel, and then the place where the Line should have been and wasn't.${stayed.length ? ` Behind us, a lamp burned in the window of the house on Ferry Road. ${stayed.map(first).join(' and ')} kept it lit.` : ' Behind us, the house on Ferry Road went dark for the first time in weeks.'} Four days later the St. Aubin froze from bank to bank.`,
+  },
+  mill: {
+    title: 'The mill',
+    text: (went, stayed) => `We walked two miles up Mill Road in the snow, ${went.length} of us, carrying everything that would carry. The Local 41 gate opened before we knocked. Inside there was steam heat and the smell of wet pulp and a chalkboard that said EVERYBODY WORKS A SHIFT, and Dolores Wick wrote our names on it, one under the other.${stayed.length ? ` ${stayed.map(first).join(' and ')} stayed behind in the house on Ferry Road, because the Union does not take the bitten. Nobody ever went back to see.` : ''} The boilers ran until April.`,
+  },
+  spring: {
+    title: 'Spring',
+    text: (went) => `Forty days. Then fifty. The ice held and the dead came across it every night and every night the wall on Ferry Road held, more or less. In January the radio stopped looping. In March it said something new. On the ninth of April the St. Aubin broke up with a sound like artillery, and the ice went out, and ${went.length ? went.map(first).join(', ') : 'nobody'} stood on the porch of the brick house and watched it go.`,
+  },
+};
+
+function epilogue() {
+  G.phase = 'over';
+  G.pendingEvent = null;
+  save();
+  music('title');
+  const ending = String(G.flags.ending);
+  const E = ENDINGS[ending] ?? ENDINGS.spring;
+  const went = parseIds(G.flags.endWent).map((id) => byId(id)).filter((s): s is Survivor => !!s && !s.dead);
+  const stayed = parseIds(G.flags.endStayed).map((id) => byId(id)).filter((s): s is Survivor => !!s && !s.dead);
+  const fates: { s: Survivor; f: Fate }[] = [
+    ...went.map((s) => ({ s, f: (ending === 'spring' ? 'held' : 'went') as Fate })),
+    ...stayed.map((s) => ({ s, f: 'stayed' as Fate })),
+    ...G.graves.map((s) => ({ s, f: (s.dead?.cause === 'deserted' ? 'left' : 'dead') as Fate })),
+  ];
+  const card = (x: { s: Survivor; f: Fate }) => {
+    const s = x.s;
+    const label = x.f === 'dead' ? 'buried' : x.f === 'left' ? 'gone' : x.f === 'stayed' ? 'stayed behind' : 'lived';
+    return `<div class="grave"><div class="gn">${esc(displayName(s))}</div>
+      <div class="gd">${s.age}${s.child ? ' (a child)' : ''} · ${s.kills} put down · ${s.daysSurvived} days · <b>${label}</b></div>
+      <div class="ge">${esc(fateLine(s, x.f, ending))}</div>
+      ${s.tales.length ? `<ul>${s.tales.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}</div>`;
+  };
+  app.onclick = null;
+  app.onchange = null;
+  app.innerHTML = `<div class="over epilogue" data-ending="${esc(ending)}">
+    <h1>${esc(E.title)}</h1>
+    <p class="sub">${dateLabel(1)} – ${dateLabel()} · ${G.day} days · ${G.stats.kills} of the Turned put down · ${G.stats.headshots} headshots</p>
+    <p class="epi" style="max-width:46em;margin:1em auto;line-height:1.55">${esc(E.text(went, stayed))}</p>
+    <h2>What became of them</h2>
+    <div class="graves">${fates.map(card).join('')}</div>
+    <h2>The chronicle</h2>
+    <div class="chron">${G.chronicle.map((e) => `<p class="ce ${e.kind}"><b>${dateLabel(e.day)}.</b> ${esc(e.text)}</p>`).join('')}</div>
+    <button data-act="again">Begin again</button>
+  </div>`;
+  app.onclick = (e) => {
+    if ((e.target as HTMLElement).dataset.act === 'again') {
+      clearSave();
+      title();
+    }
+  };
 }
 
 function gameOver() {

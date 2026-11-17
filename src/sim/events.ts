@@ -590,9 +590,14 @@ export const INCIDENTS: Incident[] = [
 export function rollIncident(): PendingEvent | null {
   if (G.day <= 1 || !living().length || G.flags.ending) return null;
   const pool = INCIDENTS.filter((i) => (G.director.cooldowns[i.id] ?? 0) <= G.day);
-  // the heaviest forced incident wins (endings and threats before a burial)
-  const forced = pool.filter((i) => i.weight() >= 8).sort((a, b) => b.weight() - a.weight())[0];
-  const pick = forced ?? (R.chance(0.7) ? R.weighted(pool, (i) => i.weight()) : undefined);
+  // the heaviest forced incident wins (endings and threats before a burial);
+  // if its make() declines, the next forced one gets a chance
+  const forced = pool.filter((i) => i.weight() >= 8).sort((a, b) => b.weight() - a.weight());
+  for (const f of forced) {
+    const ev = f.make();
+    if (ev) { G.director.cooldowns[f.id] = G.day + (f.cooldown ?? 3); return ev; }
+  }
+  const pick = R.chance(0.7) ? R.weighted(pool.filter((i) => !forced.includes(i)), (i) => i.weight()) : undefined;
   if (!pick) return null;
   const ev = pick.make();
   if (!ev) return null;
