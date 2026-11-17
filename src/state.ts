@@ -49,7 +49,7 @@ export function log(kind: ChronicleEntry['kind'], text: string) {
 }
 
 export function add(res: Res, n: number) {
-  G.stores[res] = Math.max(0, Math.round((G.stores[res] + n) * 10) / 10);
+  G.stores[res] = Math.max(0, Math.round(((G.stores[res] ?? 0) + n) * 10) / 10); // ?? 0: saves from before the new ammo keys
 }
 
 export function has(cost: Partial<Record<Res, number>>) {

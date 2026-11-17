@@ -1,6 +1,8 @@
 // Core data model. Everything in GameState is plain JSON so it can be saved.
 
-export type Res = 'food' | 'scrap' | 'wood' | 'parts' | 'meds' | 'fuel' | 'cloth' | 'light' | 'shell' | 'rifle' | 'liquor' | 'molotov';
+export type Res = 'food' | 'scrap' | 'wood' | 'parts' | 'meds' | 'fuel' | 'cloth' | 'light' | 'shell' | 'rifle' | 'liquor' | 'molotov'
+  // ammunition by caliber & bullet type (see src/data/weapons.ts CALIBERS / AMMO_TYPES)
+  | 'r22' | 'light_hp' | 'shell_slug' | 'shell_flech' | 'shell_fire' | 'rifle_sp' | 'rifle_ap' | 'r556' | 'ball' | 'bolt' | 'bolt_fire' | 'flare';
 export type Stores = Record<Res, number>;
 
 export type SkillId = 'shooting' | 'building' | 'crafting' | 'medicine' | 'scavenging' | 'farming' | 'social';
@@ -90,6 +92,20 @@ export interface WeaponDef {
   auto: boolean;
   noise: number; // draws more zombies
   desc: string;
+  // --- arsenal extensions (all optional; read them through fireProfile() in data/weapons.ts) ---
+  niche?: string; // one line: what this gun is FOR
+  caliber?: string; // CALIBERS key; decides which ammo types it can load
+  armorPen?: number; // 0..1 fraction of a Deputy's body armour ignored (negative = armour hurts more)
+  reloadPerRound?: boolean; // loads one round at a time; `reload` stays the full-magazine time
+  burst?: number; // rounds fired per trigger pull (default 1)
+  burstGap?: number; // seconds between burst rounds (0 = all at once, e.g. both barrels)
+  perShot?: number; // ammo units taken from stores per round (default 1; nails 0.05 scrap)
+  jam?: number; // base jam chance per shot on top of wear (improvised guns)
+  recoverable?: number; // 0..1 of spent ammo picked up after the fight (arrows, bolts)
+  incendiary?: boolean; // sets the Turned burning (flare gun)
+  flare?: boolean; // the shot lights up where it lands for a few seconds
+  smoke?: boolean; // big muzzle smoke cloud (black powder)
+  craftable?: boolean;
 }
 
 export interface WeaponItem {
@@ -98,6 +114,7 @@ export interface WeaponItem {
   cond: number; // 0..1 condition
   name?: string; // given a name after a memorable event
   kills: number;
+  ammoType?: Res; // selected bullet type for this gun (must match its caliber); default = WeaponDef.ammo
 }
 
 export interface Building {
