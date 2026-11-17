@@ -454,7 +454,7 @@ function recipeIcon(r: (typeof RECIPES)[number]): string {
   if (g) return RES_ICON[g];
   return SPECIAL_ICON[r.special ?? ''] ?? 'icon_parts';
 }
-const BUILD_ICON: Record<string, string> = { workbench: 'icon_parts', forge: 'icon_scrap', garden: 'icon_food', infirmary: 'icon_meds', still: 'icon_molotov', generator: 'icon_fuel', radio: 'icon_st_radio' };
+const BUILD_ICON: Record<string, string> = { workbench: 'icon_job_craft', forge: 'icon_scrap', garden: 'icon_job_farm', infirmary: 'icon_job_doctor', still: 'icon_molotov', generator: 'icon_fuel', radio: 'icon_job_radio' };
 const pic = (sprite: string, cls = '') => `<img class="pic ${cls}" src="${spriteUrl(sprite)}" alt="" onerror="this.style.visibility='hidden'">`;
 
 function workshopHtml() {
@@ -468,7 +468,7 @@ function workshopHtml() {
       ${lvl < b.maxLevel ? `<button class="mini" data-act="build" data-id="${b.id}" ${has(next) ? '' : 'disabled'}>${lvl ? '▲' : 'Build'}</button>` : ''}
     </div>`;
   }).join('');
-  const recipes = RECIPES.filter((r) => !r.hidden && !(r.special === 'roofnest' && G.flags.roofNest) && buildingLevel(r.needs) >= (r.level ?? 1));
+  const recipes = RECIPES.filter((r) => !r.hidden && !(r.special === 'roofnest' && G.flags.roofNest) && buildingLevel(r.needs) >= (r.level ?? 1)).sort((a, b) => +has(b.cost) - +has(a.cost));
   const locked = RECIPES.filter((r) => !r.hidden && buildingLevel(r.needs) < (r.level ?? 1));
   const crafters = living().filter((s) => s.job === 'craft' && canWork(s));
   const queue = G.craftQueue.length ? G.craftQueue.map((q, i) => {
@@ -677,7 +677,9 @@ function chronicleHtml() {
   }
   const days = [...byDay.entries()].reverse();
   if (!days.length) return '<p class="t-s">Nothing written yet.</p>';
-  const head = (d: number, l: string[]) => `<span class="t-m">${dateLabel(d)}</span> <span class="t-xs">day ${d} · ${l.length}</span>`;
+  const firstLine = new Map<number, string>();
+  for (const e of G.chronicle) if (!firstLine.has(e.day) || e.kind === 'death') firstLine.set(e.day, e.text);
+  const head = (d: number, l: string[]) => `<span class="t-m">${dateLabel(d)}</span> <span class="t-xs">${l.length}</span> <span class="t-s csum">${esc(firstLine.get(d) ?? '')}</span>`;
   const [d0, l0] = days[0];
   return `<div class="chron">${fold(head(d0, l0), l0.join(''), { open: true })}${days.slice(1).map(([d, l]) => fold(head(d, l), l.join(''))).join('')}</div>`;
 }
