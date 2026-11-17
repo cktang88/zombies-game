@@ -1,23 +1,51 @@
 import type { Survivor, WeaponItem, Res, NightPlan } from '../types';
 import { G, R, log, add } from '../state';
 import { ZOMBIES, type ZombieDef } from '../data/zombies';
-import { WEAPONS, fireProfile, armorDamage, roundsInStores, ammoLabel, ammoTypesFor, shotSound, wearMods, AMMO_RES, AMMO_TYPES, BURN, FLARE_LIGHT, type FireProfile } from '../data/weapons';
+import { WEAPONS, fireProfile, armorDamage, roundsInStores, ammoLabel, ammoTypesFor, shotSound, wearMods, blastDamage, AMMO_RES, AMMO_TYPES, BURN, FLARE_LIGHT, type FireProfile } from '../data/weapons';
 import { img, flashImg, shadeImg } from '../assets';
 import { sfx, wind } from '../audio';
+import { reduceGore, shakeScale } from '../ui/settings';
 import {
   living, canFight, aimFactor, first, displayName, wound, pain, killSurvivor, tale, addThought, hasTrait, changeOpinion, byId, isBitten, breakThresholds,
   moodBreakdown, their, them, grantTitle,
 } from '../sim/survivors';
+import { depthScale, bakeSprite, bakeComposite, bakeEdge, bakeLayer, bakeGround, fgStrip, shadowEllipse, type Look } from './render';
 
 export const W = 1280, H = 720;
-const WALL_X = 372; // front face of the barricade
-const LANE_TOP = 616, LANE_BOT = 690;
-const SURV_Y = 664;
+const WALL_X = 372; // front face of the barricade (near lane)
 const ZS = 1.3; // global actor scale for the Turned
 const SH = 158; // survivor display height
 const DRAIN_X = 74; // storm drain grate behind the line
 const SAFE_X = 70; // where the downed are dragged to
 const DOWN_PAIN = 1.45; // pain at which a mauled guard goes down
+
+// ---- depth (docs/research/04 §3) ----
+/** Four walking lanes, feet y far → near; the gaps widen with nearness. */
+export const LANES = [604, 628, 655, 685];
+/** Two rows of defenders behind the wall. */
+const DEF_LANES = [662, 688];
+const GROUND_TOP = 596, GROUND_BOT = 704;
+const LANE_TOL = 16; // a shot only finds bodies within this many px of its lane's feet
+const WALL_KEY = 700; // the barricade's sort key: in front of every walking lane
+/** 0 far … 1 near. */
+const depthT = (y: number) => Math.max(0, Math.min(1, (y - LANES[0]) / (LANES[3] - LANES[0])));
+const nearestLane = (y: number) => {
+  let li = 0;
+  for (let i = 1; i < LANES.length; i++) if (Math.abs(LANES[i] - y) < Math.abs(LANES[li] - y)) li = i;
+  return li;
+};
+/** The wall seen slightly from the side: the far lane's face sits ~10px further right. */
+const wallX = (lane: number) => WALL_X + (LANES[3] - LANES[lane]) * 0.12;
+/** Per-lane atmosphere: far zombies dimmer, cooler, flatter and thinner-edged. */
+const LOOK: Look[] = [
+  { b: 0.7, s: 0.65, fog: 0.22, outline: 1, rim: 0.25 },
+  { b: 0.8, s: 0.75, fog: 0.14, outline: 1, rim: 0.35 },
+  { b: 0.9, s: 0.88, fog: 0.06, outline: 1.5, rim: 0.5 },
+  { b: 1, s: 1, fog: 0, outline: 2, rim: 0.65 },
+];
+const CORPSE: Look = { b: 0.45, s: 0.6, fog: 0, outline: 0 };
+const PAD = 3; // transparent margin of every battle bake, so the layers line up
+const WARM = '#f0c98a', COOL = '#8fa6c8', DARK = '#0a0b10';
 
 interface Zombie {
   id: number;
@@ -47,6 +75,12 @@ interface Zombie {
   ducked?: boolean;
   seen?: number; // raiders: lit by their own muzzle flash
   emerge?: number; // tunnelers: climbing out of the drain
+  lane: number; // depth lane (index into LANES)
+  ty: number; // the y it is easing toward (its lane's feet + a little jitter)
+  jit: number; // per-body size variety
+  variant: number; // crowd variant (0 neutral, 1 cold, 2 sickly)
+  laneCd: number; // seconds before it may hop lanes again
+  blocked: number; // seconds spent held up behind the one ahead
 }
 
 interface Guard {
@@ -81,11 +115,46 @@ interface Guard {
   moodle?: string;
   moodleC: string;
   moodleT: number;
+  sc: number; // depth scale of their row
+  burstLane: number; // guards: the lane their burst is locked to
+  burstX: number;
 }
 
 interface Particle { x: number; y: number; vx: number; vy: number; life: number; max: number; size: number; color: string; kind: 'blood' | 'spark' | 'smoke' | 'fire' | 'spore' | 'shell' | 'chunk'; ground: number }
 interface Tracer { x1: number; y1: number; x2: number; y2: number; life: number; w: number }
-interface Fire { x: number; life: number; w: number }
+interface Fire { x: number; y: number; life: number; w: number }
+interface Lob { x0: number; y0: number; x1: number; y1: number; t: number; dur: number; p: FireProfile; g: Guard | null }
+
+// The painted background, baked once per look (never filtered per frame): an early-night
+// and a late-night variant that the battle crossfades by the clock.
+const bgCache = new Map<string, { early: HTMLCanvasElement; late: HTMLCanvasElement }>();
+function bakeBattleBg(special: string | undefined) {
+  const key = special === 'fog' ? 'fog' : special === 'crossing' ? 'crossing' : 'night';
+  const hit = bgCache.get(key);
+  if (hit) return hit;
+  if (!img('bg_mid')) return null;
+  const fog = key === 'fog', ice = key === 'crossing';
+  const one = (b: number, lift: number, sky: number) => {
+    // the far plane is lifted toward a cool grey: lighter than the actors' darks, lower in contrast
+    const cv = bakeLayer('bg_mid', 1600, 740, `brightness(${b}) saturate(${ice ? 0.45 : 0.55}) contrast(0.8) blur(${fog ? 2.2 : 1.2}px)`, fog ? '#6a7380' : '#4b5568', lift, false);
+    const x = cv.getContext('2d')!;
+    // deepen the sky so the street band is the brightest part of the backdrop
+    x.globalCompositeOperation = 'multiply';
+    const g = x.createLinearGradient(0, 0, 0, 300);
+    g.addColorStop(0, `rgba(14,18,32,${sky})`);
+    g.addColorStop(1, 'rgba(14,18,32,0)');
+    x.fillStyle = g;
+    x.fillRect(0, 0, 1600, 300);
+    return cv;
+  };
+  const r = {
+    early: one(ice ? 0.86 : 0.8, fog ? 0.5 : 0.34, 0.5),
+    late: one(ice ? 0.74 : 0.68, fog ? 0.55 : 0.36, 0.7),
+  };
+  bgCache.set(key, r);
+  return r;
+}
+let groundBand: HTMLCanvasElement | null = null;
 interface Light { x: number; y: number; r: number; life: number; max: number; color: string }
 interface FloatText { x: number; y: number; text: string; life: number; color: string; size: number }
 
@@ -157,6 +226,12 @@ export class Battle {
   raidersDown = 0;
   recover: Partial<Record<Res, number>> = {}; // arrows and bolts to pick up off the road at dawn
   fired = new Map<string, number>(); // rounds per gun tonight, for wear on suppressors and mods
+  lobs: Lob[] = []; // grenades and mortar bombs in the air
+  laneLast: (Zombie | undefined)[] = [undefined, undefined, undefined, undefined]; // update pass: the last walker seen per lane
+  laneQ = [0, 0, 0, 0]; // update pass: how many are pressed against the wall per lane
+  lanes: Zombie[][] = [[], [], [], []]; // walkers per lane at the start of this update, by x
+  prebake: (() => void)[] = []; // sprite bakes worked off during the intro
+  hover?: Zombie; // the body under the crosshair
   keyUp = (e: KeyboardEvent) => { if (e.key === ' ') this.fast = false; };
 
   constructor(canvas: HTMLCanvasElement, plan: NightPlan, onEnd: (r: NightResult) => void) {
@@ -179,8 +254,9 @@ export class Battle {
     for (const k of [...AMMO_RES, 'scrap', 'molotov'] as Res[]) this.ammoStart[k] = G.stores[k] ?? 0;
     this.res = { kills: 0, deaths: [], wallHeld: true, wallLost: 0, ammoUsed: {}, killsBy: {}, headshots: 0, lines: [], fell: false };
     this.setupGuards();
-    if (G.flags.dog) this.dog = { x: 228, y: SURV_Y + 22, barkT: 0, cd: 0, name: typeof G.flags.dog === 'string' ? G.flags.dog : 'The dog' };
+    if (G.flags.dog) this.dog = { x: 172, y: 699, barkT: 0, cd: 0, name: typeof G.flags.dog === 'string' ? G.flags.dog : 'The dog' };
     for (let i = 0; i < Math.min(2, G.fort.turrets ?? 0); i++) this.turrets.push({ x: WALL_X - 20 - i * 46, y: 560 - i * 14, cd: 1, flash: 0, ang: 0 });
+    this.queueBakes();
     const turning = G.flags.turningTonight as string | undefined;
     if (turning && byId(turning) && !byId(turning)!.dead) this.turnAt = this.duration * R.range(0.25, 0.6);
     this.keyHandler = (e) => this.onKey(e);
@@ -193,10 +269,15 @@ export class Battle {
   setupGuards() {
     const fighters = living().filter(canFight);
     fighters.sort((a, b) => (b.isLeader ? 1 : 0) - (a.isLeader ? 1 : 0));
-    const slots = [262, 192, 124, 58, 0, 160];
+    // two rows behind the wall; the leader on the near row at the slot closest to the wall,
+    // the rest alternating rows, x slots at least 62px apart (a little less with six)
+    const n = Math.min(6, fighters.length);
+    const gap = n > 5 ? 50 : 62;
     fighters.slice(0, 6).forEach((s, i) => {
       const w = G.weapons.find((x) => x.uid === s.weapon) ?? null;
-      this.guards.push({ s, w, x: slots[i], y: SURV_Y + (i % 2) * 8 - (i >= 4 ? 30 : 0), cd: R.range(0, 1), mag: 0, reload: 0, kills: 0, flash: 0, fled: false, recoil: 0, homeX: slots[i], face: 1, mauledT: 0, burstLeft: 0, burstT: 0, burstAng: 0, burstErr: 0, lastTgt: 0, dragT: 0, moodleC: '', moodleT: R.range(0, 1) });
+      const x = 262 - i * gap;
+      const y = DEF_LANES[i % 2 === 0 ? 1 : 0];
+      this.guards.push({ s, w, x, y, sc: depthScale(y), cd: R.range(0, 1), mag: 0, reload: 0, kills: 0, flash: 0, fled: false, recoil: 0, homeX: x, face: 1, mauledT: 0, burstLeft: 0, burstT: 0, burstAng: 0, burstErr: 0, burstLane: LANES[2], burstX: 0, lastTgt: 0, dragT: 0, moodleC: '', moodleT: R.range(0, 1) });
     });
     // magazines are loaded from the stores, not conjured
     for (const g of this.guards) {
@@ -381,13 +462,22 @@ export class Battle {
     this.updateDowned(dt);
     if (this.dog) this.updateDog(dt);
     for (const tu of this.turrets) this.updateTurret(tu, dt);
+    for (const l of this.lobs) { l.t += dt; if (l.t >= l.dur) this.blast(l.x1, l.y1, l.p.explosive!, l.p.knock, l.g); }
+    this.lobs = this.lobs.filter((l) => l.t < l.dur);
+    // walk the road front to back, so each body knows where the one ahead of it in its lane
+    // already stands this frame (spacing, wall queues, lane hops)
+    this.zombies.sort((a, b) => a.x - b.x);
+    for (const L of this.lanes) L.length = 0;
+    for (const z of this.zombies) if (this.inLane(z)) this.lanes[z.lane].push(z);
+    this.laneLast.fill(undefined);
+    this.laneQ.fill(0);
     for (const z of this.zombies) this.updateZombie(z, dt);
     this.zombies = this.zombies.filter((z) => !(z.state === 'dying' && z.dieT > 0.6) && !(z.state === 'flee' && z.x > W + 140));
     this.updateParticles(dt);
     for (const f of this.fires) {
       f.life -= dt;
-      if (R.chance(dt * 45)) this.particles.push({ x: f.x + R.range(-f.w / 2, f.w / 2), y: R.range(LANE_TOP + 20, LANE_BOT), vx: R.range(-8, 8), vy: R.range(-110, -50), life: 0.7, max: 0.7, size: R.range(3, 7), color: '#ffb347', kind: 'fire', ground: 0 });
-      if (R.chance(dt * 8)) this.particles.push({ x: f.x + R.range(-f.w / 3, f.w / 3), y: LANE_TOP - 20, vx: R.range(-6, 12), vy: R.range(-50, -25), life: 2.5, max: 2.5, size: R.range(8, 14), color: '#222', kind: 'smoke', ground: 0 });
+      if (R.chance(dt * 45)) this.particles.push({ x: f.x + R.range(-f.w / 2, f.w / 2), y: f.y + R.range(-26, 20), vx: R.range(-8, 8), vy: R.range(-110, -50), life: 0.7, max: 0.7, size: R.range(3, 7), color: '#ffb347', kind: 'fire', ground: 0 });
+      if (R.chance(dt * 8)) this.particles.push({ x: f.x + R.range(-f.w / 3, f.w / 3), y: f.y - 70, vx: R.range(-6, 12), vy: R.range(-50, -25), life: 2.5, max: 2.5, size: R.range(8, 14), color: '#222', kind: 'smoke', ground: 0 });
     }
     this.fires = this.fires.filter((f) => f.life > 0);
     for (const tr of this.tracers) tr.life -= dt;
@@ -427,18 +517,40 @@ export class Battle {
   spawn(type: string, straggler = false, name?: string) {
     const def = ZOMBIES[type];
     if (!def) return;
-    const y = R.range(LANE_TOP, LANE_BOT);
-    const scale = 0.92 + ((y - LANE_TOP) / (LANE_BOT - LANE_TOP)) * 0.16;
+    // the lane with the fewest bodies in the rightmost 300px; ties at random
+    const count = [0, 0, 0, 0];
+    for (const o of this.zombies) if (o.x > W - 300 && this.inLane(o)) count[o.lane]++;
+    const fewest = Math.min(...count);
+    const lane = R.pick([0, 1, 2, 3].filter((i) => count[i] === fewest));
+    const yoff = R.range(-3, 3);
+    const y = LANES[lane] + yoff;
+    const jit = R.range(0.96, 1.04);
     const hpMul = def.ranged || def.boss ? 1 : 1 + Math.max(0, G.day - 8) * 0.03;
+    const sprite = R.pick(def.sprites);
     const z: Zombie = {
-      id: this.nextId++, def, sprite: R.pick(def.sprites), x: W + R.range(30, 120), y, hp: def.hp * hpMul, maxHp: def.hp * hpMul, state: 'walk',
-      phase: R.range(0, 10), flash: 0, slow: 0, burn: 0, dieT: 0, maulT: 0, lungeT: R.range(1, 3), screamT: R.range(3, 6), scale, wallHit: 0, name,
+      id: this.nextId++, def, sprite, x: W + R.range(30, 120), y, hp: def.hp * hpMul, maxHp: def.hp * hpMul, state: 'walk',
+      phase: R.range(0, 10), flash: 0, slow: 0, burn: 0, dieT: 0, maulT: 0, lungeT: R.range(1, 3), screamT: R.range(3, 6), scale: depthScale(y) * jit, wallHit: 0, name,
+      lane, ty: y, jit, variant: R.int(0, 2), laneCd: 1, blocked: 0,
     };
+    const w = this.zw(z);
+    // heads alternate in x as well as y: stand off from the neighbours, never on top of the one ahead
+    for (let k = 0; k < 4; k++) {
+      let moved = false;
+      for (const o of this.zombies) {
+        if (!this.inLane(o)) continue;
+        const dl = Math.abs(o.lane - lane);
+        const need = dl === 0 ? 0.55 * w : dl === 1 ? 0.3 * w : 0;
+        if (need && Math.abs(o.x - z.x) < need) { z.x = o.x + need; moved = true; }
+      }
+      if (!moved) break;
+    }
+    // never the same sprite and variant as a neighbour within 120px in this or an adjacent lane
+    for (let k = 0; k < 3 && this.zombies.some((o) => o.sprite === sprite && o.variant === z.variant && Math.abs(o.x - z.x) < 120 && Math.abs(o.lane - lane) <= 1); k++) z.variant = (z.variant + 1) % 3;
     if (def.tunnel) {
       // up out of the storm drain, behind the wall
       z.x = DRAIN_X + R.range(-8, 8);
-      z.y = SURV_Y + R.range(4, 18);
-      z.scale = 1;
+      z.y = z.ty = DEF_LANES[1] - R.range(4, 12);
+      z.lane = 3;
       z.state = 'over';
       z.flip = true;
       z.emerge = 0.9;
@@ -455,8 +567,9 @@ export class Battle {
       if (!this.zombies.some((o) => o.def.ranged && o.state !== 'dying')) this.say('Men on the road. Living men, with rifles.', 4);
     } else if (def.boss) {
       z.x = W + 60;
-      z.y = LANE_TOP + (LANE_BOT - LANE_TOP) * 0.55;
-      z.scale = 1;
+      z.lane = 2;
+      z.y = z.ty = LANES[2];
+      z.jit = 1;
       z.screamT = 5;
       this.boss = z;
       this.say('Out on the ice, something tall. It is carrying the bell.', 6);
@@ -482,12 +595,14 @@ export class Battle {
     if (!s || s.dead) return;
     const g = this.guards.find((x) => x.s === s);
     const x = g ? g.x : 120;
+    const y = g ? g.y : DEF_LANES[1];
     if (g) g.fled = true;
     killSurvivor(s, 'turned, behind our own wall');
     this.res.deaths.push(`${first(s)} turned`);
     this.zombies.push({
-      id: this.nextId++, def: ZOMBIES.sleeper, sprite: s.sex === 'm' ? 'z_shambler' : 'z_shambler2', x, y: SURV_Y, hp: 90, maxHp: 90, state: 'over',
-      phase: 0, flash: 0, slow: 0, burn: 0, dieT: 0, maulT: 0, lungeT: 0, screamT: 99, scale: 1, name: first(s), wallHit: 0,
+      id: this.nextId++, def: ZOMBIES.sleeper, sprite: s.sex === 'm' ? 'z_shambler' : 'z_shambler2', x, y, hp: 90, maxHp: 90, state: 'over',
+      phase: 0, flash: 0, slow: 0, burn: 0, dieT: 0, maulT: 0, lungeT: 0, screamT: 99, scale: depthScale(y), name: first(s), wallHit: 0,
+      lane: 3, ty: y, jit: 1, variant: 0, laneCd: 0, blocked: 0,
     });
     this.say(`${first(s).toUpperCase()} HAS TURNED. Behind the wall.`, 7);
     this.shake = 8;
@@ -615,9 +730,23 @@ export class Battle {
       const mz = this.muzzle(p);
       const base = Math.atan2(this.mouse.y - mz.y, this.mouse.x - mz.x);
       const spreadA = prof.spread * (1.75 - aim) + this.bloom;
-      for (let i = 0; i < prof.pellets; i++) {
+      // Last Stand: the crosshair is the shot. It goes into the lane under it, and a body
+      // standing in front in another lane does not take it.
+      const laneY = this.targetLane();
+      const li = nearestLane(laneY);
+      if (prof.explosive && prof.arc) {
+        // lobbed over the front rank: lands at the crosshair's x on the target lane
+        const tx = Math.max(WALL_X + 30, this.mouse.x + (R.next() + R.next() - 1) * spreadA * Math.abs(this.mouse.x - mz.x) * 1.5);
+        this.lobs.push({ x0: mz.x, y0: mz.y, x1: tx, y1: laneY, t: 0, dur: 0.6, p: prof, g: p });
+      } else if (prof.explosive) {
+        const hit = this.castShot(p, mz.x, mz.y, base + (R.next() + R.next() - 1) * spreadA, prof.dmg, 0, prof.knock, false, true, prof, laneY);
+        this.blast(hit.x, laneY, prof.explosive, prof.knock, p);
+      } else for (let i = 0; i < prof.pellets; i++) {
         const a = base + (R.next() + R.next() - 1) * (prof.pellets > 1 ? prof.spread : spreadA);
-        this.castShot(p, mz.x, mz.y, a, prof.dmg, prof.pierce, prof.knock, prof.pellets > 1, true, prof);
+        // buckshot sprays a little through depth: 25% per pellet into an adjacent lane
+        let ly = laneY;
+        if (prof.pellets > 1 && R.chance(0.25)) { const adj = LANES[li + (R.chance(0.5) ? 1 : -1)]; if (adj !== undefined) ly = adj; }
+        this.castShot(p, mz.x, mz.y, a, prof.dmg, prof.pierce, prof.knock, prof.pellets > 1, true, prof, ly);
       }
       // the leader fires from the wall: a bipod braces
       this.bloom = Math.min(0.12, this.bloom + (prof.spread * 0.35 + (prof.auto ? 0.004 : 0.012)) * prof.bloomMul * prof.braceBloomMul);
@@ -643,19 +772,53 @@ export class Battle {
     sfx.shot(quiet ? 'nailer' : shotSound(def.id), far);
     if (prof.smoke) for (let i = 0; i < 4; i++) this.particles.push({ x: mz.x + g.face * R.range(0, 30), y: mz.y + R.range(-6, 6), vx: g.face * R.range(10, 50), vy: R.range(-20, 5), life: 2.2, max: 2.2, size: R.range(8, 14), color: '#bbb', kind: 'smoke', ground: 0 });
     const brass = !quiet && prof.recoverable <= 0 && def.caliber !== 'bolt';
-    if (!far && brass) this.particles.push({ x: mz.x - 30 * g.face, y: mz.y + 4, vx: -g.face * R.range(20, 60), vy: R.range(-160, -90), life: 1.2, max: 1.2, size: 2.4, color: '#c9a24a', kind: 'shell', ground: SURV_Y - 4 });
+    if (!far && brass) this.particles.push({ x: mz.x - 30 * g.face, y: mz.y + 4, vx: -g.face * R.range(20, 60), vy: R.range(-160, -90), life: 1.2, max: 1.2, size: 2.4, color: '#c9a24a', kind: 'shell', ground: g.y - 4 });
   }
 
   muzzle(g: Guard) {
-    return { x: g.x + g.face * (SH * 0.45 - g.recoil * 4), y: g.y - SH * 0.68 };
+    return { x: g.x + g.face * (SH * g.sc * 0.45 - g.recoil * 4), y: g.y - SH * g.sc * 0.68 };
   }
 
-  // Ray against all zombies; returns whether anything was hit.
-  castShot(g: Guard, ox: number, oy: number, ang: number, dmg: number, pierce: number, knock: number, pellet: boolean, isPlayer: boolean, fx?: FireProfile) {
+  zh(z: Zombie) { return z.def.height * z.scale * ZS; }
+  zw(z: Zombie) { return z.def.width * z.scale * ZS; }
+  /** Bake height for this body: its lane's display size (only the ±4% body jitter is scaled per frame). */
+  laneH(z: Zombie) { return Math.round(z.def.height * ZS * depthScale(LANES[nearestLane(z.y)])); }
+  /** Walking the road in a lane (as opposed to over the wall, in cover, fleeing or dead). */
+  inLane(z: Zombie) { return (z.state === 'walk' || z.state === 'wall') && !z.flip; }
+  /** The body drawn on top under the cursor, if any. */
+  pick(mx: number, my: number): Zombie | undefined {
+    let best: Zombie | undefined, bk = -1;
+    for (const z of this.zombies) {
+      if (z.state === 'dying' || (z.emerge !== undefined && z.emerge > 0.25)) continue;
+      const hb = this.hitbox(z);
+      const inBody = mx > hb.x1 - 4 && mx < hb.x2 + 4 && my > hb.y1 && my < hb.y2;
+      const inHead = (mx - hb.hx) ** 2 + (my - hb.hy) ** 2 < (hb.hr + 3) ** 2;
+      if (!inBody && !inHead) continue;
+      const k = this.sortKey(z);
+      if (k > bk) { bk = k; best = z; }
+    }
+    return best;
+  }
+  /** The lane the leader's shot goes into: the clicked body's, else the lane whose body column holds the cursor. */
+  targetLane(): number {
+    const z = this.pick(this.mouse.x, this.mouse.y);
+    if (z) return z.y;
+    let li = 0, bd = Infinity;
+    LANES.forEach((L, i) => { const d = Math.abs(this.mouse.y - (L - 0.55 * 156 * depthScale(L))); if (d < bd) { bd = d; li = i; } });
+    return LANES[li];
+  }
+  sortKey(z: Zombie) {
+    // over the wall (or up out of the drain) they are drawn in front of the barricade
+    return (z.state === 'over' || z.state === 'maul' ? WALL_KEY + 2 : z.y) + z.id * 1e-5;
+  }
+
+  // Ray against the zombies in one lane (±LANE_TOL); returns whether anything was hit, and where it stopped.
+  castShot(g: Guard, ox: number, oy: number, ang: number, dmg: number, pierce: number, knock: number, pellet: boolean, isPlayer: boolean, fx: FireProfile | undefined, laneY: number) {
     const dx = Math.cos(ang), dy = Math.sin(ang);
     const hits: { z: Zombie; t: number; head: boolean }[] = [];
     for (const z of this.zombies) {
       if (z.state === 'dying' || (z.emerge !== undefined && z.emerge > 0.25)) continue;
+      if (Math.abs(z.y - laneY) > LANE_TOL) continue;
       // the guards' strays rarely find a man lying low in the dark behind the crowd
       if (!isPlayer && z.def.ranged && !((z.seen ?? 0) > 0) && R.chance(0.85)) continue;
       const hb = this.hitbox(z);
@@ -688,9 +851,9 @@ export class Battle {
       if (n > pierce) break;
       d *= 0.7;
     }
-    // stop tracer at ground
+    // a miss lands on this lane's ground row, and sparks there
     if (n === 0 && dy > 0) {
-      const tg = (LANE_BOT - oy) / dy;
+      const tg = (laneY - 2 - oy) / dy;
       if (tg > 0 && tg < endT) {
         endT = tg;
         for (let i = 0; i < 3; i++) this.particles.push({ x: ox + dx * tg, y: oy + dy * tg, vx: R.range(-40, 40), vy: R.range(-80, -20), life: 0.4, max: 0.4, size: 2, color: '#6b5d4a', kind: 'spark', ground: 0 });
@@ -698,8 +861,8 @@ export class Battle {
     }
     this.tracers.push({ x1: ox + dx * 20, y1: oy + dy * 20, x2: ox + dx * endT, y2: oy + dy * endT, life: pellet ? 0.05 : 0.07, w: pellet ? 1 : 1.6 });
     // a flare lights the road where it comes down
-    if (fx?.flare && !pellet) this.lights.push({ x: ox + dx * endT, y: Math.min(LANE_BOT, oy + dy * endT), r: FLARE_LIGHT.r, life: FLARE_LIGHT.time, max: FLARE_LIGHT.time, color: '255,90,70' });
-    return n > 0;
+    if (fx?.flare && !pellet) this.lights.push({ x: ox + dx * endT, y: Math.min(laneY, oy + dy * endT), r: FLARE_LIGHT.r, life: FLARE_LIGHT.time, max: FLARE_LIGHT.time, color: '255,90,70' });
+    return { hit: n > 0, x: ox + dx * Math.min(endT, 1400), y: oy + dy * Math.min(endT, 1400) };
   }
 
   hitbox(z: Zombie) {
@@ -728,13 +891,10 @@ export class Battle {
     if (!heavy) z.x += (z.flip ? -1 : 1) * knock * (pellet ? 0.25 : 1) * (head ? 1.4 : 1) * (z.state === 'wall' ? 0.5 : 1);
     z.x = Math.min(z.x, W + 150);
     if (z.state === 'wall' && knock > 15 && !heavy) z.state = 'walk';
-    // blood
-    const nb = head ? 10 : 4;
-    for (let i = 0; i < nb; i++) {
-      this.particles.push({ x: px, y: py, vx: R.range(20, 220) * (R.chance(0.8) ? 1 : -0.5), vy: R.range(-200, 40), life: 1.6, max: 1.6, size: R.range(1.5, head ? 4.5 : 3), color: R.pick(['#4a0d0b', '#5e1410', '#3a0a08', '#6b2a12']), kind: 'blood', ground: z.y + R.range(-6, 6) });
-    }
+    // blood (fewer, smaller and darker with Reduce gore)
+    this.blood(px, py, head ? 10 : 4, head ? 4.5 : 3, z.y);
     if (z.hp <= 0) {
-      if (head && !z.headless && R.chance(isPlayer ? 0.8 : 0.5) && !z.def.crawl && !z.def.ranged) {
+      if (head && !z.headless && R.chance(isPlayer ? 0.8 : 0.5) && !z.def.crawl && !z.def.ranged && !reduceGore()) {
         z.headless = true;
         sfx.headpop();
         for (let i = 0; i < 14; i++) this.particles.push({ x: px, y: py, vx: R.range(-60, 260), vy: R.range(-260, -40), life: 2, max: 2, size: R.range(2, 5), color: R.pick(['#4a0d0b', '#2a1a14', '#5e1410', '#8b7d6b']), kind: R.chance(0.3) ? 'chunk' : 'blood', ground: z.y + R.range(-6, 6) });
@@ -744,6 +904,19 @@ export class Battle {
       this.kill(z, g);
     } else {
       sfx.hit();
+    }
+  }
+
+  /** A spray of blood that lands on the ground row `ground` (the actor's lane). */
+  blood(x: number, y: number, n: number, size: number, ground: number, spread = 1) {
+    const less = reduceGore();
+    const k = less ? Math.max(1, Math.round(n * 0.35)) : n;
+    for (let i = 0; i < k; i++) {
+      this.particles.push({
+        x, y, vx: R.range(20, 220) * spread * (R.chance(0.8) ? 1 : -0.5), vy: R.range(-200, 40), life: 1.6, max: 1.6,
+        size: R.range(1.5, size) * (less ? 0.6 : 1), color: less ? R.pick(['#240807', '#2c0a08']) : R.pick(['#4a0d0b', '#5e1410', '#3a0a08', '#6b2a12']),
+        kind: 'blood', ground: ground + R.range(-3, 3),
+      });
     }
   }
 
@@ -918,19 +1091,30 @@ export class Battle {
     const base = Math.atan2(ty - mz.y, tx - mz.x);
     g.cd = (1 / prof.rof) * (prof.auto ? 1.3 : 1.6) * R.range(0.9, 1.25) * (g.mode === 'panic' ? 0.55 : g.mode === 'rage' ? 0.7 : 1);
     g.burstLeft = Math.min(prof.burst, g.mag);
+    // their shots lock to the target's lane: no rounds wasted on a nearer body in front
+    g.burstLane = tgt.y;
+    g.burstX = tgt.x;
     this.guardRound(g, prof, base, err);
   }
 
   guardRound(g: Guard, prof: FireProfile, base: number, err: number) {
     if (!g.w) { g.burstLeft = 0; return; }
     const mz = this.muzzle(g);
+    const li = nearestLane(g.burstLane);
     do {
       if (g.mag <= 0) { g.burstLeft = 0; break; }
       g.mag--;
       g.burstLeft--;
-      for (let i = 0; i < prof.pellets; i++) {
+      if (prof.explosive && prof.arc) {
+        this.lobs.push({ x0: mz.x, y0: mz.y, x1: Math.max(WALL_X + 30, g.burstX + R.gauss(0, err * 400)), y1: g.burstLane, t: 0, dur: 0.6, p: prof, g });
+      } else if (prof.explosive) {
+        const hit = this.castShot(g, mz.x, mz.y, base + R.gauss(0, err * 0.6), prof.dmg, 0, prof.knock, false, false, prof, g.burstLane);
+        this.blast(hit.x, g.burstLane, prof.explosive, prof.knock, g);
+      } else for (let i = 0; i < prof.pellets; i++) {
         const a = base + R.gauss(0, prof.pellets > 1 ? prof.spread * 0.7 : err * 0.6);
-        this.castShot(g, mz.x, mz.y, a, prof.dmg, prof.pierce, prof.knock, prof.pellets > 1, false, prof);
+        let ly = g.burstLane;
+        if (prof.pellets > 1 && R.chance(0.25)) { const adj = LANES[li + (R.chance(0.5) ? 1 : -1)]; if (adj !== undefined) ly = adj; }
+        this.castShot(g, mz.x, mz.y, a, prof.dmg, prof.pierce, prof.knock, prof.pellets > 1, false, prof, ly);
       }
       this.roundFired(g, prof, mz, true);
       g.w.cond = Math.max(0.05, g.w.cond - 0.0006);
@@ -951,7 +1135,7 @@ export class Battle {
     const ty = (hb.y1 + hb.y2) / 2 - 10;
     tu.ang = Math.atan2(ty - tu.y, tgt.x - tu.x);
     add('scrap', -0.05);
-    this.castShot(null as unknown as Guard, tu.x + 20, tu.y, tu.ang + R.gauss(0, 0.04), 18, 1, 2, false, false);
+    this.castShot(null as unknown as Guard, tu.x + 20, tu.y, tu.ang + R.gauss(0, 0.04), 18, 1, 2, false, false, undefined, tgt.y);
     tu.cd = 0.3;
     tu.flash = 0.05;
     this.noise += 0.15;
@@ -966,20 +1150,27 @@ export class Battle {
       return;
     }
     z.phase += dt;
+    z.laneCd -= dt;
+    // ease toward the lane's feet (lane hops, or onto a defenders' row behind the wall)
+    if (z.y !== z.ty) {
+      const d = z.ty - z.y;
+      z.y += Math.sign(d) * Math.min(Math.abs(d), 40 * dt);
+    }
+    z.scale = depthScale(z.y) * z.jit;
     const cold = G.weather === 'cold' || G.weather === 'snow' ? 0.85 : 1;
     // burning
-    for (const f of this.fires) if (Math.abs(z.x - f.x) < f.w / 2) z.burn = 1.5;
+    for (const f of this.fires) if (((z.x - f.x) / (f.w / 2)) ** 2 + ((z.y - f.y) / 45) ** 2 <= 1) z.burn = 1.5;
     if (z.burn > 0) {
       z.burn -= dt;
       z.hp -= 22 * dt;
-      if (R.chance(dt * 20)) this.particles.push({ x: z.x + R.range(-15, 15), y: z.y - R.range(10, z.def.height * 0.8), vx: 0, vy: -60, life: 0.6, max: 0.6, size: R.range(5, 10), color: '#ffb347', kind: 'fire', ground: 0 });
+      if (R.chance(dt * 20)) this.particles.push({ x: z.x + R.range(-15, 15), y: z.y - R.range(10, this.zh(z) * 0.65), vx: 0, vy: -60, life: 0.6, max: 0.6, size: R.range(5, 10), color: '#ffb347', kind: 'fire', ground: 0 });
       if (z.hp <= 0) return this.kill(z, null);
     }
     // traps
     if (this.traps > 0 && z.state === 'walk' && z.x < this.trapX && z.x > this.trapX - 40) {
       this.traps--;
       G.fort.traps = Math.max(0, G.fort.traps - 1);
-      this.explode(this.trapX, 130, 160);
+      this.blast(this.trapX, z.y, { radius: 150, dmg: 160 }, 40, null);
     }
     // crier
     if (z.def.scream && z.x < W - 20) {
@@ -1015,38 +1206,12 @@ export class Battle {
       z.flip = true;
       return;
     }
-    if (z.state === 'walk') {
-      z.x -= speed * dt;
-      if (z.def.ranged && z.x <= (z.stopX ?? 900)) {
-        const h = z.def.height * z.scale * ZS;
-        this.covers.push({ x: z.x - h * 0.2, y: z.y + 3, w: h * 0.55, h: h * 0.44, seed: z.id * 7.3 });
-        z.state = 'cover';
-        z.ducked = true;
-        z.coverT = R.range(0.4, 1.2);
-        return;
-      }
-      if (z.x - (z.def.width * z.scale * ZS) / 2 <= WALL_X) {
-        z.x = WALL_X + (z.def.width * z.scale * ZS) / 2;
-        z.state = G.fort.hp > 0 ? 'wall' : 'over';
-      }
-    } else if (z.state === 'wall') {
-      if (G.fort.hp <= 0) {
-        z.state = 'over';
-        return;
-      }
-      const dmg = z.def.dps * dt * cold;
-      G.fort.hp = Math.max(0, G.fort.hp - dmg);
-      z.wallHit -= dt;
-      if (z.wallHit <= 0) {
-        z.wallHit = R.range(0.8, 1.4);
-        sfx.wallHit();
-        for (let i = 0; i < 2; i++) this.particles.push({ x: WALL_X - 5, y: z.y - R.range(30, 100), vx: R.range(-80, -10), vy: R.range(-100, 0), life: 0.6, max: 0.6, size: 2, color: '#7a6448', kind: 'spark', ground: 0 });
-      }
-      if (G.fort.spikes > 0) {
-        z.hp -= G.fort.spikes * 3.5 * dt;
-        if (z.hp <= 0) this.kill(z, null);
-      }
-    } else if (z.state === 'over') {
+    if (z.state === 'walk' || z.state === 'wall') {
+      this.walkLane(z, speed, cold, dt);
+      if (this.inLane(z)) this.laneLast[z.lane] = z;
+      return;
+    }
+    if (z.state === 'over') {
       if (z.emerge !== undefined && z.emerge > 0) { z.emerge -= dt; return; }
       // over the rubble (or up out of the drain) toward the nearest defender
       let tgt: Guard | undefined;
@@ -1057,6 +1222,8 @@ export class Battle {
         if (d < best) { best = d; tgt = g; }
       }
       if (!tgt) { z.x += (z.flip ? speed : -speed) * dt; if (z.x < -80 || z.x > W + 80) z.hp = 0; return; }
+      // onto the defenders' row, just in front of the one it wants
+      z.ty = tgt.y + 2;
       const dx = tgt.x - z.x;
       if (Math.abs(dx) > 34) {
         z.x += Math.sign(dx) * speed * 0.8 * dt;
@@ -1069,6 +1236,7 @@ export class Battle {
     } else if (z.state === 'maul') {
       const g = this.guards.find((x) => x.s.id === z.target);
       if (!g || g.s.dead || g.fled || g.safe || Math.abs(g.x - z.x) > 60) { z.state = 'over'; return; }
+      z.ty = g.y + 2;
       z.maulT -= dt;
       if (z.maulT <= 0) {
         z.maulT = R.range(0.9, 1.6) * (z.def.id === 'ferryman' ? 0.7 : 1);
@@ -1077,6 +1245,87 @@ export class Battle {
     }
   }
 
+  // Walking the road in a lane. Bodies keep their spacing (a faster one is held up behind a
+  // slower one and looks for room in the next lane), and queue at their lane's stop line on
+  // the wall. Everyone pressed into the queue pushes on the wall, as one crowd.
+  walkLane(z: Zombie, speed: number, cold: number, dt: number) {
+    const w = this.zw(z);
+    const ahead = this.laneLast[z.lane];
+    const aw = ahead ? this.zw(ahead) : 0;
+    const queued = !!ahead && ahead.state === 'wall';
+    const face = wallX(z.lane) + w / 2;
+    const standing = G.fort.hp > 0;
+    if (z.state === 'wall') {
+      if (!standing) { z.state = 'over'; return; }
+      // still pressed against the wall, or against the one in front of it?
+      const atFace = z.x <= face + 1;
+      const inQueue = queued && z.x <= ahead!.x + 0.45 * Math.max(w, aw) + 2;
+      if (!atFace && !inQueue) { z.state = 'walk'; return; }
+      const k = this.laneQ[z.lane]++;
+      const dmg = z.def.dps * dt * cold;
+      G.fort.hp = Math.max(0, G.fort.hp - dmg);
+      z.wallHit -= dt;
+      if (z.wallHit <= 0) {
+        z.wallHit = R.range(0.8, 1.4);
+        if (atFace) {
+          sfx.wallHit();
+          for (let i = 0; i < 2; i++) this.particles.push({ x: wallX(z.lane) - 5, y: z.y - R.range(30, 100), vx: R.range(-80, -10), vy: R.range(-100, 0), life: 0.6, max: 0.6, size: 2, color: '#7a6448', kind: 'spark', ground: 0 });
+        }
+      }
+      if (G.fort.spikes > 0 && atFace) {
+        z.hp -= G.fort.spikes * 3.5 * dt;
+        if (z.hp <= 0) { this.kill(z, null); return; }
+      }
+      // a long queue: the back of it looks for a shorter one next door
+      if (k >= 3 && z.laneCd <= 0) this.hop(z, w, true);
+      return;
+    }
+    // walking
+    let nx = z.x - speed * dt;
+    if (z.def.ranged && nx <= (z.stopX ?? 900)) {
+      z.x = nx;
+      const h = this.zh(z);
+      this.covers.push({ x: z.x - h * 0.2, y: z.y + 3, w: h * 0.55, h: h * 0.44, seed: z.id * 7.3 });
+      z.state = 'cover';
+      z.ducked = true;
+      z.coverT = R.range(0.4, 1.2);
+      return;
+    }
+    let held = false;
+    if (ahead) {
+      const gap = (queued ? 0.45 : 0.55) * Math.max(w, aw);
+      const lim = ahead.x + gap;
+      // never closer than the gap; a body knocked back into the one behind just stops it
+      if (nx < lim) { nx = Math.min(z.x, lim); held = true; }
+    }
+    z.x = nx;
+    if (z.x <= face) { z.x = face; z.state = standing ? 'wall' : 'over'; if (z.state === 'wall') this.laneQ[z.lane]++; return; }
+    if (held && queued && standing) { z.state = 'wall'; this.laneQ[z.lane]++; return; }
+    z.blocked = held ? z.blocked + dt : 0;
+    if (held && z.blocked > 0.25 && z.laneCd <= 0) this.hop(z, w, false);
+  }
+
+  // Step into an adjacent lane with room at this x (at least 0.6 body widths to anyone there).
+  hop(z: Zombie, w: number, shorterQueue: boolean) {
+    z.laneCd = R.range(0.8, 1.4);
+    const opts = [z.lane - 1, z.lane + 1].filter((l) => l >= 0 && l < LANES.length);
+    if (R.chance(0.5)) opts.reverse();
+    for (const l of opts) {
+      let room = Infinity;
+      for (const o of this.lanes[l]) if (o !== z) room = Math.min(room, Math.abs(o.x - z.x));
+      if (room < 0.6 * w) continue;
+      if (shorterQueue) {
+        let q = 0;
+        for (const o of this.lanes[l]) if (o.state === 'wall') q++;
+        if (q >= this.laneQ[z.lane] - 1) continue;
+      }
+      z.lane = l;
+      z.ty = LANES[l] + R.range(-3, 3);
+      if (z.state === 'wall') z.state = 'walk';
+      z.blocked = 0;
+      return;
+    }
+  }
   // ---------- raiders ----------
   updateRaider(z: Zombie, dt: number) {
     if (!z.ducked && z.coverT !== undefined && z.coverT > 0 && R.chance(dt * 0.4)) z.seen = Math.max(z.seen ?? 0, 0.5);
@@ -1125,7 +1374,7 @@ export class Battle {
       wound(s, 'gunshot', R.range(0.18, 0.38));
       sfx.hurt();
       this.text(tgt.x + 10, tgt.y - 150, 'SHOT', '#e07050', 13);
-      for (let i = 0; i < 6; i++) this.particles.push({ x: tx, y: ty, vx: R.range(-140, 20), vy: R.range(-140, 20), life: 1.2, max: 1.2, size: R.range(1.5, 3.5), color: '#5e1410', kind: 'blood', ground: tgt.y });
+      this.blood(tx, ty, 6, 3.5, tgt.y, -0.6);
       if (!s.tales.some((t) => t.startsWith('Took a County bullet'))) tale(s, `Took a County bullet on the wall, night ${G.day}.`);
       this.checkDown(tgt, 'shot on the wall by a County man');
     } else {
@@ -1158,7 +1407,7 @@ export class Battle {
       tale(s, `Bitten on the line, night ${G.day}.`);
       this.say(`${first(s)} is bitten!`, 3);
     }
-    for (let i = 0; i < 8; i++) this.particles.push({ x: g.x + 20, y: g.y - 80, vx: R.range(-120, 120), vy: R.range(-160, 0), life: 1.4, max: 1.4, size: R.range(2, 4), color: '#5e1410', kind: 'blood', ground: g.y });
+    this.blood(g.x + 20, g.y - 80, 8, 4, g.y, 0.6);
     const by = z.name ? `by what had been ${z.name}` : `by a ${z.def.name}`;
     if (g.downed) return; // the clock in updateDowned decides
     this.checkDown(g, `pulled down behind the wall ${by}, night ${G.day}`);
@@ -1335,24 +1584,34 @@ export class Battle {
     if (d.barkT > 0 && d.barkT < 1.1 && !this.texts.some((t) => t.x === d.x + 18)) this.text(d.x + 18, d.y - 64, R.pick(['bark', 'growl']), '#bfb39a', 10);
   }
 
-  explode(x: number, r: number, dmg: number) {
+  // A blast on the ground plane (traps, rockets, grenades): everything inside the ground-space
+  // ellipse (dx/r)² + (dy/0.3r)² ≤ 1 around the foot point takes blastDamage(), armour ignored,
+  // and is thrown outward. Covers about one lane either side.
+  blast(x: number, y: number, ex: { radius: number; dmg: number }, knock: number, g: Guard | null) {
     sfx.boom();
-    this.shake = 16;
-    this.lights.push({ x, y: 600, r: 420, life: 0.4, max: 0.4, color: '255,170,80' });
-    for (let i = 0; i < 40; i++) this.particles.push({ x, y: 620, vx: R.range(-300, 300), vy: R.range(-420, -60), life: 1.2, max: 1.2, size: R.range(2, 6), color: R.pick(['#ffcf6b', '#ff8a3d', '#444']), kind: R.chance(0.6) ? 'spark' : 'smoke', ground: 640 });
+    this.shake = Math.max(this.shake, 16);
+    this.lights.push({ x, y: y - 30, r: 420, life: 0.4, max: 0.4, color: '255,170,80' });
+    for (let i = 0; i < 40; i++) this.particles.push({ x: x + R.range(-20, 20), y: y - R.range(0, 30), vx: R.range(-300, 300), vy: R.range(-420, -60), life: 1.2, max: 1.2, size: R.range(2, 6), color: R.pick(['#ffcf6b', '#ff8a3d', '#444']), kind: R.chance(0.6) ? 'spark' : 'smoke', ground: y + 6 });
+    // a scorch on the road
+    const c = this.gctx;
+    c.fillStyle = 'rgba(8,7,6,0.45)';
+    c.beginPath();
+    c.ellipse(x, y + 1, ex.radius * 0.35, ex.radius * 0.35 * 0.3, 0, 0, Math.PI * 2);
+    c.fill();
     for (const z of this.zombies) {
-      if (z.state === 'dying') continue;
-      const d = Math.abs(z.x - x);
-      if (d < r) {
-        z.hp -= dmg * (1 - d / r / 1.5);
-        z.x += 40;
-        z.flash = 0.1;
-        if (z.hp <= 0) this.kill(z, null);
-      }
+      if (z.state === 'dying' || (z.emerge !== undefined && z.emerge > 0.25)) continue;
+      const dmg = blastDamage(ex, z.x - x, z.y - y);
+      if (dmg <= 0) continue;
+      z.hp -= dmg;
+      z.flash = 0.1;
+      const heavy = z.def.id === 'ferryman' || z.def.boss || z.state === 'cover';
+      const push = Math.sign(z.x - x || 1) * knock * (dmg / ex.dmg) * (heavy ? 0.2 : 1);
+      z.x = Math.min(W + 150, z.x + push);
+      if (z.state === 'wall' && Math.abs(push) > 15) z.state = 'walk';
+      if (z.hp <= 0) this.kill(z, g);
     }
     this.noise += 10;
   }
-
   throwMolotov() {
     if (this.done || G.stores.molotov <= 0) {
       if (G.stores.molotov <= 0) this.say('No firebombs. Make them at the still.', 2);
@@ -1362,34 +1621,34 @@ export class Battle {
     if (!p) return;
     add('molotov', -1);
     const x = Math.max(WALL_X + 40, Math.min(W - 40, this.mouse.x));
+    // it bursts on the lane under the crosshair and spreads about a lane either way
+    const y = this.targetLane();
     setTimeout(() => {
       sfx.fire();
-      this.fires.push({ x, life: 7, w: 150 });
-      this.lights.push({ x, y: 620, r: 300, life: 7, max: 7, color: '255,150,60' });
+      this.fires.push({ x, y, life: 7, w: 150 });
+      this.lights.push({ x, y: y - 20, r: 300, life: 7, max: 7, color: '255,150,60' });
     }, 350);
-    this.tracers.push({ x1: p.x + 40, y1: p.y - 100, x2: x, y2: 630, life: 0.35, w: 2 });
+    this.tracers.push({ x1: p.x + 40, y1: p.y - 100, x2: x, y2: y - 8, life: 0.35, w: 2 });
   }
 
   stampCorpse(z: Zombie) {
-    // a body left in the road, darkened and laid flat
-    const im = img(z.sprite);
-    if (!im) return;
-    const h = z.def.height * z.scale * ZS;
-    const w = (im.width / im.height) * h;
+    // a body left in the road, darkened and laid flat (a baked dark copy; no per-kill filter)
+    const h = this.zh(z);
+    const bk = bakeSprite(z.sprite, this.laneH(z), CORPSE, 0, { outline: false, pad: 0 });
+    if (!bk) return;
+    const w = bk.cv.width * (h / bk.h);
     const c = this.gctx;
     c.save();
     c.globalAlpha = 0.85;
-    c.filter = 'brightness(0.45) saturate(0.6)';
-    if (z.def.id === 'drag') {
-      c.drawImage(im, z.x - w / 2, z.y - h, w, h);
+    if (z.def.crawl) {
+      c.drawImage(bk.cv, z.x - w / 2, z.y - h, w, h);
     } else {
       c.translate(z.x + h * 0.35, z.y - 6);
       c.rotate(Math.PI / 2 * (R.chance(0.5) ? 1 : 0.92));
       c.scale(1, 0.55);
-      c.drawImage(im, -w / 2, -h * 0.1, w, h);
+      c.drawImage(bk.cv, -w / 2, -h * 0.1, w, h);
     }
     c.restore();
-    c.filter = 'none';
   }
 
   updateParticles(dt: number) {
@@ -1413,7 +1672,7 @@ export class Battle {
         }
         const c = this.gctx;
         c.fillStyle = p.color;
-        c.globalAlpha = 0.75;
+        c.globalAlpha = reduceGore() ? 0.5 : 0.75;
         c.beginPath();
         c.ellipse(p.x, p.y, p.size * 1.8, p.size * 0.6, 0, 0, Math.PI * 2);
         c.fill();
@@ -1430,70 +1689,101 @@ export class Battle {
   }
 
   // ---------------- draw ----------------
+  // Layering (docs/research/04 §3.4): baked background → lit asphalt → decals and ground props
+  // → darkness pass A (full) → light pools → contact shadows → y-sorted actors → foreground
+  // strip → particles → darkness pass B (40%) → glow, vignette, words.
+
+  // sprite bakes for tonight's crowd, worked off during the intro instead of on first sight
+  queueBakes() {
+    const sprites = new Set<string>();
+    for (const s of this.plan.spawns) for (const sp of ZOMBIES[s.type]?.sprites ?? []) sprites.add(sp);
+    for (const sp of ZOMBIES.sleeper.sprites) sprites.add(sp);
+    for (const sp of ZOMBIES.deer.sprites) sprites.add(sp);
+    const heights = new Map<string, number>();
+    for (const d of Object.values(ZOMBIES)) for (const sp of d.sprites) heights.set(sp, d.height);
+    for (const sp of sprites) {
+      const dh = heights.get(sp) ?? 120;
+      LANES.forEach((L, lane) => {
+        const bh = Math.round(dh * ZS * depthScale(L));
+        for (let v = 0; v < 3; v++) for (const lit of [false, true]) this.prebake.push(() => { this.zLook(sp, bh, lane, v, false, lit); });
+      });
+    }
+  }
+
+  workBakes(ms: number) {
+    const t0 = performance.now();
+    while (this.prebake.length && performance.now() - t0 < ms) this.prebake.shift()!();
+  }
+
   draw() {
     const c = this.ctx;
+    if (this.prebake.length) this.workBakes(this.intro > 0 ? 10 : 2);
     c.save();
-    if (this.shake > 0) c.translate(R.range(-this.shake, this.shake), R.range(-this.shake, this.shake) * 0.6);
-    // background with slight parallax from aim
-    const bg = img('bg_mid');
+    const sk = this.shake * shakeScale();
+    if (sk > 0) c.translate(R.range(-sk, sk), R.range(-sk, sk) * 0.6);
+    // background, baked once; slight parallax from aim; early → late night is a crossfade
     const px = (this.mouse.x / W - 0.5) * -24;
-    if (bg) c.drawImage(bg, -160 + px, -20, 1600, 740);
-    else { c.fillStyle = '#2a2d33'; c.fillRect(0, 0, W, H); }
-    // night grade: push the painted dusk toward night
+    const bg = bakeBattleBg(this.plan.special);
     const nightT = Math.min(1, this.t / 40);
-    c.fillStyle = `rgba(14,18,30,${0.22 + nightT * 0.14})`;
-    c.fillRect(0, 0, W, H);
-    // road
-    const g = c.createLinearGradient(0, 590, 0, H);
-    g.addColorStop(0, 'rgba(24,24,26,0.0)');
-    g.addColorStop(0.15, 'rgba(24,24,26,0.75)');
-    g.addColorStop(1, 'rgba(12,12,14,0.95)');
-    c.fillStyle = g;
-    c.fillRect(0, 590, W, H - 590);
+    const bx = Math.round(-160 + px);
+    if (bg) {
+      c.drawImage(bg.early, bx, -20);
+      if (nightT > 0.01) { c.globalAlpha = nightT; c.drawImage(bg.late, bx, -20); c.globalAlpha = 1; }
+    } else { c.fillStyle = '#2a2d33'; c.fillRect(0, 0, W, H); }
+    // the ground plane: lit asphalt, not a black void
+    if (!groundBand) {
+      groundBand = bakeGround(W, H - GROUND_TOP, GROUND_TOP, LANES, { rut: 0.06, base: ['rgba(22,23,26,0.15)', 'rgba(22,23,26,0.42)', 'rgba(16,17,20,0.62)'] });
+    }
+    c.drawImage(groundBand, 0, GROUND_TOP);
     c.drawImage(this.ground, 0, 0);
-    // wire belt
-    if (G.fort.wire > 0) this.drawWire(c);
+    // ground-level props behind every lane
+    if (G.fort.wire > 0) this.drawWirePosts(c, false);
     if (this.plan.special === 'tunnel') this.drawDrain(c);
-    // trap marker
     if (this.traps > 0) {
-      c.fillStyle = '#3b3a33';
-      c.fillRect(this.trapX - 14, 650, 28, 8);
+      c.fillStyle = '#2b2a25';
+      c.beginPath(); c.ellipse(this.trapX, LANES[2], 16, 4, 0, 0, Math.PI * 2); c.fill();
       c.fillStyle = '#a33';
-      c.fillRect(this.trapX - 2, 646, 4, 4);
+      c.fillRect(this.trapX - 2, LANES[2] - 5, 4, 4);
     }
-    // fires (ground)
-    for (const f of this.fires) {
-      const a = Math.min(1, f.life);
-      const fg = c.createRadialGradient(f.x, 640, 5, f.x, 640, f.w * 0.7);
-      fg.addColorStop(0, `rgba(255,180,80,${0.5 * a})`);
-      fg.addColorStop(1, 'rgba(255,90,30,0)');
-      c.fillStyle = fg;
-      c.fillRect(f.x - f.w, 560, f.w * 2, 120);
+    // the fog lies thickest over the far road
+    if (this.plan.special === 'fog') this.drawFog(c, 1);
+    // darkness, pass A: the whole mask over background and ground
+    this.buildDark();
+    c.drawImage(this.dark, 0, 0, W, H);
+    this.drawPools(c);
+    // contact shadows: one batched path, before the sorted actors
+    this.drawShadows(c);
+    const hv = this.player && !this.done ? this.pick(this.mouse.x, this.mouse.y) : undefined;
+    this.hover = hv;
+    if (hv) {
+      // which lane the shot will go into
+      c.strokeStyle = 'rgba(240,216,144,0.35)';
+      c.lineWidth = 2;
+      c.beginPath();
+      c.ellipse(hv.x, hv.y + 1, this.zw(hv) * 0.55, this.zw(hv) * 0.14, 0, 0, Math.PI * 2);
+      c.stroke();
     }
-    // entities sorted by depth
+    // actors, y-sorted by feet (id epsilon breaks ties)
+    const L = this.lightEnv();
     type D = { y: number; f: () => void };
     const list: D[] = [];
-    for (const z of this.zombies) list.push({ y: z.y, f: () => this.drawZombie(c, z) });
-    for (const gd of this.guards) if (!gd.s.dead && !gd.fled) list.push({ y: gd.y - 40, f: () => this.drawGuard(c, gd) });
-    list.push({ y: 668, f: () => this.drawWall(c) });
+    for (const z of this.zombies) list.push({ y: this.sortKey(z), f: () => this.drawZombie(c, z, L) });
+    for (const gd of this.guards) if (!gd.s.dead && !gd.fled) list.push({ y: gd.y + (gd.downed ? -0.5 : 0) + gd.homeX * 1e-5, f: () => this.drawGuard(c, gd) });
+    list.push({ y: WALL_KEY, f: () => this.drawWall(c) });
+    list.push({ y: 650, f: () => this.drawPoles(c) });
     for (const cv of this.covers) list.push({ y: cv.y, f: () => this.drawCover(c, cv) });
     if (this.dog) list.push({ y: this.dog.y, f: () => this.drawDog(c) });
-    for (const tu of this.turrets) list.push({ y: 669, f: () => {
-      c.save();
-      c.fillStyle = '#2a2622';
-      c.fillRect(tu.x - 4, tu.y, 8, 694 - tu.y);
-      c.translate(tu.x, tu.y);
-      c.rotate(tu.ang);
-      c.fillStyle = '#5a4a32';
-      c.fillRect(-10, -7, 34, 14);
-      c.fillStyle = '#8a7a5a';
-      c.fillRect(20, -3, 14, 6);
-      if (tu.flash > 0) { c.fillStyle = 'rgba(255,230,160,0.9)'; c.fillRect(34, -3, 12, 6); }
-      c.restore();
-    } });
+    if (G.fort.wire > 0) {
+      for (let i = 0; i < LANES.length; i++) list.push({ y: LANES[i] + 0.9, f: () => this.drawWireLane(c, i) });
+      list.push({ y: GROUND_BOT - 1, f: () => this.drawWirePosts(c, true) });
+    }
+    this.turrets.forEach((tu, i) => list.push({ y: WALL_KEY + 1 - i * 0.1, f: () => this.drawTurret(c, tu) }));
     list.sort((a, b) => a.y - b.y);
     for (const d of list) d.f();
     for (const gd of this.guards) if (gd.downed && !gd.s.dead && !gd.fled) this.drawDownedLabel(c, gd);
+    // the front plane: near-black weeds and kerb rubble, parallaxed faster than the backdrop
+    const fg = fgStrip();
+    c.drawImage(fg, Math.round(-400 + px * 1.4), H - 44);
     // particles
     for (const p of this.particles) {
       const a = Math.max(0, p.life / p.max);
@@ -1509,6 +1799,14 @@ export class Battle {
       }
       else { c.fillStyle = p.color; c.globalAlpha = Math.min(1, a * 2); c.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size); c.globalAlpha = 1; }
     }
+    // grenades and mortar bombs in the air
+    for (const l of this.lobs) {
+      const k = l.t / l.dur;
+      const x = l.x0 + (l.x1 - l.x0) * k;
+      const y = l.y0 + (l.y1 - 20 - l.y0) * k - Math.sin(k * Math.PI) * (120 + Math.abs(l.x1 - l.x0) * 0.2);
+      c.fillStyle = '#1a1814';
+      c.beginPath(); c.arc(x, y, 5, 0, 7); c.fill();
+    }
     // tracers
     for (const t of this.tracers) {
       c.strokeStyle = `rgba(255,226,170,${Math.min(1, t.life * 14)})`;
@@ -1518,18 +1816,13 @@ export class Battle {
       c.lineTo(t.x2, t.y2);
       c.stroke();
     }
-    // fog
-    if (this.plan.special === 'fog') {
-      const fg = c.createLinearGradient(500, 0, W, 0);
-      fg.addColorStop(0, 'rgba(120,128,135,0)');
-      fg.addColorStop(0.4, 'rgba(120,128,135,0.55)');
-      fg.addColorStop(1, 'rgba(120,128,135,0.85)');
-      c.fillStyle = fg;
-      c.fillRect(0, 0, W, H);
-    }
-    // snow
+    if (this.plan.special === 'fog') this.drawFog(c, 0.45);
     if (G.weather === 'snow' || this.plan.special === 'crossing') this.drawSnow(c);
-    this.drawLighting(c);
+    // darkness, pass B: the same mask at 40%, so the actors sit in the scene without being flattened
+    c.globalAlpha = 0.4;
+    c.drawImage(this.dark, 0, 0, W, H);
+    c.globalAlpha = 1;
+    this.drawGlow(c);
     // texts
     for (const t of this.texts) {
       c.font = `bold ${t.size}px "Special Elite", monospace`;
@@ -1541,6 +1834,70 @@ export class Battle {
     }
     c.restore();
     this.drawHud(c);
+  }
+
+  drawFog(c: CanvasRenderingContext2D, k: number) {
+    const fg = c.createLinearGradient(500, 0, W, 0);
+    fg.addColorStop(0, 'rgba(120,128,135,0)');
+    fg.addColorStop(0.4, `rgba(120,128,135,${0.55 * k})`);
+    fg.addColorStop(1, `rgba(120,128,135,${0.85 * k})`);
+    c.fillStyle = fg;
+    c.fillRect(0, 0, W, H);
+  }
+
+  // warm light lying on the asphalt under the floodlights and the fires
+  drawPools(c: CanvasRenderingContext2D) {
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    const pool = (x: number, y: number, rx: number, ry: number, rgb: string, a: number) => {
+      c.save();
+      c.translate(x, y);
+      c.scale(1, ry / rx);
+      const g = c.createRadialGradient(0, 0, 0, 0, 0, rx);
+      g.addColorStop(0, `rgba(${rgb},${a})`);
+      g.addColorStop(1, `rgba(${rgb},0)`);
+      c.fillStyle = g;
+      c.fillRect(-rx, -rx, rx * 2, rx * 2);
+      c.restore();
+    };
+    pool(150, 684, 230, 34, '255,214,150', 0.07); // the lantern behind the line
+    for (let i = 0; i < Math.min(3, G.fort.lights); i++) pool(520 + i * 190, 652, 300, 52, '255,226,170', 0.085);
+    for (const f of this.fires) pool(f.x, f.y, f.w * 1.1, 40, '255,150,60', 0.3 * Math.min(1, f.life));
+    for (const l of this.lights) if (l.max > 1) pool(l.x, Math.max(l.y, LANES[1]), l.r * 0.6, 34, l.color, 0.18 * Math.min(1, l.life / l.max + 0.3));
+    c.restore();
+  }
+
+  drawShadows(c: CanvasRenderingContext2D) {
+    // contact: one path, one fill. Shadows stay on the ground while bodies bob, lunge or climb.
+    const cast: [number, number, number][] = [];
+    c.fillStyle = 'rgba(0,0,0,0.5)';
+    c.beginPath();
+    for (const z of this.zombies) {
+      if (z.emerge !== undefined && z.emerge > 0.45) continue;
+      const fade = (z.state === 'dying' ? Math.max(0, 1 - Math.max(0, z.dieT - 0.2) * 3) : 1) * this.fogAlpha(z);
+      if (z.state === 'cover' && z.ducked) continue; // the junk pile carries the shadow
+      const rx = this.zw(z) * (z.def.crawl ? 0.5 : 0.38) * fade;
+      shadowEllipse(c, z.x, z.y + 1, rx);
+      if (fade > 0.5) cast.push([z.x + 12 * z.scale, z.y + 1, rx * 1.6]);
+    }
+    for (const g of this.guards) {
+      if (g.s.dead || g.fled || g.downed) continue;
+      const rx = 26 * g.sc;
+      shadowEllipse(c, g.x, g.y + 1, rx);
+      cast.push([g.x + 12 * g.sc, g.y + 1, rx * 1.6]);
+    }
+    const ww = this.wallW();
+    shadowEllipse(c, WALL_X + 10 - ww / 2, GROUND_BOT, ww / 2 + 12, 7);
+    for (const tu of this.turrets) shadowEllipse(c, tu.x, GROUND_BOT, 12, 3);
+    for (const cv of this.covers) shadowEllipse(c, cv.x, cv.y, cv.w * 0.62, 6);
+    if (this.dog) shadowEllipse(c, this.dog.x, this.dog.y + 1, 26, 5);
+    if (G.fort.wire > 0) for (let k = 0; k < Math.min(3, G.fort.wire); k++) { const x0 = WALL_X + 60 + k * 90; shadowEllipse(c, x0 + 1, GROUND_BOT, 5, 2); shadowEllipse(c, x0 + 79, GROUND_BOT, 5, 2); }
+    c.fill();
+    // a second, softer shadow cast away from the floodlights and the house (toward the road)
+    c.fillStyle = 'rgba(0,0,0,0.25)';
+    c.beginPath();
+    for (const [x, y, rx] of cast) shadowEllipse(c, x, y, rx);
+    c.fill();
   }
 
   // a heap of whatever was in the road: a door, tires, a shopping cart on its side
@@ -1581,21 +1938,19 @@ export class Battle {
     const d = this.dog!;
     const im = img('dog');
     if (!im) return;
-    const h = 62;
+    const h = 62 * depthScale(d.y);
     const w = (im.width / im.height) * h;
     const hop = d.barkT > 0 ? -Math.abs(Math.sin(this.t * 14)) * 4 : Math.sin(this.t * 2) * 0.6;
-    c.drawImage(im, d.x - w / 2, d.y - h + hop, w, h);
-    c.globalAlpha = 0.4;
-    const sh = shadeImg('dog', '#0a0b10');
-    if (sh) c.drawImage(sh, d.x - w / 2, d.y - h + hop, w, h);
-    c.globalAlpha = 1;
+    const bk = bakeSprite('dog', Math.round(h), LOOK[3], 0, { pad: PAD });
+    if (bk) c.drawImage(bk.cv, Math.round(d.x - w / 2 - PAD), Math.round(d.y - h + hop - PAD));
   }
 
   drawDrain(c: CanvasRenderingContext2D) {
     const open = this.drainOpen > 0;
+    const y = 676;
     c.fillStyle = '#0b0b0c';
     c.beginPath();
-    c.ellipse(DRAIN_X, SURV_Y + 14, 40, 8, 0, 0, Math.PI * 2);
+    c.ellipse(DRAIN_X, y, 40, 8, 0, 0, Math.PI * 2);
     c.fill();
     c.strokeStyle = open ? '#6a645c' : '#7a7468';
     c.lineWidth = 2;
@@ -1603,30 +1958,43 @@ export class Battle {
     const gx = open ? DRAIN_X + 34 : DRAIN_X;
     for (let i = -3; i <= 3; i++) {
       c.beginPath();
-      c.moveTo(gx + i * 10, SURV_Y + 8);
-      c.lineTo(gx + i * 10, SURV_Y + 20);
+      c.moveTo(gx + i * 10, y - 6);
+      c.lineTo(gx + i * 10, y + 6);
       c.stroke();
     }
   }
 
-  drawWire(c: CanvasRenderingContext2D) {
-    c.strokeStyle = 'rgba(90,85,80,0.9)';
-    c.lineWidth = 1;
-    const n = Math.min(3, G.fort.wire);
-    for (let k = 0; k < n; k++) {
+  // wire belt: posts at both ends of the band, a strand at knee height through each lane
+  drawWirePosts(c: CanvasRenderingContext2D, near: boolean) {
+    c.fillStyle = near ? '#1d1a17' : '#2b2622';
+    const y = near ? GROUND_BOT : GROUND_TOP + 4, h = near ? 62 : 44;
+    for (let k = 0; k < Math.min(3, G.fort.wire); k++) {
       const x0 = WALL_X + 60 + k * 90;
-      for (let i = 0; i < 3; i++) {
-        c.beginPath();
-        for (let x = 0; x <= 80; x += 4) {
-          const y = 610 + i * 18 + Math.sin(x * 0.4 + i + k) * 5;
-          if (x === 0) c.moveTo(x0 + x, y); else c.lineTo(x0 + x, y);
-        }
-        c.stroke();
-      }
-      c.fillStyle = '#2b2622';
-      c.fillRect(x0, 600, 3, 60);
-      c.fillRect(x0 + 78, 600, 3, 60);
+      c.fillRect(x0, y - h, near ? 4 : 3, h);
+      c.fillRect(x0 + 78, y - h, near ? 4 : 3, h);
     }
+  }
+
+  drawWireLane(c: CanvasRenderingContext2D, lane: number) {
+    const s = depthScale(LANES[lane]);
+    c.strokeStyle = `rgba(${58 + lane * 8},${55 + lane * 8},${52 + lane * 8},0.85)`;
+    c.lineWidth = lane >= 2 ? 1.4 : 1;
+    for (let k = 0; k < Math.min(3, G.fort.wire); k++) {
+      const x0 = WALL_X + 60 + k * 90;
+      c.beginPath();
+      for (let x = 0; x <= 80; x += 4) {
+        const y = LANES[lane] - 34 * s + Math.sin(x * 0.4 + lane + k) * 5 * s;
+        if (x === 0) c.moveTo(x0 + x, y); else c.lineTo(x0 + x, y);
+      }
+      c.stroke();
+    }
+  }
+
+  wallW() {
+    const frac = G.fort.hp / G.fort.maxHp;
+    const im = img(frac > 0.45 ? 'barricade' : 'barricade_broken');
+    const h = 118 + Math.min(50, (G.fort.maxHp - 300) * 0.1);
+    return im ? (im.width / im.height) * h : 120;
   }
 
   drawWall(c: CanvasRenderingContext2D) {
@@ -1635,56 +2003,76 @@ export class Battle {
     const h = 118 + Math.min(50, (G.fort.maxHp - 300) * 0.1);
     if (im) {
       const w = (im.width / im.height) * h;
+      // its base sits on the front edge of the ground plane: it spans every lane
       if (frac <= 0) {
         c.globalAlpha = 0.85;
-        c.drawImage(im, WALL_X - w + 10, 694 - h * 0.45, w, h * 0.45);
+        c.drawImage(im, WALL_X - w + 10, GROUND_BOT - h * 0.45, w, h * 0.45);
         c.globalAlpha = 1;
       } else {
-        c.drawImage(im, WALL_X - w + 10, 694 - h, w, h);
+        c.drawImage(im, WALL_X - w + 10, GROUND_BOT - h, w, h);
       }
-      // spikes
+      // spikes, a row per lane, on each lane's face
       for (let i = 0; i < Math.min(5, G.fort.spikes) * 3; i++) {
         c.strokeStyle = '#4a3f35';
         c.lineWidth = 3;
-        const sx = WALL_X + 4 + (i % 3) * 6, sy = 600 + Math.floor(i / 3) * 12;
+        const lane = i % 4;
+        const sx = wallX(lane) + 2 + (Math.floor(i / 4) % 3) * 5, sy = LANES[lane] - 40 - Math.floor(i / 4) * 9;
         c.beginPath();
         c.moveTo(sx, sy);
         c.lineTo(sx + 26, sy - 8);
         c.stroke();
       }
     }
-    // floodlights on poles
+  }
+
+  // floodlights on poles, behind the defenders
+  drawPoles(c: CanvasRenderingContext2D) {
     for (let i = 0; i < Math.min(3, G.fort.lights); i++) {
       const x = 260 - i * 90;
       c.fillStyle = '#1a1a1a';
-      c.fillRect(x, 380, 4, 280);
+      c.fillRect(x, 380, 4, 270);
       c.fillStyle = '#e8e2c0';
       c.fillRect(x - 6, 376, 18, 10);
     }
   }
 
+  drawTurret(c: CanvasRenderingContext2D, tu: { x: number; y: number; cd: number; flash: number; ang: number }) {
+    c.save();
+    c.fillStyle = '#2a2622';
+    c.fillRect(tu.x - 4, tu.y, 8, GROUND_BOT - tu.y);
+    c.translate(tu.x, tu.y);
+    c.rotate(tu.ang);
+    c.fillStyle = '#5a4a32';
+    c.fillRect(-10, -7, 34, 14);
+    c.fillStyle = '#8a7a5a';
+    c.fillRect(20, -3, 14, 6);
+    if (tu.flash > 0) { c.fillStyle = 'rgba(255,230,160,0.9)'; c.fillRect(34, -3, 12, 6); }
+    c.restore();
+  }
+
   drawGuard(c: CanvasRenderingContext2D, g: Guard) {
     const im = img(g.s.sprite);
-    const h = SH;
+    const h = SH * g.sc;
     const isP = g === this.player;
     if (g.downed) return this.drawDowned(c, g, im);
     const walking = g.x !== g.homeX || !!g.dragging;
     const bob = walking ? -Math.abs(Math.sin(this.t * 9)) * 3 : Math.sin(this.t * 1.6 + g.homeX) * 1.2;
-    if (im) {
-      const w = (im.width / im.height) * h;
+    // survivors keep full brightness (near row: the near-lane look; far row: lane 2), an ink
+    // outline, and a warm rim from the lantern behind them. Never darker than the backdrop.
+    const look = LOOK[g.y >= DEF_LANES[1] ? 3 : 2];
+    const bh = Math.round(h);
+    // the lantern is at x≈120: the rim falls on the side facing it
+    const side = (g.x > 120 ? -2 : 2) * (g.face < 0 ? -1 : 1);
+    const body = bakeComposite(g.s.sprite, bh, look, 0, PAD, { rim: [WARM, +((look.rim ?? 0.5) * 0.8).toFixed(2), side, 0] });
+    if (im && body) {
+      const k = h / bh;
+      const w = (body.cv.width - PAD * 2) * k;
       const lean = g.dragging && g.dragT < 3 ? 0.18 : 0; // hauling backward
       c.save();
-      c.translate(g.x - g.face * g.recoil * 3, g.y + bob);
+      c.translate(Math.round(g.x - g.face * g.recoil * 3), Math.round(g.y + bob));
       if (g.face < 0) c.scale(-1, 1);
       if (lean) c.rotate(-lean);
-      // survivors are read as silhouettes against the dark, lit by their own fire
-      const lit = g.flash > 0 || isP || G.fort.lights > 0;
-      c.drawImage(im, -w / 2, -h, w, h);
-      if (!lit) {
-        c.globalAlpha = 0.45;
-        const sh = shadeImg(g.s.sprite, '#0a0b10');
-        if (sh) c.drawImage(sh, -w / 2, -h, w, h);
-      }
+      c.drawImage(body.cv, -w / 2 - PAD * k, -h - PAD * k, body.cv.width * k, body.cv.height * k);
       c.restore();
     }
     // muzzle flash
@@ -1697,8 +2085,9 @@ export class Battle {
       c.lineTo(mz.x, mz.y + 5);
       c.fill();
     }
-    // label
-    const top = g.y - h;
+    // label; a far-row label steps up out of the way of a near-row neighbour's
+    let top = g.y - h;
+    if (g.y < DEF_LANES[1] && this.guards.some((o) => o !== g && o.y >= DEF_LANES[1] && !o.s.dead && !o.fled && !o.downed && Math.abs(o.x - g.x) < 50)) top -= 14;
     c.font = '11px "Special Elite", monospace';
     c.textAlign = 'center';
     c.fillStyle = isP ? '#f0d890' : '#cfc6b0';
@@ -1731,9 +2120,9 @@ export class Battle {
   }
 
   drawDowned(c: CanvasRenderingContext2D, g: Guard, im: HTMLImageElement | undefined) {
-    const h = SH;
+    const h = SH * g.sc;
     // blood under them
-    c.fillStyle = 'rgba(70,10,8,0.55)';
+    c.fillStyle = reduceGore() ? 'rgba(40,8,6,0.4)' : 'rgba(70,10,8,0.55)';
     c.beginPath();
     c.ellipse(g.x, g.y - 2, 60, 7, 0, 0, Math.PI * 2);
     c.fill();
@@ -1763,27 +2152,86 @@ export class Battle {
     c.fillText(st, g.x, g.y - lh - 22);
   }
 
-  drawZombie(c: CanvasRenderingContext2D, z: Zombie) {
-    const im = img(z.sprite);
-    const h = z.def.height * z.scale * ZS;
-    if (!im) return;
-    const w = (im.width / im.height) * h;
+  // Where the light is this frame, for the rim/silhouette treatment of each body.
+  lightEnv() {
+    const cones: { x: number; y: number; len: number; face: number }[] = [];
+    for (const g of this.guards) {
+      if (!g.w || g.s.dead || g.fled || g.downed) continue;
+      const len = this.prof(g.w).light;
+      if (len > 0) { const mz = this.muzzle(g); cones.push({ x: mz.x, y: mz.y, len, face: g.face }); }
+    }
+    return { flood: Math.min(3, G.fort.lights), cones };
+  }
+
+  /** 0 (dark) … 1 (well lit) at a body's chest, and whether a muzzle flash just lit it. */
+  lightAt(x: number, y: number, env: ReturnType<Battle['lightEnv']>): [number, boolean] {
+    let L = 0, flash = false;
+    if (env.flood > 0) L = Math.max(L, Math.max(0, Math.min(1, 0.95 - (0.75 * (x - 260)) / 840)) * (0.7 + 0.1 * env.flood));
+    const dl = Math.hypot(x - 120, y - 600);
+    if (dl < 300) L = Math.max(L, 0.7 * (1 - dl / 300)); // the lantern
+    for (const f of this.fires) { const d = Math.abs(x - f.x); if (d < 300) L = Math.max(L, (1 - d / 300) * Math.min(1, f.life)); }
+    for (const k of env.cones) {
+      const d = (x - k.x) * k.face;
+      if (d > 0 && d < k.len && y > k.y - d * 0.12 - 60 && y < k.y + d * 0.2 + 120) L = Math.max(L, 0.85 * (1 - d / k.len));
+    }
+    for (const l of this.lights) {
+      const d = Math.hypot(x - l.x, y - l.y);
+      if (d > l.r) continue;
+      const a = (1 - d / l.r) * Math.min(1, l.life / l.max + 0.3);
+      L = Math.max(L, a);
+      if (l.max < 0.1) flash = true;
+    }
+    return [L, flash];
+  }
+
+  // The two baked looks of a crowd body in a lane: lit (a warm key rim on the side facing
+  // the line) and dark (a thin cool moon rim, and 35% toward a near-silhouette).
+  zLook(sprite: string, bh: number, lane: number, variant: number, flip: boolean, lit: boolean) {
+    const look = LOOK[lane];
+    const rimA = look.rim ?? 0.5;
+    const s = Math.round(depthScale(LANES[lane]) * 4) / 2; // 2px × scale, to the half pixel
+    return lit
+      ? bakeComposite(sprite, bh, look, variant, PAD, { rim: [WARM, +(rimA * 0.85).toFixed(2), flip ? s : -s, 0] })
+      : bakeComposite(sprite, bh, look, variant, PAD, { shade: [DARK, 0.35], rim: [COOL, +(rimA * 0.6).toFixed(2), flip ? -1.5 : 1.5, -1.5] });
+  }
+
+  /** In fog the far ones fade into it (by x), the far lanes sooner. 1 on a clear night. */
+  fogAlpha(z: Zombie) {
+    if (this.plan.special !== 'fog') return 1;
+    const farFade = Math.max(0.15, 1 - Math.max(0, z.x - 620) / 400);
+    return Math.max(0.15, 1 - (1 - farFade) * (1.4 - 0.4 * depthT(z.y)));
+  }
+
+  drawZombie(c: CanvasRenderingContext2D, z: Zombie, env: ReturnType<Battle['lightEnv']>) {
+    const lane = nearestLane(z.y);
+    const bh = this.laneH(z);
+    const h = this.zh(z);
+    // light at the chest: walking out of the dark into a pool visibly switches a body on
+    const [L, flash] = z.state === 'dying' ? [0.5, false] : this.lightAt(z.x, z.y - h * 0.6, env);
+    const lit = flash ? 1 : Math.max(0, Math.min(1, (L - 0.12) / 0.2));
+    const flip = !!z.flip;
+    const lo = lit < 0.98 ? this.zLook(z.sprite, bh, lane, z.variant, flip, false) : null;
+    const hi = lit > 0.02 ? this.zLook(z.sprite, bh, lane, z.variant, flip, true) : null;
+    const body = hi ?? lo;
+    if (!body) return;
+    const k = h / bh;
+    const w = (body.cv.width - PAD * 2) * k;
     c.save();
     let rot = 0, dy = 0;
     const gait = z.def.speed > 60 ? 9 : 3.2;
     if (z.state === 'walk' || z.state === 'over' || z.state === 'flee') {
       rot = Math.sin(z.phase * gait) * (z.def.speed > 60 ? 0.05 : 0.04);
-      dy = -Math.abs(Math.sin(z.phase * gait)) * (z.def.speed > 60 ? 5 : 2.5);
+      dy = -Math.abs(Math.sin(z.phase * gait)) * (z.def.speed > 60 ? 5 : 2.5) * z.scale;
     } else if (z.state === 'wall' || z.state === 'maul') {
       rot = -0.08 + Math.sin(z.phase * 7) * 0.06;
     } else if (z.state === 'dying') {
-      const k = Math.min(1, z.dieT / 0.45);
-      rot = k * 1.2;
-      dy = k * h * 0.15;
+      const t = Math.min(1, z.dieT / 0.45);
+      rot = t * 1.2;
+      dy = t * h * 0.15;
       c.globalAlpha = 1 - Math.max(0, z.dieT - 0.4) * 5;
     }
-    c.translate(z.x, z.y + dy);
-    if (z.flip) c.scale(-1, 1);
+    c.translate(Math.round(z.x), Math.round(z.y + dy));
+    if (flip) c.scale(-1, 1);
     c.rotate(rot);
     // up out of the drain, or down behind cover: only what is above the line shows
     const sink = (z.emerge && z.emerge > 0 ? h * Math.min(1, z.emerge / 0.9) : 0) + (z.state === 'cover' && z.ducked ? h * 0.32 : 0);
@@ -1793,25 +2241,29 @@ export class Battle {
       c.clip();
       c.translate(0, sink);
     }
-    // the far ones fade into the dark
-    const farFade = this.plan.special === 'fog' ? Math.max(0.15, 1 - Math.max(0, z.x - 620) / 400) : 1;
-    c.globalAlpha *= farFade;
+    // in fog the far ones fade into it, the far lanes sooner
+    c.globalAlpha *= this.fogAlpha(z);
     if (z.headless) {
       c.beginPath();
       c.rect(-w / 2 - 10, -h + h * z.def.head * 0.95, w + 20, h);
       c.clip();
     }
-    const rim = shadeImg(z.sprite, '#a9b8c9');
-    if (rim && z.state !== 'dying') {
-      const a = c.globalAlpha;
-      c.globalAlpha = a * 0.55;
-      c.drawImage(rim, -w / 2 + 1.5, -h - 1.5, w, h);
-      c.globalAlpha = a;
+    const base = c.globalAlpha;
+    const dx = -w / 2 - PAD * k, dyy = -h - PAD * k, dw = body.cv.width * k, dh = body.cv.height * k;
+    // one baked body (outline, grade, fog, variant, rim, shade); two while crossing a light's edge
+    if (lo) c.drawImage(lo.cv, dx, dyy, dw, dh);
+    if (hi) { c.globalAlpha = base * (lo ? lit : 1); c.drawImage(hi.cv, dx, dyy, dw, dh); }
+    // a nearby muzzle flash, or the crosshair on it: a brighter warm edge for a moment
+    const extra = (flash ? 0.3 : 0) + (this.hover === z ? 0.35 : 0);
+    if (extra > 0) {
+      const s = Math.round(depthScale(LANES[lane]) * 4) / 2;
+      const e = bakeEdge(z.sprite, bh, WARM, flip ? s : -s, 0, PAD);
+      if (e) { c.globalAlpha = base * Math.min(1, extra); c.drawImage(e, dx, dyy, dw, dh); }
     }
-    c.drawImage(im, -w / 2, -h, w, h);
+    c.globalAlpha = base;
     if (z.flash > 0) {
-      const fl = flashImg(z.sprite);
-      if (fl) { c.globalAlpha = 0.6 * farFade; c.drawImage(fl, -w / 2, -h, w, h); }
+      const f = flashImg(z.sprite);
+      if (f) { c.globalAlpha = base * 0.6; c.drawImage(f, -w / 2, -h, w, h); }
     }
     if (z.burn > 0) {
       c.globalAlpha = 0.35;
@@ -1836,7 +2288,9 @@ export class Battle {
     }
   }
 
-  drawLighting(c: CanvasRenderingContext2D) {
+  // The darkness mask, built at half resolution into this.dark; drawn twice per frame
+  // (full before the actors, 40% after).
+  buildDark() {
     const d = this.dctx;
     const s = 0.5;
     d.globalCompositeOperation = 'source-over';
@@ -1852,8 +2306,8 @@ export class Battle {
       d.fillStyle = g;
       d.fillRect((x - r) * s, (y - r) * s, r * 2 * s, r * 2 * s);
     };
-    // the house: a lantern behind the line
-    hole(120, 560, 260, 0.6);
+    // the house: a lantern behind the line, its light on the ground
+    hole(120, 640, 260, 0.6);
     // flashlights taped to barrels
     for (const g of this.guards) {
       if (!g.w || g.s.dead || g.fled || g.downed) continue;
@@ -1873,8 +2327,7 @@ export class Battle {
       d.fill();
     }
     for (let i = 0; i < Math.min(3, G.fort.lights); i++) {
-      // floodlight cone toward the road
-      d.save();
+      // floodlight cone down onto the road
       const g = d.createLinearGradient(260 * s, 0, 1100 * s, 0);
       g.addColorStop(0, 'rgba(0,0,0,0.85)');
       g.addColorStop(1, 'rgba(0,0,0,0.1)');
@@ -1885,12 +2338,13 @@ export class Battle {
       d.lineTo(1200 * s, 720 * s);
       d.lineTo((260 - i * 90) * s, 400 * s);
       d.fill();
-      d.restore();
     }
     for (const l of this.lights) hole(l.x, l.y, l.r * (0.7 + 0.3 * (l.life / l.max)), Math.min(1, l.life / l.max + 0.3));
-    for (const f of this.fires) hole(f.x, 620, 260, 0.9 * Math.min(1, f.life));
-    c.drawImage(this.dark, 0, 0, W, H);
-    // warm additive glow for flashes
+    for (const f of this.fires) hole(f.x, f.y - 20, 260, 0.9 * Math.min(1, f.life));
+  }
+
+  // additive warm glow for flashes and flashlights, then the vignette
+  drawGlow(c: CanvasRenderingContext2D) {
     c.save();
     c.globalCompositeOperation = 'lighter';
     for (const g of this.guards) {
@@ -1919,12 +2373,16 @@ export class Battle {
       c.fillRect(l.x - l.r, l.y - l.r, l.r * 2, l.r * 2);
     }
     c.restore();
-    // vignette
-    const v = c.createRadialGradient(W / 2, H / 2, H * 0.4, W / 2, H / 2, H * 0.95);
+    // vignette: an ellipse set high, so the bottom corners (HUD) darken and the lanes stay clear
+    c.save();
+    c.translate(W / 2, H * 0.42);
+    c.scale(1.7, 1);
+    const v = c.createRadialGradient(0, 0, H * 0.32, 0, 0, H * 0.72);
     v.addColorStop(0, 'rgba(0,0,0,0)');
-    v.addColorStop(1, 'rgba(0,0,0,0.55)');
+    v.addColorStop(1, 'rgba(0,0,0,0.45)');
     c.fillStyle = v;
-    c.fillRect(0, 0, W, H);
+    c.fillRect(-W, -H, W * 2, H * 2);
+    c.restore();
   }
 
   drawHud(c: CanvasRenderingContext2D) {
