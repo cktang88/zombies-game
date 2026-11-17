@@ -4283,7 +4283,7 @@ export class Battle {
     const multiAmmo = !!(p?.w && ammoTypesFor(p.w.def).length > 1);
     // on a phone-width canvas (≈0.3× scale) the key list is 3 px noise over the near lane, and
     // there is no keyboard: drop it, and set the messages larger so they stay readable
-    const narrow = (this.canvas.clientWidth || W) < 700;
+    const narrow = (this.canvas.getBoundingClientRect().width || W) < 700; // the stage may be CSS-transformed: measure what shows
     // the full key list early in the night (and when paused); afterwards one short line
     if (narrow) { /* no key list */ }
     else if (this.t < 30 || this.paused) {

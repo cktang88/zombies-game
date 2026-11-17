@@ -1,7 +1,7 @@
 // Battle-scene audit captures (docs/gfx-audit.md §Round 2 — Battle): multi-frame sequences of
 // every night look, special, trap, Turned move and crew post, at deviceScaleFactor 2.
 //   npx tsx tools/stage-save.ts 12 /tmp/vessey-save.json
-//   npx vite build && npx vite preview --port 4196 &
+//   npx vite build && npx vite preview --port 4199 --strictPort &
 //   node tools/e2e/battle-audit.cjs [scene ...]     (default: every scene)
 // Writes <scene>_<frame>.png (2× raw) and a 1280 px .jpg beside it, into $AUDIT_OUT.
 const path = require('node:path');
@@ -11,7 +11,7 @@ let pw;
 try { pw = require('playwright'); } catch { pw = require(path.join(execSync('npm root -g').toString().trim(), 'playwright')); }
 const sharp = require('sharp');
 
-const URL = process.env.AUDIT_URL ?? 'http://localhost:4196/';
+const URL = process.env.AUDIT_URL ?? 'http://localhost:4199/';
 const SAVE = process.env.AUDIT_SAVE ?? '/tmp/vessey-save.json';
 const OUT = process.env.AUDIT_OUT ?? '/tmp/vessey-audit';
 fs.mkdirSync(OUT, { recursive: true });
