@@ -8,11 +8,14 @@ import { SKILL_NAMES } from '../data/names';
 import { SITES, BUILDINGS, RECIPES, RES_LABEL, RES_ICON } from '../data/world';
 import {
   living, displayName, first, moodBreakdown, computeMood, moodWord, breakThresholds, pain, woundLabel, byId, canWork, canFight,
-  isBitten, SKILLS, aimFactor,
+  isBitten, SKILLS, aimFactor, skillOf, workMult,
 } from '../sim/survivors';
 import { buildingLevel, queueRecipe, WEATHER_LABEL } from '../sim/day';
 import { persona, forecast, threatPoints } from '../sim/director';
-import { sfx } from '../audio';
+import { sfx, music } from '../audio';
+import { openSettings } from './settings';
+import { openHelp } from './help';
+import { hintHtml, markHintTarget, nextHint, skipHints } from './onboarding';
 
 const JOBS: { id: JobId; label: string; hint: string }[] = [
   { id: 'repair', label: 'Repair the wall', hint: 'Building. Uses timber.' },
@@ -23,6 +26,68 @@ const JOBS: { id: JobId; label: string; hint: string }[] = [
   { id: 'radio', label: 'Work the radio', hint: 'Social. Needs a radio mast.' },
   { id: 'rest', label: 'Rest', hint: 'Recover.' },
 ];
+
+// What a job is likely to yield today for this survivor (mirrors sim/day.ts resolveDayWork).
+function jobOutlook(s: Survivor, j: JobId): string {
+  const m = workMult(s);
+  switch (j) {
+    case 'repair': {
+      const room = Math.max(0, G.fort.maxHp - G.fort.hp);
+      return room <= 0 ? 'wall is whole' : `+${Math.min(room, Math.round((40 + skillOf(s, 'building') * 9) * m))} wall`;
+    }
+    case 'craft':
+      return G.craftQueue.length ? `${Math.round((3 + skillOf(s, 'crafting') * 0.9) * m)} work on the queue` : 'queue is empty';
+    case 'farm': {
+      const cold = G.weather === 'cold' || G.weather === 'snow' ? 0.6 : 1;
+      return `~${Math.round((1.5 + skillOf(s, 'farming') * 0.45 + buildingLevel('garden') * 2.2) * m * cold)} food`;
+    }
+    case 'doctor': {
+      const hurt = living().reduce((a, p) => a + p.wounds.filter((w) => !w.tended && !w.hidden).length, 0);
+      return hurt ? `tends ${Math.min(hurt, Math.round((2 + skillOf(s, 'medicine')) * m))} of ${hurt} wounds` : 'nobody needs tending';
+    }
+    case 'scavenge':
+      return `skill ${s.skills.scavenging}/10`;
+    case 'radio':
+      return buildingLevel('radio') ? `social ${s.skills.social}/10` : 'needs a radio mast';
+    case 'rest':
+      return s.rest < 0.6 ? 'sleeps it off' : 'a day off';
+    default:
+      return '';
+  }
+}
+
+// The top two named reasons behind a mood (skipping the baseline).
+function moodWhy(s: Survivor) {
+  return moodBreakdown(s)
+    .slice(1)
+    .filter((p) => p.v !== 0)
+    .sort((a, b) => Math.abs(b.v) - Math.abs(a.v))
+    .slice(0, 2);
+}
+
+function warnings(): string[] {
+  const w: string[] = [];
+  const eat = living().length;
+  if (eat) {
+    const days = Math.floor(G.stores.food / eat);
+    const farmers = living().filter((s) => s.job === 'farm' && canWork(s)).length;
+    if (days < 2) w.push(`Food for ${days ? 'one more day' : 'less than a day'}.${farmers ? '' : ' Nobody is on the Food job.'}`);
+    else if (days < 4) w.push(`Food for ${days} days.`);
+  }
+  const ammoNeed = new Map<Res, number>();
+  for (const s of living()) {
+    const it = G.weapons.find((x) => x.uid === s.weapon);
+    const a = it ? WEAPONS[it.def]?.ammo : null;
+    if (a) ammoNeed.set(a, (ammoNeed.get(a) ?? 0) + 1);
+  }
+  for (const [a, n] of ammoNeed) {
+    const have = Math.floor(G.stores[a] ?? 0);
+    if (have < 12 * n) w.push(`${have ? `Only ${have}` : 'No'} ${(RES_LABEL[a] ?? a).toLowerCase()} for ${n === 1 ? 'one gun' : `${n} guns`} on the wall.`);
+  }
+  if (G.fort.hp / G.fort.maxHp < 0.4 && !living().some((s) => s.job === 'repair' && canWork(s))) w.push('The wall is barely standing and nobody is repairing it.');
+  if (G.craftQueue.length && !living().some((s) => s.job === 'craft' && canWork(s))) w.push('Work is queued but nobody is at the bench.');
+  return w;
+}
 
 let tab = 'workshop';
 let detail: string | null = null;
@@ -47,9 +112,14 @@ function costHtml(cost: Partial<Record<Res, number>>) {
 
 function moodBar(s: Survivor) {
   const th = breakThresholds(s);
-  return `<div class="moodbar" title="${esc(moodWord(s.mood))}">
+  const why = moodWhy(s);
+  const whyTxt = why.map((p) => `${p.label} ${p.v > 0 ? '+' : '−'}${Math.abs(p.v)}`).join(' · ');
+  return `<div class="mood" tabindex="0" title="${esc(whyTxt)}" aria-label="Mood ${Math.round(s.mood)}, ${esc(moodWord(s.mood))}${whyTxt ? `: ${esc(whyTxt)}` : ''}">
+  <div class="moodbar">
     <div class="fill" style="width:${s.mood}%;background:${s.mood > 50 ? '#8a9a5b' : s.mood > th.minor ? '#b08a3c' : '#a8322a'}"></div>
     <i style="left:${th.minor}%"></i><i style="left:${th.major}%"></i><i style="left:${th.extreme}%"></i>
+  </div>
+  <div class="why"><b>${esc(moodWord(s.mood))}</b>${why.map((p) => ` <span class="${p.v > 0 ? 'pos' : 'neg'}">${esc(p.label)} ${p.v > 0 ? '+' : '−'}${Math.abs(p.v)}</span>`).join('')}</div>
   </div>`;
 }
 
@@ -80,14 +150,15 @@ function survivorCard(s: Survivor) {
       <div class="tags">${statusTags(s)}</div>
       ${moodBar(s)}
       <div class="row">
-        <select data-act="job" data-id="${s.id}" ${disabled ? 'disabled' : ''}>
-          ${JOBS.map((j) => `<option value="${j.id}" ${s.job === j.id ? 'selected' : ''}>${j.label}</option>`).join('')}
+        <select data-act="job" data-id="${s.id}" ${disabled ? 'disabled' : ''} aria-label="Job for ${esc(first(s))}">
+          ${JOBS.map((j) => `<option value="${j.id}" ${s.job === j.id ? 'selected' : ''}>${j.label} — ${jobOutlook(s, j.id)}</option>`).join('')}
         </select>
-        ${s.job === 'scavenge' ? `<select data-act="site" data-id="${s.id}">${sites.map((x) => {
+        ${s.job === 'scavenge' ? `<select data-act="site" data-id="${s.id}" aria-label="Where ${esc(first(s))} scavenges">${sites.map((x) => {
           const st = (G.flags[`stock_${x.id}`] as number) ?? x.stock;
           return `<option value="${x.id}" ${site === x.id ? 'selected' : ''}>${x.name}${st <= 0 ? ' (picked clean)' : ''} — ${x.risk < 0.2 ? 'low' : x.risk < 0.4 ? 'some' : x.risk < 0.6 ? 'high' : 'grave'} risk</option>`;
         }).join('')}</select>` : ''}
       </div>
+      ${disabled ? '' : `<div class="jobhint">${esc(JOBS.find((j) => j.id === s.job)?.hint ?? '')}</div>`}
       <div class="row small">
         <select data-act="weapon" data-id="${s.id}">
           <option value="">— unarmed —</option>
@@ -255,6 +326,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
     <header>
       <div class="date"><b>${dateLabel()}</b> · day ${G.day} · ${WEATHER_LABEL[G.weather] ?? G.weather}</div>
       <div class="ice">${ice > 0 ? `River freezes in <b>${ice}</b> day${ice === 1 ? '' : 's'}` : ice === 0 ? '<b>The river is freezing tonight.</b>' : 'The river is ice.'}</div>
+      <div class="hbtns"><button class="icon" data-act="help" aria-label="Help and controls" title="Help and controls">?</button><button class="icon" data-act="settings" aria-label="Settings" title="Settings">⚙</button></div>
       <div class="stores">${res.map((r) => `<span title="${RES_LABEL[r]}" class="${r === 'food' && G.stores.food < eat * 2 ? 'low' : ''}"><img src="${spriteUrl(RES_ICON[r])}" alt="">${Math.floor(G.stores[r])}<em>${RES_LABEL[r].replace(' ammo', '').toLowerCase()}</em></span>`).join('')}</div>
     </header>
     <main>
@@ -268,11 +340,12 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
       </section>
       <section class="report">
         <h2>This morning</h2>
+        ${warnings().map((w) => `<p class="stamp" role="alert">${esc(w)}</p>`).join('')}
         <div class="lines">${report.length ? report.map((l) => `<p>${esc(l)}</p>`).join('') : '<p class="dim">A quiet morning.</p>'}</div>
         ${fc ? `<p class="forecast">${esc(fc)}</p>` : ''}
         <div class="weather">The Weather: <b>${persona().name}</b><br><span class="dim">Tonight feels like ${threatPoints() > 60 ? 'a long one' : threatPoints() > 30 ? 'a bad one' : 'any other night'}.</span></div>
         ${runHtml()}
-        <button class="dusk" data-act="dusk">Go to the wall at dusk ›</button>
+        <button class="dusk" data-act="dusk">Go to the wall at dusk ›<small>Enter</small></button>
       </section>
     </main>
     ${G.pendingEvent ? `<div class="overlay"><div class="modal event">
@@ -281,7 +354,11 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
       <div class="choices">${G.pendingEvent.choices.map((c, i) => `<button data-act="choice" data-i="${i}">${esc(c.label)}${c.hint ? `<small>${esc(c.hint)}</small>` : ''}</button>`).join('')}</div>
     </div></div>` : ''}
     ${sel ? `<div class="overlay" data-act="closedetail">${detailHtml(sel)}</div>` : ''}
+    ${G.pendingEvent || sel ? '' : hintHtml()}
   </div>`;
+  if (!G.pendingEvent && !sel) markHintTarget(root);
+  duskKey = h.onDusk;
+  installKeys();
 
   root.onchange = (e) => {
     const t = e.target as HTMLSelectElement;
@@ -336,7 +413,18 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
     } else if (act === 'unarmor') {
       const s = byId(el.dataset.id!);
       if (s?.armor) { s.armor = null; G.flags.armorStock = ((G.flags.armorStock as number) ?? 0) + 1; }
-    } else if (act === 'run') {
+    } else if (act === 'settings') {
+      sfx.ui();
+      openSettings(root);
+      return;
+    } else if (act === 'help') {
+      sfx.ui();
+      openHelp(root);
+      return;
+    } else if (act === 'hint-next') nextHint();
+    else if (act === 'hint-skip') skipHints();
+    else if (act === 'run') {
+      music('off');
       const sel = root.querySelector('select[data-act=runsite]') as HTMLSelectElement;
       h.onRun(sel.value);
       return;
@@ -347,4 +435,27 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
     sfx.ui();
     h.rerender();
   };
+}
+
+// Enter = go to the wall, when nothing modal is open and focus isn't on a control.
+// '?' opens the help ledger.
+let duskKey: (() => void) | null = null;
+let keysInstalled = false;
+function installKeys() {
+  if (keysInstalled) return;
+  keysInstalled = true;
+  window.addEventListener('keydown', (e) => {
+    if (G.phase !== 'day' || !duskKey || e.repeat || e.altKey || e.ctrlKey || e.metaKey) return;
+    if (!document.querySelector('.day') || document.querySelector('.overlay') || G.pendingEvent) return;
+    const t = e.target as HTMLElement | null;
+    if (t && /^(SELECT|INPUT|TEXTAREA|BUTTON|A)$/.test(t.tagName)) return;
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const f = duskKey;
+      duskKey = null;
+      f();
+    } else if (e.key === '?') {
+      openHelp((document.getElementById('app') as HTMLElement | null) ?? document.body);
+    }
+  });
 }
