@@ -13,7 +13,7 @@ import {
 } from '../sim/survivors';
 import {
   buildingLevel, queueRecipe, WEATHER_LABEL, DAY_HOURS, DEFAULT_HOURS, jobHours, setJobHours, hoursAvailable, travelHours, survivorSite,
-  searchHours, searchFactor, planConfirmed, confirmPlan, ranToday, runDaylightFor, prepareRun, clockLabel, heatNeed, houseNoise,
+  searchHours, searchFactor, planConfirmed, confirmPlan, ranToday, runDaylightFor, prepareRun, clockLabel, heatNeed,
   drillPlan, emplacements, tomorrowTeaser,
 } from '../sim/day';
 import { persona, forecast, threatPoints } from '../sim/director';
@@ -539,13 +539,6 @@ function ammoChip() {
     <span class="ammopop" role="tooltip">${rows.map((r) => `<span class="${r.n ? '' : 'dim'}"><b>${esc(r.c.name)}</b> ${r.types.map((t) => `${Math.floor(G.stores[t] ?? 0)} ${esc((AMMO_TYPES[t]?.short ?? ammoLabel(t)).toLowerCase())}`).join(' · ')}</span>`).join('')}</span></span>`;
 }
 
-function noiseHtml() {
-  const n = houseNoise();
-  return `<div class="noise" title="Stores, guns, machinery and the stove all draw the dead. Spend or stash to quiet the house.">
-    <div class="nh"><span>Smell and noise of the house</span><b>+${n.pct}% tonight</b></div>
-    <div class="nbar"><i data-tw="noise" style="width:${Math.round(n.level * 100)}%"></i></div>
-    <div class="dim small">${esc(n.words)}</div></div>`;
-}
 
 let duskArmed = false; // first dusk press with carried-over plans only highlights them
 
@@ -582,7 +575,6 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
         ${threadsHtml()}
         <div class="weather">The Weather: <b>${persona().name}</b><br><span class="dim">Tonight feels like ${threatPoints() > 60 ? 'a long one' : threatPoints() > 30 ? 'a bad one' : 'any other night'}.</span></div>
         <div class="weather">The Weather: <b>${persona().name}</b><br><span class="dim">Tonight feels like ${threatPoints() > 60 ? 'a long one' : threatPoints() > 30 ? 'a bad one' : 'any other night'}.${heat ? ` The stove will want ${heat} fuel.` : ''}</span></div>
-        ${noiseHtml()}
         ${runHtml()}
         <button class="dusk" data-act="dusk">${duskArmed && stale.length ? 'Yesterday\'s jobs are marked. Go anyway ›' : 'Go to the wall at dusk ›'}<small>Enter</small></button>
       </section>

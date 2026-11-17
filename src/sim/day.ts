@@ -1,7 +1,7 @@
 import type { Survivor, Res } from '../types';
 import { G, R, log, add, pay, has, newWeapon, uid, findDoc, ICE_DAY } from '../state';
 import { Rng } from '../rng';
-import { campWealth, cyclePos, persona } from './director';
+import { cyclePos, persona } from './director';
 import { SITES, RECIPES, RES_LABEL } from '../data/world';
 import { WEAPONS, MODS, modFits, slotsFor, selectedAmmo } from '../data/weapons';
 import {
@@ -669,23 +669,6 @@ export const WEATHER_LABEL: Record<string, string> = {
 };
 
 export { uid };
-
-// ---------- the smell and noise of the house (campWealth → threat, made visible) ----------
-/**
- * How much the house's stores, guns and machinery draw the dead tonight. Mirrors the wealth term in
- * director.threatPoints(): min(35, sqrt(campWealth) * 0.7) on top of the day's base threat.
- */
-export function houseNoise() {
-  const part = Math.min(35, Math.sqrt(campWealth()) * 0.7);
-  const base = 10 + 6 * Math.pow(G.day, 1.02) + living().filter(canFight).length * 3;
-  const pct = Math.round((part / base) * 100);
-  const level = Math.min(1, pct / 80); // the meter is full at +80% threat
-  const words = pct > 60 ? 'Woodsmoke, cooking, gun oil and generator hum. Everything for a mile knows we are here.'
-    : pct > 35 ? 'The house smells of woodsmoke and cooking. It carries down the road.'
-      : pct > 15 ? 'A thread of smoke from the chimney. Some noise at the bench.'
-        : 'Quiet. Cold stove, nothing worth smelling.';
-  return { part, pct, level, words };
-}
 
 // ---------- "one more day": a title-only teaser of tomorrow ----------
 // G.flags.teaser (string), if set by an incident or radio thread, wins; otherwise an omen is drawn from the

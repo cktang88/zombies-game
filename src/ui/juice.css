@@ -45,13 +45,6 @@
 .stores .heat { color: #e0705a; font-weight: normal; }
 .date .seed { margin-left: 8px; font-family: var(--type); font-size: 11px; color: var(--dim); }
 
-/* house noise */
-.noise { border: 1px solid var(--line); padding: 6px 8px; margin: 8px 0; }
-.noise .nh { display: flex; justify-content: space-between; font-family: var(--type); font-size: 12px; }
-.noise .nh b { color: #e0a060; font-weight: normal; }
-.nbar { height: 6px; background: #0e0d0b; border: 1px solid #3a342a; margin: 4px 0; }
-.nbar i { display: block; height: 100%; background: linear-gradient(90deg, #6a5426, #c9703a); }
-
 /* run planner */
 .run select + select { margin-top: 0; }
 .rundl { display: flex; flex-direction: column; gap: 3px; margin: 4px 0 6px; font-size: 13px; color: var(--dim); }
