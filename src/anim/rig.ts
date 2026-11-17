@@ -584,6 +584,10 @@ export class Rig {
           const sgx = P.hand_support?.gx ?? 10;
           const d = Math.hypot(fx - nsX, fy - nsY), maxD = reach * 0.95 + sgx; // a slight bend at the elbow, under the gun
           if (d > maxD) { const back = Math.min(d - maxD, Math.abs(loc(a!.fore)[0]) * 0.85); fx -= Math.cos(this.ga) * back; fy -= Math.sin(this.ga) * back; }
+          // seen from the right, the support hand cups the fore-end from below: palm and fingers show
+          // under the handguard rather than hiding behind it
+          const dn = 4;
+          fx -= Math.sin(this.ga) * dn; fy += Math.cos(this.ga) * dn;
           defN = { x: fx, y: fy, rho: this.ga, pose: 'support' };
         }
         // pistol: the support hand cups the trigger hand from below / in front of the grip
@@ -1032,7 +1036,9 @@ export class Rig {
     this.xf(ctx, S * F * c * mx, S * s, -S * F * s * mx, S * c, this.dx + S * F * (this.jx[i] + ox), this.dy + S * (this.jy[i] + oy));
     // arm art stretched along its bone to the bone's real length (skeleton.ts geomOf, ARM)
     const g = this.geo, k = !g ? 1 : i === N_UA || i === F_UA ? g.uaK : i === N_FA || i === F_FA ? g.faK : 1;
-    if (k !== 1) { ctx.rotate(m.rest); ctx.scale(k, 1); ctx.rotate(-m.rest); }
+    // the far forearm under a long gun is farther from the camera and mostly behind the gun: slimmer
+    const thin = i === F_FA && this.swap && this.anchors?.hold !== 'pistol' && this.anchors?.hold !== 'melee' && this.gunVisible ? 0.72 : 1;
+    if (k !== 1 || thin !== 1) { ctx.rotate(m.rest); ctx.scale(k, thin); ctx.rotate(-m.rest); }
     // forearms end at the wrist: the source painting's own hand (a glove, a fist) was cut into the
     // forearm part, and the hand library draws the real one, so cut the art off just past the wrist
     const fa = i === N_FA || i === F_FA;
