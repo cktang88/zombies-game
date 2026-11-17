@@ -179,6 +179,9 @@ img.portrait.big { width: 128px; height: 160px; border-width: 4px; border-bottom
 .doc b { font-size: 14px; letter-spacing: .03em; }
 .hint { padding-top: 22px; background-color: #e2d8bf; background-image: var(--grain-d), repeating-linear-gradient(transparent 0 23px, rgba(70, 100, 140, .18) 23px 24px); }
 .hint button:not(.mini) { background: #2d2921; color: var(--ink); }
+.hint h3 { display: flex; align-items: center; gap: 8px; }
+.hint h3 .ico { width: 28px; height: 28px; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .35)); }
+.hint .qi { border-color: #9a8a6c; color: #6a5d48; }
 
 /* the ledger pages (settings, help, dawn): ruled dark paper with a red margin */
 .modal.ledger {
@@ -441,3 +444,9 @@ button.mini.urgent { border-color: #c0603c; color: #f0b090; }
 .fold.mk .mk-peek .pic.sm { width: 18px; height: 18px; }
 .fold.mk[open] .mk-peek { visibility: hidden; }
 .fold.mk > .fold-body { padding: 2px 0 8px; }
+/* pause: keys as caps, an icon on each button, the quit cost on hover */
+.pausebox .pkeys { text-align: center; margin: 2px 0 6px; cursor: help; }
+.pausebox kbd { display: inline-block; min-width: 20px; padding: 1px 5px; border: 1px solid #6a5c46; border-bottom-width: 2px; border-radius: 3px; font: var(--fs-xs) var(--type); color: var(--ink); background: rgba(0, 0, 0, .25); }
+.pausebtns button i { display: inline-block; width: 1.4em; margin-left: -1.4em; font-style: normal; color: var(--dim); }
+.pconfirm { text-align: center; }
+.pconfirm > span { cursor: help; border-bottom: 1px dotted rgba(224, 204, 144, .5); }
