@@ -10,11 +10,34 @@ const SPRITES: Record<string, string[]> = {
   m0: ['surv_smg', 'surv_m_young'], m1: ['surv_rifle', 'surv_m_mid', 'surv_m_big'], m2: ['surv_shotgun', 'surv_m_old'],
   f0: ['surv_idle', 'surv_f_young', 'surv_pistol'], f1: ['surv_f_mid', 'surv_f_native', 'surv_pistol'], f2: ['surv_f_old'],
 };
-export function pickSprite(sex: 'm' | 'f', age: number) {
-  const list = SPRITES[sex + (age < 30 ? 0 : age < 55 ? 1 : 2)];
-  const used = new Set(G.survivors.map((x) => x.sprite));
-  const fresh = list.filter((x) => !used.has(x));
-  return R.pick(fresh.length ? fresh : list);
+// Sprites made by makeSurvivor() but not yet in G.survivors (a pair of arrivals built together); cleared on use.
+const pendingSprites: string[] = [];
+/**
+ * A sprite for a new survivor, unique among the living household where possible: a free one for their sex and
+ * age first, then a free one of their sex at any age, and only then a repeat.
+ */
+export function pickSprite(sex: 'm' | 'f', age: number, exclude: Iterable<string> = []) {
+  const bracket = SPRITES[sex + (age < 30 ? 0 : age < 55 ? 1 : 2)];
+  const used = new Set([...G.survivors.filter((x) => !x.dead).map((x) => x.sprite), ...pendingSprites.filter((x) => !G.survivors.some((y) => y.sprite === x)), ...exclude]);
+  const anyAge = [0, 1, 2].flatMap((b) => SPRITES[sex + b]);
+  const fresh = bracket.filter((x) => !used.has(x));
+  const freshAny = anyAge.filter((x) => !used.has(x));
+  const pick = R.pick(fresh.length ? fresh : freshAny.length ? freshAny : bracket);
+  pendingSprites.push(pick);
+  if (pendingSprites.length > 2) pendingSprites.shift();
+  return pick;
+}
+/** Give any living survivor who shares a sprite with an earlier one a fresh sprite, where one is free. */
+export function dedupeSprites() {
+  const seen = new Set<string>();
+  for (const s of living()) {
+    if (seen.has(s.sprite)) {
+      const others = living().filter((o) => o !== s).map((o) => o.sprite);
+      const anyAge = [0, 1, 2].flatMap((b) => SPRITES[s.sex + b]);
+      if (anyAge.some((x) => !others.includes(x))) s.sprite = pickSprite(s.sex, s.age, others);
+    }
+    seen.add(s.sprite);
+  }
 }
 
 export const PART_NAMES: Record<BodyPart, string> = {

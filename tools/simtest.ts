@@ -314,6 +314,21 @@ console.log('smell:', lean.pct + '%', '->', fat.pct + '%', fat.reasons.join('; '
 G.director.mode = 'coin'; check(calendar(3).every((c) => c.kind === 'unknown'), 'coin is unknown');
 G.director.mode = 'quiet'; G.day = 1; console.log('quiet:', calendar(10).map((c) => c.kind[0]).join(''));
 
+// ---------- founders never share a sprite ----------
+{
+  let dup = 0;
+  for (let seed = 0; seed < 300; seed++) {
+    newGame('siege', 9000 + seed);
+    const sp = living().map((s) => s.sprite);
+    if (new Set(sp).size !== sp.length) dup++;
+    // a pair built together before either joins the house also differs (when their sex has a free sprite)
+    const a = makeSurvivor({ sex: 'f', age: 70 }), b = makeSurvivor({ sex: 'f', age: 72 });
+    if (a.sprite === b.sprite) dup++;
+  }
+  check(dup === 0, `founders / paired arrivals sharing a sprite: ${dup}/300`);
+  console.log(`sprites: ${dup} shared over 300 new games`);
+}
+
 const ids = INCIDENTS.map((i) => i.id);
 console.log(`\nincidents: ${ids.length} total; exercised ${fired.size}: ${[...fired.entries()].map(([k, v]) => `${k}×${v}`).join(' ')}`);
 console.log('never fired:', ids.filter((i) => !fired.has(i)).join(', ') || '(none)');

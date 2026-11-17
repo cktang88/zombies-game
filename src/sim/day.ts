@@ -8,7 +8,7 @@ import { WEAPONS, MODS, modFits, slotsFor, selectedAmmo } from '../data/weapons'
 import {
   living, first, displayName, workMult, skillOf, addThought, wound, canWork, rel, changeOpinion, setBond, hasTrait,
   computeMood, breakThresholds, killSurvivor, pain, they, their, tale, isBitten, PART_NAMES, closeTo, them, checkTitles,
-  gainXp, attr, counsel, counselled, drainLevelUps, gainProf, heldProf, canFight,
+  dedupeSprites, gainXp, attr, counsel, counselled, drainLevelUps, gainProf, heldProf, canFight,
 } from './survivors';
 import { bondLine, breakLine } from './chronicle';
 
@@ -491,6 +491,7 @@ export function queueRecipe(id: string) {
 // ---------- the dawn tick: needs, healing, infection, social, breaks ----------
 export function dawnTick(): string[] {
   const out: string[] = [];
+  dedupeSprites();
   const people = living();
   // eating
   for (const s of people) {
