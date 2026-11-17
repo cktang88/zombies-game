@@ -107,3 +107,17 @@ None. The Turned busts are cut from the existing sprites, so the image model was
 - **Hit reactions on a downed body**: the hitbox stays the standing one while a Turned lies in the road, so an aimed head shot at a fallen body hits where its head *was*. This needs `hitbox()` to follow the rig's fall.
 - **Foreshortening**: the trigger arm can't foreshorten in 2D, so its elbow sits low and slightly behind the grip (71–83° at the elbow). That reads naturally. A drawn near-arm foreshortening (a shorter upper-arm sprite when the elbow points at the camera) would match the photos more closely.
 - **Survivor sprite reuse** (from round 1) still needs new generations.
+
+## Round 2 — Battle (follow-up pass)
+
+**Method.** `tools/e2e/battle-audit.cjs` stages each night scene from a day-12 save (weather, special, lights, emplacements and crews, every trap kit laid after the battle starts, corpse-pile carry, wall HP steps) and writes multi-frame 2× PNG sequences plus 1280 px JPEGs. Scenes: unlit, floodlit, fog, snow, rain, tide, raiders, tunnel, horde, crossing, nests, traps, pile, buck, biler, crier, pulper, ferryman, melee, wallhp, dawn; `AUDIT_SIZE=390x844` or `1920x1080` for the HUD. Labels, scaffold layering, the counter clamp, the nest double flash, barricade damage and lit snow/rain had already landed on main (table above), so this pass rechecked them and took what was left.
+
+| Scene | Sev | Issue | Fix |
+|---|---|---|---|
+| Traps | M | Bear trap, propane tank, burning barrels and the net were drawn as raw sprites, so they skipped the lane grade and read brighter than everything else on their lane. The tank also had a per-frame `shadowBlur` white halo: a white blob in the dark, and a blur pass every frame. | Drawn with `drawProp` and `LOOK[lane]` like the other kits (tank +10%, lit barrels +15% so they still read). The four sprites were added to `PROP_IDS` so they are preloaded and baked. Raw-sprite fallback kept. |
+| Traps / long shots | L | Hits on Turned still off the right edge (traps under the spawn point, long guard shots) clamped their "LEGS" / "ARM" texts to the edge, where they stacked into a column pointing at nothing. | `text()` drops labels whose source is off screen. Near-edge ones are still clamped. |
+| HUD at 390×844 | M | In portrait the 1280 canvas shows at about 0.3×. The two-line key list became 3 px noise over the near lane, and the messages were about 5 px. | When the canvas shows under 700 CSS px wide, the key list is dropped (there is no keyboard anyway) and messages are 30 px, fitted to the width. |
+
+**Checked, fine:** the scaffold legs sit behind the firestep crews; labels de-collide in the crowded six-guard line; the counter stays at or above 0; the horde (44 bodies) and the pile/climb frames show no z-fighting or popping; no new page errors in any scene.
+
+**Left:** a real portrait layout for the night (a second canvas framing, or a rotate-device prompt) belongs with the stage/UI owner (`src/main.ts`, `src/ui/*`). The moodle word over every guard ("starving", "exhausted") is accurate but busy on a hungry house. A one-glyph form when three or more guards share it would help. **Art spend:** none.
