@@ -24,6 +24,7 @@ import { sfx, gunSoundFor, type ReloadStage } from '../audio';
 import { WEAPONS, MELEE, type FireProfile } from '../data/weapons';
 import { ZOMBIES } from '../data/zombies';
 import { VARIANT_TINT, FOG_TINT, depthScale, type Look } from './render';
+import { panOf } from './gunfx';
 import type { BattleHook, SortedDraw } from './hook';
 import type { Battle, Zombie, Guard } from './battle';
 import { LANES, DEF_LANES, LOOK, wallX, nearestLane } from './battle';
@@ -32,6 +33,9 @@ const WARM = '#f0c98a', COOL = '#8fa6c8', DARK = '#0a0b10', BURN = '#ff7a2a';
 const ZS = 1.3; // battle.ts actor scale for the Turned
 const SH = 158; // survivor display height
 const FULL_RIGS = 40; // Turned drawn with the full rig; the rest use the flipbook unless acting
+const MIN_FULL_RIGS = 8; // the adaptive budget's floor before falling back to Classic
+/** Full-rig budget: shrinks while frames run long, grows back slowly when there's headroom. */
+let fullRigs = FULL_RIGS;
 const MAX_RAGDOLLS = 24;
 
 // ------------------------------------------------------------------ on / off, fallback
@@ -46,13 +50,13 @@ export function animFallback(reason: string) {
   fallback = reason;
   console.warn(`[anim] rigged animation off, using Classic: ${reason}`);
 }
-type Dbg = { upd: number; drawFull: number; drawLod: number; noFallback?: boolean; frameMs: number; rigMs: number; fullRigs: number; lodRigs: number; ragdolls: number; acc: { n: number; frame: number; rig: number; max: number } };
+type Dbg = { budget?: number; upd: number; drawFull: number; drawLod: number; noFallback?: boolean; frameMs: number; rigMs: number; fullRigs: number; lodRigs: number; ragdolls: number; acc: { n: number; frame: number; rig: number; max: number } };
 const dbg: Dbg = { upd: 0, drawFull: 0, drawLod: 0, frameMs: 0, rigMs: 0, fullRigs: 0, lodRigs: 0, ragdolls: 0, acc: { n: 0, frame: 0, rig: 0, max: 0 } };
 /** debug handle for tests: globalThis.__anim */
 (globalThis as unknown as { __anim: unknown }).__anim = {
   dbg,
   state: () => ({ setting: animationSetting(), on: rigsOn(), fallback, loadOk, loadBad, ...flipbookStats(), ...dbg }),
-  reset: () => { fallback = null; },
+  reset: () => { fallback = null; fullRigs = FULL_RIGS; },
   resetAcc: () => { dbg.acc = { n: 0, frame: 0, rig: 0, max: 0 }; dbg.upd = 0; dbg.drawFull = 0; dbg.drawLod = 0; },
 };
 function noteLoad(sprite: string, ok: boolean) {
@@ -66,7 +70,7 @@ function noteLoad(sprite: string, ok: boolean) {
 }
 /** Frame-time watch: consistently > 25 ms for 3 s while the rigs carry a real share of it. */
 class FrameWatch {
-  last = 0; slowFor = 0; rigAcc = 0;
+  last = 0; slowFor = 0; rigAcc = 0; adapt = 0;
   tick(rigMs: number) {
     const now = performance.now();
     const dt = this.last ? now - this.last : 0;
@@ -75,8 +79,18 @@ class FrameWatch {
     if (dt > 0 && dt < 250) { dbg.acc.n++; dbg.acc.frame += dt; dbg.acc.rig += rigMs; dbg.acc.max = Math.max(dbg.acc.max, dt); }
     dbg.rigMs = dbg.rigMs * 0.9 + rigMs * 0.1;
     if (dt <= 0 || dt > 250) { this.slowFor = 0; return; } // a hitch or a background tab: not "consistently"
-    if (dt > 25 && rigMs > dt * 0.25) this.slowFor += dt; else this.slowFor = 0;
-    if (this.slowFor > 3000 && !dbg.noFallback) animFallback(`frames over 25 ms for 3 s (avg ${dbg.frameMs.toFixed(1)} ms, rigs ${dbg.rigMs.toFixed(1)} ms)`);
+    const slow = dt > 25 && rigMs > dt * 0.25;
+    // first trade full rigs for flipbook walkers (every 0.4 s of slow frames: -25%); only once the
+    // budget is at its floor do slow frames count toward falling back to Classic
+    this.adapt += dt;
+    if (this.adapt > 400) {
+      this.adapt = 0;
+      if (dbg.frameMs > 22 && dbg.rigMs > dbg.frameMs * 0.2 && fullRigs > MIN_FULL_RIGS) fullRigs = Math.max(MIN_FULL_RIGS, Math.floor(fullRigs * 0.75));
+      else if (dbg.frameMs < 15 && fullRigs < FULL_RIGS) fullRigs = Math.min(FULL_RIGS, fullRigs + 2);
+    }
+    dbg.budget = fullRigs;
+    if (slow && fullRigs <= MIN_FULL_RIGS) this.slowFor += dt; else this.slowFor = 0;
+    if (this.slowFor > 3000 && !dbg.noFallback) animFallback(`frames over 25 ms for 3 s with ${fullRigs} full rigs (avg ${dbg.frameMs.toFixed(1)} ms, rigs ${dbg.rigMs.toFixed(1)} ms)`);
   }
 }
 
@@ -132,10 +146,16 @@ const STAGE: Record<string, ReloadStage> = {
   magOut: 'out', magIn: 'in', rack: 'rack', slide: 'rack', shellIn: 'shell', pumpBack: 'rack', boltUp: 'bolt', boltFwd: 'bolt', roundIn: 'in',
   leverDown: 'rack', cylOut: 'out', speedIn: 'shell', cylIn: 'close', breakOpen: 'out', breakClose: 'close', nock: 'arrow', boltIn: 'arrow',
   cock: 'rack', powder: 'in', ram: 'close', tubeDrop: 'out', extend: 'close',
+  tap: 'in', rackFwd: 'close', lock: 'bolt',
 };
-export function reloadEventSfx(defId: string): (name: string) => void {
+export function reloadEventSfx(defId: string, o?: { volume?: number; pan?: number; far?: boolean }): (name: string) => void {
   const kind = gunSoundFor(defId).reload;
-  return (name) => { const st = STAGE[name]; if (st) sfx.reload(kind, st); };
+  return (name) => { const st = STAGE[name]; if (st) sfx.reload(kind, st, 0, o); };
+}
+/** A guard's reload heard from the leader's place: quieter with distance, panned to where they stand. */
+function guardEar(g: Guard, leader: Guard | undefined) {
+  const d = leader ? Math.abs(g.x - leader.x) : 300;
+  return { volume: clamp(0.5 - d / 900, 0.12, 0.45), pan: panOf(g.x), far: d > 260 };
 }
 
 /** The anim id for a weapon item def (guns by WEAPONS id, hand weapons by MELEE id). */
@@ -172,7 +192,7 @@ interface ZR {
   attack: string | null; gap: number; tolled: boolean; pant: boolean; seen: number; hit?: Hit; react?: Hit; ready: boolean;
 }
 interface GR { rig: Rig; weapon: string | null; px: number; v: number; aimX: number; aimY: number; reload: number; wounds: number; perRound?: { empty: boolean; finish: boolean }; swingT: number }
-interface Corpse { rig: Rig; x: number; y: number; scale: number; facing: 1 | -1; lane: number; t: number; snap?: Zombie; id: number }
+interface Corpse { rig: Rig; x: number; y: number; scale: number; facing: 1 | -1; lane: number; t: number; snap?: Zombie; pileM: number; id: number }
 
 export class BattleActors implements BattleHook {
   b: Battle;
@@ -180,7 +200,7 @@ export class BattleActors implements BattleHook {
   gs = new Map<string, GR>();
   corpses: Corpse[] = [];
   dead = new Set<number>(); // zombie ids whose corpse is a ragdoll here (no Classic stamp)
-  pendingPile = new Map<number, Zombie>();
+  pendingPile = new Map<number, { snap: Zombie; m: number }>();
   cam: DOMMatrix | null = null;
   watch = new FrameWatch();
   rigMs = 0;
@@ -251,7 +271,7 @@ export class BattleActors implements BattleHook {
     order.sort((p, q) => (byId.get(p[0])?.x ?? 0) - (byId.get(q[0])?.x ?? 0));
     order.forEach(([id, r], i) => {
       const z = byId.get(id);
-      r.rig.lod = i >= FULL_RIGS && !(z && z.def.boss);
+      r.rig.lod = i >= fullRigs && !(z && z.def.boss);
       r.rig.autoIdle = !r.rig.lod; // idles and twitches only where they can be seen (they'd force the full rig)
     });
     for (const g of b.guards) {
@@ -381,7 +401,13 @@ export class BattleActors implements BattleHook {
     // the gun in their hands (a hand weapon while a swing plays)
     r.swingT = Math.max(0, r.swingT - dt);
     const want = r.swingT > 0 ? (r.weapon ?? null) : weaponAnim(g.w?.def);
-    if (r.swingT <= 0 && want !== r.weapon) { rig.setWeapon(want); r.weapon = want; }
+    if (r.swingT <= 0 && want !== r.weapon) {
+      const had = r.weapon;
+      rig.setWeapon(want);
+      r.weapon = want;
+      // the leader changes guns: the new one comes up over the draw time (not after a melee swing)
+      if (isP && had && want && WEAPONS[want] && WEAPONS[had] && rig.ready) rig.play('drawGun', { duration: clamp(b.playerCd, 0.3, 1.2) });
+    }
     const moved = Math.abs(g.x - r.px) / dt;
     r.px = g.x;
     r.v += (Math.min(moved, 300) - r.v) * Math.min(1, dt * 10);
@@ -414,8 +440,9 @@ export class BattleActors implements BattleHook {
       if (g.reload > 0 && r.reload <= 0) {
         const prof = b.prof(g.w, g.s);
         const rounds = Math.max(1, prof.mag - g.mag);
-        if (prof.reloadPerRound) rig.reload(Math.max(0.15, (g.reload - 0.5) / rounds), { rounds, empty: g.mag <= 0 });
-        else rig.reload(g.reload, { empty: g.mag <= 0 });
+        const ev = reloadEventSfx(g.w.def, guardEar(g, b.player));
+        if (prof.reloadPerRound) rig.reload(Math.max(0.15, (g.reload - 0.5) / rounds), { rounds, empty: g.mag <= 0, onEvent: (n) => ev(n) });
+        else rig.reload(g.reload, { empty: g.mag <= 0, onEvent: (n) => ev(n) });
       }
       r.reload = g.reload;
     }
@@ -466,22 +493,24 @@ export class BattleActors implements BattleHook {
     const dx = Math.sign(z.x - x || 1);
     r.hit = { zone: 'torso', dx: dx * 0.7, dy: -0.7, mag: 320 + knock * 3, kind: 'explosion', t: this.t, n: 1 };
   }
-  /** kill(): the pile mass waits for the body to settle (true), or is added now (false). */
+  /** kill(): the pile mass is added at once where the body dropped (so ramps aren't delayed by
+   * the fall) and moved to where the ragdoll comes to rest when it settles (true); false: the
+   * battle adds it itself. */
   deferPile(z: Zombie): boolean {
     if (!rigsOn()) return false;
     const r = this.zs.get(z.id);
     if (!r || !r.rig.ready) return false;
-    this.pendingPile.set(z.id, { ...z });
+    this.pendingPile.set(z.id, { snap: { ...z }, m: this.b.addPile(z) });
     return true;
   }
   /** stampCorpse(): a ragdoll will bake this body into the road itself. */
   ownsCorpse(z: Zombie) { return this.dead.has(z.id); }
 
   onKill(z: Zombie) {
-    const snap = this.pendingPile.get(z.id);
+    const pend = this.pendingPile.get(z.id);
     this.pendingPile.delete(z.id);
     const r = this.zs.get(z.id);
-    if (!rigsOn() || !r || !r.rig.ready) { if (snap) this.b.addPile(snap); return; }
+    if (!rigsOn() || !r || !r.rig.ready) return; // the pile already has it
     this.zs.delete(z.id);
     const rig = r.rig;
     const h = r.hit && this.t - r.hit.t < 0.25 ? r.hit : undefined;
@@ -503,7 +532,7 @@ export class BattleActors implements BattleHook {
       authoredDur: id === 'pulper' ? 0.3 : undefined,
     });
     this.dead.add(z.id);
-    this.corpses.push({ rig, x: z.x, y: z.y, scale: this.zScale(z, rig), facing: face, lane: nearestLane(z.y), t: 0, snap, id: z.id });
+    this.corpses.push({ rig, x: z.x, y: z.y, scale: this.zScale(z, rig), facing: face, lane: nearestLane(z.y), t: 0, snap: pend?.snap, pileM: pend?.m ?? 0, id: z.id });
   }
 
   /** The leader's reload, played and voiced by the rig (null: no rig, schedule the sfx). */
@@ -521,6 +550,15 @@ export class BattleActors implements BattleHook {
     } else ok = rig.reload(seconds, { empty: o.empty, rounds: o.rounds, onEvent: (n) => ev(n) });
     if (!ok) return null;
     return { cancel: () => { rig.stop(); r.perRound = undefined; } };
+  }
+  /** The leader clears a stoppage (true: the rig plays it and voices it). Tap-rack for a
+   * failure to feed or a short stroke; lock, strip, rack for a double-feed or a barrel swap. */
+  clearJam(g: Guard, kind: string, seconds: number): boolean {
+    if (!rigsOn() || !g.w) return false;
+    const r = this.gs.get(g.s.id);
+    if (!r || !r.rig.ready || !r.rig.anchors || r.weapon !== g.w.def) return false;
+    const id = kind === 'double' || kind === 'barrel' ? 'stripFeed' : 'tapRack';
+    return r.rig.play(id, { duration: Math.max(0.3, seconds), onEvent: reloadEventSfx(g.w.def) });
   }
   /** Every round (battle.roundFired): recoil spring, casing. The battle draws the flash. */
   onFire(g: Guard, prof: FireProfile, kick: number) {
@@ -692,8 +730,11 @@ export class BattleActors implements BattleHook {
     g.globalAlpha = 0.92;
     rig.bakeCorpse(g, cp.x, cp.y, cp.scale, cp.facing);
     g.globalAlpha = a;
-    // the corpse pile counts the body where it came to rest
-    if (cp.snap) this.b.addPile({ ...cp.snap, x: sx });
+    // the corpse pile: the body was counted where it dropped; move it to where it came to rest
+    if (cp.snap) {
+      const m = this.b.pileMass({ ...cp.snap, x: sx });
+      if (m !== cp.pileM) this.b.piles[cp.snap.lane] = Math.max(0, this.b.piles[cp.snap.lane] + m - cp.pileM);
+    }
   }
 
   /** Bake every ragdoll still in flight (the night is over). */
@@ -712,7 +753,8 @@ function stopAdd(rig: Rig, id: string) { if (has(rig, id)) rig.stop(id); }
 /** The run's view of a Turned (expedition.ts EZ). Coordinates: world x, screen y. */
 export interface RunZed { id: number; def: { id: string; height: number; crawl?: boolean; lunge?: boolean }; sprite: string; x: number; y: number; state: string; dir: number; sc: number; lane: number; variant: number; flash: number; headless?: boolean; stun?: number; burn?: number; lungeT: number }
 interface RunBody { rig: Rig; px: number; v: number; weapon: string | null; swingT: number; reload: number; mag: number; wounds: number }
-interface RunCorpse { rig: Rig; x: number; y: number; scale: number; facing: 1 | -1; t: number }
+interface RunCorpse { rig: Rig; x: number; y: number; scale: number; facing: 1 | -1; t: number; img?: HTMLCanvasElement; ox?: number; oy?: number }
+const MAX_RUN_DEAD = 60; // baked bodies kept along the road
 type RunZR = ZR & { lastState: string };
 const W_RUN = 1280;
 
@@ -804,6 +846,14 @@ export class RunActors {
     return { cancel: () => b.rig.stop() };
   }
 
+  /** The leader clears a jam on the run: a tap-rack, voiced by the rig (false: Classic). */
+  clearJam(key: string, weapon: string, seconds: number): boolean {
+    if (!rigsOn()) return false;
+    const b = this.bodies.get(key);
+    if (!b || !b.rig.ready || b.weapon !== weapon || !b.rig.anchors) return false;
+    return b.rig.play('tapRack', { duration: Math.max(0.3, seconds), onEvent: reloadEventSfx(weapon) });
+  }
+
   driveZed(z: RunZed, dt: number) {
     if (!rigsOn()) return;
     const r = this.zr(z);
@@ -834,12 +884,34 @@ export class RunActors {
     rig.update(dt);
   }
 
-  /** After the Turned moved: drop rigs of the gone, step the dead. */
-  update(dt: number, alive: Set<number>) {
+  /** After the Turned moved: drop rigs of the gone, step the dead, bake the settled into the road. */
+  update(dt: number, alive: Set<number>, looks?: Look[], laneOf?: (y: number) => number) {
     for (const id of this.zs.keys()) if (!alive.has(id)) this.zs.delete(id);
-    for (const cp of this.corpses) { cp.t += dt; cp.rig.update(dt); }
-    // the run keeps its dead where they fell (no ground canvas): the oldest go first
-    while (this.corpses.length > MAX_RAGDOLLS) this.corpses.shift();
+    let live = 0;
+    for (const cp of this.corpses) {
+      if (cp.img) continue;
+      cp.t += dt;
+      cp.rig.update(dt);
+      // like the battle: once it settles (or 3.2 s) it becomes one darkened image in the road
+      if ((cp.rig.settled || cp.t > 3.2 || !cp.rig.ready) && looks && laneOf) this.bakeRun(cp, looks[laneOf(cp.y)]);
+      else live++;
+    }
+    // the oldest ragdoll still in flight is baked early; the oldest baked bodies go first
+    if (live > MAX_RAGDOLLS && looks && laneOf) { const cp = this.corpses.find((c) => !c.img); if (cp) this.bakeRun(cp, looks[laneOf(cp.y)]); }
+    while (this.corpses.length > MAX_RUN_DEAD) this.corpses.shift();
+  }
+  private bakeRun(cp: RunCorpse, look: Look) {
+    const rig = cp.rig;
+    const R = Math.ceil(cp.scale * 300), up = Math.ceil(cp.scale * 140) + 12, down = 12;
+    const cv = document.createElement('canvas');
+    cv.width = R * 2; cv.height = up + down;
+    const g = cv.getContext('2d');
+    if (!g || !rig.ready) { cp.img = cv; cp.ox = R; cp.oy = up; return; }
+    applyLook(rig, { look: { ...look, b: 0.6, s: 0.6 }, variant: 0, lit: false, shade: true, rimColor: COOL, rimA: 0, rimDx: 0, rimDy: 0 }, cp.scale, cp.facing);
+    rig.outline = null; rig.rim = null; rig.overlay = null;
+    g.globalAlpha = 0.92;
+    rig.bakeCorpse(g, R, up, cp.scale, cp.facing);
+    cp.img = cv; cp.ox = R; cp.oy = up;
   }
 
   onKill(z: RunZed, from: { x: number; y: number } | null, melee: boolean) {
@@ -890,11 +962,13 @@ export class RunActors {
     this.watch.tick(this.rigMs);
     this.rigMs = 0;
     if (!rigsOn()) return [];
-    return this.corpses.filter((cp) => cp.x - cam > -300 && cp.x - cam < W_RUN + 300).map((cp) => ({ y: cp.y - 0.3, f: () => {
+    return this.corpses.filter((cp) => cp.x - cam > -300 && cp.x - cam < W_RUN + 300).map((cp) => cp.img ? { y: cp.y - 40, f: () => {
+      c.drawImage(cp.img!, Math.round(cp.x - cam - cp.ox!), Math.round(cp.y - cp.oy!));
+    } } : { y: cp.y - 0.3, f: () => {
       applyLook(cp.rig, { look: { ...looks[laneOf(cp.y)], b: 0.6, s: 0.6 }, variant: 0, lit: false, shade: false, rimColor: COOL, rimA: 0, rimDx: 0, rimDy: 0 }, cp.scale, cp.facing);
       cp.rig.overlay = null;
       cp.rig.draw(c, cp.x - cam, cp.y, cp.scale, cp.facing, undefined, c.getTransform());
-    } }));
+    } });
   }
   /** Where the rig holds the muzzle (screen space), null for Classic. */
   muzzle(key: string): { x: number; y: number } | null {

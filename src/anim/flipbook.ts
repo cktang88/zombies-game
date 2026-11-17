@@ -14,7 +14,7 @@ let makeTemplate: ((spriteId: string, style: string, gait: string) => Rig) | nul
 export function setTemplateFactory(f: (spriteId: string, style: string, gait: string) => Rig) { makeTemplate = f; }
 let bytes = 0, bakeMs = 0, bakes = 0;
 /** Frames are dropped (oldest first) above this many bytes of canvas. */
-export let FLIP_BUDGET = 96 * 1024 * 1024;
+export let FLIP_BUDGET = 48 * 1024 * 1024;
 export function setFlipBudget(b: number) { FLIP_BUDGET = b; }
 
 export function flipFrame(rig: Rig, scale: number): Frame | null {
@@ -25,7 +25,11 @@ export function flipFrame(rig: Rig, scale: number): Frame | null {
   const sb = Math.round((rig.lodScale || scale) * 40) / 40;
   const key = `${rig.spriteId}|${gait}|${f}|${sb}|${rig.lookKey}`;
   let fr = cache.get(key);
-  if (fr) return fr;
+  if (fr) {
+    // least-recently-used order: a frame in use moves to the back of the Map
+    cache.delete(key); cache.set(key, fr);
+    return fr;
+  }
   const tk = `${rig.spriteId}|${rig.style.id}|${gait}`;
   let t = templates.get(tk);
   if (!t) { t = makeTemplate(rig.spriteId, rig.style.id, gait); templates.set(tk, t); }
@@ -53,7 +57,7 @@ export function flipFrame(rig: Rig, scale: number): Frame | null {
   bakeMs += performance.now() - t0; bakes++;
   bytes += c.width * c.height * 4;
   if (bytes > FLIP_BUDGET) {
-    // a Map iterates in insertion order: drop the oldest frames
+    // a Map iterates in insertion (here: last-use) order: drop the least recently used frames
     for (const [k, v] of cache) {
       if (bytes <= FLIP_BUDGET * 0.8) break;
       cache.delete(k);

@@ -320,12 +320,12 @@ function tone(freq: number, dur: number, v: number, type: OscillatorType = 'sine
   e.synth(when, dur + 0.1, { pri: 0 }).tone({ f: freq, f2: slide ? Math.max(20, freq + slide) : undefined, dur, v, type });
 }
 /** Run a foley synth on a fresh voice. */
-function fx(len: number, draw: (s: Synth) => void, o: { delay?: number; gate?: string; gap?: number; rev?: number; echo?: number; volume?: number; pri?: number; far?: boolean } = {}) {
+function fx(len: number, draw: (s: Synth) => void, o: { delay?: number; gate?: string; gap?: number; rev?: number; echo?: number; volume?: number; pri?: number; far?: boolean; pan?: number } = {}) {
   const e = engine();
   if (!e) return;
   const delay = o.delay ?? 0;
   if (o.gate && !e.gate(o.gate, e.now + delay, o.gap ?? 0.025)) return;
-  draw(e.synth(delay, len, { gain: o.volume ?? 1, rev: o.rev ?? 0.08, echo: o.echo ?? 0, pri: o.pri ?? 0, far: o.far }));
+  draw(e.synth(delay, len, { gain: o.volume ?? 1, rev: o.rev ?? 0.08, echo: o.echo ?? 0, pri: o.pri ?? 0, far: o.far, pan: o.pan }));
 }
 
 // ---------------------------------------------------------------------------
@@ -469,8 +469,9 @@ export const sfx = {
   },
   // ---- reloads & handling ----------------------------------------------------------
   /** A reload stage for a reload family. Called with no arguments: the legacy generic sound. */
-  reload(kind: ReloadKind = 'rifle', stage: ReloadStage = 'in', delay = 0) {
-    fx(0.8, (s) => reloadFx(s, kind, stage), { delay, rev: 0.05, pri: 1 });
+  reload(kind: ReloadKind = 'rifle', stage: ReloadStage = 'in', delay = 0, o: { volume?: number; pan?: number; far?: boolean } = {}) {
+    // another defender's reload down the line: quieter, panned, low priority (never steals a voice)
+    fx(0.8, (s) => reloadFx(s, kind, stage), { delay, rev: o.far ? 0.12 : 0.05, pri: o.volume !== undefined ? 0 : 1, volume: o.volume, pan: o.pan, far: o.far, gate: o.volume !== undefined ? `greload:${stage}` : undefined, gap: 0.06 });
   },
   /** Schedule a whole reload for a WEAPONS id across `seconds`. cancel() stops what hasn't played. */
   reloadFor(defId: string, seconds: number, rounds?: number) {

@@ -807,6 +807,7 @@ export class Expedition {
       this.say(`${this.w.name ?? WEAPONS[this.w.def].name} jammed.`, 1.5);
       sfx.jam();
       this.cd = p.jamClear;
+      this.actors.clearJam('p', this.w.def, p.jamClear); // tap-rack (rigged)
       return;
     }
     this.burstLeft = p.burst;
@@ -1388,7 +1389,7 @@ export class Expedition {
     }
     const alive = new Set<number>();
     for (const z of this.zs) if (z.state !== 'dying') { alive.add(z.id); A.driveZed(z, dt); }
-    A.update(dt, alive);
+    A.update(dt, alive, LANE_LOOK, (y) => Math.max(0, Math.min(2, Math.round((y - LANES[0]) / 24))));
   }
 
   drawP() {

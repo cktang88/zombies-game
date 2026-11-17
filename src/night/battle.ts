@@ -1056,7 +1056,8 @@ export class Battle {
       if (this.jam.clearing <= 0) {
         this.jam.clearing = this.jam.kind === 'barrel' ? 2.2 * (1.1 - prof(p.s, 'heavy') * 0.04) : clearTime(this.prof(p.w, p.s), p.s, this.jam.kind);
         if (this.jam.kind === 'double') this.say('Double-feed. Lock, strip, rack.', 2);
-        sfx.reload(gunSoundFor(p.w.def).reload, this.jam.kind === 'barrel' ? 'out' : 'bolt');
+        // the rig plays the clear (tap-rack / strip) and voices each stage; Classic: one sound
+        if (!this.actors.clearJam(p, this.jam.kind, this.jam.clearing)) sfx.reload(gunSoundFor(p.w.def).reload, this.jam.kind === 'barrel' ? 'out' : 'bolt');
       }
       return;
     }
@@ -1779,7 +1780,7 @@ export class Battle {
 
   kill(z: Zombie, g: Guard | null) {
     if (z.state === 'dying') return;
-    if (!this.actors.deferPile(z)) this.addPile(z); // rigged: added where the body comes to rest
+    if (!this.actors.deferPile(z)) this.addPile(z); // rigged: added now, moved to where the body comes to rest
     z.state = 'dying';
     z.dieT = 0;
     z.climb = undefined;
@@ -2855,11 +2856,15 @@ export class Battle {
     }
   }
   /** A death close to the wall adds to that lane's pile. */
-  addPile(z: Zombie) {
-    if (z.state === 'over' || z.state === 'maul' || z.state === 'leap' || z.flip || z.def.ranged || z.def.boss) return;
-    const d = z.x - wallX(z.lane);
-    if (d > 130) return;
-    this.piles[z.lane] += z.def.mass ?? 1;
+  /** What a body lying here adds to its lane's corpse pile (0: too far out, or not a ramp body). */
+  pileMass(z: Zombie): number {
+    if (z.state === 'over' || z.state === 'maul' || z.state === 'leap' || z.flip || z.def.ranged || z.def.boss) return 0;
+    return z.x - wallX(z.lane) > 130 ? 0 : z.def.mass ?? 1;
+  }
+  addPile(z: Zombie): number {
+    const m = this.pileMass(z);
+    this.piles[z.lane] += m;
+    return m;
   }
   // ---------------- draw ----------------
   // Layering (docs/research/04 §3.4): baked background → lit asphalt → decals and ground props

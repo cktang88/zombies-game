@@ -465,11 +465,46 @@ const deathChoke: Clip = { id: 'deathChoke', dur: 1.8, hold: true, num: { lean: 
 const buckle: Clip = { id: 'buckle', dur: 0.8, fadeOut: 0.2, num: { crouch: [[0, 0], [0.35, 0.55, 'in'], [1, 0.0]], lean: [[0, 0.1], [0.35, 0.6], [1, 1.42, 'in']], py: [[0, 0], [0.35, 0], [1, 0]], head: [[0, 0], [0.5, 0.4], [1, -0.9]], nSh: [[0, 1], [0.6, 2.4], [1, 2.6]], fSh: [[0, 1], [0.6, 2.2], [1, 2.4]] }, ev: [[0.35, 'buckle'], [0.95, 'thud']] };
 const deathCollapse: Clip = { id: 'deathCollapse', dur: 0.9, hold: true, num: { crouch: [[0, 0], [0.6, 0.85, 'in'], [1, 0.95]], lean: [[0, 0.1], [0.5, 0.4], [1, 1.1, 'in']], head: [[0, 0], [1, 0.6]], nSh: [[0, 0.5], [1, 0.1]], fSh: [[0, 0.4], [1, 0.0]] }, ev: [[0.6, 'knees'], [1, 'ragdoll']] };
 
+// ---- gun handling between reloads (the leader at the wall)
+/** Tap-rack: slap the magazine home, rack the action, back on target. */
+const tapRack: Clip = {
+  id: 'tapRack', dur: 0.9,
+  num: { ready: [[0, 0], [0.12, 0.55], [0.8, 0.5], [1, 0]], gunTilt: [[0, 0], [0.12, -0.3], [0.45, -0.1], [0.75, -0.15], [1, 0]], head: [[0, 0], [0.15, 0.3], [0.85, 0.2], [1, 0]] },
+  n: [[0, null], [0.14, G('magwell', 0, 22, 'open')], [0.26, G('magwell', 0, 4, 'open'), 'in'], [0.42, G('rack', 0, 0, 'pinch')], [0.58, G('rack', -14, 0, 'pinch'), 'out'], [0.66, G('rack', 0, 0, 'pinch'), 'in'], [1, null]],
+  ev: [[0.26, 'tap'], [0.58, 'rack'], [0.66, 'rackFwd']],
+};
+/** Double-feed: lock the action open, rip the magazine, rack it clear three times, magazine back in, rack. */
+const stripFeed: Clip = {
+  id: 'stripFeed', dur: 2.6,
+  num: {
+    ready: [[0, 0], [0.08, 0.75], [0.9, 0.7], [1, 0]],
+    gunTilt: [[0, 0], [0.08, -0.4], [0.3, -0.55], [0.6, -0.5], [0.85, -0.2], [1, 0]],
+    head: [[0, 0], [0.1, 0.4], [0.9, 0.3], [1, 0]], lean: [[0, 0], [0.1, 0.08], [0.9, 0.08], [1, 0]],
+  },
+  n: [
+    [0, null], [0.08, G('rack', 0, 0, 'pinch')], [0.14, G('rack', -14, 0, 'pinch'), 'out'],
+    [0.2, G('magwell', 0, 6, 'fist')], [0.28, G('magwell', -2, 34, 'fist'), 'out'],
+    [0.34, G('rack', 0, 0, 'pinch')], [0.39, G('rack', -14, 0, 'pinch'), 'out'], [0.43, G('rack', 0, 0, 'pinch')],
+    [0.48, G('rack', -14, 0, 'pinch'), 'out'], [0.52, G('rack', 0, 0, 'pinch')], [0.57, G('rack', -14, 0, 'pinch'), 'out'], [0.6, G('rack', 0, 0, 'pinch')],
+    [0.66, G('magwell', 0, 26, 'fist')], [0.74, G('magwell', 0, 6, 'fist'), 'in'],
+    [0.8, G('rack', 0, 0, 'pinch')], [0.86, G('rack', -14, 0, 'pinch'), 'out'], [0.9, G('rack', 0, 0, 'pinch')], [1, null],
+  ],
+  set: [[0.22, 'mag', 'hand'], [0.74, 'mag', 'gun']],
+  ev: [[0.14, 'lock'], [0.24, 'magOut'], [0.39, 'rack'], [0.48, 'rack'], [0.57, 'rack'], [0.74, 'magIn'], [0.86, 'rack']],
+};
+/** A different gun comes up off the sling: low and canted, then on target. */
+const drawGun: Clip = {
+  id: 'drawGun', dur: 0.6, fadeIn: 0.02,
+  num: { ready: [[0, 1], [0.25, 0.9], [1, 0, 'out']], gunTilt: [[0, 0.9], [0.3, 0.6], [1, 0, 'out']], gunDY: [[0, 18], [1, 0, 'out']], head: [[0, 0.25], [1, 0]] },
+  n: [[0, B('chest', 10, 10, 'open')], [0.5, null]],
+  ev: [[0.05, 'draw'], [0.85, 'ready']],
+};
+
 export const CLIPS: Record<string, Clip> = Object.fromEntries([
   reloadMag(true), reloadMag(false), reloadPistol(true), reloadPistol(false), shellIn, pump, reloadBolt, boltCycle, leverCycle, reloadRevolver,
   reloadBreak, nockBow, reloadCrossbow, reloadMuzzle, reloadTube, chop, sweep, rummage, hitHead, hitTorso, hitLeg, hitArm, twitch,
   claw, grabBite, pound, lunge, pantStop, smash, grabDrag, stagger, knockdown, climb, idleSniff, idleSway, idleTurn, keen, retch, vault, toll, burstWindup,
-  deathChoke, deathCollapse, buckle,
+  deathChoke, deathCollapse, buckle, tapRack, stripFeed, drawGun,
 ].map((c) => [c.id, c]));
 
 /** Which clip(s) a reload kind uses. `perRound` clips are repeated once per round loaded. */
