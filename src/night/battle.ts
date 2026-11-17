@@ -28,7 +28,7 @@ import { drawProp, drawGunBase, drawGunPart, has, propW } from './props';
 import { QuadRig } from '../anim'; // the dog's quadruped rig
 import { BattleActors } from './actors'; // rigged bodies (src/anim): drawing, deaths, corpses
 import { Sally, SALLY } from './sally';
-import { Ticker, caps, hintRow, keySheet, keyHintsOn, coarsePointer, dot, FONT, type Hint } from './hud'; // the sortie over the wall
+import { Ticker, caps, hintRow, keySheet, keyHintsOn, coarsePointer, dot, weaponPanel, FONT, type Hint } from './hud'; // the sortie over the wall
 import { react, slideStep, classicPose, IMPACT, type Reaction } from './impact'; // flinch / stagger / stumble / knockdown
 
 export const W = 1280, H = 720;
@@ -76,10 +76,11 @@ export const TURNED_LOOK: Look[] = [
   { b: 1.7, s: 0.6, fog: 0.2, haze: '#86928a', outline: 2, rim: 0.8 },
   { b: 1.8, s: 0.62, fog: 0.17, haze: '#8f9a88', outline: 2.4, rim: 0.9 },
 ];
-/** The defenders: a touch below the Turned in value and contrast (they stand back, behind the wall). */
+/** The defenders: a touch below the Turned in value and contrast (they stand back, behind the wall);
+ * a plain ink line, no warm rim (the rim over the ink read as a brown sticker halo, critique #9). */
 export const GUARD_LOOK: Look[] = [
-  { b: 0.88, s: 0.8, fog: 0.1, outline: 2, rim: 0.4 },
-  { b: 0.92, s: 0.85, fog: 0.06, outline: 2.2, rim: 0.45 },
+  { b: 0.88, s: 0.8, fog: 0.1, outline: 2, rim: 0 },
+  { b: 0.92, s: 0.85, fog: 0.06, outline: 2.2, rim: 0 },
 ];
 const CORPSE: Look = { b: 0.45, s: 0.6, fog: 0, outline: 0 };
 const PAD = 3; // transparent margin of every battle bake, so the layers line up
@@ -3087,7 +3088,12 @@ export class Battle {
     type D = { y: number; f: () => void };
     const list: D[] = [];
     for (const z of this.zombies) list.push({ y: this.sortKey(z), f: () => this.drawZombie(c, z, L) });
-    for (const gd of this.guards) if (!gd.s.dead && !gd.fled) list.push({ y: gd.y + (gd.downed ? -0.5 : 0) + gd.homeX * 1e-5, f: () => this.drawGuard(c, gd) });
+    // a downed guard lies in front of the firestep's sandbags (they must stay in sight to be hauled in)
+    for (const gd of this.guards) if (!gd.s.dead && !gd.fled) list.push({ y: gd.downed ? WALL_KEY - 0.4 + gd.homeX * 1e-5 : gd.y + gd.homeX * 1e-5, f: () => this.drawGuard(c, gd) });
+    // the firestep's sandbag courses, one in front of each row of defenders: they stand behind the
+    // barricade line, legs in cover, torso and gun above it (critique #14)
+    list.push({ y: DEF_LANES[0] + 0.5, f: () => this.drawParapet(c, 0) });
+    list.push({ y: WALL_KEY - 1, f: () => this.drawParapet(c, 1) });
     list.push({ y: WALL_KEY, f: () => { this.drawWall(c); this.vfx.drawWall(c); } });
     for (let l = 0; l < 4; l++) if (this.piles[l] >= 0.3) list.push({ y: LANES[l] + 0.5, f: () => this.drawPile(c, l) });
     list.push({ y: 500, f: () => this.drawPoles(c) }); // behind the scaffold and the roof crews
@@ -3462,6 +3468,26 @@ export class Battle {
   }
 
   // floodlights on poles, behind the defenders
+  /**
+   * A low sandbag wall in front of a row of defenders (row 0 far, 1 near), from the left edge to
+   * under the barricade: covers their legs to mid-thigh. Two staggered courses of the firestep
+   * sprite, in the shade behind the line.
+   */
+  drawParapet(c: CanvasRenderingContext2D, row: 0 | 1) {
+    if (!has('emp_firestep')) return;
+    const feet = DEF_LANES[row];
+    const top = feet - 0.36 * SH * depthScale(feet);
+    const base = row ? GROUND_BOT : feet + 6;
+    const ch = (base - top) / 2; // course height
+    const cw = propW('emp_firestep', ch) * 0.9;
+    const look: Look = row ? { b: 0.78, s: 0.8, fog: 0, outline: 0 } : { b: 0.66, s: 0.75, fog: 0.08, outline: 0 };
+    const x1 = row ? WALL_X - 60 : WALL_X - 110;
+    for (let k = 0; k < 2; k++) {
+      const y = base - k * ch * 0.92;
+      for (let x = -30 + (k ? cw * 0.5 : 0) + row * 23; x < x1; x += cw) drawProp(c, 'emp_firestep', x, y, ch, look, { flip: ((x / cw) | 0) % 2 === 1 });
+    }
+  }
+
   drawPoles(c: CanvasRenderingContext2D) {
     for (let i = 0; i < Math.min(3, G.fort.lights); i++) {
       const x = 260 - i * 90;
@@ -4329,25 +4355,26 @@ export class Battle {
       const prof = this.eff(p);
       const icon = img(def.icon);
       const hard = realism() === 'hardcore';
-      // the panel sits over the near lanes: a light scrim that fades in from the left, so the
-      // Turned walking in under it stay visible (the text carries its own shadow)
-      const pg = c.createLinearGradient(W - 330, 0, W - 20, 0);
+      // top right, under the road ribbon (hud weaponPanel): at the bottom right it sat on the near
+      // lanes' spawn edge, over the very bodies the player is reading (critique #1)
+      const { rx, hb } = weaponPanel(W, coarsePointer());
+      const pg = c.createLinearGradient(rx - 330, 0, rx - 20, 0);
       pg.addColorStop(0, 'rgba(10,9,8,0)'); pg.addColorStop(0.35, 'rgba(10,9,8,0.32)'); pg.addColorStop(1, 'rgba(10,9,8,0.45)');
       c.fillStyle = pg;
-      c.fillRect(W - 330, H - 92, 310, 74);
+      c.fillRect(rx - 330, hb - 92, 310, 74);
       c.shadowColor = 'rgba(0,0,0,0.9)'; c.shadowBlur = 3;
       if (icon) {
         const ih = 44, iw = Math.min(150, (icon.width / icon.height) * ih);
-        c.drawImage(icon, W - 320, H - 84, iw, (icon.height / icon.width) * iw);
+        c.drawImage(icon, rx - 320, hb - 84, iw, (icon.height / icon.width) * iw);
       }
       c.textAlign = 'right';
       // the name, small; the mag, big; the reserve, small beside it
-      caps(c, p.w.name ? `"${p.w.name}"` : def.name, W - 30, H - 78, '#9a8e76', 'right');
+      caps(c, p.w.name ? `"${p.w.name}"` : def.name, rx - 30, hb - 78, '#9a8e76', 'right');
       const mag = this.playerMag.get(p.w.uid) ?? 0;
       const cap = prof.mag;
       const chamber = hasChamber(p.w, prof) && mag > cap ? 1 : 0;
       const punch = this.ammoPunch;
-      const magX = W - 104;
+      const magX = rx - 104;
       c.font = `${Math.round(38 + punch * 6)}px ${FONT}`;
       c.fillStyle = mag === 0 ? '#c04030' : mag <= Math.max(1, cap * 0.3) ? '#d09040' : punch > 0.5 ? '#fff6dc' : '#efe2c2';
       const reserve = prof.ammoRes ? roundsInStores(prof, G.stores) : '∞';
@@ -4356,21 +4383,21 @@ export class Battle {
         // Hardcore: you feel the weight of the gun, you don't count it
         const f = mag / Math.max(1, cap);
         c.font = `20px ${FONT}`;
-        c.fillText(mag === 0 ? 'empty' : f >= 0.85 ? 'full' : f >= 0.5 ? 'most' : f >= 0.25 ? 'half' : mag === 1 ? 'last' : 'low', magX, H - 28);
-      } else c.fillText(chamber ? `${mag - 1}+1` : `${mag}`, magX + punch * 2, H - 26 - punch * 2);
+        c.fillText(mag === 0 ? 'empty' : f >= 0.85 ? 'full' : f >= 0.5 ? 'most' : f >= 0.25 ? 'half' : mag === 1 ? 'last' : 'low', magX, hb - 28);
+      } else c.fillText(chamber ? `${mag - 1}+1` : `${mag}`, magX + punch * 2, hb - 26 - punch * 2);
       c.font = `14px ${FONT}`;
       c.fillStyle = '#a89c84';
       c.textAlign = 'left';
-      c.fillText(`/${reserve}`, magX + 6, H - 28);
-      if (pouch) caps(c, `+${pouch} loose`, magX + 6, H - 44, '#8f846e');
+      c.fillText(`/${reserve}`, magX + 6, hb - 28);
+      if (pouch) caps(c, `+${pouch} loose`, magX + 6, hb - 44, '#8f846e');
       // what is in the gun: the ammo's picture and its short name; the selector as pips
       const at = prof.ammoRes ? AMMO_TYPES[prof.ammoRes] : undefined;
       const aic = at ? img(at.icon) : undefined;
-      let ax = W - 30;
+      let ax = rx - 30;
       if (prof.ammoRes) {
-        const aw = caps(c, at?.short ?? ammoLabel(prof.ammoRes), ax, H - 60, prof.incendiary ? '#d08040' : '#b8ab90', 'right');
+        const aw = caps(c, at?.short ?? ammoLabel(prof.ammoRes), ax, hb - 60, prof.incendiary ? '#d08040' : '#b8ab90', 'right');
         ax -= aw + 4;
-        if (aic) { const ih = 14, iw = (aic.width / aic.height) * ih; c.drawImage(aic, ax - iw, H - 71, iw, ih); ax -= iw + 4; }
+        if (aic) { const ih = 14, iw = (aic.width / aic.height) * ih; c.drawImage(aic, ax - iw, hb - 71, iw, ih); ax -= iw + 4; }
       }
       const modes = fireModes(p.w, this.prof(p.w, p.s));
       if (modes.length > 1) {
@@ -4378,20 +4405,20 @@ export class Battle {
         const n = m === 'semi' ? 1 : m === 'burst' ? 3 : 6;
         ax -= 8;
         c.fillStyle = '#d9cdb0';
-        for (let i = 0; i < n; i++) c.fillRect(ax - i * (m === 'auto' ? 3 : 5), H - 68, m === 'auto' ? 2 : 3, 8);
+        for (let i = 0; i < n; i++) c.fillRect(ax - i * (m === 'auto' ? 3 : 5), hb - 68, m === 'auto' ? 2 : 3, 8);
       }
       if (this.usesTube(p.w, prof) && !hard) {
         const tube = this.tubeOf(p.w, mag);
         const col: Partial<Record<Res, string>> = { shell: '#b04030', shell_slug: '#a0a0a0', shell_fire: '#d08030', shell_flech: '#6080c0' };
-        tube.forEach((r, i) => { c.fillStyle = col[r] ?? '#c9b88a'; c.fillRect(W - 200 + i * 9, H - 58, 7, 10); });
+        tube.forEach((r, i) => { c.fillStyle = col[r] ?? '#c9b88a'; c.fillRect(rx - 200 + i * 9, hb - 58, 7, 10); });
       }
-      if (p.w.cond < 0.4) caps(c, 'worn', magX - 50, H - 30, '#c08040', 'right');
+      if (p.w.cond < 0.4) caps(c, 'worn', magX - 50, hb - 30, '#c08040', 'right');
       // reload / clearing bar
       if (this.playerReload > 0) {
         c.fillStyle = this.reloadKind === 'speed' ? '#d0a050' : '#d9c9a0';
-        c.fillRect(W - 320, H - 24, 290 * Math.max(0, 1 - this.playerReload / Math.max(0.01, prof.reloadPerRound ? prof.reload : this.reloadTotal)), 3);
+        c.fillRect(rx - 320, hb - 24, 290 * Math.max(0, 1 - this.playerReload / Math.max(0.01, prof.reloadPerRound ? prof.reload : this.reloadTotal)), 3);
       }
-      if (this.jam) hintRow(c, [{ key: 'night.reload', label: this.jam.clearing > 0 ? 'clearing…' : this.jam.kind === 'barrel' ? 'barrel hot — swap' : this.jam.kind === 'double' ? 'double-feed' : 'jammed', hot: true }], W - 30, H - 122, 'right');
+      if (this.jam) hintRow(c, [{ key: 'night.reload', label: this.jam.clearing > 0 ? 'clearing…' : this.jam.kind === 'barrel' ? 'barrel hot — swap' : this.jam.kind === 'double' ? 'double-feed' : 'jammed', hot: true }], rx - 30, hb + 40, 'right');
     }
     c.shadowBlur = 0; c.shadowColor = 'transparent';
     // nerve and rally, bottom left above the key line

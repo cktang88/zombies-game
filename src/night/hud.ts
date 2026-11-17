@@ -10,6 +10,16 @@ export const INK = '#e8dcc0';
 export const DIM = '#a89c84';
 export const FAINT = '#8a7e66';
 
+/**
+ * Where the night's weapon panel sits: top right, under the road ribbon, clear of the lanes (at
+ * the bottom right it covered the near lane's spawn edge). `rx` is the panel's right reference
+ * (the old W), `hb` its bottom reference (the old H): the panel spans hb-92 … hb-18. On touch it
+ * steps left of the pause button.
+ */
+export function weaponPanel(W: number, touch: boolean): { rx: number; hb: number } {
+  return { rx: W - (touch ? 96 : 0), hb: 46 + 92 };
+}
+
 /** The label printed on a keycap for a bound action ('R', 'Space'); a literal ('RMB', '1-9') passes through. */
 export function capOf(id: string): string { return id.includes('.') ? keyLabel(keyOf(id)) : id; }
 

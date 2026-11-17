@@ -435,7 +435,8 @@ export class BattleActors implements BattleHook {
     const isP = g === b.player;
     // the gun in their hands (a hand weapon while a swing plays)
     r.swingT = Math.max(0, r.swingT - dt);
-    const want = r.swingT > 0 ? (r.weapon ?? null) : weaponAnim(g.w?.def);
+    // on a gun nest the own gun is put away: both hands are on the nest's grips (crewClip)
+    const want = r.swingT > 0 ? (r.weapon ?? null) : g.crew ? null : weaponAnim(g.w?.def);
     if (r.swingT <= 0 && want !== r.weapon) {
       const had = r.weapon;
       rig.setWeapon(want);
@@ -468,7 +469,7 @@ export class BattleActors implements BattleHook {
     const hauling = !!g.dragging && Math.abs(g.x - (g.dragging.x + 26)) <= 4;
     if (hauling && !rig.isPlaying('haul')) rig.play(clip('haul'));
     else if (!hauling && rig.isPlaying('haul')) rig.stop('haul');
-    if (g.crew && !rig.isPlaying('crew')) rig.play(clip('crew'));
+    if (g.crew && !rig.isPlaying('crew')) rig.play(this.crewClip(g) ?? clip('crew'));
     else if (!g.crew && rig.isPlaying('crew')) rig.stop('crew');
     // guards' reloads: the clip is stretched over the simulation's reload time
     if (!isP && g.w) {
@@ -492,6 +493,26 @@ export class BattleActors implements BattleHook {
     // mauled / shot: a flinch for every new wound
     if (g.s.wounds.length > r.wounds) rig.hit(Math.random() < 0.3 ? 'arm' : 'torso');
     r.wounds = g.s.wounds.length;
+  }
+
+  /**
+   * The crew pose on a mounted gun: both hands on the gun's own grips, in rig space from where the
+   * nest's gun pivots (emplacements Mount px/py), so the gunner is seen working the MG rather than
+   * standing beside it with his own gun (critique #14). Null when the guard is on no mount.
+   */
+  private crewClip(g: Guard): Clip | null {
+    const em = (this.b.hooks as unknown as { mounts?: { crew: unknown; px: number; py: number; def: { id: string } }[] }[]).find((h) => Array.isArray(h.mounts));
+    const m = em?.mounts?.find((q) => q.crew === g);
+    if (!m) return null;
+    const k = 240 / (SH * g.sc); // world px -> rig units
+    const len = m.def.id === 'mgnest' ? 88 : m.def.id === 'swivel' ? 80 : 60;
+    // the rear grip a fifth of the way along from the butt (the pivot sits ~0.4 along), the
+    // support hand on the feed cover just behind the pivot
+    const gx = (m.px - len * 0.22 - g.x) * k, gy = (m.py + 4 - g.y) * k;
+    const sx = (m.px - len * 0.06 - g.x) * k, sy = (m.py - 3 - g.y) * k;
+    const n: NonNullable<Clip['n']> = [[0, { s: 'world', dx: sx, dy: sy, pose: 'fist' }], [1, { s: 'world', dx: sx, dy: sy, pose: 'fist' }]];
+    const f: NonNullable<Clip['f']> = [[0, { s: 'world', dx: gx, dy: gy, pose: 'fist' }], [1, { s: 'world', dx: gx, dy: gy, pose: 'fist' }]];
+    return { ...CREW, n, f, set: [] };
   }
 
   private guardTarget(g: Guard): { x: number; y: number } | null {
@@ -731,9 +752,9 @@ export class BattleActors implements BattleHook {
     const rig = r.rig;
     const look = GUARD_LOOK[g.y >= DEF_LANES[1] ? 1 : 0];
     const scale = (SH * g.sc) / 240;
-    // a warm lantern rim inside the ink line (never past it: the old 2 px offset covered the ink and read as a brown halo)
+    // plain ink, no rim (GUARD_LOOK): the old warm rim, 2 px out over the ink, read as a brown halo
     const d = +(look.outline * 0.45).toFixed(1);
-    applyLook(rig, { look, variant: 0, lit: true, shade: false, rimColor: WARM, rimA: look.rim ?? 0.4, rimDx: g.x > 120 ? -d : d, rimDy: 0 }, scale, g.face);
+    applyLook(rig, { look, variant: 0, lit: true, shade: false, rimColor: WARM, rimA: look.rim ?? 0, rimDx: g.x > 120 ? -d : d, rimDy: 0 }, scale, g.face);
     rig.overlay = null;
     rig.draw(c, g.x, g.y, scale, g.face, undefined, this.cam);
     rig.hasDrawn = true;

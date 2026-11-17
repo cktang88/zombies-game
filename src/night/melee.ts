@@ -10,7 +10,7 @@
 //   knock / stagger (a stagger stops it, and breaks a grab) / bleed (BLEED_TIME s) /
 //   finisher (crawlers die outright) / wear (breaks at 0) / chainsaw: fuel per swing, noise.
 import { is, keyCap } from '../ui/keys';
-import { keycap, caps, capOf } from './hud';
+import { keycap, caps, capOf, weaponPanel, coarsePointer } from './hud';
 import { img } from '../assets';
 import type { Battle } from './battle';
 import { LANES } from './battle';
@@ -281,7 +281,9 @@ export class Melee implements BattleHook {
     const { prof, item } = profOf(p);
     const st = this.sta(p);
     // [V] + the tool's picture + a thin stamina line: the name only on the armory screen
-    const x = 1280 - 320, y = 720 - 100;
+    // under the weapon panel (hud weaponPanel), top right
+    const { rx, hb } = weaponPanel(1280, coarsePointer());
+    const x = rx - 320, y = hb + 14;
     c.save();
     c.globalAlpha = st < 100 ? 1 : 0.7;
     const kw = keycap(c, capOf('night.melee'), x, y);

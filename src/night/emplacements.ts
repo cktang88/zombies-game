@@ -78,7 +78,7 @@ export class Emplacements implements BattleHook {
       const k = slots[it.post]++;
       if (it.post === 'roof') {
         const x = 214 - k * 74;
-        this.mounts.push(this.mount(def, it, 'roof', x, ROOF_Y, x + 24, ROOF_Y - 62));
+        this.mounts.push(this.mount(def, it, 'roof', x, ROOF_Y, x + 40, ROOF_Y - 78)); // ahead of its crew at chest height: their hands on its grips (drawn over them), not its butt in their belly
       } else {
         const x = WALL_X - 52 - k * 50;
         this.mounts.push(this.mount(def, it, 'firestep', x, FIRESTEP_Y, x + 30, 580));
