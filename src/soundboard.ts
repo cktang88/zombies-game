@@ -1,7 +1,11 @@
 // Dev sound board (soundboard.html): audition every sound in the kit.
-import { sfx, music, gunSoundFor, setMasterVolume, setMusicVolume, setSfxVolume, type GunKind, type MusicMode } from './audio';
+import {
+  sfx, music, gunSoundFor, setMasterVolume, setMusicVolume, setSfxVolume, type GunKind, type MusicMode,
+  ambience, ambienceLayer, wind, auditionSample, loadSampleSet, sampleLoaded, ZOMBIE_VOICE_KINDS, ZOMBIE_VOICE_TYPES,
+} from './audio';
 import { GUN_KINDS } from './audio/guns';
-import { CASING_KINDS, IMPACT_KINDS, RELOAD_KINDS, RELOAD_STAGES, type ReloadKind } from './audio/foley';
+import { CASING_KINDS, IMPACT_KINDS, MELEE_KINDS, RELOAD_KINDS, RELOAD_STAGES, SEARCH_KINDS, SURFACES, type ReloadKind } from './audio/foley';
+import { SAMPLES, SAMPLE_IDS, sampleFailures } from './audio/samples';
 import { runSelfTest } from './audio/selftest';
 import { WEAPONS, WEAPON_ORDER } from './data/weapons';
 
@@ -81,6 +85,54 @@ section('Explosions', row(btn('explosion 0.6', () => sfx.explosion(0.6)), btn('e
 const legacy = ['click', 'reload', 'shell', 'hit', 'headpop', 'thud', 'wallHit', 'groan', 'scream', 'burst', 'boom', 'fire', 'hurt', 'bell', 'ui'] as const;
 section('Legacy sfx.* (still used by the game)', row(...legacy.map((k) => btn(k, () => sfx[k]())),
   btn("shot('pump')", () => sfx.shot('pump')), btn("shot('ar15', far)", () => sfx.shot('ar15', true))));
+
+// --- recorded samples ------------------------------------------------------------------
+const pan = (): number => Math.random() * 1.2 - 0.6;
+section('Zombie voices — sfx.zombieVoice(type, kind)', ...ZOMBIE_VOICE_TYPES.map((t) =>
+  row(el('label', { textContent: t, style: 'min-width:80px' }), ...ZOMBIE_VOICE_KINDS.map((k) => btn(k, () => sfx.zombieVoice(t, k, { pan: pan() })))),
+), row(btn('horde (12 mixed)', () => {
+  for (let i = 0; i < 12; i++) {
+    const t = ZOMBIE_VOICE_TYPES[Math.floor(Math.random() * 5)], k = ZOMBIE_VOICE_KINDS[Math.floor(Math.random() * 3)];
+    sfx.zombieVoice(t, k, { pan: pan(), delay: i * 0.18 });
+  }
+})));
+const MELEE_WEAPONS = ['machete', 'hatchet', 'crowbar', 'bat', 'knife', 'sledge', 'fist'];
+section('Melee — sfx.melee(kind, weapon)', ...MELEE_WEAPONS.map((w) => row(el('label', { textContent: w, style: 'min-width:80px' }),
+  ...MELEE_KINDS.map((k) => btn(k, () => sfx.melee(k, w))),
+  btn('swing + hit', () => { sfx.melee('swing', w); sfx.melee('hit', w, { delay: 0.12 }); }))));
+let walk: number | null = null;
+section('Footsteps — sfx.footstep(surface)', row(...SURFACES.map((s) => btn(s, () => sfx.footstep(s))),
+  btn('walk 3 s on asphalt', () => { if (walk) return; let n = 0; walk = window.setInterval(() => { sfx.footstep('asphalt', { pan: n % 2 ? 0.1 : -0.1 }); if (++n > 7) { clearInterval(walk!); walk = null; } }, 420); })));
+section('Searching — sfx.search(kind)', row(...SEARCH_KINDS.map((k) => btn(k, () => sfx.search(k)))));
+section('UI — sfx.ui(kind)', row(...(['click', 'type', 'paper', 'stamp'] as const).map((k) => btn(k, () => sfx.ui(k)))));
+section('Ambience — ambience(scene), ambienceLayer(kind, level)', row(
+  ...(['night', 'day', 'run', 'title', 'off'] as const).map((s) => btn(`ambience ${s}`, () => ambience(s))),
+  ...(['fire', 'generator', 'static', 'river'] as const).map((k) => {
+    let on = false;
+    return btn(`layer ${k}`, () => { on = !on; ambienceLayer(k, on ? 0.5 : 0); });
+  }),
+  btn('wind on', () => wind(true)), btn('wind off', () => wind(false))));
+
+// every recorded set, raw: decode check + audition
+const sampStatus = el('div', { id: 'samples-status' });
+section('Recorded sample sets (public/sfx, CC0 — CREDITS.md)', sampStatus, row(btn('Load & decode all', () => void loadAll()),
+  ...SAMPLE_IDS.map((id) => btn(`${id} ×${SAMPLES[id].n}`, () => {
+    if (!sampleLoaded(id)) { void loadSampleSet(id).then(() => auditionSample(id)); return; }
+    auditionSample(id);
+  }))));
+async function loadAll() {
+  sampStatus.textContent = 'loading…';
+  const res = await Promise.all(SAMPLE_IDS.map(async (id) => [id, await loadSampleSet(id)] as const));
+  const bad = res.filter(([, ok]) => !ok).map(([id]) => id);
+  const files = SAMPLE_IDS.reduce((n, id) => n + SAMPLES[id].n, 0);
+  sampStatus.className = sampleFailures.length ? 'bad' : 'ok';
+  sampStatus.textContent = `${res.length} sets · ${files} files · ${sampleFailures.length} failed` +
+    (bad.length ? `\nsets with nothing decoded: ${bad.join(', ')}` : '') + (sampleFailures.length ? '\n' + sampleFailures.join('\n') : '');
+  const out = { sets: res.length, files, failures: [...sampleFailures], emptySets: bad };
+  (window as unknown as { __samplesResult: unknown }).__samplesResult = out;
+  return out;
+}
+(window as unknown as { __loadAllSamples: typeof loadAll }).__loadAllSamples = loadAll;
 
 // --- music & mix --------------------------------------------------------------------
 const slider = (label: string, v: number, fn: (v: number) => void) => {
