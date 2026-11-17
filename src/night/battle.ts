@@ -1500,7 +1500,9 @@ export class Battle {
       if (tmax >= 0 && tmin <= tmax) {
         const tc = Math.max(tmin, Math.min(tmax, (z.x - ox) / dx));
         const yc = oy + dy * tc;
-        const f = (yc - hb.y1) / Math.max(1, hb.y2 - hb.y1);
+        let f = (yc - hb.y1) / Math.max(1, hb.y2 - hb.y1);
+        // lying: head end to feet end along the road instead of top to bottom
+        if (hb.lying > 0.6) { const xc = ox + dx * tc; f = Math.abs(xc - hb.hx) / Math.max(1, hb.x2 - hb.x1); }
         const low = this.isCrawler(z);
         const zone: Zone = low ? 'torso' : f > 0.55 ? 'leg' : f > 0.4 ? 'arm' : 'torso';
         hits.push({ z, t: Math.max(0, tmin), head: false, zone });
@@ -1577,7 +1579,7 @@ export class Battle {
     const f = z.flip ? -1 : 1;
     if (z.crippled && !z.def.crawl && z.def.id !== 'ferryman') {
       // dragging itself along on its arms: long, low, the head out in front
-      return { x1: z.x - h * 0.42, x2: z.x + h * 0.42, y1: z.y - h * 0.3, y2: z.y, hx: z.x - f * h * 0.4, hy: z.y - h * 0.2, hr: z.headless ? 0 : h * z.def.head * 0.56 };
+      return { x1: z.x - h * 0.42, x2: z.x + h * 0.42, y1: z.y - h * 0.3, y2: z.y, hx: z.x - f * h * 0.4, hy: z.y - h * 0.2, hr: z.headless ? 0 : h * z.def.head * 0.56, lying: 0 };
     }
     // raiders crouch behind a heap of junk; the lower body is behind it, and ducking drops the rest
     const cover = z.def.ranged && z.state === 'cover';
@@ -1587,10 +1589,40 @@ export class Battle {
     const crawl = z.def.crawl;
     // the skull, not the hair (balance.md §8.7); a climber's head against the sky is easier
     const hr = z.headless ? 0 : (crawl ? h * 0.3 : headH * 0.56) * (lift > 0 ? 1.4 : 1);
-    return {
+    const hb = {
       x1: z.x - w / 2, x2: z.x + w / 2, y1: top + (z.headless ? 0 : headH * 0.8), y2: cover ? z.y - h * 0.42 : z.y - lift,
       hx: z.x - f * w * (crawl ? 0.36 : 0.12), hy: crawl ? z.y - h * 0.62 : top + headH * 0.5, hr,
     };
+    return crawl ? { ...hb, lying: 0 } : this.downBox(z, hb);
+  }
+  /**
+   * On a knee, on its back or face down, and getting up again: the box (and the Classic skull) follow
+   * the fall pose (the same tilt / sink / squash drawZombie gives it), so a lying body is low and flat
+   * and the head is down by the road, not where it stood. `lying` 0..1: how far over it is.
+   */
+  downBox<T extends { x1: number; x2: number; y1: number; y2: number; hx: number; hy: number; hr: number }>(z: Zombie, hb: T): T & { lying: number } {
+    const fallen = (z.down ?? 0) > 0 || (!!z.react && (z.react.tier === 'stumble' || z.react.tier === 'knockdown') && this.t - z.react.t0 < z.react.dur);
+    if (!fallen || z.state === 'dying' || z.leap) return { ...hb, lying: 0 };
+    const ps = this.pose(z);
+    if (Math.abs(ps.rot) < 0.15 && ps.sy > 0.97) return { ...hb, lying: 0 };
+    const f = z.flip ? -1 : 1;
+    const cr = Math.cos(ps.rot), sr = Math.sin(ps.rot);
+    // the drawn transform about the feet: squash, tilt, sink (mirrored for a flipped body)
+    const tf = (x: number, y: number) => {
+      const lx = (x - z.x) * f, ly = (y - z.y) * ps.sy;
+      return [z.x + f * (lx * cr - ly * sr), z.y + ps.dy + lx * sr + ly * cr] as const;
+    };
+    const cs = [tf(hb.x1, hb.y1), tf(hb.x2, hb.y1), tf(hb.x1, hb.y2), tf(hb.x2, hb.y2)];
+    const lying = Math.min(1, Math.abs(ps.rot) / 1.05);
+    const out = { ...hb, lying };
+    out.x1 = Math.min(...cs.map((q) => q[0])); out.x2 = Math.max(...cs.map((q) => q[0]));
+    out.y1 = Math.min(...cs.map((q) => q[1])); out.y2 = Math.min(z.y, Math.max(...cs.map((q) => q[1])));
+    // a body flat on the road is about as thick as its chest, not as tall as it stood
+    const thick = this.zw(z) * 0.75;
+    if (lying > 0.6 && out.y2 - out.y1 > thick) out.y1 = out.y2 - thick;
+    const [hx, hy] = tf(hb.hx, hb.hy);
+    out.hx = hx; out.hy = Math.min(z.y - hb.hr * 0.6, hy);
+    return out;
   }
 
   /** Weakspot circles in world space (none on a crawler, none while it is over the wall). They ride the drawn pose. */
