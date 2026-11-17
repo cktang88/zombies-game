@@ -115,32 +115,44 @@ function fireBlob(stage: number, variant: number, S = 96): Cv {
 }
 
 /** A licking flame tongue, base at the bottom centre, tip up: pale core, yellow, orange, red rim. */
-function flameTongue(variant: number, W = 40, H = 88): Cv {
+function flameTongue(variant: number, W = 48, H = 96): Cv {
+  // metaballs strung up a wavering spine: a fat round base, lobes shrinking upward, a licked-off tip,
+  // and a detached wisp above some of them, so a row of tongues reads as fire and not as teeth
   const R = rng(4242 + variant * 97);
-  const curl = (R() - 0.5) * 0.5, fat = 0.8 + R() * 0.35, sd = variant * 5 + 3;
+  const sd = variant * 5 + 3;
+  const lean = (R() - 0.5) * 0.5, wave = 0.12 + R() * 0.12, ph = R() * 6;
+  const lobes: [number, number, number][] = [];
+  for (let i = 0; i < 7; i++) {
+    const t = 0.13 + i * 0.12;
+    const cx = lean * t * t + Math.sin(t * 7 + ph) * wave * t;
+    lobes.push([cx, t, 0.62 * Math.pow(1 - t, 0.75) * (0.85 + R() * 0.3) + 0.05]);
+  }
+  if (R() < 0.6) lobes.push([lean * 0.9 + (R() - 0.5) * 0.3, 0.93, 0.07]);
   return raster(W, H, (x, y, o) => {
-    const u = ((x + 0.5) / W) * 2 - 1; // -1..1
-    const t = 1 - (y + 0.5) / H; // 0 bottom .. 1 top
-    // teardrop: round base low, pinching to a curled tip
-    const base = 0.16;
-    const half = t < base ? Math.sqrt(Math.max(0, 1 - ((base - t) / base) ** 2)) * 0.95 * fat : 0.95 * fat * Math.pow(Math.max(0, 1 - (t - base) / (1 - base)), 0.62);
-    const cx = curl * t * t * 1.4 + Math.sin(t * 5 + variant) * 0.08 * t;
-    let f = half > 0 ? 1 - Math.abs(u - cx) / half : -1;
-    f -= (fbm(u * 2.4 + variant, t * 4.2, sd) - 0.5) * 0.7 * (0.3 + t);
-    f -= t * 0.18;
+    const u = (((x + 0.5) / W) * 2 - 1) * 1.45; // margin: lean and wave never touch the edge
+    const t = 1 - (y + 0.5) / H;
+    let f = 0;
+    for (const [lx, lt, lr] of lobes) {
+      const dx = (u - lx) / 1.0, dt = (t - lt) * 1.9;
+      f = Math.max(f, 1 - Math.sqrt(dx * dx + dt * dt) / lr);
+    }
+    f -= (fbm(u * 2.2 + variant * 3, t * 3.4 - variant, sd) - 0.5) * 0.55 * (0.4 + t);
     if (f <= 0) return;
-    const bands = [0.0, 0.2, 0.42, 0.66];
+    const bands = [0.0, 0.16, 0.36, 0.6];
     let k = 0;
     for (let i = 0; i < bands.length; i++) if (f > bands[i]) k = i;
-    const cols: RGB[] = [[196, 52, 18], [255, 128, 34], [255, 206, 92], [255, 246, 214]];
+    // the core only low in the flame: tips stay orange-red
+    if (k === 3 && t > 0.45) k = 2;
+    if (k >= 2 && t > 0.75) k = 1;
+    const cols: RGB[] = [[190, 48, 16], [255, 122, 32], [255, 200, 84], [255, 244, 206]];
     const [r, g, b] = cols[k];
-    o[0] = r; o[1] = g; o[2] = b; o[3] = 255 * sstep(0, 0.06, f) * (k === 0 ? 0.85 : 1);
+    o[0] = r; o[1] = g; o[2] = b; o[3] = 255 * sstep(0, 0.07, f) * (k === 0 ? 0.85 : 1);
   });
 }
 
 // ---------- smoke: cel-shaded puffs ----------
 export const PUFF = {
-  smoke: '#6e6a64', dark: '#26231f', powder: '#d8d4cb', dust: '#7b6e5a', snow: '#dfe6ee', mist: '#5e0c0a', mistDark: '#2c0907', steam: '#a8acb0', flare: '#c8868a',
+  smoke: '#6e6a64', dark: '#26231f', powder: '#d8d4cb', dust: '#7b6e5a', snow: '#dfe6ee', mist: '#420907', mistDark: '#240705', steam: '#a8acb0', flare: '#c8868a',
 } as const;
 export type PuffCol = keyof typeof PUFF;
 
@@ -518,7 +530,7 @@ export function sprites(): Sprites {
     splat: [0, 1, 2, 3, 4, 5].map((v) => splatTex(v, '#4a0c0a')),
     splatDark: [0, 1, 2].map((v) => splatTex(v, '#200806')),
     chip: [0, 1, 2].map((v) => splatTex(v + 9, '#121110', 16)),
-    drop: dropTex('#4a0b08'), dropDark: dropTex('#220605'),
+    drop: dropTex('#3a0806'), dropDark: dropTex('#220605'),
     gib: [0, 1, 2].map((v) => gibTex(v, '#4a1410', '#7a2a1c')), bone: [0, 1].map((v) => gibTex(v + 3, '#b8ae98', '#e0d8c4')),
     ms: 0,
   };

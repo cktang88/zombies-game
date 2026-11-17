@@ -301,9 +301,9 @@ export class Vfx {
       const g = (head ? 1.6 : 1) * power * pk;
       // the mist: a dark burst at the hole, mostly blown out the far side
       for (let i = 0; i < this.q(head ? 3 : 2, 1); i++) {
-        const j = P.add(MIST, x + ca * rr(0, 8), y + sa * rr(0, 8), rr(0.22, 0.42) * (head ? 1.3 : 1));
+        const j = P.add(MIST, x + ca * rr(-4, 18), y + sa * rr(-4, 18) + rr(-3, 3), rr(0.22, 0.42) * (head ? 1.3 : 1));
         P.vx[j] = ca * rr(30, 120) * g; P.vy[j] = sa * rr(30, 120) * g - rr(0, 20); P.drag[j] = 5; P.grav[j] = 30;
-        P.s0[j] = 5 * s; P.s1[j] = rr(16, 28) * s * Math.sqrt(g) * (less ? 0.6 : 1); P.a0[j] = less ? 0.55 : 0.85;
+        P.s0[j] = 4 * s; P.s1[j] = rr(12, 22) * s * Math.sqrt(g) * (less ? 0.6 : 1); P.a0[j] = less ? 0.5 : 0.7;
         P.col[j] = pc(less ? 'mistDark' : 'mist'); P.rot[j] = rr(0, 6.28);
       }
       // exit spray (forward, fast) and a little back-spatter out of the entry
@@ -498,16 +498,16 @@ export class Vfx {
     const s = laneScale(y);
     if (this.pools.length < 16) this.pools.push({ x, y, w, k: Math.min(1, strength) });
     // licking tongues: tall ones in the middle, short ones at the edges
-    const nt = dt * 60 * k * (w / 150);
+    const nt = dt * 38 * k * (w / 150);
     for (let n = Math.floor(nt) + (this.chance(nt % 1) ? 1 : 0); n > 0; n--) {
       const u = rr(-0.5, 0.5), mid = 1 - Math.abs(u) * 1.2;
       const j = P.add(FLAME, x + u * w, y + rr(-5, 8), rr(0.4, 0.8));
       P.vx[j] = rr(-10, 10) + this.wind * 0.2; P.vy[j] = -rr(30, 70); P.s0[j] = rr(18, 34) * s * (0.6 + 0.4 * strength) * (0.6 + 0.5 * mid); P.s1[j] = 3; P.asp[j] = rr(1.3, 2.3) * (0.7 + 0.5 * mid); P.col[j] = (rnd() * 6) | 0;
     }
     // the burning bed: low lumps of fire along the ground
-    if (this.chance(dt * 22 * k * (w / 150))) {
-      const j = P.add(FIRE, x + rr(-0.45, 0.45) * w, y - rr(2, 10) * s, rr(0.35, 0.6));
-      P.vy[j] = -rr(20, 50); P.s0[j] = rr(10, 16) * s; P.s1[j] = rr(18, 26) * s; P.col[j] = 1 + ((rnd() * 2) | 0); P.rot[j] = rr(0, 6.28);
+    if (this.chance(dt * 30 * k * (w / 150))) {
+      const j = P.add(FIRE, x + rr(-0.45, 0.45) * w, y - rr(4, 14) * s, rr(0.45, 0.8));
+      P.vy[j] = -rr(30, 70); P.vx[j] = this.wind * 0.3; P.grav[j] = -30; P.s0[j] = rr(12, 18) * s; P.s1[j] = rr(22, 34) * s; P.col[j] = 1 + ((rnd() * 2) | 0); P.rot[j] = rr(0, 6.28);
     }
     if (this.chance(dt * 6 * k)) {
       const j = P.add(EMBER, x + rr(-0.4, 0.4) * w, y - rr(10, 50), rr(1.2, 2.6));
@@ -652,7 +652,7 @@ export class Vfx {
       // trails
       if (!r.arrived && (r.kind === 'flare' || r.kind === 'rocket' || r.fire)) {
         r.emit += dt;
-        const step = r.kind === 'rocket' ? 0.008 : 0.016;
+        const step = r.kind === 'rocket' ? 0.008 : r.kind === 'flare' ? 0.01 : 0.016;
         while (r.emit > step) {
           r.emit -= step;
           // spread the sub-steps back along the path, so the trail is a ribbon, not beads
@@ -665,7 +665,7 @@ export class Vfx {
             P.vx[k] = -r.dx * 300; P.vy[k] = -r.dy * 300; P.s0[k] = 6; P.s1[k] = 12; P.col[k] = 0;
           } else if (r.kind === 'flare') {
             const j = P.add(SMOKE, hx, hy, rr(1.2, 2));
-            P.vy[j] = -10; P.s0[j] = 3; P.s1[j] = rr(14, 22); P.a0[j] = 0.45; P.col[j] = pc('flare'); P.flags[j] = F_WIND; P.rot[j] = rr(0, 6);
+            P.vy[j] = -10; P.s0[j] = 4; P.s1[j] = rr(12, 18); P.a0[j] = 0.35; P.col[j] = pc('flare'); P.flags[j] = F_WIND; P.rot[j] = rr(0, 6);
             const k = P.add(SPARK, hx, hy, rr(0.1, 0.3));
             P.vx[k] = rr(-80, 80); P.vy[k] = rr(-60, 80); P.grav[k] = 400; P.s0[k] = 1; P.col[k] = sc('flare');
           } else {
@@ -887,7 +887,6 @@ export class Vfx {
       this.smokeCx = this.smokeCv.getContext('2d')!;
     }
     const g = this.smokeCx!;
-    const id = new DOMMatrix([K, 0, 0, K, 0, 0]);
     let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
     let any = false;
     for (let i = 0; i < P.n; i++) {
@@ -899,15 +898,16 @@ export class Vfx {
       const a = P.a0[i] * fadeIn * Math.pow(1 - u, k === MIST ? 1.6 : 1.2);
       if (a < 0.01 || s < 0.6) continue;
       if (!any) { g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(this.dirty[0], this.dirty[1], this.dirty[2], this.dirty[3]); any = true; }
-      void id;
-      const x = P.x[i], y = P.y[i];
-      const r = s * 1.42;
+      // screen space (the caller's transform is a translate / uniform scale: shake, the day run's camera)
+      const x = m.a * P.x[i] + m.e, y = m.d * P.y[i] + m.f;
+      const s2 = s * m.a;
+      const r = s2 * 1.42;
       if (x - r < x0) x0 = x - r; if (y - r < y0) y0 = y - r; if (x + r > x1) x1 = x + r; if (y + r > y1) y1 = y + r;
       const im = S.puff[PUFF_KEYS[P.col[i]]][(P.seed[i] * 4) | 0];
       const sy = P.flags[i] & F_GROUNDED ? 0.55 : 1;
       // unrotated (an axis-aligned scaled blit is the fast path); the four variants and the drift hide it
       g.globalAlpha = a > 1 ? 1 : a;
-      g.drawImage(im, (x - s) * K, (y - s * sy) * K, s * 2 * K, s * 2 * sy * K);
+      g.drawImage(im, (x - s2) * K, (y - s2 * sy) * K, s2 * 2 * K, s2 * 2 * sy * K);
     }
     if (!any) {
       if (this.dirty[2] > 0) { g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(this.dirty[0], this.dirty[1], this.dirty[2], this.dirty[3]); this.dirty[2] = 0; }
@@ -920,9 +920,10 @@ export class Vfx {
     const lw = Math.min(this.smokeCv!.width, Math.ceil(x1 * K) + 1) - lx, lh = Math.min(this.smokeCv!.height, Math.ceil(y1 * K) + 1) - ly;
     this.dirty = [lx, ly, Math.max(0, lw), Math.max(0, lh)];
     if (lw <= 0 || lh <= 0) return;
-    c.setTransform(m);
+    c.setTransform(1, 0, 0, 1, 0, 0);
     c.globalAlpha = 1;
     c.drawImage(this.smokeCv!, lx, ly, lw, lh, lx / K, ly / K, lw / K, lh / K);
+    c.setTransform(m);
   }
   private dirty: [number, number, number, number] = [0, 0, 0, 0];
 
@@ -981,7 +982,7 @@ export class Vfx {
         const h = s * P.asp[i];
         const a = u < 0.15 ? u / 0.15 : 1 - (u - 0.15) / 0.85;
         const sway = Math.sin(this.t * 7 + P.seed[i] * 20) * 0.12;
-        rot(c, m, S.flame[P.col[i] % 6], x, y, s, h, sway, 0.5, 1, a);
+        rot(c, m, S.flame[P.col[i] % 6], x, y, (P.seed[i] > 0.5 ? 1.45 : -1.45) * s, h, sway, 0.5, 1, a);
         if (P.seed[i] < 0.4 * this.gk) rot(c, m, S.glow.orange, x, y - h * 0.4, s * 3, h * 1.4, 0, 0.5, 0.5, a * 0.35);
       } else if (k === GLOWK) {
         const s = P.s0[i] + (P.s1[i] - P.s0[i]) * u;
@@ -1152,9 +1153,12 @@ export class Vfx {
 // ---------- blitting helpers: rotate/scale around an anchor without save/restore ----------
 /** drawImage `im` at (x, y), w×h, rotated by `a` about the anchor (ax, ay) in 0..1 of the image, with alpha. */
 function rot(c: CanvasRenderingContext2D, m: DOMMatrix, im: CanvasImageSource, x: number, y: number, w: number, h: number, a: number, ax: number, ay: number, alpha: number) {
+  // a negative width mirrors the image about the anchor
+  const fl = w < 0 ? -1 : 1;
+  if (fl < 0) w = -w;
   if (alpha <= 0.004 || w < 0.3 || h < 0.3) return;
   const cs = Math.cos(a), sn = Math.sin(a);
-  c.setTransform(m.a * cs + m.c * sn, m.b * cs + m.d * sn, m.c * cs - m.a * sn, m.d * cs - m.b * sn, m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f);
+  c.setTransform((m.a * cs + m.c * sn) * fl, (m.b * cs + m.d * sn) * fl, m.c * cs - m.a * sn, m.d * cs - m.b * sn, m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f);
   c.globalAlpha = alpha > 1 ? 1 : alpha;
   c.drawImage(im, -ax * w, -ay * h, w, h);
 }

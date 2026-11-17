@@ -105,6 +105,7 @@ const EFFECTS: Record<string, () => void> = {
   explosion: () => vfx.explosion(760, LANES[lane], 150),
   'big blast': () => vfx.explosion(820, LANES[lane], 240),
   molotov: () => { vfx.throwArc(SHOOTER.x + 40, SHOOTER.y - 100, 700, LANES[lane] - 8, 0.35); setTimeout(() => { fires.push({ x: 700, y: LANES[lane], w: 150, life: 7 }); lights.push({ x: 700, y: LANES[lane] - 20, r: 300, life: 7, max: 7, color: '255,150,60' }); }, 350); },
+  fire: () => { fires.push({ x: 700, y: LANES[lane], w: 150, life: 7 }); lights.push({ x: 700, y: LANES[lane] - 20, r: 300, life: 7, max: 7, color: '255,150,60' }); },
   'burn bodies': () => { for (const d of dummies) d.burn = 6; },
   flamethrower: () => { flaming = 2.2; },
   armor: () => { const d = dummies[4], b = bodyBox(d); for (let i = 0; i < 3; i++) setTimeout(() => vfx.impact('armor', d.x - 8, b.y - b.h * 0.6, -0.1, { ground: b.y }), i * 120); },

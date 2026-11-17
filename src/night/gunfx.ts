@@ -1,6 +1,9 @@
-// Gun juice shared by the night battle and the daylight run (docs/balance.md §5): muzzle-flash
-// shapes per class, recoil kick, shake, casings, and the sound-side mapping (impact surfaces,
-// zombie voices). Pure helpers: no game state, so both canvases feel like the same guns.
+// Gun juice shared by the night battle and the daylight run (docs/balance.md §5): recoil kick, shake,
+// light, and the sound-side mapping (impact surfaces, zombie voices). Pure helpers: no game state, so
+// both canvases feel like the same guns. What a shot LOOKS like (flash anatomy per gun, the round in
+// flight, tracers, impacts, smoke, brass, blasts, fire) lives in night/vfx (docs/research/10-vfx.md);
+// drawFlash/casingLook below are the old single-shape versions, kept for any caller outside the night.
+export { gunLook, type GunLook } from './vfx/looks';
 import type { WeaponItem } from '../types';
 import { WEAPONS, type FireProfile } from '../data/weapons';
 import { gunSoundFor, type ZombieVoiceType } from '../audio';
@@ -45,7 +48,7 @@ export function gunFeel(p: FireProfile): GunFeel {
   return { shake: Math.min(10, shake), kick: Math.min(18, kick), light, size };
 }
 
-/** Draw a muzzle flash at (x, y) pointing along `ang`. k: 1 at the shot → 0 as it dies. */
+/** Legacy: one muzzle-flash shape at (x, y) pointing along `ang` (night/vfx draws the real ones). k: 1 at the shot → 0. */
 export function drawFlash(c: CanvasRenderingContext2D, x: number, y: number, ang: number, kind: FlashKind, k: number, size = 1, seed = 0) {
   if (kind === 'none' || k <= 0) return;
   const a = Math.min(1, k * 1.4);
