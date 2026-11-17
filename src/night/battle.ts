@@ -4,8 +4,9 @@ import { ZOMBIES, WEAKSPOTS, EYES, type ZombieDef, type WeakKind } from '../data
 import { WEAPONS, fireProfile, armorDamage, roundsInStores, ammoLabel, ammoTypesFor, selectedAmmo, shotSound, wearMods, blastDamage, AMMO_RES, AMMO_TYPES, BURN, FLARE_LIGHT, type FireProfile } from '../data/weapons';
 import { img, flashImg, shadeImg } from '../assets';
 import { sfx, wind, gunSoundFor, muffle, ambienceLayer } from '../audio';
-import { flashKind, gunFeel, drawFlash, casingLook, voiceOf, panOf, isSuppressed, type FlashKind } from './gunfx';
-import { reduceGore, shakeScale, realism, screenFx, hitMarkers, zoneMarkers, autoReload, focusToggle, threatRibbon } from '../ui/settings';
+import { flashKind, gunFeel, voiceOf, panOf, isSuppressed, type FlashKind } from './gunfx';
+import { Vfx } from './vfx'; // gunfire & effects (docs/research/10-vfx.md)
+import { reduceGore, shakeScale, realism, screenFx, fxQuality, hitMarkers, zoneMarkers, autoReload, focusToggle, threatRibbon } from '../ui/settings';
 import { keyOf, normKey, keyCap } from '../ui/keys';
 import { openPause } from '../ui/pause';
 import {
@@ -227,6 +228,7 @@ export class Battle {
   ctx: CanvasRenderingContext2D;
   ground: HTMLCanvasElement;
   gctx: CanvasRenderingContext2D;
+  vfx: Vfx;
   dark: HTMLCanvasElement;
   dctx: CanvasRenderingContext2D;
   plan: NightPlan;
@@ -369,6 +371,11 @@ export class Battle {
     this.ground.width = W;
     this.ground.height = H;
     this.gctx = this.ground.getContext('2d')!;
+    this.vfx = new Vfx({
+      ground: this.gctx, gore: reduceGore, flashes: screenFx,
+      light: (x, y, r, life, color) => this.lights.push({ x, y, r, life, max: life, color }),
+      snow: () => G.weather === 'snow' || this.plan.special === 'crossing',
+    }, fxQuality());
     this.dark = document.createElement('canvas');
     this.dark.width = W / 2;
     this.dark.height = H / 2;
@@ -781,10 +788,11 @@ export class Battle {
     for (const h of this.hooks) h.update?.(dt); // night modules
     this.zombies = this.zombies.filter((z) => !(z.state === 'dying' && z.dieT > 0.6) && !(z.state === 'flee' && z.x > W + 140));
     this.updateParticles(dt);
+    if (this.vfx.quality !== fxQuality()) this.vfx.setQuality(fxQuality());
+    this.vfx.update(dt);
     for (const f of this.fires) {
       f.life -= dt;
-      if (R.chance(dt * 45)) this.particles.push({ x: f.x + R.range(-f.w / 2, f.w / 2), y: f.y + R.range(-26, 20), vx: R.range(-8, 8), vy: R.range(-110, -50), life: 0.7, max: 0.7, size: R.range(3, 7), color: '#ffb347', kind: 'fire', ground: 0 });
-      if (R.chance(dt * 8)) this.particles.push({ x: f.x + R.range(-f.w / 3, f.w / 3), y: f.y - 70, vx: R.range(-6, 12), vy: R.range(-50, -25), life: 2.5, max: 2.5, size: R.range(8, 14), color: '#222', kind: 'smoke', ground: 0 });
+      this.vfx.burn(f.x, f.y, f.w, Math.min(1, f.life), dt);
     }
     this.fires = this.fires.filter((f) => f.life > 0);
     for (const tr of this.tracers) tr.life -= dt;
@@ -1379,17 +1387,13 @@ export class Battle {
     if (prof.recoverable > 0 && prof.ammoRes) this.recover[prof.ammoRes] = (this.recover[prof.ammoRes] ?? 0) + prof.recoverable * prof.perShot;
     const quiet = prof.noise < 0.5;
     const supp = isSuppressed(w);
-    if (fe.light > 0) this.lights.push({ x: mz.x + 10 * g.face, y: mz.y, r: (quiet || supp ? 0.35 : 1) * fe.light * (far ? 0.8 : 1), life: 0.06, max: 0.06, color: prof.incendiary ? '255,150,70' : '255,200,120' });
     sfx.shoot(def.id, { suppressed: supp, far: far ? 0.4 : false, incendiary: prof.incendiary, pan: panOf(mz.x) * 0.6, volume: far ? 0.8 : 1 });
     if (!quiet && !supp) this.earLoad += prof.noise * (far ? 0.3 : 1) * (prof.pellets > 1 || prof.dmg > 60 ? 1.3 : 1);
-    if (prof.smoke) for (let i = 0; i < 4; i++) this.particles.push({ x: mz.x + g.face * R.range(0, 30), y: mz.y + R.range(-6, 6), vx: g.face * R.range(10, 50), vy: R.range(-20, 5), life: 2.2, max: 2.2, size: R.range(8, 14), color: '#bbb', kind: 'smoke', ground: 0 });
-    // a wisp off the muzzle on the heavy ones
-    else if (!prof.auto && fe.kick >= 11) this.particles.push({ x: mz.x + g.face * 8, y: mz.y, vx: g.face * R.range(10, 30), vy: R.range(-25, -10), life: 0.8, max: 0.8, size: R.range(4, 7), color: '#bbb', kind: 'dust', ground: 0 });
-    // brass and hulls: out of the side, bounce twice on the boards, and stay there
-    const cl = casingLook(def.id);
-    if (cl && (!prof.auto || R.chance(far ? 0.35 : 0.7))) {
-      this.particles.push({ x: mz.x - 34 * g.face * g.sc, y: mz.y + 6, vx: -g.face * R.range(30, 90), vy: R.range(-190, -110), life: 2.5, max: 2.5, size: cl.w, w: cl.w, h: cl.h, rot: R.range(0, 6), bounces: 2, color: cl.color, kind: 'shell', ground: g.y - R.range(2, 7) });
-    }
+    // flash, light, smoke, sparks and brass (night/vfx)
+    this.vfx.muzzle({
+      x: mz.x, y: mz.y, ang, defId: def.id, prof, suppressed: supp, scale: g.sc, far, key: g, light: fe.light > 0,
+      eject: !prof.auto || Math.random() < (far ? 0.35 : 0.7) ? { x: mz.x - 34 * g.face * g.sc, y: mz.y + 6, ground: g.y - 2 - Math.random() * 5, face: g.face } : undefined,
+    });
   }
 
   muzzle(g: Guard) {
@@ -1436,6 +1440,8 @@ export class Battle {
   // height the ray crosses the body's centre line: torso (top 40%), arms (40–55%), legs (bottom 45%).
   castShot(g: Guard, ox: number, oy: number, ang: number, dmg: number, pierce: number, knock: number, pellet: boolean, isPlayer: boolean, fx: FireProfile | undefined, laneY: number) {
     for (const h of this.hooks) if (h.onShot?.(g, ox, oy, ang, laneY, pellet, isPlayer)) return { hit: true, x: ox, y: oy }; // night modules (propane)
+    const gw = (g as Guard | null)?.w;
+    this.vfx.shotStart(ox, oy, gw?.def, fx); // impacts below wait for the round to get there
     const dx = Math.cos(ang), dy = Math.sin(ang);
     const hits: { z: Zombie; t: number; head: boolean; zone: Zone; weak?: WeakKind }[] = [];
     const circle = (cx: number, cy: number, r: number) => {
@@ -1488,13 +1494,14 @@ export class Battle {
           this.hitMark = { kind: 'glob', t: 0.2 };
           this.nerveGain(3);
           sfx.impact('burst', { volume: 0.4 });
-          this.tracers.push({ x1: ox + dx * 20, y1: oy + dy * 20, x2: gp.x, y2: gp.y, life: 0.07, w: 1.6 });
+          this.vfx.bullet({ x0: ox, y0: oy, x1: gp.x, y1: gp.y, defId: gw?.def, prof: fx, pellet, end: 'body', laneY, key: g ?? 'turret' });
           this.shotHit = true;
           return { hit: true, x: gp.x, y: gp.y };
         }
       }
     }
     let endT = 1600;
+    let onGround = false;
     let d = dmg;
     let n = 0;
     for (const h of hits) {
@@ -1514,14 +1521,12 @@ export class Battle {
       const tg = (laneY - 2 - oy) / dy;
       if (tg > 0 && tg < endT) {
         endT = tg;
-        const gx = ox + dx * tg, gy = oy + dy * tg;
-        const big = pellet ? 0.6 : 1;
-        this.particles.push({ x: gx, y: gy - 2, vx: R.range(-15, 15), vy: R.range(-40, -20), life: 0.7, max: 0.7, size: R.range(4, 7) * big, color: '#8a7c66', kind: 'dust', ground: 0 });
-        for (let i = 0; i < (pellet ? 1 : 3); i++) this.particles.push({ x: gx, y: gy, vx: R.range(-50, 50), vy: R.range(-120, -40), life: 0.45, max: 0.45, size: 2, color: '#6b5d4a', kind: 'spark', ground: gy + 1 });
+        onGround = true; // the dust, chips and grit come off the road when the round lands (vfx.bullet)
         if (isPlayer && !pellet) sfx.impact('ground', { volume: 0.3 });
       }
     }
-    this.tracers.push({ x1: ox + dx * 20, y1: oy + dy * 20, x2: ox + dx * endT, y2: oy + dy * endT, life: pellet ? 0.05 : 0.07, w: pellet ? 1 : 1.6 });
+    const ve = Math.min(endT, 1500);
+    this.vfx.bullet({ x0: ox, y0: oy, x1: ox + dx * ve, y1: oy + dy * ve, defId: gw?.def, prof: fx, pellet, suppressed: !!gw && isSuppressed(gw), end: n > 0 ? 'body' : onGround ? 'ground' : 'air', laneY, key: g ?? 'turret' });
     // a flare lights the road where it comes down
     if (fx?.flare && !pellet) this.lights.push({ x: ox + dx * endT, y: Math.min(laneY, oy + dy * endT), r: FLARE_LIGHT.r, life: FLARE_LIGHT.time, max: FLARE_LIGHT.time, color: '255,90,70' });
     return { hit: n > 0, x: ox + dx * Math.min(endT, 1400), y: oy + dy * Math.min(endT, 1400) };
@@ -1717,20 +1722,17 @@ export class Battle {
     if (isPlayer) this.hitMark = { kind: mark, t: 0.18 };
     if (mark === 'plate') {
       // steel on steel: bright sparks off the Deputy's plate, no blood
-      for (let i = 0; i < 6; i++) this.particles.push({ x: px, y: py, vx: (z.flip ? 1 : -1) * R.range(40, 220), vy: R.range(-200, 40), life: 0.3, max: 0.3, size: R.range(1.5, 2.5), color: R.pick(['#ffe8b0', '#ffd080', '#fff4d8']), kind: 'spark', ground: z.y });
-      this.lights.push({ x: px, y: py, r: 50, life: 0.05, max: 0.05, color: '255,220,160' });
+      this.vfx.impact('armor', px, py, NaN, { ground: z.y, pellet });
     } else {
       // blood (fewer, smaller and darker with Reduce gore), scaled by the hit
-      const big = Math.min(1.6, 0.6 + d / 60);
-      this.blood(px, py, Math.round((head ? 8 : 3) * big + (pellet ? 0 : 1)), (head ? 4.5 : 3) * Math.min(1.3, big), z.y);
-      if (!pellet || R.chance(0.3)) this.particles.push({ x: px, y: py, vx: (z.flip ? -1 : 1) * R.range(10, 40), vy: R.range(-20, 0), life: 0.35, max: 0.35, size: (reduceGore() ? 3 : 5) * big * (head ? 1.4 : 1), color: reduceGore() ? '40,10,8' : '110,18,14', kind: 'puff', ground: 0 });
+      this.vfx.impact(head ? 'head' : 'flesh', px, py, NaN, { ground: z.y, power: Math.min(1.6, 0.6 + d / 60), pellet });
     }
     const voice = voiceOf(z.def.id);
     if (z.hp <= 0) {
       if (head && !z.headless && R.chance(isPlayer ? 0.8 : 0.5) && !z.def.crawl && !z.def.ranged && !reduceGore()) {
         z.headless = true;
         sfx.headpop();
-        for (let i = 0; i < 14; i++) this.particles.push({ x: px, y: py, vx: R.range(-60, 260), vy: R.range(-260, -40), life: 2, max: 2, size: R.range(2, 5), color: R.pick(['#4a0d0b', '#2a1a14', '#5e1410', '#8b7d6b']), kind: R.chance(0.3) ? 'chunk' : 'blood', ground: z.y + R.range(-6, 6) });
+        this.vfx.gib(px, py, z.y, NaN);
         if (isPlayer) this.text(z.x, z.y - z.def.height, 'HEADSHOT', '#d9c9a0', 13);
       }
       if (head) { this.res.headshots++; if (isPlayer) G.stats.headshots++; }
@@ -1787,16 +1789,9 @@ export class Battle {
   }
   /** A spray of blood that lands on the ground row `ground` (the actor's lane). */
   blood(x: number, y: number, n: number, size: number, ground: number, spread = 1) {
-    const less = reduceGore();
-    const k = less ? Math.max(1, Math.round(n * 0.35)) : n;
-    for (let i = 0; i < k; i++) {
-      this.particles.push({
-        x, y, vx: R.range(20, 220) * spread * (R.chance(0.8) ? 1 : -0.5), vy: R.range(-200, 40), life: 1.6, max: 1.6,
-        size: R.range(1.5, size) * (less ? 0.6 : 1), color: less ? R.pick(['#240807', '#2c0a08']) : R.pick(['#4a0d0b', '#5e1410', '#3a0a08', '#6b2a12']),
-        kind: 'blood', ground: ground + R.range(-3, 3),
-      });
-    }
+    this.vfx.impact('flesh', x, y, spread >= 0 ? -0.35 : Math.PI + 0.35, { ground, power: Math.min(2, (n / 6) * (size / 3.5) * Math.abs(spread || 1)) });
   }
+
 
   kill(z: Zombie, g: Guard | null) {
     if (z.state === 'dying') return;
@@ -2094,7 +2089,7 @@ export class Battle {
     if (z.burn > 0) {
       z.burn -= dt;
       z.hp -= 22 * dt;
-      if (R.chance(dt * 20)) this.particles.push({ x: z.x + R.range(-15, 15), y: z.y - R.range(10, this.zh(z) * 0.65), vx: 0, vy: -60, life: 0.6, max: 0.6, size: R.range(5, 10), color: '#ffb347', kind: 'fire', ground: 0 });
+      this.vfx.burnBody(z.x, z.y, this.zh(z), dt);
       if (z.hp <= 0) return this.kill(z, null);
     }
     // in the air over the wall (a Buck)
@@ -2400,9 +2395,10 @@ export class Battle {
     z.seen = 2.5;
     this.noise += 1;
     sfx.shoot(z.sprite === 'z_raider2' ? 'pump' : 'hunting', { far: 0.9, pan: panOf(mz.x) });
-    this.lights.push({ x: mz.x, y: mz.y, r: 200, life: 0.08, max: 0.08, color: '255,200,120' });
+    const rdef = z.sprite === 'z_raider2' ? 'pump' : 'hunting';
+    this.vfx.muzzle({ x: mz.x, y: mz.y, ang: Math.atan2(ty - mz.y, tx - mz.x), defId: rdef, scale: z.scale, far: true, key: z });
     if (hit) {
-      this.tracers.push({ x1: mz.x, y1: mz.y, x2: tx, y2: ty, life: 0.08, w: 1.4 });
+      this.vfx.bullet({ x0: mz.x, y0: mz.y, x1: tx, y1: ty, defId: rdef, end: 'body', laneY: tgt.y, key: z });
       const s = tgt.s;
       wound(s, 'gunshot', R.range(0.18, 0.38));
       sfx.hurt();
@@ -2416,8 +2412,9 @@ export class Battle {
       const ey = R.chance(0.5) ? R.range(590, 660) : ty - R.range(40, 120);
       if (ex === WALL_X - 6) sfx.impact('wood', { volume: 0.45, delay: 0.05 });
       else if (R.chance(0.3)) sfx.impact('ricochet', { volume: 0.3, delay: 0.05 });
-      this.tracers.push({ x1: mz.x, y1: mz.y, x2: ex, y2: ey, life: 0.08, w: 1.2 });
-      for (let i = 0; i < 3; i++) this.particles.push({ x: ex, y: ey, vx: R.range(-80, 40), vy: R.range(-90, 0), life: 0.4, max: 0.4, size: 2, color: '#8a7a5a', kind: 'spark', ground: 0 });
+      this.vfx.shotStart(mz.x, mz.y, rdef, undefined);
+      if (ex === WALL_X - 6) this.vfx.impact('wood', ex, ey, Math.atan2(ey - mz.y, ex - mz.x), { ground: GROUND_BOT - 8 });
+      this.vfx.bullet({ x0: mz.x, y0: mz.y, x1: ex, y1: ey, defId: rdef, end: 'air', laneY: 660, key: z });
     }
   }
 
@@ -2632,14 +2629,7 @@ export class Battle {
     this.earLoad += 6 * size;
     this.shake = Math.max(this.shake, 9 + 6 * size);
     const k0 = this.res.kills;
-    this.lights.push({ x, y: y - 30, r: 420, life: 0.4, max: 0.4, color: '255,170,80' });
-    for (let i = 0; i < 40; i++) this.particles.push({ x: x + R.range(-20, 20), y: y - R.range(0, 30), vx: R.range(-300, 300), vy: R.range(-420, -60), life: 1.2, max: 1.2, size: R.range(2, 6), color: R.pick(['#ffcf6b', '#ff8a3d', '#444']), kind: R.chance(0.6) ? 'spark' : 'smoke', ground: y + 6 });
-    // a scorch on the road
-    const c = this.gctx;
-    c.fillStyle = 'rgba(8,7,6,0.45)';
-    c.beginPath();
-    c.ellipse(x, y + 1, ex.radius * 0.35, ex.radius * 0.35 * 0.3, 0, 0, Math.PI * 2);
-    c.fill();
+    this.vfx.explosion(x, y, ex.radius); // flash, fireball, shock, debris, smoke, scorch
     for (const z of this.zombies) {
       if (z.state === 'dying' || (z.emerge !== undefined && z.emerge > 0.25)) continue;
       const dmg = blastDamage(ex, z.x - x, z.y - y);
@@ -2681,7 +2671,7 @@ export class Battle {
       this.fires.push({ x, y, life: 7, w: 150 });
       this.lights.push({ x, y: y - 20, r: 300, life: 7, max: 7, color: '255,150,60' });
     }, 350);
-    this.tracers.push({ x1: p.x + 40, y1: p.y - 100, x2: x, y2: y - 8, life: 0.35, w: 2 });
+    this.vfx.throwArc(p.x + 40, p.y - 100, x, y - 8, 0.35);
   }
 
   stampCorpse(z: Zombie) {
@@ -2969,7 +2959,7 @@ export class Battle {
     const list: D[] = [];
     for (const z of this.zombies) list.push({ y: this.sortKey(z), f: () => this.drawZombie(c, z, L) });
     for (const gd of this.guards) if (!gd.s.dead && !gd.fled) list.push({ y: gd.y + (gd.downed ? -0.5 : 0) + gd.homeX * 1e-5, f: () => this.drawGuard(c, gd) });
-    list.push({ y: WALL_KEY, f: () => this.drawWall(c) });
+    list.push({ y: WALL_KEY, f: () => { this.drawWall(c); this.vfx.drawWall(c); } });
     for (let l = 0; l < 4; l++) if (this.piles[l] >= 0.3) list.push({ y: LANES[l] + 0.5, f: () => this.drawPile(c, l) });
     list.push({ y: 650, f: () => this.drawPoles(c) });
     for (const cv of this.covers) list.push({ y: cv.y, f: () => this.drawCover(c, cv) });
@@ -3013,10 +3003,10 @@ export class Battle {
       const k = l.t / l.dur;
       const x = l.x0 + (l.x1 - l.x0) * k;
       const y = l.y0 + (l.y1 - 20 - l.y0) * k - Math.sin(k * Math.PI) * (120 + Math.abs(l.x1 - l.x0) * 0.2);
-      c.fillStyle = '#1a1814';
-      c.beginPath(); c.arc(x, y, 5, 0, 7); c.fill();
+      this.vfx.drawLob(c, x, y, k, l.p.ammoRes === 'pipebomb');
     }
     this.drawGlobs(c);
+    this.vfx.drawNormal(c); // smoke, blood, debris, brass, arrows in flight
     // tracers
     for (const t of this.tracers) {
       c.strokeStyle = `rgba(255,226,170,${Math.min(1, t.life * 14)})`;
@@ -3032,6 +3022,7 @@ export class Battle {
     c.globalAlpha = 0.4;
     c.drawImage(this.dark, 0, 0, W, H);
     c.globalAlpha = 1;
+    this.vfx.drawAdd(c); // flashes, tracers, sparks, fire: emissive, so over the darkness
     this.drawGlow(c);
     // texts
     for (const t of this.texts) {
@@ -3309,10 +3300,6 @@ export class Battle {
       c.restore();
     }
     // muzzle flash, shaped by the gun (night/gunfx.ts)
-    if (g.flash > 0) {
-      const mz = this.muzzle(g);
-      drawFlash(c, mz.x, mz.y, g.flashAng ?? (g.face > 0 ? 0 : Math.PI), g.flashKind ?? 'long', g.flash / 0.06, (g.flashSize ?? 1) * g.sc, this.shotsTonight + g.homeX);
-    }
     // label; a far-row label steps up out of the way of a near-row neighbour's
     let top = g.y - h;
     if (g.y < DEF_LANES[1] && this.guards.some((o) => o !== g && o.y >= DEF_LANES[1] && !o.s.dead && !o.fled && !o.downed && Math.abs(o.x - g.x) < 50)) top -= 14;

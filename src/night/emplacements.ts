@@ -331,11 +331,10 @@ export class Emplacements implements BattleHook {
     m.kills += b.res.kills - k0;
     m.flash = 0.05;
     b.noise += m.def.noise;
-    b.lights.push({ x: mz.x + 10, y: mz.y, r: 220, life: 0.06, max: 0.06, color: '255,200,120' });
+    b.vfx.muzzle({ x: mz.x, y: mz.y, ang, defId: PROFILE_GUN[m.def.id], prof: m.fx, key: m, eject: m.def.id === 'mgnest' ? { x: m.px - 6, y: m.py + 4, ground: m.y - 4, face: 1 } : undefined });
     sfx.shoot(m.def.sound, { far: isPlayer ? false : 0.4 });
     if (isPlayer) b.earLoad += m.def.id === 'flamer' ? 0 : 1.2;
     if (isPlayer) b.shake = Math.max(b.shake, m.def.id === 'swivel' ? 3 : 1.6);
-    if (m.def.id === 'mgnest' && R.chance(0.6)) b.particles.push({ x: m.px - 6, y: m.py + 4, vx: R.range(-60, -20), vy: R.range(-160, -90), life: 1.2, max: 1.2, size: 2.4, color: '#c9a24a', kind: 'shell', ground: m.y - 4 });
     if (m.item) m.item.cond = Math.max(0.05, m.item.cond - m.def.wear);
     if (m.def.heat) {
       m.heat += m.def.heat * h.heatMul;
@@ -381,10 +380,7 @@ export class Emplacements implements BattleHook {
       if (z.hp <= 0) b.kill(z, m.crew);
     }
     m.kills += b.res.kills - k0;
-    for (let i = 0; i < 3; i++) {
-      const t = Math.random();
-      b.particles.push({ x: mz.x + reach * t, y: mz.y + (laneY - 40 - mz.y) * t + R.range(-8, 8) * t, vx: R.range(20, 120), vy: R.range(-60, -10), life: 0.35, max: 0.35, size: 4 + 9 * t, color: '#ffb347', kind: 'fire', ground: 0 });
-    }
+    b.vfx.flame(mz.x, mz.y, mz.x + reach, laneY - 40, dt); // the burning stream (night/vfx)
     if (R.chance(dt * 8)) b.lights.push({ x: mz.x + reach * 0.5, y: laneY - 50, r: 240, life: 0.25, max: 0.25, color: '255,150,60' });
     if (R.chance(dt * 3)) sfx.fire();
     this.traps?.igniteNear(tipX - 30, tipX);
