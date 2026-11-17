@@ -10,7 +10,7 @@
 // reduceGore(), shakeScale()) rather than parsing storage itself. They are cheap:
 // the parsed object is cached in memory and updated whenever the panel changes it.
 
-import { setMasterVolume, setMusicVolume, setSfxVolume, sfx } from '../audio';
+import { setMasterVolume, setMusicVolume, setReducedGore, setSfxVolume, sfx } from '../audio';
 
 export interface Settings {
   master: number;
@@ -68,6 +68,7 @@ export function applyAudio() {
   setMasterVolume(s.master);
   setMusicVolume(s.music);
   setSfxVolume(s.sfx);
+  setReducedGore(s.reduceGore);
 }
 applyAudio();
 
