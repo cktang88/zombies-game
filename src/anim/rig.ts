@@ -108,6 +108,8 @@ export class Rig {
   private lastFire = -9;
   aimWX = 0; aimWY = 0; hasAim = false;
   aimAngle = 0;
+  /** closed-loop aim trim: keeps the barrel itself on the aim point (the solve aims from the shoulder) */
+  aimCorr = 0;
   recoil = 0; recoilV = 0;
   flashT = 0;
   private lastFlashT = -9;
@@ -433,7 +435,7 @@ export class Rig {
     if (this.hasAim) {
       const lx = ((this.aimWX - this.dx) * this.df) / this.ds, ly = (this.aimWY - this.dy) / this.ds;
       const sx = ch.px + g.sh[1], sy = ch.py + g.sh[0] * -1;
-      aim = clamp(Math.atan2(ly - sy, Math.max(8, lx - sx)), -1.2, 1.0);
+      aim = clamp(Math.atan2(ly - sy, Math.max(8, lx - sx)) + this.aimCorr, -1.2, 1.0);
     }
     this.aimAngle = aim;
     const st = this.stance, lr = this.swap ? this.lowW : 0;
@@ -516,6 +518,16 @@ export class Rig {
       this.ga = lerpAngle(gAimA + ch.gunTilt * 0.3, rA, rw) - this.recoil * 0.03;
       this.gx = lerp(gX, rX, rw) - Math.cos(this.ga) * this.recoil * 0.9;
       this.gy = lerp(gY, rY, rw) - Math.sin(this.ga) * this.recoil * 0.9;
+      // the barrel, not the shoulder, onto the aim point: measure the bore line's miss and trim next frame
+      if (this.hasAim && rw < 0.05 && aimW > 0.95 && a!.hold !== 'bow') {
+        const lx = ((this.aimWX - this.dx) * this.df) / this.ds, ly = (this.aimWY - this.dy) / this.ds;
+        const [mx, my] = this.gunPt(muz);
+        if (Math.hypot(lx - mx, ly - my) > 20) {
+          let err = Math.atan2(ly - my, lx - mx) - (this.ga + this.recoil * 0.03 + (muz[0] < 0 ? Math.PI : 0));
+          err = Math.atan2(Math.sin(err), Math.cos(err));
+          this.aimCorr = clamp(this.aimCorr + err * 0.7, -0.6, 0.6);
+        }
+      } else this.aimCorr *= 0.9;
       // cheek weld: the head drops onto the comb of the stock; what it can't reach, the gun comes up to
       if (st.cheek && raise > 0.01 && a!.butt) this.cheekWeld(loc(a!.butt), muz, gun.combY !== undefined ? loc([a!.butt[0], gun.combY]) : null, raise);
       // default hand targets
