@@ -1,6 +1,6 @@
 import type { GameState } from '../types';
 import { setState, G, R, log, newWeapon } from '../state';
-import { makeSurvivor, rel, setBond, living } from './survivors';
+import { makeSurvivor, rel, setBond, living, dedupeSprites } from './survivors';
 import { nextWeather } from './day';
 import { freshSeed } from '../rng';
 
@@ -34,6 +34,7 @@ export function newGame(mode = 'siege', seed = freshSeed()): GameState {
   if (leader.base) leader.base.shooting = leader.skills.shooting;
   G.survivors.push(leader);
   for (let i = 0; i < 2; i++) G.survivors.push(makeSurvivor());
+  dedupeSprites();
   const [a, b, c] = G.survivors;
   for (const x of living()) for (const y of living()) if (x !== y) rel(x, y);
   // a pre-existing bond gives the start some weight

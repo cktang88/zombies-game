@@ -10,8 +10,9 @@ import { SITES, BUILDINGS, RECIPES, RES_LABEL, RES_ICON } from '../data/world';
 import {
   living, displayName, first, moodBreakdown, computeMood, moodWord, breakThresholds, pain, woundLabel, byId, canWork, canFight,
   isBitten, SKILLS, aimFactor, skillOf, workMult, attr, ATTRS, ATTR_NAMES, level, xpProgress, topSkills, heldProf, prof,
-  WEAPON_CLASSES, CLASS_SHORT, progressName, type ProgressKey,
+  WEAPON_CLASSES, CLASS_SHORT, progressName, choosePerk, type ProgressKey,
 } from '../sim/survivors';
+import { PERKS } from '../data/perks';
 import {
   buildingLevel, queueRecipe, WEATHER_LABEL, DAY_HOURS, DEFAULT_HOURS, jobHours, setJobHours, hoursAvailable, travelHours, survivorSite,
   searchHours, searchFactor, planConfirmed, confirmPlan, ranToday, onRunToday, runDaylightFor, prepareRun, clockLabel, heatNeed,
@@ -221,7 +222,7 @@ function survivorCard(s: Survivor) {
   return `<div class="card surv ${stale ? 'stale' : ''}" data-id="${s.id}">
     ${portraitImg(s.sprite, `portrait${s.isLeader ? ' lead' : ''}`)}
     <div class="body">
-      <div class="name"><a data-act="detail" data-id="${s.id}">${esc(displayName(s))}</a> <span class="age">${s.age}</span>${stale ? '<span class="tag carried" title="Yesterday\'s job carried over. Change it, or press Keep to confirm.">same as yesterday?</span>' : ''}</div>
+      <div class="name"><a data-act="detail" data-id="${s.id}">${esc(displayName(s))}</a> <span class="age">${s.age}</span>${s.perkOffers?.length ? `<a class="tag" data-act="detail" data-id="${s.id}" title="A skill reached ${s.perkOffers[0].tier}: pick a perk on the sheet">perk ✦</a>` : ''}${stale ? '<span class="tag carried" title="Yesterday\'s job carried over. Change it, or press Keep to confirm.">same as yesterday?</span>' : ''}</div>
       <div class="tags">${statusTags(s)}</div>
       ${moodBar(s)}
       ${skillsMini(s)}
@@ -264,6 +265,16 @@ function progRow(s: Survivor, k: ProgressKey, name: string, passion = false) {
     <div class="xpbar" title="${Math.round(xpProgress(s, k) * 100)}% to ${Math.min(10, cur + 1)}"><i style="width:${xpProgress(s, k) * 100}%"></i></div></div>`;
 }
 
+// Perks kept, and offers waiting (a skill reached 4 or 7): pick one, or they pick at the second dawn.
+function perksHtml(s: Survivor) {
+  const kept = (s.perks ?? []).filter((id) => PERKS[id]);
+  const offers = s.dead ? [] : s.perkOffers ?? [];
+  if (!kept.length && !offers.length) return '';
+  return `<h3>Perks <span class="dim">at skill 4 and 7</span></h3>
+    ${kept.map((id) => `<div class="trait"><b>${esc(PERKS[id].name)}</b> <span class="dim">${esc(progressName(PERKS[id].skill))} ${PERKS[id].tier}</span> — ${esc(PERKS[id].desc)}</div>`).join('')}
+    ${offers.map((o) => `<div class="trait"><b>${esc(progressName(o.skill))} ${o.tier}: choose one</b> ${o.options.map((id) => `<button class="mini" data-act="perk" data-id="${s.id}" data-perk="${id}" title="${esc(PERKS[id].desc)}">${esc(PERKS[id].name)}</button>`).join(' ')}<div class="dim small">${o.options.map((id) => `${esc(PERKS[id].name)}: ${esc(PERKS[id].desc)}`).join(' · ')}</div></div>`).join('')}`;
+}
+
 function detailHtml(s: Survivor) {
   computeMood(s);
   const parts = moodBreakdown(s);
@@ -290,6 +301,7 @@ function detailHtml(s: Survivor) {
       <div>
         <h3>Traits</h3>
         ${s.traits.map((t) => `<div class="trait"><b>${TRAITS[t].name}</b> — ${TRAITS[t].desc}</div>`).join('')}
+        ${perksHtml(s)}
         <h3>Skills <span class="dim">dark = at arrival · bright = learned here</span></h3>
         ${SKILLS.map((k) => progRow(s, k, SKILL_NAMES[k], s.passions.includes(k))).join('')}
         <h3>Nerve and body</h3>
@@ -783,6 +795,10 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
     } else if (act === 'armor') {
       const s = byId(el.dataset.id!);
       if (s && (G.flags.armorStock as number) > 0) { s.armor = 'vest'; G.flags.armorStock = (G.flags.armorStock as number) - 1; }
+    } else if (act === 'perk') {
+      const s = byId(el.dataset.id!);
+      const line = s ? choosePerk(s, el.dataset.perk!) : '';
+      if (line) { report.push(line); sfx.ui('stamp'); }
     } else if (act === 'unarmor') {
       const s = byId(el.dataset.id!);
       if (s?.armor) { s.armor = null; G.flags.armorStock = ((G.flags.armorStock as number) ?? 0) + 1; }

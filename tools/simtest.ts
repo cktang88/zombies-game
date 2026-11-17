@@ -7,7 +7,12 @@ import { SITES } from '../src/data/world';
 import { fireProfile } from '../src/data/weapons';
 import { planNight, afterNight } from '../src/sim/director';
 import { rollIncident, resolveEvent, returnsTick, INCIDENTS } from '../src/sim/events';
-import { living, wound, killSurvivor, makeSurvivor, setBond, canFight } from '../src/sim/survivors';
+import { living, wound, killSurvivor, makeSurvivor, setBond, canFight, gainXp, choosePerk, settlePerkOffers, perkFx, aimFactor, breakThresholds, moodBreakdown, counsel, migrateSurvivor } from '../src/sim/survivors';
+import { PERK_LIST, perksFor } from '../src/data/perks';
+import { repairAmount, craftPoints, farmAmount, careCount } from '../src/sim/day';
+import { shooterMods, clearTime } from '../src/night/gunplay';
+import { newWeapon } from '../src/state';
+import type { Survivor } from '../src/types';
 import { fateLine, morningSummary } from '../src/sim/chronicle';
 import type { GameState } from '../src/types';
 import { activeThreads, threadTick, threadsWon, evacuees } from '../src/sim/threads';
@@ -313,6 +318,96 @@ check(fat.level > lean.level && fat.pct > lean.pct, 'hoarding raises the smell o
 console.log('smell:', lean.pct + '%', '->', fat.pct + '%', fat.reasons.join('; '));
 G.director.mode = 'coin'; check(calendar(3).every((c) => c.kind === 'unknown'), 'coin is unknown');
 G.director.mode = 'quiet'; G.day = 1; console.log('quiet:', calendar(10).map((c) => c.kind[0]).join(''));
+
+// ---------- founders never share a sprite ----------
+{
+  let dup = 0;
+  for (let seed = 0; seed < 300; seed++) {
+    newGame('siege', 9000 + seed);
+    const sp = living().map((s) => s.sprite);
+    if (new Set(sp).size !== sp.length) dup++;
+    // a pair built together before either joins the house also differs (when their sex has a free sprite)
+    const a = makeSurvivor({ sex: 'f', age: 70 }), b = makeSurvivor({ sex: 'f', age: 72 });
+    if (a.sprite === b.sprite) dup++;
+  }
+  check(dup === 0, `founders / paired arrivals sharing a sprite: ${dup}/300`);
+  console.log(`sprites: ${dup} shared over 300 new games`);
+}
+
+// ---------- perks at skill 4 / 7 ----------
+{
+  newGame('siege', 4747);
+  G.day = 3;
+  const s = living()[1];
+  s.skills.shooting = 3; s.xp = {}; delete s.perks; delete s.perkOffers; s.passions = []; s.traits = [];
+  migrateSurvivor(s); // an old save: no perk fields
+  check(Array.isArray(s.perks) && perkFx(s, 'aim') === 0, 'old survivor loads with no perks');
+  gainXp(s, 'shooting', 400);
+  check(s.skills.shooting === 4 && (s as Survivor).perkOffers?.length === 1 && (s as Survivor).perkOffers![0].options.length === 2, `skill 4 offers two perks: ${JSON.stringify((s as Survivor).perkOffers)}`);
+  gainXp(s, 'shooting', 1);
+  check((s as Survivor).perkOffers?.length === 1, 'one offer per tier');
+  check(!!choosePerk(s, 'tap_rack') && s.perks!.includes('tap_rack') && !(s as Survivor).perkOffers!.length, 'pick Tap-rack');
+  check(!choosePerk(s, 'quick_hands'), 'the other option is gone');
+  gainXp(s, 'shooting', 500 + 600 + 700);
+  check(s.skills.shooting === 7 && (s as Survivor).perkOffers?.length === 1 && (s as Survivor).perkOffers![0].tier === 7, 'skill 7 offers the next tier');
+  check(settlePerkOffers().length === 0, 'no auto-pick the day it is offered');
+  G.day += 2;
+  const auto = settlePerkOffers();
+  check(auto.length === 1 && s.perks!.length === 2 && !(s as Survivor).perkOffers!.length, `auto-pick at the second dawn: ${auto}`);
+  console.log('perks:', auto[0]);
+  for (const sk of ['shooting', 'building', 'crafting', 'medicine', 'scavenging', 'farming', 'social', 'psych'] as const)
+    for (const t of [4, 7] as const) check(perksFor(sk, t).length === 2, `two perks for ${sk} ${t}`);
+  check(PERK_LIST.every((p) => Object.keys(p.fx).length > 0) && new Set(PERK_LIST.map((p) => p.id)).size === PERK_LIST.length, 'perk ids unique, all have effects');
+
+  // each effect, with and without
+  const base = makeSurvivor({ traits: [], passions: [] });
+  base.wounds = []; base.scars = []; base.rest = 1; base.hunger = 1; base.mood = 60; base.perks = [];
+  const w = (id: string): Survivor => ({ ...JSON.parse(JSON.stringify(base)), perks: [id] });
+  const near = (a: number, b: number, msg: string) => check(Math.abs(a - b) < 1e-6, `${msg}: ${a} vs ${b}`);
+  const gun = fireProfile(newWeapon('service9'));
+  near(clearTime(gun, w('tap_rack'), 'tap')!, clearTime(gun, base, 'tap')! * 0.6, 'Tap-rack clears 40% faster');
+  near(shooterMods(w('quick_hands'), 'handgun', true).reloadMul!, shooterMods(base, 'handgun', true).reloadMul! * 0.85, 'Quick hands');
+  near(shooterMods(w('armorer'), 'handgun', true).jamMul!, shooterMods(base, 'handgun', true).jamMul! * 0.75, 'Armorer');
+  check(perkFx(w('bead'), 'weakspot') > 0, 'Bead weakspot');
+  near(aimFactor(w('dead_eye')), Math.min(1.2, aimFactor(base) + 0.08), 'Dead eye');
+  check(Math.abs(repairAmount(w('mason'), 1) - repairAmount(base, 1) * 1.25) <= 1, 'Mason +25%');
+  check(repairAmount(w('iron_back'), 1) > repairAmount(w('mason'), 1) && repairAmount(w('mason'), 1) > repairAmount(base, 1), 'repair perks');
+  near(craftPoints(w('tinker'), 1), craftPoints(base, 1) * 1.25, 'Tinker');
+  near(craftPoints(w('master_hand'), 1), craftPoints(base, 1) * 1.5, 'Master hand');
+  check(farmAmount(w('root_cellar'), 1, 1, 'clear') > farmAmount(w('green_thumb'), 1, 1, 'clear') && farmAmount(w('green_thumb'), 1, 1, 'clear') > farmAmount(base, 1, 1, 'clear'), 'farm perks');
+  check(farmAmount(w('frost_hardy'), 1, 2, 'snow') > farmAmount(base, 1, 2, 'snow') && farmAmount(w('frost_hardy'), 1, 2, 'clear') === farmAmount(base, 1, 2, 'clear'), 'Frost-hardy only in the cold');
+  check(careCount(w('triage'), 1) > careCount(w('field_medic'), 1) && careCount(w('field_medic'), 1) > careCount(base, 1), 'care perks');
+  near(breakThresholds(w('unshakable')).minor, breakThresholds(base).minor - 6, 'Unshakable');
+  near(breakThresholds(w('thick_skin')).minor, breakThresholds(base).minor - 3, 'Thick skin');
+  // day work: timber, fatigue, dressing, radio
+  const dayRun = (id: string | null, setup: (x: Survivor) => void) => {
+    newGame('quiet', 4800);
+    G.flags = { ...G.flags };
+    const x = living()[0];
+    x.traits = []; x.passions = []; x.wounds = []; x.scars = []; x.rest = 1; x.hunger = 1; x.perks = id ? [id] : [];
+    for (const o of living()) if (o !== x) o.job = 'rest';
+    setup(x);
+    resolveDayWork();
+    return x;
+  };
+  const wood = (id: string | null) => { let w0 = 0; dayRun(id, (x) => { x.job = 'repair'; G.fort.hp = 50; G.stores.wood = 999; w0 = G.stores.wood; }); return w0 - G.stores.wood; };
+  check(wood('thrifty') < wood(null), `Thrifty uses less timber ${wood('thrifty')} < ${wood(null)}`);
+  const rest = (id: string | null) => dayRun(id, (x) => { x.job = 'repair'; }).rest;
+  check(rest('tireless') > rest(null) && rest('steady_pace') > rest(null), 'Tireless / Steady pace tire less');
+  const sev = (id: string | null) => { let p: Survivor | undefined; dayRun(id, (x) => { x.job = 'doctor'; p = living()[1]; p.wounds = []; wound(p, 'laceration', 0.2, 'larm'); }); return p!.wounds[0].severity; };
+  check(sev('surgeon') < sev('clean_hands') && sev('clean_hands') < sev(null), 'dressing perks');
+  const radio = (id: string | null) => { dayRun(id, (x) => { x.job = 'radio'; G.buildings.push({ id: 'radio', level: 1 }); G.flags.radioWork = 0; }); return G.flags.radioWork as number; };
+  check(radio('the_voice') > radio('easy_talker') && radio('easy_talker') > radio(null), 'radio perks');
+  check(perkFx(w('packrat'), 'scav') > perkFx(w('deep_pockets'), 'scav') && perkFx(w('ghost'), 'scavDanger') < perkFx(w('light_step'), 'scavDanger'), 'scavenging perks');
+  // the house: Warmth / Anchor lift everyone else; counselling goes deeper
+  newGame('quiet', 4900);
+  const [a, b] = living();
+  const m0 = moodBreakdown(b).reduce((t, p) => t + p.v, 0);
+  a.perks = ['anchor'];
+  check(moodBreakdown(b).reduce((t, p) => t + p.v, 0) === m0 + 4 && !moodBreakdown(a).some((p) => p.label.includes(a.name.split(' ')[0]) && p.v === 4), 'Anchor lifts the others');
+  const lift = (id: string | null) => { a.perks = id ? [id] : []; b.thoughts = []; counsel(a, b); return b.thoughts.find((t) => t.id === 'counselled')!.mood; };
+  check(lift('confessor') > lift('good_listener') && lift('good_listener') >= lift(null), `counselling perks ${lift('confessor')} ${lift('good_listener')} ${lift(null)}`);
+}
 
 const ids = INCIDENTS.map((i) => i.id);
 console.log(`\nincidents: ${ids.length} total; exercised ${fired.size}: ${[...fired.entries()].map(([k, v]) => `${k}×${v}`).join(' ')}`);

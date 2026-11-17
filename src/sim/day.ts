@@ -8,7 +8,7 @@ import { WEAPONS, MODS, modFits, slotsFor, selectedAmmo } from '../data/weapons'
 import {
   living, first, displayName, workMult, skillOf, addThought, wound, canWork, rel, changeOpinion, setBond, hasTrait,
   computeMood, breakThresholds, killSurvivor, pain, they, their, tale, isBitten, PART_NAMES, closeTo, them, checkTitles,
-  gainXp, attr, counsel, counselled, drainLevelUps, gainProf, heldProf, canFight,
+  dedupeSprites, perkMul, perkFx, settlePerkOffers, gainXp, attr, counsel, counselled, drainLevelUps, gainProf, heldProf, canFight,
 } from './survivors';
 import { bondLine, breakLine } from './chronicle';
 
@@ -214,16 +214,16 @@ export function resolveDayWork(): string[] {
     const m = workMult(s);
     const f = hours / DEFAULT_HOURS; // yields are tuned for an 8-hour day
     const gritF = 1.16 - attr(s, 'grit') * 0.04; // grit 4 = x1, grit 10 = x0.76
-    if (s.job !== 'rest') s.rest = Math.max(0, Math.min(1, s.rest - (DRAIN[s.job] ?? 0.03) * gritF * hours + FREE_HOUR_REST * free));
+    if (s.job !== 'rest') s.rest = Math.max(0, Math.min(1, s.rest - (DRAIN[s.job] ?? 0.03) * gritF * perkMul(s, 'drain') * hours + FREE_HOUR_REST * free));
     if (hours > 8) gainXp(s, 'grit', (hours - 8) * 8);
     if (hours > 0 && s.rest < 0.3) gainXp(s, 'grit', 10);
     if (s.job !== 'rest' && hours <= 0) continue;
     switch (s.job) {
       case 'repair': {
-        const amt = Math.round((40 + skillOf(s, 'building') * 9) * m * f);
+        const amt = repairAmount(s, m * f);
         const before = G.fort.hp;
         G.fort.hp = Math.min(G.fort.maxHp, G.fort.hp + amt);
-        const wood = Math.min(G.stores.wood, Math.ceil((G.fort.hp - before) / 25));
+        const wood = Math.min(G.stores.wood, Math.ceil(((G.fort.hp - before) / 25) * perkMul(s, 'repairWood')));
         add('wood', -wood);
         out.push(G.fort.hp > before ? `${first(s)} patched the wall for ${hours}h (+${G.fort.hp - before}).` : `${first(s)} walked the wall for ${hours}h and found nothing to patch.`);
         break;
@@ -233,7 +233,7 @@ export function resolveDayWork(): string[] {
           out.push(`${first(s)} sat at an idle bench. Nothing was queued.`);
           break;
         }
-        let pts = (3 + skillOf(s, 'crafting') * 0.9) * m * f;
+        let pts = craftPoints(s, m * f);
         while (pts > 0 && G.craftQueue.length) {
           const job = G.craftQueue[0];
           const r = RECIPES.find((x) => x.id === job.recipe)!;
@@ -250,14 +250,14 @@ export function resolveDayWork(): string[] {
       }
       case 'farm': {
         const g = buildingLevel('garden');
-        const amt = Math.round((1.5 + skillOf(s, 'farming') * 0.45 + g * 2.2) * m * f * (G.weather === 'cold' || G.weather === 'snow' ? 0.6 : 1));
+        const amt = farmAmount(s, m * f, g);
         add('food', amt);
         out.push(`${first(s)} brought in ${amt} food${g ? ' from the cold frames' : ' snaring rabbits and picking frost-bit kale'}.`);
         break;
       }
       case 'doctor': {
         const patients = living().filter((p) => p.wounds.length);
-        let care = Math.max(1, Math.round((2 + skillOf(s, 'medicine')) * m * f));
+        let care = careCount(s, m * f);
         for (const p of patients) {
           for (const w of p.wounds) {
             if (care <= 0) break;
@@ -266,6 +266,7 @@ export function resolveDayWork(): string[] {
               w.bleeding = false;
               care--;
               gainXp(s, 'medicine', 10);
+              w.severity *= 1 - Math.min(0.5, perkFx(s, 'tendHeal'));
               if (G.stores.meds > 0 && w.severity > 0.3) {
                 add('meds', -1);
                 w.severity *= 0.8;
@@ -290,7 +291,7 @@ export function resolveDayWork(): string[] {
           out.push(`${first(s)} turned the dial of a dead transistor radio.`);
           break;
         }
-        G.flags.radioWork = ((G.flags.radioWork as number) ?? 0) + (1 + skillOf(s, 'social') * 0.2) * m * f;
+        G.flags.radioWork = ((G.flags.radioWork as number) ?? 0) + (1 + skillOf(s, 'social') * 0.2) * m * f * perkMul(s, 'radio');
         out.push(`${first(s)} worked the CB for ${hours}h.`);
         break;
       }
@@ -352,6 +353,20 @@ export function resolveDayWork(): string[] {
   return out;
 }
 
+// Day yields per worker (m = workMult x hours/8). Perks scale them (src/data/perks.ts).
+export function repairAmount(s: Survivor, m: number) {
+  return Math.round((40 + skillOf(s, 'building') * 9) * m * perkMul(s, 'repair'));
+}
+export function craftPoints(s: Survivor, m: number) {
+  return (3 + skillOf(s, 'crafting') * 0.9) * m * perkMul(s, 'craft');
+}
+export function farmAmount(s: Survivor, m: number, garden = buildingLevel('garden'), weather = G.weather) {
+  const cold = weather === 'cold' || weather === 'snow' ? Math.min(1, 0.6 + perkFx(s, 'farmCold')) : 1;
+  return Math.round((1.5 + skillOf(s, 'farming') * 0.45 + garden * 2.2) * m * cold * perkMul(s, 'farm'));
+}
+export function careCount(s: Survivor, m: number) {
+  return Math.max(1, Math.round((2 + skillOf(s, 'medicine')) * m * perkMul(s, 'care')));
+}
 function jobSkill(j: string) {
   return ({ repair: 'building', craft: 'crafting', farm: 'farming', doctor: 'medicine', scavenge: 'scavenging', radio: 'social', guard: 'shooting', drill: 'shooting', counsel: 'psych' } as const)[j as 'repair'];
 }
@@ -362,7 +377,7 @@ function scavenge(siteId: string, team: Survivor[]): string[] {
   const stockKey = `stock_${site.id}`;
   const stock = (G.flags[stockKey] as number) ?? site.stock;
   const fullness = Math.max(0.15, stock / site.stock);
-  const skill = team.reduce((a, s) => a + skillOf(s, 'scavenging') * workMult(s), 0);
+  const skill = team.reduce((a, s) => a + skillOf(s, 'scavenging') * workMult(s) * perkMul(s, 'scav'), 0);
   const search = team.reduce((a, s) => a + searchFactor(searchHours(s)), 0) / team.length;
   const mult = (0.55 + skill * 0.12) * fullness * search * (team.length > 1 ? 1 + (team.length - 1) * 0.5 : 1);
   const names = team.map(first).join(' and ');
@@ -396,7 +411,7 @@ function scavenge(siteId: string, team: Survivor[]): string[] {
   out.push(`${names} searched ${site.name}: ${got.length ? got.join(', ') : 'nothing worth carrying'}.${stock <= 1 ? ' The place is picked clean.' : ''}`);
   // danger
   for (const s of team) {
-    const danger = site.risk * (1.2 - Math.min(0.6, skillOf(s, 'scavenging') * 0.06)) * (team.length > 1 ? 0.75 : 1) * Math.min(1.3, searchFactor(searchHours(s)));
+    const danger = site.risk * perkMul(s, 'scavDanger') * (1.2 - Math.min(0.6, skillOf(s, 'scavenging') * 0.06)) * (team.length > 1 ? 0.75 : 1) * Math.min(1.3, searchFactor(searchHours(s)));
     if (R.chance(danger * 0.45)) {
       const roll = R.next();
       if (roll < 0.12 + site.risk * 0.1) {
@@ -491,6 +506,8 @@ export function queueRecipe(id: string) {
 // ---------- the dawn tick: needs, healing, infection, social, breaks ----------
 export function dawnTick(): string[] {
   const out: string[] = [];
+  dedupeSprites();
+  out.push(...settlePerkOffers());
   const people = living();
   // eating
   for (const s of people) {
