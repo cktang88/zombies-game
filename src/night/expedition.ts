@@ -105,7 +105,6 @@ export class Expedition {
       const def = R.weighted(pool, (z) => (z.id === 'sleeper' ? 6 : z.id === 'drag' ? 1.5 : z.id === 'deer' ? 1.2 : 0.6))!;
       this.zs.push(this.mk(def, R.range(700, this.len - 60), R.chance(0.7) ? 'sleep' : 'walk'));
     }
-    for (const sp of this.spots) if (sp.kind === 'kin') this.zs.push({ ...this.mk(ZOMBIES.sleeper, sp.x + 10, 'kin') });
   }
 
   mk(def: ZombieDef, x: number, state: EZ['state']): EZ {
@@ -459,25 +458,36 @@ export class Expedition {
       c.fillText('← home', 30 - this.cam, 420);
     }
     // spots
+    const SPR: Record<Spot['kind'], [string, number]> = { door: ['obj_door', 200], car: ['obj_car', 120], shed: ['obj_shed', 190], body: ['obj_body', 44], kin: ['obj_kin', 175] };
     for (const sp of this.spots) {
       const x = sp.x - this.cam;
-      if (x < -100 || x > W + 100) continue;
-      c.fillStyle = sp.searched ? 'rgba(60,55,50,0.4)' : 'rgba(232,200,120,0.25)';
-      c.fillRect(x - 26, GROUND - 120, 52, 120);
-      c.strokeStyle = sp.searched ? 'rgba(80,70,60,0.5)' : 'rgba(232,200,120,0.6)';
-      c.strokeRect(x - 26, GROUND - 120, 52, 120);
+      if (x < -250 || x > W + 250) continue;
+      const [id, h] = SPR[sp.kind];
+      const im = img(id);
+      if (im) {
+        const w = (im.width / im.height) * h;
+        c.globalAlpha = sp.searched ? 0.55 : 1;
+        c.filter = sp.searched ? 'brightness(0.6)' : 'none';
+        c.drawImage(im, x - w / 2, GROUND - h + (sp.kind === 'body' ? 6 : 4), w, h);
+        c.filter = 'none';
+        c.globalAlpha = 1;
+      }
       if (!sp.searched && Math.abs(sp.x - this.px) < 60) {
         c.font = '13px "Special Elite", monospace';
         c.fillStyle = '#efe2c2';
         c.textAlign = 'center';
-        c.fillText(`[E] search ${sp.label}`, x, GROUND - 132);
+        c.fillText(`[E] search ${sp.label}`, x, GROUND - h - 14);
         c.textAlign = 'left';
+      } else if (!sp.searched) {
+        c.fillStyle = 'rgba(232,200,120,0.7)';
+        c.beginPath(); c.arc(x, GROUND - h - 10, 3, 0, 7); c.fill();
       }
     }
     // actors by y
     const list: { y: number; f: () => void }[] = [];
     for (const z of this.zs) list.push({ y: z.y, f: () => this.drawZ(z) });
     list.push({ y: GROUND, f: () => this.drawP() });
+    if (this.found) list.push({ y: GROUND - 2, f: () => this.drawFollower() });
     list.sort((a, b) => a.y - b.y);
     for (const l of list) l.f();
     for (const p of this.parts) { c.fillStyle = p.color; c.fillRect(p.x - this.cam, p.y, p.size, p.size); }
@@ -509,6 +519,23 @@ export class Expedition {
       c.fillStyle = '#d9c9a0';
       c.fillRect(x - 30, GROUND - h - 22, 60 * Math.min(1, this.searchT / 2.5), 6);
     }
+  }
+
+  fx = 0;
+  drawFollower() {
+    const c = this.c;
+    const f = this.found!;
+    const im = img(f.sprite);
+    if (!im) return;
+    const target = this.px - this.face * 70;
+    this.fx = this.fx ? this.fx + (target - this.fx) * 0.05 : target;
+    const h = SH * 0.97, w = (im.width / im.height) * h;
+    c.save();
+    c.translate(this.fx - this.cam, GROUND - 2);
+    c.scale(this.face, 1);
+    c.filter = 'brightness(0.85)';
+    c.drawImage(im, -w / 2, -h, w, h);
+    c.restore();
   }
 
   drawZ(z: EZ) {

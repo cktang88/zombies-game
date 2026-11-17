@@ -242,6 +242,35 @@
       "height": 80,
       "prompt": "a folded stack of rags, canvas and leather scraps.",
       "kind": "icon"
+    },
+    {
+      "id": "obj_door",
+      "height": 250,
+      "prompt": "A free-standing weathered back door of a clapboard house with a small porch step, screen door hanging open, a dead potted plant, seen straight from the side as a flat front-facing object.",
+      "kind": "icon"
+    },
+    {
+      "id": "obj_car",
+      "height": 170,
+      "prompt": "A rusted abandoned station wagon with its rear hatch open, luggage spilling out, flat tire, seen from the side.",
+      "kind": "icon"
+    },
+    {
+      "id": "obj_shed",
+      "height": 230,
+      "prompt": "A small sagging wooden tool shed with a corrugated roof and a padlock hanging broken, front view.",
+      "kind": "icon"
+    },
+    {
+      "id": "obj_body",
+      "height": 70,
+      "prompt": "A dead human body lying face down on the ground wearing a blaze orange hunting jacket and a backpack, horizontal, side view.",
+      "kind": "icon"
+    },
+    {
+      "id": "obj_kin",
+      "height": 230,
+      "prompt": "A grey-skinned dead elderly woman in a floral housedress sitting very still on a kitchen chair at a small kitchen table with a cold plate of food, hands folded, eerie and sad, side view facing left."
     }
   ],
   "iconPrefix": "Single game inventory icon of an object (no people, no hands, no characters), centered, mature graphic-novel cel-shaded style, thick black ink outlines, two-tone hard shadows, gritty worn texture, muted desaturated palette with a sparing accent colour, realistic not cartoony."
