@@ -24,7 +24,7 @@ import {
 import { STYLES, type Style } from './styles';
 import { flipFrame, setTemplateFactory } from './flipbook';
 import { anchorsFor, stanceOf, type WeaponAnchors } from './weaponAnchors';
-import { STANCES, type Slot, type Stance } from './stances';
+import { STANCES, type Slot, type Stance, type StanceId } from './stances';
 
 export type RigKind = 'survivor' | 'turned';
 export interface PlayOpts {
@@ -183,7 +183,8 @@ export class Rig {
   get ready() { return !!this.asset; }
 
   // ------------------------------------------------------------------ public API
-  setWeapon(defId: string | null, opts: { oneHand?: boolean } = {}) {
+  /** Put a weapon in the hands. stance: override the weapon's stance (stances.ts), e.g. 'hip' for an SMG fired from the hip. */
+  setWeapon(defId: string | null, opts: { oneHand?: boolean; stance?: StanceId } = {}) {
     this.weaponId = defId;
     this.oneHand = !!opts.oneHand;
     this.magState = 'gun';
@@ -191,7 +192,7 @@ export class Rig {
     this.gunState = 'held';
     if (!defId) { this.anchors = null; this.gun = null; this.stance = STANCES.free; this.swap = false; return; }
     this.anchors = anchorsFor(defId);
-    this.stance = this.kind === 'survivor' ? STANCES[stanceOf(this.anchors, this.oneHand)] : STANCES.free;
+    this.stance = this.kind === 'survivor' ? STANCES[opts.stance ?? stanceOf(this.anchors, this.oneHand)] : STANCES.free;
     this.swap = this.kind === 'survivor' && this.anchors.hold !== 'melee';
     this.gun = getGun(defId) ?? null;
     if (!this.gun) loadGun(defId).then((g) => { if (this.weaponId === defId) this.gun = g; });
