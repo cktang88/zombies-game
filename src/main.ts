@@ -3,6 +3,7 @@ import { G, R, setState, save, loadSave, clearSave, log, dateLabel, ICE_DAY } fr
 import { loadAssets, spriteUrl } from './assets';
 import { newGame } from './sim/newgame';
 import { renderDay } from './ui/day';
+import { installKit } from './ui/kit';
 import { resolveDayWork, dawnTick, nextWeather, prepareRun, tomorrowTeaser, restoreRunMate } from './sim/day';
 import { dailySeed, parseSeed } from './rng';
 import { planNight, afterNight, PERSONAS, nightIntel } from './sim/director';
@@ -40,6 +41,7 @@ import { startGamepad } from './input/gamepad';
 const WALL_X = 372; // the battle's wall face (night/battle.ts)
 
 const app = document.getElementById('app')!;
+installKit();
 let report: string[] = [];
 let battle: Battle | null = null;
 
