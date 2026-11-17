@@ -7,8 +7,11 @@
 // Turned x distance x shooter skill x firing style. Then: a power-fantasy / domination check and
 // a days 1-23 ammunition economy using the real director (threatPoints / planNight).
 //
-// Everything is run twice: BASE (the data as it is in src/) and PATCH (the tuning proposed in
-// docs/balance.md, applied in-memory by applyPatch() below). Nothing in src/ is modified on disk.
+// Everything is run twice: BASE (the data as it is in src/ with the current battle.ts model) and
+// PATCH (the battle-model tuning proposed in docs/balance.md, applied in-memory by applyPatch()).
+// The data half of the patch (weapons, ammo, Turned, recipes, sites, start stores, switchTime) is
+// now in src/ itself, so BASE reads it directly; only the battle.ts model is still patched here.
+// Nothing in src/ is modified on disk.
 import { WEAPONS, WEAPON_ORDER, AMMO_TYPES, ammoTypesFor, fireProfile, weaponClass, BURN, type FireProfile } from '../src/data/weapons';
 import { ZOMBIES, type ZombieDef } from '../src/data/zombies';
 import { RECIPES, SITES } from '../src/data/world';
@@ -304,7 +307,7 @@ function profiles(): Prof[] {
   const out: Prof[] = [];
   for (const id of WEAPON_ORDER) {
     const def = WEAPONS[id];
-    if (!def) continue;
+    if (!def || def.explosive) continue; // area weapons (launchers) need a blast model: not simulated
     const types = ammoTypesFor(id);
     const list: (Res | null)[] = types.length ? types : [null];
     for (const a of list) {
@@ -674,48 +677,19 @@ const PATCH_MODEL: Partial<Model> = {
   staggerS: 0.3,
   hpMul: (day) => 1 + Math.max(0, day - 8) * 0.02,
 };
-const WEAPON_PATCH: Record<string, WPatch> = {
-  service9: { dmg: 32, rof: 3.3 }, // first pull 50% of a Sleeper; one-shot heads; no longer the fastest
-  m1911: { dmg: 42, knock: 18 },
-  smg: { dmg: 22 }, // 66 on the head: one-shots a Sleeper's head
-  r22: { dmg: 22 }, // the headshot tool now kills with a headshot
-  pipe: { dmg: 18, knock: 34, pierce: 1 }, // crude but brutal: hardest single-barrel shove
-  pump: { pierce: 1 }, // buckshot reaches the second rank (pellet pierce 1, ×0.7)
-  coach: { pierce: 1 },
-  autoshot: { pierce: 1 },
-  hunting: { dmg: 130, rof: 1.0, armorPen: 0.4 }, // one body shot drops a Pulper or a Deputy
-  snake410: { dmg: 13, pellets: 6, knock: 14, reload: 0.7 },
-  muzzle: { reload: 3.6, spread: 0.006, dmg: 280 }, // rifled: the one-shot Ferryman answer, through four
-  ar15: { dmg: 40, rof: 4 },
-  carbine: { dmg: 32, spread: 0.045, rof: 8 }, // a 5.56 hose with pierce: three body hits, one head
-  lmg: { dmg: 36, spread: 0.075, rof: 10 },
-  crossbow: { reload: 1.7 },
-  nailer: { perShot: 0.08, rof: 8 },
-};
-// base swing time (s) added to fireProfile().switchTime: needs WeaponDef.switchTime read in baseProfile()
-const PATCH_SWITCH: Record<string, number> = { lmg: 0.15, muzzle: 0.1 };
+// The data changes below were applied to src/ (weapons.ts, zombies.ts, world.ts, newgame.ts;
+// see docs/balance.md §4b–c). They stay as empty layers so new data experiments can go here.
+const WEAPON_PATCH: Record<string, WPatch> = {};
+// extra swing time added on top of fireProfile().switchTime (WeaponDef.switchTime is now real)
+const PATCH_SWITCH: Record<string, number> = {};
 const SWITCH_PATCH: Record<string, number> = {};
-const AMMO_PATCH: Partial<Record<Res, Record<string, number | boolean | string>>> = {
-  rifle_ap: { dmgMul: 1, pierceAdd: 2 }, // through plate and through lines (was strictly worse than FMJ off-plate)
-  shell_flech: { dmgMul: 0.7, armorPen: 0.9 }, // the anti-Deputy shell: 12 nails that go through plate
-};
-// newgame.ts starting stores (doc 06 #9: start lean, the bench catches up)
-const START_PATCH: Partial<Record<Res, number>> = { light: 80 };
+const AMMO_PATCH: Partial<Record<Res, Record<string, number | boolean | string>>> = {};
+// newgame.ts starting stores override (src now starts at 70 pistol rounds; the doc proposed 80)
+const START_PATCH: Partial<Record<Res, number>> = {};
 const START: Partial<Record<Res, number>> = {};
-const ZOMBIE_PATCH: Record<string, Partial<ZombieDef>> = {
-  sleeper: { hp: 64 },
-  drag: { cost: 0.8 },
-};
-const RECIPE_PATCH: Record<string, { cost?: Partial<Record<Res, number>>; gives?: Partial<Record<Res, number>>; work?: number }> = {
-  ammo_light: { cost: { scrap: 2, fuel: 1 }, gives: { light: 40 }, work: 2 },
-  ammo_shell: { cost: { scrap: 2, fuel: 1, cloth: 1 }, gives: { shell: 16 }, work: 2 },
-  ammo_rifle: { cost: { scrap: 3, fuel: 1, parts: 1 }, gives: { rifle: 15 }, work: 2 },
-  ammo_r556: { cost: { scrap: 3, fuel: 1, parts: 1 }, gives: { r556: 40 }, work: 3 },
-};
-const SITE_PATCH: Record<string, Partial<Record<Res, number>>> = {
-  route9: { scrap: 5 },
-  millyard: { scrap: 14 },
-};
+const ZOMBIE_PATCH: Record<string, Partial<ZombieDef>> = {};
+const RECIPE_PATCH: Record<string, { cost?: Partial<Record<Res, number>>; gives?: Partial<Record<Res, number>>; work?: number }> = {};
+const SITE_PATCH: Record<string, Partial<Record<Res, number>>> = {};
 export const PATCH = { model: PATCH_MODEL, weapons: WEAPON_PATCH, ammo: AMMO_PATCH, zombies: ZOMBIE_PATCH, recipes: RECIPE_PATCH, sites: SITE_PATCH };
 
 function applyPatch() {

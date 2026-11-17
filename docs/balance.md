@@ -510,3 +510,30 @@ Median competent TTK per Turned (s, and s per threat point):
 - PATCH: sleeper 1.05s (1.05 s/threat-pt) · deer 0.93s (0.58 s/threat-pt) · drag 0.94s (1.18 s/threat-pt) · pulper 1.52s (0.51 s/threat-pt) · crier 1.01s (0.25 s/threat-pt) · deputy 1.97s (0.56 s/threat-pt) · ferryman 5.24s (0.58 s/threat-pt)
 
 Unit cost per round after the patch (scrap-eq; scrap 1, wood .5, cloth 1, fuel 2, parts 3): light 0.10 · light_hp 0.23 · shell 0.31 · shell_slug 0.70 · shell_flech 0.90 · shell_fire 0.88 · r22 0.10 · rifle 0.53 · rifle_sp 0.92 · rifle_ap 2.00 · r556 0.20 · ball 0.40 · bolt 0.29 · bolt_fire 0.50 · flare 2.00
+
+---
+
+## 7. Status: data half applied (arsenal agent)
+
+The data half of §4 (weapons, ammo types, Turned, recipes, sites, `switchTime`) is now in `src/`, and `tools/balance.ts` reads it directly. Its data patch layers are empty and only `PATCH_MODEL` (the battle.ts firing model) is still applied in memory. With `npx tsx tools/balance.ts --only patch`, **all 10 checks pass**. `--only base` is now the patched data under the *old* battle model: 7/10 checks pass. The 3 fails (tap vs spray on autos, a niche for the burst pistol, AR-15 dominance) are fixed by the model items below.
+
+Three deviations from the §4 list:
+- **Starting pistol rounds stay at 70.** The day-loop agent's scarcity pass had already cut 130 → 70, which is lower than the proposed 80. `npm run simtest` still meets its ammo target with the bigger recipe batches: 63% of nights from day 10 end with less than 1 night of ammo, against a target of ≥ 40%.
+- **Muzzleloader spread 0.006 → 0.004.** The "first kill on a Ferryman" niche was a coin-flip with the coach gun (1.04 vs 1.06 s) and was lost to sampling noise once the Bellwether joined the roster. At 0.004 it holds at 0.88 s.
+- **Launchers (`law`, `m79`, `pipemortar`) are skipped by the harness** (`def.explosive`), because it has no blast model.
+
+## 8. battle.ts TODO from balance.md (combat/feel pass)
+
+These are still **not** in `src/night/battle.ts`. The harness models them as `PATCH_MODEL`:
+1. **Bloom kick per shot** by weapon id, then by `weaponClass()`, × `fireProfile().bloomMul`: pistol 0.022, smg 0.065, shotgun 0.05, rifle 0.03, lmg 0.045, bow 0.02, tool 0.04, carbine 0.085. The class keys predate the new `WeaponClass` names, so map them: handgun → pistol, heavy → lmg, improvised → tool, assault/marksman → rifle.
+2. **Bloom cap** 0.12 → 0.30. **Decay:** hold for 0.12 s after a shot, then exponential with a 0.15 s half-life, replacing the linear 0.12/s.
+3. **Aimed shot:** at least 0.35 s since the last shot (at least 0.6 s if rof ≤ 1.2) and bloom < 0.01 → spread × 0.6. Show a tight, solid ring.
+4. **Sway:** the aim point drifts by `(1 − aim) × 16` px as slow noise at about 0.7 Hz.
+5. **Pellet cone follows the shooter:** `spread × (0.75 + bloom/0.08) × (1.3 − 0.3·aim)`, × 0.85 on an aimed shot.
+6. **Pellet falloff:** × `clamp(1 − (t − 250)/400 × 0.65, 0.35, 1)` by ray distance t.
+7. **Head circle radius** `headH × 0.62 → 0.56`.
+8. **Stagger:** each body hit rolls `fireProfile().stagger` (1 pellet in 4 rolls) and freezes the target for 0.3 s.
+9. **HP growth** `1 + 0.03·(day − 8)` → `1 + 0.02·(day − 8)`.
+10. **Dawn salvage:** if the wall held, add `0.12 × kills` scrap.
+11. **`fireProfile().switchTime`** is now non-zero by default for the LMG (0.15 s) and the muzzleloader (0.1 s). Apply it as the retarget delay for guards and as the player's settle time.
+12. **Feel numbers:** hitstop, shake and kick per class, as in §5.

@@ -127,6 +127,7 @@ export interface WeaponDef {
   flare?: boolean; // the shot lights up where it lands for a few seconds
   smoke?: boolean; // big muzzle smoke cloud (black powder)
   craftable?: boolean;
+  switchTime?: number; // base seconds to swing onto a new target (heavy guns); attachments add to it
   explosive?: { radius: number; dmg: number }; // blast on impact (launchers)
   arc?: boolean; // lobbed: lands where aimed instead of travelling a straight ray
   limbMul?: number; // damage multiplier on arm/leg zones (default 1, pellets 1.2)
