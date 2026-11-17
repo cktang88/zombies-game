@@ -323,7 +323,7 @@ export class VfxGL {
     if (!gl) { this.broken = true; return; }
     this.gl = gl;
     this.floatFB = !!gl.getExtension('EXT_color_buffer_float');
-    this.atlasFor = null; this.uv.clear();
+    this.atlasFor = null; this.atlas = null; this.uv.clear();
     this.add = this.smokeT = this.heatT = this.bloomA = this.bloomB = null;
     this.W = this.H = 0;
     try {
@@ -722,7 +722,7 @@ export class VfxGL {
     if (this.pinned || this.level === 0) { this.gLast = now; return; }
     if (this.gLast) {
       const dt = now - this.gLast;
-      if (dt > 0 && dt < 250) { this.gSum += dt; this.gN++; } // a hidden tab or a breakpoint is not a slow frame
+      if (dt > 0 && dt < 1000) { this.gSum += dt; this.gN++; } // a hidden tab or a breakpoint is not a slow frame
     }
     this.gLast = now;
     if (!this.gT0) this.gT0 = now;
