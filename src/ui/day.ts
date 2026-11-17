@@ -198,6 +198,7 @@ function wallHtml() {
       <li>Spike rows: <b>${f.spikes}</b> <span class="dim">— the dead hurt themselves at the wall</span></li>
       <li>Wire belts: <b>${f.wire}</b> <span class="dim">— slows them in the road</span></li>
       <li>Floodlights: <b>${f.lights}</b> <span class="dim">— better aim, less dark; burns fuel</span></li>
+      <li>Nail turrets: <b>${f.turrets ?? 0}</b> <span class="dim">— auto-fire from the wall, eat scrap</span></li>
       <li>Nail-bomb traps: <b>${f.traps}</b> <span class="dim">— one use each, out in the road</span></li>
       <li>Firebombs: <b>${G.stores.molotov}</b> <span class="dim">— [F] or right-click at night</span></li>
     </ul>

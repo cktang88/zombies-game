@@ -121,7 +121,7 @@ export interface GameState {
   graves: Survivor[];
   weapons: WeaponItem[];
   buildings: Building[];
-  fort: { hp: number; maxHp: number; level: number; spikes: number; wire: number; lights: number; traps: number };
+  fort: { hp: number; maxHp: number; level: number; spikes: number; wire: number; lights: number; traps: number; turrets?: number };
   craftQueue: { recipe: string; progress: number }[];
   chronicle: ChronicleEntry[];
   director: { tension: number; lastBigDay: number; wealth: number; mode: string; cooldowns: Record<string, number> };

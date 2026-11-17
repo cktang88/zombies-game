@@ -212,6 +212,7 @@ export function finishRecipe(id: string, by?: Survivor): string {
     case 'spikes': G.fort.spikes++; break;
     case 'wire': G.fort.wire++; break;
     case 'light': G.fort.lights++; break;
+    case 'turret': G.fort.turrets = (G.fort.turrets ?? 0) + 1; break;
     case 'trap': G.fort.traps++; break;
     case 'armor': G.flags.armorStock = ((G.flags.armorStock as number) ?? 0) + 1; break;
     case 'repair': {

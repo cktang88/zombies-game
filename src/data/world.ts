@@ -57,7 +57,7 @@ export interface Recipe {
   work: number; // work points (a skilled crafter makes ~8/day)
   gives?: Partial<Record<Res, number>>;
   weapon?: string;
-  special?: 'spikes' | 'wire' | 'light' | 'trap' | 'armor' | 'molotov' | 'liquor' | 'fortify' | 'repair';
+  special?: 'spikes' | 'wire' | 'light' | 'trap' | 'armor' | 'molotov' | 'liquor' | 'fortify' | 'repair' | 'turret';
   desc: string;
 }
 
@@ -72,6 +72,7 @@ export const RECIPES: Recipe[] = [
   { id: 'spikes', name: 'Spike row', needs: 'forge', cost: { wood: 8, scrap: 4 }, work: 4, special: 'spikes', desc: 'Sharpened rebar at shin height. The Turned impale themselves at the wall.' },
   { id: 'wire', name: 'Wire belt', needs: 'forge', cost: { scrap: 8 }, work: 3, special: 'wire', desc: 'Barbed wire strung across the road. Slows them in the kill zone.' },
   { id: 'armor', name: 'Mill-plate vest', needs: 'forge', cost: { scrap: 10, cloth: 4 }, work: 6, special: 'armor', desc: 'Saw-blade steel sewn into a Carhartt. Lessens wounds. Not bites.' },
+  { id: 'turret', name: 'Nail turret', needs: 'generator', cost: { parts: 10, scrap: 20, fuel: 2 }, work: 14, special: 'turret', desc: 'A framing nailer on a tractor-seat swivel, triggered by a doorbell relay. Fires at anything on the road. Eats scrap; needs the generator.' },
   { id: 'light', name: 'Floodlight', needs: 'generator', cost: { parts: 3, scrap: 3 }, work: 3, special: 'light', desc: 'A ballfield lamp on a pole. Burns fuel each night; you see them coming.' },
   { id: 'molotov', name: 'Firebombs ×3', needs: 'still', cost: { fuel: 2, cloth: 1 }, work: 2, gives: { molotov: 3 }, desc: 'Throw with [F] / right click. Fire on the road.' },
   { id: 'liquor', name: 'Liquor', needs: 'still', cost: { food: 3 }, work: 2, gives: { liquor: 2 }, desc: 'Potato moonshine. Medicine for the soul; bad for the aim.' },

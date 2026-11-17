@@ -120,6 +120,7 @@ export class Battle {
   intro = 4;
   oldFaceBy?: string;
   fast = false;
+  turrets: { x: number; y: number; cd: number; flash: number; ang: number }[] = [];
   keyUp = (e: KeyboardEvent) => { if (e.key === ' ') this.fast = false; };
 
   constructor(canvas: HTMLCanvasElement, plan: NightPlan, onEnd: (r: NightResult) => void) {
@@ -141,6 +142,7 @@ export class Battle {
     this.ammoStart = { light: G.stores.light, shell: G.stores.shell, rifle: G.stores.rifle, scrap: G.stores.scrap, molotov: G.stores.molotov };
     this.res = { kills: 0, deaths: [], wallHeld: true, wallLost: 0, ammoUsed: {}, killsBy: {}, headshots: 0, lines: [], fell: false };
     this.setupGuards();
+    for (let i = 0; i < Math.min(2, G.fort.turrets ?? 0); i++) this.turrets.push({ x: WALL_X - 20 - i * 46, y: 560 - i * 14, cd: 1, flash: 0, ang: 0 });
     const turning = G.flags.turningTonight as string | undefined;
     if (turning && byId(turning) && !byId(turning)!.dead) this.turnAt = this.duration * R.range(0.25, 0.6);
     this.keyHandler = (e) => this.onKey(e);
@@ -311,12 +313,14 @@ export class Battle {
     }
     this.updatePlayer(dt);
     for (const g of this.guards) this.updateGuard(g, dt);
+    for (const tu of this.turrets) this.updateTurret(tu, dt);
     for (const z of this.zombies) this.updateZombie(z, dt);
     this.zombies = this.zombies.filter((z) => !(z.state === 'dying' && z.dieT > 0.6));
     this.updateParticles(dt);
     for (const f of this.fires) {
       f.life -= dt;
-      if (R.chance(dt * 30)) this.particles.push({ x: f.x + R.range(-f.w / 2, f.w / 2), y: R.range(LANE_TOP, LANE_BOT), vx: R.range(-10, 10), vy: R.range(-90, -40), life: 0.8, max: 0.8, size: R.range(6, 14), color: '#ffb347', kind: 'fire', ground: 0 });
+      if (R.chance(dt * 45)) this.particles.push({ x: f.x + R.range(-f.w / 2, f.w / 2), y: R.range(LANE_TOP + 20, LANE_BOT), vx: R.range(-8, 8), vy: R.range(-110, -50), life: 0.7, max: 0.7, size: R.range(3, 7), color: '#ffb347', kind: 'fire', ground: 0 });
+      if (R.chance(dt * 8)) this.particles.push({ x: f.x + R.range(-f.w / 3, f.w / 3), y: LANE_TOP - 20, vx: R.range(-6, 12), vy: R.range(-50, -25), life: 2.5, max: 2.5, size: R.range(8, 14), color: '#222', kind: 'smoke', ground: 0 });
     }
     this.fires = this.fires.filter((f) => f.life > 0);
     for (const tr of this.tracers) tr.life -= dt;
@@ -718,6 +722,24 @@ export class Battle {
     sfx.shot(def.id, true);
   }
 
+  updateTurret(tu: { x: number; y: number; cd: number; flash: number; ang: number }, dt: number) {
+    tu.flash = Math.max(0, tu.flash - dt);
+    tu.cd -= dt;
+    if (tu.cd > 0) return;
+    if (G.stores.scrap < 0.05 || !G.buildings.some((b) => b.id === 'generator')) { tu.cd = 1; return; }
+    const tgt = this.zombies.filter((z) => z.state !== 'dying' && z.x < 900).sort((a, b) => a.x - b.x)[0];
+    if (!tgt) { tu.cd = 0.3; return; }
+    const hb = this.hitbox(tgt);
+    const ty = (hb.y1 + hb.y2) / 2 - 10;
+    tu.ang = Math.atan2(ty - tu.y, tgt.x - tu.x);
+    add('scrap', -0.05);
+    this.castShot(null as unknown as Guard, tu.x + 20, tu.y, tu.ang + R.gauss(0, 0.04), 18, 1, 2, false, false);
+    tu.cd = 0.3;
+    tu.flash = 0.05;
+    this.noise += 0.15;
+    sfx.shot('nailer', true);
+  }
+
   updateZombie(z: Zombie, dt: number) {
     z.flash = Math.max(0, z.flash - dt);
     if (z.state === 'dying') {
@@ -979,6 +1001,19 @@ export class Battle {
     for (const z of this.zombies) list.push({ y: z.y, f: () => this.drawZombie(c, z) });
     for (const gd of this.guards) if (!gd.s.dead && !gd.fled) list.push({ y: gd.y - 40, f: () => this.drawGuard(c, gd) });
     list.push({ y: 668, f: () => this.drawWall(c) });
+    for (const tu of this.turrets) list.push({ y: 669, f: () => {
+      c.save();
+      c.fillStyle = '#2a2622';
+      c.fillRect(tu.x - 4, tu.y, 8, 694 - tu.y);
+      c.translate(tu.x, tu.y);
+      c.rotate(tu.ang);
+      c.fillStyle = '#5a4a32';
+      c.fillRect(-10, -7, 34, 14);
+      c.fillStyle = '#8a7a5a';
+      c.fillRect(20, -3, 14, 6);
+      if (tu.flash > 0) { c.fillStyle = 'rgba(255,230,160,0.9)'; c.fillRect(34, -3, 12, 6); }
+      c.restore();
+    } });
     list.sort((a, b) => a.y - b.y);
     for (const d of list) d.f();
     // particles
@@ -986,7 +1021,14 @@ export class Battle {
       const a = Math.max(0, p.life / p.max);
       if (p.kind === 'smoke') { c.fillStyle = `rgba(60,58,55,${a * 0.4})`; c.beginPath(); c.arc(p.x, p.y, p.size * (2 - a), 0, 7); c.fill(); }
       else if (p.kind === 'spore') { c.fillStyle = `rgba(168,134,47,${a * 0.35})`; c.beginPath(); c.arc(p.x, p.y, p.size * (2.2 - a), 0, 7); c.fill(); }
-      else if (p.kind === 'fire') { c.fillStyle = `rgba(255,${120 + 100 * a | 0},50,${a})`; c.beginPath(); c.arc(p.x, p.y, p.size * a, 0, 7); c.fill(); }
+      else if (p.kind === 'fire') {
+        c.globalCompositeOperation = 'lighter';
+        c.fillStyle = `rgba(255,${(90 + 150 * a) | 0},${(30 + 60 * a * a) | 0},${a * 0.55})`;
+        c.beginPath();
+        c.ellipse(p.x, p.y, p.size * (0.5 + a * 0.6), p.size * (1 + a * 1.4), 0, 0, 7);
+        c.fill();
+        c.globalCompositeOperation = 'source-over';
+      }
       else { c.fillStyle = p.color; c.globalAlpha = Math.min(1, a * 2); c.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size); c.globalAlpha = 1; }
     }
     // tracers

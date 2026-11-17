@@ -9,6 +9,7 @@ export let R: Rng;
 export function setState(s: GameState) {
   G = s;
   R = new Rng(s.seed + s.day * 7919 + s.uid);
+  (globalThis as unknown as { __G: GameState }).__G = s; // debug handle
 }
 
 export function uid(prefix = 'x') {
