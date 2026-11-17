@@ -1,0 +1,20 @@
+{
+ "note": "hand-placed shoulder / elbow / wrist pivots (source px) for tools/rigs/src/arm_jacket_over_f.png: gemini-3.1-flash-image redrew the template with the upper arm hanging down, so the template's own pivots do not apply. The 5th drawing of each row (cuff hidden) is left out.",
+ "w": 1440, "h": 720, "byLen": true,
+ "bends": [0, 0, 0, 0],
+ "bendsAt": [[0, 104, 121, 133], [87, 101, 120, 134]],
+ "rows": [
+  [
+   { "s": [42, 243], "e": [161, 245], "w": [243, 246] },
+   { "s": [345, 90], "e": [345, 235], "w": [515, 192] },
+   { "s": [637, 90], "e": [640, 235], "w": [755, 165] },
+   { "s": [925, 90], "e": [935, 240], "w": [1010, 170] }
+  ],
+  [
+   { "s": [55, 440], "e": [55, 565], "w": [243, 575] },
+   { "s": [345, 440], "e": [345, 565], "w": [517, 530] },
+   { "s": [637, 440], "e": [640, 565], "w": [755, 500] },
+   { "s": [920, 440], "e": [930, 565], "w": [995, 502] }
+  ]
+ ]
+}

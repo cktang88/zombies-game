@@ -1,0 +1,29 @@
+{
+  "model": "google/gemini-3.1-flash-lite-image",
+  "style": "Drawn exactly in the style of the reference image: mature graphic-novel cel-shading, thick confident black ink outlines, two-tone hard-edged shadows, gritty texture, muted desaturated palette, realistic adult proportions.",
+  "key": "Isolated on a perfectly flat solid pure magenta #FF00FF background, no cast shadow, no text, no labels, no numbers, no border, no objects.",
+  "refCanvas": { "w": 640, "h": 640, "fill": 0.8 },
+  "parts": [
+    {
+      "id": "arm_jacket_kit",
+      "ref": "surv_rifle",
+      "prompt": "A rigging reference sheet of the SAME dark brown waxed field-jacket sleeve worn by the man in the reference image, sleeve only, NO hands, NO body, NO gun: every forearm ends in an open round cuff showing the dark inside of the sleeve. Ten separate whole arms (upper arm + elbow + forearm, one continuous sleeve each) in strict side view, every upper arm perfectly horizontal with the SHOULDER end on the LEFT drawn as a full round cap with ink outline all round, the elbow a rounded joint. Top row, five arms: the near arm (outer side of the sleeve, lit), the elbow bent 0 degrees (straight), 40 degrees, 80 degrees, 115 degrees and 145 degrees, the forearm rotating UPWARD from the elbow, fabric folds bunching on the inside of the bend. Bottom row, five arms: the same five bends drawn as the character's other arm seen from the inner side of the sleeve, slightly narrower, in shadow. All ten at identical scale and identical sleeve thickness, wide magenta gaps between them, nothing touching, nothing overlapping."
+    },
+    {
+      "id": "arm_jacket_paint",
+      "ref": "surv_rifle",
+      "guide": "tools/rigs/src/kit_guide_arm.png",
+      "prompt": "The FIRST image is a pose template: ten flat grey arm shapes on magenta, two rows of five. The SECOND image is the character. Paint the SAME dark brown waxed field-jacket sleeve the man in the second image wears exactly over every grey shape of the first image: keep each shape's exact position, size, thickness, bend angle and the whole layout and aspect ratio of the first image, one jacket sleeve per grey shape. The round left end of each shape is the shoulder (round cap, ink outline all round), the bend is the elbow (rounded), and the dark oval at the other end is an open cuff showing the dark inside of the sleeve: NO hands, NO fingers, NO body, NO gun. Fabric folds bunch and crease on the inside of each bend. Top row: the near arm, outer side of the sleeve, lit. Bottom row: the character's other arm seen from the inner side of the sleeve, in shadow, slightly darker and narrower. Remove all grey: only painted jacket sleeves on flat magenta."
+    },
+    {
+      "id": "arm_jacket_over",
+      "guide": "tools/rigs/src/kit_guide_surv_rifle.png",
+      "prompt": "Edit this image: repaint each of the ten crude cut-out jacket arms as a clean, well-drawn jacket sleeve, keeping every arm at EXACTLY the same position, size, thickness and elbow bend angle, and keeping the whole layout and aspect ratio unchanged. The left round end of each arm is the shoulder: make it a full round cap with a black ink outline all round. The elbow is a rounded joint; the fabric folds bunch and crease on the inside of the bend, the sleeve is one continuous piece of dark brown waxed field jacket (keep the rust-brown patch on the upper arm). The right end is an open cuff showing the dark inside of the sleeve: NO hands, NO fingers. Top row: the near arm, outer side of the sleeve, lit. Bottom row: the other arm seen from the inner side of the sleeve, in shadow, darker, no patch. Clean continuous black ink outline round each whole arm."
+    },
+    {
+      "id": "surv_rifle_dollsheet",
+      "ref": "surv_rifle",
+      "prompt": "Paper-doll rigging parts of the man in the reference image, each part drawn separately and complete, straight and axis-aligned, every end a round cap with the black ink outline drawn all the way round, laid out in a 3 by 4 grid with wide magenta gaps, nothing touching: head with hair and beard in side view facing right; torso with NO arms (shoulder sockets painted, complete jacket chest, scarf), upright; pelvis and hips; near thigh (vertical); near shin (vertical); near boot flat on its sole, toe to the right; far thigh, far shin and far boot (inner side of the trousers, shadowed, slightly darker); nothing else, no arms, no hands, no gun."
+    }
+  ]
+}

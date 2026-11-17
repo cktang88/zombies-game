@@ -13,7 +13,11 @@ import sharp from 'sharp';
 import { chromaKey } from './chroma.ts';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-interface PartSpec { id: string; ref?: string; prompt: string }
+interface PartSpec {
+  id: string; ref?: string; prompt: string;
+  /** a pose/layout template (path from the repo root) sent as the FIRST image, before the reference */
+  guide?: string;
+}
 interface PartManifest {
   model: string; style: string; key: string; parts: PartSpec[];
   /** Optional: centre the reference on a w×h magenta canvas at `fill` of its height. The model
@@ -36,6 +40,9 @@ const only = args.filter((a) => !a.startsWith('--'));
 const manifestArg = args.find((a) => a.startsWith('--manifest='))?.slice('--manifest='.length);
 const manifest = JSON.parse(fs.readFileSync(path.resolve(ROOT, manifestArg ?? 'tools/sprites-parts.json'), 'utf8')) as PartManifest;
 const MODEL = process.env.SPRITE_MODEL || manifest.model;
+// --tag=x writes <id>_x.png (several runs of one prompt side by side)
+const tag = args.find((a) => a.startsWith('--tag='))?.slice('--tag='.length);
+const outId = (id: string) => (tag ? `${id}_${tag}` : id);
 
 /** Reference image: the original generation if cached, else the shipped sprite. */
 async function refDataUrl(id: string): Promise<string> {
@@ -55,8 +62,9 @@ async function refDataUrl(id: string): Promise<string> {
   return `data:image/png;base64,${buf.toString('base64')}`;
 }
 
-async function generate(prompt: string, ref?: string): Promise<{ buf: Buffer; cost: number }> {
+async function generate(prompt: string, ref?: string, guide?: string): Promise<{ buf: Buffer; cost: number }> {
   const content: unknown[] = [{ type: 'text', text: prompt }];
+  if (guide) content.push({ type: 'image_url', image_url: { url: `data:image/png;base64,${fs.readFileSync(path.resolve(ROOT, guide)).toString('base64')}` } });
   if (ref) content.push({ type: 'image_url', image_url: { url: await refDataUrl(ref) } });
   for (let attempt = 0; attempt < 8; attempt++) {
     const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -82,15 +90,15 @@ const queue = [...list];
 const worker = async () => { for (let p = queue.shift(); p; p = queue.shift()) await one(p); };
 await Promise.all(Array.from({ length: Math.min(jobs, list.length) }, worker));
 async function one(p: PartSpec) {
-  const raw = path.join(RAW, `${p.id}.png`);
+  const raw = path.join(RAW, `${outId(p.id)}.png`);
   try {
     if (force || !fs.existsSync(raw)) {
-      const g = await generate(`${p.prompt} ${manifest.style} ${manifest.key}`, p.ref);
+      const g = await generate(`${p.prompt} ${manifest.style} ${manifest.key}`, p.ref, p.guide);
       fs.writeFileSync(raw, g.buf);
       total += g.cost;
-      console.log(`ok ${p.id} ($${g.cost.toFixed(3)})`);
+      console.log(`ok ${outId(p.id)} ($${g.cost.toFixed(3)})`);
     }
-    fs.writeFileSync(path.join(KEYED, `${p.id}.png`), await chromaKey(fs.readFileSync(raw)));
+    fs.writeFileSync(path.join(KEYED, `${outId(p.id)}.png`), await chromaKey(fs.readFileSync(raw)));
   } catch (e) {
     console.error(`FAIL ${p.id}`, (e as Error).message);
   }
