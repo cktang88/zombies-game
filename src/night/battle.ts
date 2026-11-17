@@ -225,6 +225,21 @@ export interface NightResult {
   fell: boolean;
 }
 
+/** A soft round puff (radial falloff) in one colour, cached: smoke, spores, dust. */
+const softDots = new Map<string, HTMLCanvasElement>();
+function softDot(rgb: string): HTMLCanvasElement {
+  let cv = softDots.get(rgb);
+  if (cv) return cv;
+  cv = document.createElement('canvas');
+  cv.width = cv.height = 64;
+  const g = cv.getContext('2d')!;
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, `rgba(${rgb},1)`); gr.addColorStop(0.45, `rgba(${rgb},0.6)`); gr.addColorStop(1, `rgba(${rgb},0)`);
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  softDots.set(rgb, cv);
+  return cv;
+}
+
 export class Battle {
   /** Balance knobs (docs/balance.md §9): guard rate of fire, aim error and head-aim share, the Turned at the wall. */
   static tune = { guardCd: 2.2, guardErr: 1.15, guardHead: 0.85, wallDps: 1.3, guardRange: 0.55, guardShove: 0.35, guardPierce: 0, passSpeed: 0.75 }; // guardPierce: bodies past the first a guard's round goes on through (0 = it stops in the first; the player keeps full pierce)
@@ -243,6 +258,8 @@ export class Battle {
   tracers: Tracer[] = [];
   fires: Fire[] = [];
   lights: Light[] = [];
+  /** gouges on the barricade's face: claw rakes, pound dents, bile rot (drawWall) */
+  wallMarks: { x: number; y: number; kind: 'claw' | 'pound' | 'rot'; rot: number; n: number; seed: number }[] = [];
   texts: FloatText[] = [];
   spawnIdx = 0;
   nextId = 1;
@@ -1859,6 +1876,7 @@ export class Battle {
       // the kill line: inside 180 px it rots the wall and the pile against it
       if (z.x - WALL_X < 180 && !z.flip) {
         G.fort.hp = Math.max(0, G.fort.hp - 45);
+        for (let i = 0; i < 3; i++) this.markWall(WALL_X - R.range(0, 30), z.y - R.range(10, 70), 'rot');
         this.pileRot = 3;
         this.streak = 0;
         this.nerveHit(10);
@@ -2288,6 +2306,7 @@ export class Battle {
         z.wallHit = R.range(0.8, 1.4);
         if (atFace) {
           sfx.wallHit();
+          this.markWall(wallX(z.lane) - R.range(3, 24), z.y - R.range(24, Math.min(110, this.zh(z) * 0.8)), (IMPACT.mass[z.def.id] ?? 1) >= 1.3 ? 'pound' : 'claw');
           const v = voiceOf(z.def.id);
           if (v && R.chance(0.12)) sfx.zombieVoice(v, 'attack', { pan: panOf(z.x), volume: 0.6 });
           for (let i = 0; i < 2; i++) this.particles.push({ x: wallX(z.lane) - 5, y: z.y - R.range(30, 100), vx: R.range(-80, -10), vy: R.range(-100, 0), life: 0.6, max: 0.6, size: 2, color: '#7a6448', kind: 'spark', ground: 0 });
@@ -2782,7 +2801,7 @@ export class Battle {
       this.zeroes++;
       this.focusing = false;
       const p = this.player;
-      if (p) this.text(p.x, p.y - 170, 'hands shaking', '#d0a040', 12);
+      if (p) this.text(p.x + 30, p.y - SH * p.sc * 0.55, 'hands shaking', '#d0a040', 12); // over the body, clear of the name labels
     }
   }
   nerveGain(n: number) { this.nerve = Math.min(this.nerveMax, this.nerve + n); }
@@ -2846,6 +2865,7 @@ export class Battle {
       } else {
         // the planks rot where it lands
         G.fort.hp = Math.max(0, G.fort.hp - 16);
+        this.markWall(WALL_X - R.range(0, 40), Math.max(GROUND_BOT - 150, Math.min(GROUND_BOT - 20, b.y1)), 'rot');
         this.text(b.x1, b.y1 - 20, 'ROT', '#b8b050', 11);
         sfx.wallHit();
       }
@@ -2993,9 +3013,10 @@ export class Battle {
     // particles
     for (const p of this.particles) {
       const a = Math.max(0, p.life / p.max);
-      if (p.kind === 'smoke') { c.fillStyle = `rgba(60,58,55,${a * 0.4})`; c.beginPath(); c.arc(p.x, p.y, p.size * (2 - a), 0, 7); c.fill(); }
-      else if (p.kind === 'spore') { c.fillStyle = `rgba(168,134,47,${a * 0.35})`; c.beginPath(); c.arc(p.x, p.y, p.size * (2.2 - a), 0, 7); c.fill(); }
-      else if (p.kind === 'dust') { c.fillStyle = `rgba(120,108,90,${a * 0.35})`; c.beginPath(); c.arc(p.x, p.y, p.size * (1.8 - a * 0.8), 0, 7); c.fill(); }
+      // smoke, spores and dust as soft puffs (a radial falloff), never flat discs with hard edges
+      if (p.kind === 'smoke') { const r = p.size * (2 - a) * 1.5; c.globalAlpha = a * 0.5; c.drawImage(softDot('60,58,55'), p.x - r, p.y - r, r * 2, r * 2); c.globalAlpha = 1; }
+      else if (p.kind === 'spore') { const r = p.size * (2.2 - a) * 1.5; c.globalAlpha = a * 0.42; c.drawImage(softDot('150,122,44'), p.x - r, p.y - r, r * 2, r * 2); c.globalAlpha = 1; }
+      else if (p.kind === 'dust') { const r = p.size * (1.8 - a * 0.8) * 1.5; c.globalAlpha = a * 0.45; c.drawImage(softDot('120,108,90'), p.x - r, p.y - r, r * 2, r * 2); c.globalAlpha = 1; }
       else if (p.kind === 'puff') { c.fillStyle = `rgba(${p.color},${a * 0.45})`; c.beginPath(); c.arc(p.x, p.y, p.size * (1.6 - a * 0.6), 0, 7); c.fill(); }
       else if (p.kind === 'shell') {
         c.save(); c.translate(p.x, p.y); c.rotate(p.rot ?? 0);
@@ -3031,11 +3052,13 @@ export class Battle {
       c.stroke();
     }
     if (this.plan.special === 'fog') this.drawFog(c, 0.45);
-    if (G.weather === 'snow' || this.plan.special === 'crossing') this.drawSnow(c);
     // darkness, pass B: the same mask at 40%, so the actors sit in the scene without being flattened
     c.globalAlpha = 0.4;
     c.drawImage(this.dark, 0, 0, W, H);
     c.globalAlpha = 1;
+    // snow and rain over the darkness: dim in the dark, lit where a flash, a flare or a fire is
+    if (G.weather === 'snow' || this.plan.special === 'crossing') this.drawPrecip(c, 'snow');
+    else if (G.weather === 'rain') this.drawPrecip(c, 'rain');
     this.vfx.drawAdd(c); // flashes, tracers, sparks, fire: emissive, so over the darkness
     this.drawGlow(c);
     this.drawGuardLabels(c);
@@ -3046,7 +3069,8 @@ export class Battle {
       c.fillStyle = t.color;
       c.globalAlpha = Math.min(1, t.life * 2);
       c.textAlign = 'center';
-      c.fillText(t.text, t.x, t.y);
+      const tw = c.measureText(t.text).width;
+      c.fillText(t.text, Math.min(W - 6 - tw / 2, Math.max(6 + tw / 2, t.x)), t.y);
       c.globalAlpha = 1;
     }
     c.restore();
@@ -3250,6 +3274,7 @@ export class Battle {
         c.globalAlpha = 1;
       } else {
         c.drawImage(im, WALL_X - w + 10, GROUND_BOT - h, w, h);
+        this.drawWallDamage(c, WALL_X - w + 10, w, h);
       }
       // spikes, a row per lane, on each lane's face
       if (G.fort.spikes > 0 && has('fort_spikes')) {
@@ -3268,6 +3293,73 @@ export class Battle {
         c.lineTo(sx + 26, sy - 8);
         c.stroke();
       }
+    }
+  }
+
+  /** A new gouge on the barricade's face, or a deeper one where the last landed close by. */
+  markWall(x: number, y: number, kind: 'claw' | 'pound' | 'rot') {
+    const near = this.wallMarks.find((m) => m.kind === kind && Math.abs(m.x - x) < 9 && Math.abs(m.y - y) < 12);
+    if (near) { near.n = Math.min(4, near.n + 1); return; }
+    this.wallMarks.push({ x, y, kind, rot: R.range(-0.5, 0.35), n: 1, seed: Math.floor(R.next() * 1e6) });
+    if (this.wallMarks.length > 70) this.wallMarks.shift();
+  }
+
+  /**
+   * What the night has done to the barricade's face: pale claw rakes, splintered dents where the heavy
+   * ones pound, bile rot; and, as the wall's strength goes, split planks and splinters standing out of
+   * the face (the image swaps to the broken barricade below 45%).
+   */
+  drawWallDamage(c: CanvasRenderingContext2D, x0: number, w: number, h: number) {
+    const frac = G.fort.hp / G.fort.maxHp;
+    if (frac <= 0) return;
+    const top = GROUND_BOT - h;
+    // splinters standing out of the face, more of them as the wall weakens (deterministic per slot)
+    const n = Math.floor((1 - frac) * 16);
+    for (let i = 0; i < n; i++) {
+      const u = ((i * 7919) % 101) / 101, v = ((i * 3571) % 97) / 97;
+      const sx = x0 + w * (0.55 + 0.42 * u), sy = top + h * (0.22 + 0.68 * v);
+      const len = 6 + ((i * 13) % 9), a = -0.5 + ((i * 29) % 11) / 11;
+      c.save(); c.translate(sx, sy); c.rotate(a);
+      c.fillStyle = 'rgba(8,6,5,0.55)'; c.fillRect(-1, 1, len, 2.2);
+      c.fillStyle = 'rgba(178,150,112,0.85)';
+      c.beginPath(); c.moveTo(0, -1.4); c.lineTo(len, 0); c.lineTo(0, 1.4); c.fill();
+      c.restore();
+    }
+    // split plank ends: dark cracks along the grain
+    const cracks = Math.floor((1 - frac) * 7);
+    c.strokeStyle = 'rgba(10,8,6,0.75)'; c.lineWidth = 1.6;
+    for (let i = 0; i < cracks; i++) {
+      const u = ((i * 4271) % 89) / 89, v = ((i * 6007) % 83) / 83;
+      const cx = x0 + w * (0.45 + 0.5 * u), cy = top + h * (0.2 + 0.65 * v);
+      c.beginPath(); c.moveTo(cx - 14, cy); c.lineTo(cx - 4, cy + 1.5); c.lineTo(cx + 3, cy - 1); c.lineTo(cx + 14, cy + 0.5); c.stroke();
+    }
+    for (const m of this.wallMarks) {
+      c.save(); c.translate(m.x, m.y); c.rotate(m.rot);
+      const k = 0.7 + m.n * 0.25;
+      if (m.kind === 'claw') {
+        // three or four raked furrows: a dark groove with a pale torn lip
+        for (let j = 0; j < 3 + (m.n > 2 ? 1 : 0); j++) {
+          const oy = (j - 1.5) * 3.2, len = (10 + ((m.seed >> j) % 5)) * k;
+          c.strokeStyle = 'rgba(12,9,7,0.8)'; c.lineWidth = 1.3;
+          c.beginPath(); c.moveTo(-len / 2, oy); c.lineTo(len / 2, oy + len * 0.35); c.stroke();
+          c.strokeStyle = 'rgba(196,170,128,0.55)'; c.lineWidth = 0.8;
+          c.beginPath(); c.moveTo(-len / 2, oy - 1); c.lineTo(len / 2, oy + len * 0.35 - 1); c.stroke();
+        }
+      } else if (m.kind === 'pound') {
+        // a splintered dent: dark pit, pale broken rim, a split running off it
+        const r = 4 * k;
+        c.fillStyle = 'rgba(10,8,6,0.85)'; c.beginPath(); c.ellipse(0, 0, r * 1.3, r, 0, 0, 7); c.fill();
+        c.strokeStyle = 'rgba(190,162,120,0.6)'; c.lineWidth = 1;
+        for (let j = 0; j < 6; j++) { const a = j * 1.05 + (m.seed % 7) * 0.1; c.beginPath(); c.moveTo(Math.cos(a) * r, Math.sin(a) * r * 0.8); c.lineTo(Math.cos(a) * r * 1.8, Math.sin(a) * r * 1.4); c.stroke(); }
+        c.strokeStyle = 'rgba(10,8,6,0.7)'; c.lineWidth = 1.2;
+        c.beginPath(); c.moveTo(r, 0); c.lineTo(r * 3.2, r * 0.6); c.stroke();
+      } else {
+        // bile rot: a sick yellow-brown stain eating into the boards
+        const g = c.createRadialGradient(0, 0, 0, 0, 0, 13 * k);
+        g.addColorStop(0, 'rgba(70,64,20,0.75)'); g.addColorStop(0.6, 'rgba(110,100,30,0.35)'); g.addColorStop(1, 'rgba(110,100,30,0)');
+        c.fillStyle = g; c.beginPath(); c.ellipse(0, 0, 13 * k, 9 * k, 0, 0, 7); c.fill();
+      }
+      c.restore();
     }
   }
 
@@ -3534,7 +3626,12 @@ export class Battle {
     if (this.actors.drawZombie(c, z, env)) {
       if (z.state !== 'dying') {
         this.drawTells(c, z, Math.max(0, Math.min(1, (this.lightAt(z.x, z.y - this.zh(z) * 0.6, env)[0] - 0.12) / 0.2)));
-        if (z.name) { c.font = '12px "Special Elite", monospace'; c.fillStyle = '#c9a95a'; c.textAlign = 'center'; c.fillText(z.name, z.x, z.y - this.zh(z) - 8); }
+        if (z.name && z.x < W + 10) {
+          // a named one (someone they knew): the name stays on screen while it walks in from the edge
+          c.font = '12px "Special Elite", monospace'; c.fillStyle = '#c9a95a'; c.textAlign = 'center';
+          const tw = c.measureText(z.name).width;
+          c.fillText(z.name, Math.min(W - 8 - tw / 2, Math.max(8 + tw / 2, z.x)), z.y - this.zh(z) - 8);
+        }
       }
       return;
     }
@@ -3694,13 +3791,60 @@ export class Battle {
     }
     void h;
   }
-  drawSnow(c: CanvasRenderingContext2D) {
-    c.fillStyle = 'rgba(230,235,240,0.7)';
-    for (let i = 0; i < 120; i++) {
-      const x = (i * 97.3 + this.t * (20 + (i % 5) * 6)) % W;
-      const y = (i * 53.7 + this.t * (40 + (i % 7) * 9)) % H;
-      c.fillRect(x, y, 2, 2);
+  /**
+   * Snow or rain, drawn over the darkness. Each flake / streak takes the light it is in: the
+   * floodlight pools and every short light (muzzle flashes, flares, fires, the bell's glow), so a
+   * shot lights the snow around the muzzle for a frame and a fire lights the rain falling past it.
+   */
+  drawPrecip(c: CanvasRenderingContext2D, kind: 'snow' | 'rain') {
+    const ls = this.lights.filter((l) => l.life > 0);
+    const flood = Math.min(3, G.fort.lights);
+    const lit = (x: number, y: number) => {
+      let v = 0;
+      for (const l of ls) {
+        const dx = x - l.x, dy = y - l.y, r = l.r * 0.85;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < r * r) v += (1 - Math.sqrt(d2) / r) * Math.min(1, (l.life / l.max) * 1.6);
+      }
+      // the floodlights' throw over the near road
+      for (let i = 0; i < flood; i++) { const dx = x - (520 + i * 190); if (Math.abs(dx) < 260 && y > 420) v += 0.35 * (1 - Math.abs(dx) / 260); }
+      return Math.min(1.4, v);
+    };
+    const t = this.t;
+    if (kind === 'snow') {
+      for (let i = 0; i < 170; i++) {
+        const near = i % 3 === 0;
+        const x = (i * 97.3 + t * (20 + (i % 5) * 6) + Math.sin(t * 0.8 + i) * 6) % W;
+        const y = (i * 53.7 + t * (near ? 70 : 40 + (i % 7) * 7)) % H;
+        const v = lit(x, y);
+        const a = 0.34 + v * 0.5;
+        const sz = near ? 2.6 : 1.6;
+        c.fillStyle = `rgba(${Math.round(205 + v * 50)},${Math.round(212 + v * 34)},${Math.round(222 + v * 10)},${Math.min(0.95, a)})`;
+        c.fillRect(x, y, sz, sz);
+      }
+      return;
     }
+    // rain: thin slanted streaks, faster and longer near the camera; a few splashes on the road
+    c.lineWidth = 1;
+    for (let i = 0; i < 220; i++) {
+      const near = i % 4 === 0;
+      const sp = near ? 900 : 620 + (i % 5) * 40;
+      const len = near ? 22 : 13;
+      const x = ((i * 131.7 - t * sp * 0.18) % (W + 60) + W + 60) % (W + 60) - 30;
+      const y = (i * 71.3 + t * sp) % (H + 40) - 20;
+      const v = lit(x, y);
+      c.strokeStyle = `rgba(${Math.round(170 + v * 80)},${Math.round(180 + v * 66)},${Math.round(196 + v * 40)},${Math.min(0.85, 0.2 + v * 0.5 + (near ? 0.08 : 0))})`;
+      c.beginPath(); c.moveTo(x, y); c.lineTo(x - len * 0.18, y + len); c.stroke();
+    }
+    c.fillStyle = 'rgba(190,200,215,0.28)';
+    for (let i = 0; i < 26; i++) {
+      const ph = (t * 3 + i * 0.37) % 1;
+      const x = (i * 211.3 + Math.floor(t * 3 + i * 0.37) * 97) % W;
+      const y = LANES[i % 4] + 6 - (i % 3) * 3;
+      c.globalAlpha = 1 - ph;
+      c.fillRect(x - 3 * ph - 1, y, 2 + 6 * ph, 1);
+    }
+    c.globalAlpha = 1;
   }
 
   // The darkness mask, built at half resolution into this.dark; drawn twice per frame

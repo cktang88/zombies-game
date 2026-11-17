@@ -12,6 +12,8 @@ import { reduceGore, shakeScale, autoReload, hitMarkers, screenFx, fxQuality } f
 import { flashKind, gunFeel, voiceOf, panOf, isSuppressed, type FlashKind } from './gunfx';
 import { Vfx } from './vfx'; // gunfire & effects (docs/research/10-vfx.md)
 import { RunActors } from './actors'; // rigged bodies (src/anim)
+import { react, slideStep, classicPose, IMPACT, type Reaction, type HitIn } from './impact'; // hit reactions, as at night
+import type { Zombie } from './battle';
 
 /** What underfoot sounds like at each site (footsteps). */
 const SURFACE: Record<string, Surface> = {
@@ -102,6 +104,8 @@ function bakeBackgrounds() {
 interface EZ {
   def: ZombieDef; sprite: string; x: number; y: number; hp: number; state: 'sleep' | 'walk' | 'grab' | 'dying' | 'kin';
   phase: number; flash: number; dieT: number; grabT: number; dir: number; headless?: boolean; lungeT: number; burn?: number; grabWho?: 'p' | 'm'; stun?: number; bleed?: number; bleedDps?: number; wake?: number;
+  /** hit reactions (night/impact.ts): knocked down, the eased slide, the last reaction; hitT/hitZone: the last non-lethal hit (a flinch on the rig) */
+  down?: number; slide?: number; react?: Reaction; hitT?: number; hitZone?: HitIn['zone'];
   id: number; lane: number; sc: number; variant: number;
 }
 interface Spot { x: number; searched: boolean; kind: 'door' | 'car' | 'shed' | 'body' | 'kin' | 'cache' | 'truck' | 'drop'; label: string; loot: number; survivor?: boolean; zone: number; items?: PackItem[] }
@@ -199,6 +203,8 @@ export class Expedition {
   rummageT = 0;
   surface: Surface = 'asphalt';
   decals: { x: number; y: number; w: number; h: number; rot: number; color: string }[] = [];
+  /** this frame's search prompt (drawn over the actors) */
+  prompt: { text: string; x: number; y: number } | null = null;
   actors = new RunActors(); // rigged bodies: night/actors.ts
 
   /** the road's own decal layer, in world space (brass, blood, chips stay where they land); the
@@ -261,7 +267,9 @@ export class Expedition {
       this.spots.push({ x, searched: false, kind, label: R.pick(labels[kind]), loot: fullness * R.range(0.5, 1.3), zone: this.zoneOf(x) });
     }
     // zone 3 always has a cache (slow, loud), and a pickup you can hotwire out of here
-    const cx = Math.round(R.range(this.zoneB[1] + 420, this.len - 260));
+    const cx = Math.round(R.range(this.zoneB[1] + 440, Math.max(this.zoneB[1] + 460, this.len - 260)));
+    // the cache and the pickup stand on their own: no shed or car in front of them
+    this.spots = this.spots.filter((sp) => Math.abs(sp.x - cx) > 240 && Math.abs(sp.x - (this.zoneB[1] + 160)) > 220);
     this.spots.push({ x: cx, searched: false, kind: 'cache', label: R.pick(['a locked gun cabinet', 'a pharmacy cage', 'a deer-camp footlocker']), loot: fullness, zone: 2 });
     this.spots.push({ x: this.zoneB[1] + 160, searched: false, kind: 'truck', label: 'a pickup with keys gone', loot: 0, zone: 2 });
     this.spots.sort((a, b) => a.x - b.x);
@@ -537,6 +545,21 @@ export class Expedition {
     if (this.px <= 22 && this.t > 2 && !this.downed && (this.dragging || this.held('run.left'))) this.finish(false);
   }
 
+  /** A non-lethal hit lands: flinch, stagger, stumble or knockdown by impulse against the body's
+   *  mass (night/impact.ts, the same table as the wall). dir +1 = shoved toward +x. */
+  impact(z: EZ, h: Omit<HitIn, 'dir'>, dir: number) {
+    if (z.hp <= 0 || z.state === 'dying') return;
+    z.hitT = this.t; z.hitZone = h.zone;
+    z.stun ??= 0;
+    if (z.state === 'sleep' || z.state === 'kin') return;
+    const zz = z as unknown as Zombie;
+    // react() reads the night's states: a grabbing body counts as one at the wall
+    const st = z.state;
+    if (st === 'grab') (zz as { state: string }).state = 'wall';
+    const rx = react(zz, { ...h, dir }, this.t, () => R.next());
+    if ((zz as { state: string }).state === 'wall') (zz as { state: string }).state = st === 'grab' && !(rx && rx.tier !== 'flinch') ? 'grab' : 'walk';
+  }
+
   updZ(z: EZ, dt: number) {
     z.flash = Math.max(0, z.flash - dt);
     if (z.state === 'dying') { z.dieT += dt; return; }
@@ -555,6 +578,9 @@ export class Expedition {
     }
     z.phase += dt;
     if (z.state === 'kin') return;
+    // hit reactions: the knockback slide eases out; knocked flat, it lies there until it gets up
+    slideStep(z as unknown as Zombie, dt, this.len + 400);
+    if (z.down && z.down > 0) { z.down -= dt; if (z.state === 'grab') z.state = 'walk'; return; }
     if (z.stun && z.stun > 0) { z.stun -= dt; if (z.state === 'grab') z.state = 'walk'; return; }
     // go for whoever is nearer: the leader or the companion
     const mateUp = this.mate && this.mateX;
@@ -954,8 +980,10 @@ export class Expedition {
       z.flash = 0.08;
       if (p.incendiary) z.burn = BURN.time;
       if (z.state === 'sleep' || z.state === 'kin') z.state = 'walk';
+      if ((z.down ?? 0) > 0) { z.hp -= dd * (IMPACT.FINISH_MUL - 1); } // down in the road: an easy finish
       z.x += Math.sign(dx) * knock * (pellet ? 0.25 : 1);
       if (z.state === 'grab' && knock > 15) z.state = 'walk';
+      if (z.hp > 0) this.impact(z, { dmg: dr, knock, zone: h.head ? 'head' : oy + dy * h.t > z.y - this.zh(z) * 0.42 ? 'leg' : 'torso', pellet }, Math.sign(dx) || 1);
       const px = ox + dx * h.t, py = oy + dy * h.t;
       const plate = !h.head && !!z.def.armor && dd < dr * 0.6;
       const mine = this.shooter === 'p';
@@ -1078,6 +1106,7 @@ export class Expedition {
       z.flash = 0.1;
       z.x += this.face * p.knock * (z.def.id === 'ferryman' ? 0.15 : 1);
       if (R.chance(p.stagger)) { z.stun = 0.5 + p.stagger * 0.6; if (z.state === 'grab') z.state = 'walk'; }
+      if (z.hp > 0) this.impact(z, { dmg, knock: p.knock, zone: overhead ? 'head' : 'torso', melee: true }, this.face);
       if (p.bleed) { z.bleed = BLEED_TIME; z.bleedDps = p.bleed; }
       for (let i = 0; i < (overhead ? 8 : 4); i++) this.parts.push({ x: z.x - this.face * this.zw(z) * 0.3, y: z.y - h * (overhead ? 0.85 : 0.55), vx: this.face * R.range(20, 160), vy: R.range(-180, 20), life: 1.2, color: R.pick(['#4a0d0b', '#5e1410']), size: R.range(1.5, 3.5), g: z.y });
       if (z.hp <= 0) {
@@ -1308,11 +1337,8 @@ export class Expedition {
       const cv = bakeSpot(id, h, sp.searched);
       if (cv) c.drawImage(cv, Math.round(x - cv.width / 2), GROUND - h + (sp.kind === 'body' ? 6 : 4));
       if (!sp.searched && Math.abs(sp.x - this.px) < 60) {
-        c.font = '13px "Special Elite", monospace';
-        c.fillStyle = '#efe2c2';
-        c.textAlign = 'center';
-        c.fillText(sp.kind === 'truck' ? `${keyCap('run.search')} hotwire the pickup and drive home (2 fuel, 1 part; loud)` : `${keyCap('run.search')} search ${sp.label}${sp.kind === 'cache' ? ' (slow, loud)' : ''}`, x, GROUND - h - 14);
-        c.textAlign = 'left';
+        // the prompt is drawn after the people, so nobody's head covers it
+        this.prompt = { text: sp.kind === 'truck' ? `${keyCap('run.search')} hotwire the pickup and drive home (2 fuel, 1 part; loud)` : `${keyCap('run.search')} search ${sp.label}${sp.kind === 'cache' ? ' (slow, loud)' : ''}`, x, y: GROUND - h - 14 };
       } else if (!sp.searched) {
         c.fillStyle = 'rgba(232,200,120,0.7)';
         c.beginPath(); c.arc(x, GROUND - h - 10, 3, 0, 7); c.fill();
@@ -1351,6 +1377,18 @@ export class Expedition {
     if (this.mate) list.push({ y: LANES[0] + 0.6, f: () => this.drawMate() });
     list.sort((a, b) => a.y - b.y);
     for (const l of list) l.f();
+    if (this.prompt) {
+      const pr = this.prompt;
+      c.font = '13px "Special Elite", monospace';
+      c.textAlign = 'center';
+      const tw = c.measureText(pr.text).width;
+      const px = Math.min(W - 10 - tw / 2, Math.max(10 + tw / 2, pr.x));
+      c.fillStyle = 'rgba(10,9,8,0.55)'; c.fillRect(px - tw / 2 - 5, pr.y - 13, tw + 10, 18);
+      c.fillStyle = '#efe2c2';
+      c.fillText(pr.text, px, pr.y);
+      c.textAlign = 'left';
+      this.prompt = null;
+    }
     // foreground strip at 1.3x camera speed
     if (fgC) {
       const off = Math.round((this.cam * 1.3) % 2560);
@@ -1531,14 +1569,18 @@ export class Expedition {
       return;
     }
     c.save();
-    let rot = 0, dy = 0;
+    let rot = 0, dy = 0, sy = 1;
     if (z.state === 'walk') { rot = Math.sin(z.phase * 3.2) * 0.04; dy = -Math.abs(Math.sin(z.phase * 3.2)) * 2.5 * z.sc; }
+    // a hit reaction on the single image (night/impact.ts classicPose): tilt, knee, fall and rise
+    const cp = z.state !== 'dying' ? classicPose(z as unknown as Zombie, h, this.t) : null;
+    if (cp) { rot = cp.rot; dy = cp.dy; sy = cp.sy; }
     if (z.state === 'sleep' || z.state === 'kin') rot = 0.06 + Math.sin(z.phase * 0.7) * 0.01;
     if (z.state === 'grab') rot = -0.1 + Math.sin(z.phase * 7) * 0.06;
     if (z.state === 'dying') { const t = Math.min(1, z.dieT / 0.45); rot = t * 1.2; dy = t * h * 0.15; c.globalAlpha = 1 - Math.max(0, z.dieT - 0.4) * 5; }
     c.translate(x, z.y + dy);
     c.scale(-z.dir, 1); // sprites face left by default
     c.rotate(rot);
+    if (sy !== 1) c.scale(1, sy);
     if (z.headless) { c.beginPath(); c.rect(-w / 2 - 10, -h + h * z.def.head * 0.95, w + 20, h); c.clip(); }
     c.drawImage(bk.cv, -w / 2 - bk.pad * k, -h - bk.pad * k, bk.cv.width * k, bk.cv.height * k);
     if (z.flash > 0) { const f = flashImg(z.sprite); if (f) { c.globalAlpha = 0.6; c.drawImage(f, -w / 2, -h, w, h); } }

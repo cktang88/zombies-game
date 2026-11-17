@@ -782,11 +782,11 @@ function stopAdd(rig: Rig, id: string) { if (has(rig, id)) rig.stop(id); }
 
 // ------------------------------------------------------------------ daylight run (expedition.ts)
 /** The run's view of a Turned (expedition.ts EZ). Coordinates: world x, screen y. */
-export interface RunZed { id: number; def: { id: string; height: number; crawl?: boolean; lunge?: boolean }; sprite: string; x: number; y: number; state: string; dir: number; sc: number; lane: number; variant: number; flash: number; headless?: boolean; stun?: number; burn?: number; lungeT: number }
+export interface RunZed { id: number; def: { id: string; height: number; crawl?: boolean; lunge?: boolean }; sprite: string; x: number; y: number; state: string; dir: number; sc: number; lane: number; variant: number; flash: number; headless?: boolean; stun?: number; burn?: number; lungeT: number; down?: number; react?: { tier: string; kind: string; t0: number; dur: number; seed: number }; hitT?: number; hitZone?: 'head' | 'torso' | 'arm' | 'leg' }
 interface RunBody { rig: Rig; px: number; v: number; weapon: string | null; swingT: number; reload: number; mag: number; wounds: number }
 interface RunCorpse { rig: Rig; x: number; y: number; scale: number; facing: 1 | -1; t: number; img?: HTMLCanvasElement; ox?: number; oy?: number }
 const MAX_RUN_DEAD = 60; // baked bodies kept along the road
-type RunZR = ZR & { lastState: string };
+type RunZR = ZR & { lastState: string; hitT?: number };
 const W_RUN = 1280;
 
 export class RunActors {
@@ -892,14 +892,29 @@ export class RunActors {
     const rig = r.rig;
     const moved = Math.abs(z.x - r.px) / dt;
     r.px = z.x;
-    const still = z.state !== 'walk' || (z.stun ?? 0) > 0;
+    const still = z.state !== 'walk' || (z.stun ?? 0) > 0 || (z.down ?? 0) > 0;
     r.v += ((still ? 0 : Math.min(moved, 400)) - r.v) * Math.min(1, dt * 10);
     rig.setSpeed(r.v);
     if (rig.ready) {
       if (!r.ready) { r.ready = true; rig.phase = (z.id * 0.6180339) % 1; }
       if (z.flash > r.flash + 0.02) rig.flashT = Math.max(rig.flashT, 0.06);
       r.flash = z.flash;
-      if ((z.stun ?? 0) > r.stun + 0.05) rig.play(clip('stagger'), { duration: 0.6 });
+      // hit reactions, as at the wall (night/impact.ts): a flinch on every new hit, then the
+      // stagger / knee / fall clip for the tier the hit earned, stretched to the sim's time
+      if (z.hitT !== undefined && z.hitT !== r.hitT) { r.hitT = z.hitT; rig.hit(z.hitZone ?? 'torso', { cripple: false }); }
+      const rx = z.react;
+      let reacted = false;
+      if (rx && rx.t0 !== r.rt0) {
+        r.rt0 = rx.t0;
+        const pick = reactClip(rx.tier, rx.kind, rx.seed);
+        if (pick) {
+          const v = 0.92 + ((rx.seed >> 3) % 9) * 0.02;
+          rig.stop('stagger'); rig.stop('staggerInPlace');
+          rig.play(pick, { duration: rx.tier === 'stagger' ? clamp(rx.dur * 1.9 * v, 0.4, 1.0) : Math.max(0.7, rx.dur * v) });
+          reacted = true;
+        }
+      }
+      if (!reacted && (z.stun ?? 0) > r.stun + 0.05 && !(z.down && z.down > 0)) rig.play(clip('stagger'), { duration: 0.6 });
       r.stun = z.stun ?? 0;
       if (z.state === 'grab') { if (!rig.isPlaying('grabBite')) rig.play('grabBite'); }
       else if (rig.isPlaying('grabBite')) rig.stop('grabBite');
