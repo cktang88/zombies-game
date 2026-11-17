@@ -26,6 +26,9 @@ interface RigSrc {
   radius?: Record<string, number>; // per-part thickness as a fraction of source char height
   force?: { part: string; poly: P[] }[]; // pixels inside poly go to `part` ("none" = discard)
   fillMaxX?: number; // the chest-hole fill under the arm stops at this source x
+  // added to a part's rest angle (the art is drawn rotated by -bias). z_crawler: its prone
+  // source already has the head raised, while the crawl gaits lift the head of upright rigs
+  restBias?: Record<string, number>;
   hands?: { source: string; refPose: string; scale?: number; poses: Record<string, { index: number; wrist: P; tip: P; grip?: P }> };
 }
 interface Bone { part: string; a: string; b: string; parent?: string; ignore?: boolean; front?: boolean }
@@ -152,23 +155,78 @@ async function segment(rig: RigSrc) {
   {
     const tm = masks.get('torso')!;
     const tk = idx('torso');
-    const hole: number[] = [];
-    for (let x = 0; x < Math.min(src.w, rig.fillMaxX ?? src.w); x++) {
+    const W = src.w;
+    const isHole = new Uint8Array(W * src.h);
+    const fillMax = Math.min(W, rig.fillMaxX ?? W);
+    for (let x = 0; x < fillMax; x++) {
       let y0 = -1, y1 = -1;
-      for (let y = 0; y < src.h; y++) if (own[y * src.w + x] === tk) { if (y0 < 0) y0 = y; y1 = y; }
+      for (let y = 0; y < src.h; y++) if (own[y * W + x] === tk) { if (y0 < 0) y0 = y; y1 = y; }
       if (y0 < 0) continue;
       for (let y = y0; y <= y1; y++) {
-        const i = y * src.w + x;
-        if (!tm[i] && own[i] >= 0 && BONES[own[i]].front && segDist(x, y, J.pelvis, J.neck).d < R('torso') * 0.95) { tm[i] = 1; hole.push(i); }
+        const i = y * W + x;
+        if (!tm[i] && own[i] >= 0 && BONES[own[i]].front && segDist(x, y, J.pelvis, J.neck).d < R('torso') * 0.95) isHole[i] = 1;
       }
     }
-    inpaint(torsoSrc.data, src.w, hole);
+    // The chest's front contour behind the arm is unknown: rows where the arm covers the
+    // torso's front edge get an edge interpolated between the clear rows above and below
+    // (rigs face right, so "front" = +x). Fill up to it and ink it, so a raised arm shows a
+    // drawn chest line instead of the straight capsule cut.
+    const fx = new Int32Array(src.h).fill(-1);
+    for (let y = 0; y < src.h; y++) for (let x = 0; x < W; x++) if (own[y * W + x] === tk) fx[y] = x;
+    const occl = (y: number) => {
+      if (fx[y] < 0) return false;
+      for (let d = 1; d <= 3; d++) { const o = own[y * W + fx[y] + d]; if (o >= 0 && BONES[o].front) return true; }
+      return false;
+    };
+    const edge = new Int32Array(src.h).fill(-1);
+    for (let y = 0; y < src.h;) {
+      if (!occl(y)) { y++; continue; }
+      let y2 = y;
+      while (y2 + 1 < src.h && occl(y2 + 1)) y2++;
+      const a = fx[y - 1] ?? -1, b = fx[y2 + 1] ?? -1;
+      for (let yy = y; yy <= y2; yy++) {
+        const u = (yy - y + 1) / (y2 - y + 2);
+        const xe = a >= 0 && b >= 0 ? a + (b - a) * u : Math.max(a, b);
+        if (xe < 0) continue;
+        edge[yy] = Math.round(Math.min(fillMax - 1, Math.max(fx[yy], xe)));
+        for (let x = fx[yy] + 1; x < W; x++) {
+          const i = yy * W + x;
+          if (x <= edge[yy]) { if (!tm[i] && segDist(x, yy, J.pelvis, J.neck).d < R('torso') * 1.6) isHole[i] = 1; }
+          else isHole[i] = 0; // nothing in front of the drawn edge
+        }
+      }
+      y = y2 + 1;
+    }
+    const hole: number[] = [];
+    for (let i = 0; i < isHole.length; i++) if (isHole[i]) { tm[i] = 1; hole.push(i); }
+    inpaint(torsoSrc.data, W, hole, tm);
+    // texture: mirror the chest behind the hole's back boundary into it (seamless at that
+    // boundary), mixed with the diffusion colour so the mean tone stays right
+    const d = torsoSrc.data;
+    for (const i of hole) {
+      const x = i % W, y = (i / W) | 0;
+      let xb = x - 1;
+      while (xb >= 0 && isHole[y * W + xb]) xb--;
+      const xm = 2 * xb - x;
+      if (xb < 0 || xm < 0) continue;
+      const j = y * W + xm;
+      if (!tm[j] || isHole[j] || src.data[j * 4 + 3] < 128) continue;
+      for (let k = 0; k < 3; k++) d[i * 4 + k] = Math.round(src.data[j * 4 + k] * 0.7 + d[i * 4 + k] * 0.3);
+    }
+    // ink line along the reconstructed front edge
+    const ink = Math.max(3, Math.round(charH * 0.003));
+    for (let y = 0; y < src.h; y++) if (edge[y] >= 0) for (let x = edge[y] - ink + 1; x <= edge[y]; x++) {
+      const i = y * W + x;
+      if (x < 0 || !isHole[i]) continue;
+      d[i * 4] = 22; d[i * 4 + 1] = 19; d[i * 4 + 2] = 17; d[i * 4 + 3] = 255;
+    }
+    keepLargest(tm, W, src.h);
   }
   // 3. cut + scale
   const cuts: Cut[] = [];
   for (const bn of BONES) if (!bn.ignore) {
     const c = await cutPart(bn.part, bn.part === 'torso' ? torsoSrc : src, masks.get(bn.part)!, s, J[bn.a], J[bn.b]);
-    if (c) cuts.push(c);
+    if (c) { c.rest += rig.restBias?.[bn.part] ?? 0; cuts.push(c); }
   }
   // 4. alternate hand poses from a hands sheet (connected components, left to right)
   if (rig.hands) {
@@ -230,26 +288,65 @@ async function segment(rig: RigSrc) {
 }
 
 /** Diffusion fill: hole pixels take the mean of their known neighbours, repeated until settled. */
-function inpaint(data: Buffer, w: number, hole: number[]) {
+function inpaint(data: Buffer, w: number, hole: number[], region: Uint8Array) {
   if (!hole.length) return;
   const known = new Uint8Array(data.length / 4).fill(1);
   for (const i of hole) known[i] = 0;
+  // ink outlines would darken the fill: skip neighbours much darker than the region's median
+  // (relative, so dark clothing like riot armour still has known pixels to diffuse from)
+  const lum: number[] = [];
+  for (let i = 0; i < region.length; i += 7) if (region[i] && known[i] && data[i * 4 + 3] > 128) lum.push(data[i * 4] + data[i * 4 + 1] + data[i * 4 + 2]);
+  lum.sort((a, b) => a - b);
+  const inkT = Math.min(110, (lum[lum.length >> 1] ?? 220) * 0.5);
   // seed from nearest known pixels so diffusion converges quickly, then relax
+  // only torso pixels and already-filled hole pixels feed the fill (never the arm on top)
+  const filled = new Uint8Array(known.length);
   for (let it = 0; it < 400; it++) {
-    let changed = 0;
+    let fresh = 0;
     for (const i of hole) {
       let r = 0, g = 0, b = 0, n = 0;
       for (const j of [i - 1, i + 1, i - w, i + w, i - w - 1, i - w + 1, i + w - 1, i + w + 1]) {
-        if (j < 0 || j * 4 >= data.length || data[j * 4 + 3] < 128 || (!known[j] && it === 0)) continue;
-        if (known[j] && data[j * 4] + data[j * 4 + 1] + data[j * 4 + 2] < 110) continue; // ink outlines would darken the fill
+        if (j < 0 || j * 4 >= data.length) continue;
+        if (known[j]) {
+          if (!region[j] || data[j * 4 + 3] < 128 || data[j * 4] + data[j * 4 + 1] + data[j * 4 + 2] < inkT) continue;
+        } else if (!filled[j]) continue;
         r += data[j * 4]; g += data[j * 4 + 1]; b += data[j * 4 + 2]; n++;
       }
       if (!n) continue;
       data[i * 4] = r / n; data[i * 4 + 1] = g / n; data[i * 4 + 2] = b / n; data[i * 4 + 3] = 255;
-      changed++;
+      if (!filled[i]) { filled[i] = 1; fresh++; }
     }
-    if (!changed) break;
+    if (!fresh && it > 60) break;
   }
+  // anything unreachable (no torso neighbour at all) takes the region's median tone
+  const med = lum[lum.length >> 1] ?? 240;
+  for (const i of hole) if (!filled[i]) { data[i * 4] = data[i * 4 + 1] = data[i * 4 + 2] = Math.round(med / 3); data[i * 4 + 3] = 255; }
+}
+
+/** Drop specks: keep only the largest 8-connected component of a mask. */
+function keepLargest(m: Uint8Array, w: number, h: number) {
+  const lab = new Int32Array(m.length);
+  let best = 0, bestN = 0, next = 0;
+  const stack: number[] = [];
+  for (let i = 0; i < m.length; i++) {
+    if (!m[i] || lab[i]) continue;
+    next++;
+    let n = 0;
+    stack.push(i); lab[i] = next;
+    while (stack.length) {
+      const j = stack.pop()!;
+      n++;
+      const x = j % w, y = (j / w) | 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const X = x + dx, Y = y + dy;
+        if (X < 0 || Y < 0 || X >= w || Y >= h) continue;
+        const k = Y * w + X;
+        if (m[k] && !lab[k]) { lab[k] = next; stack.push(k); }
+      }
+    }
+    if (n > bestN) { bestN = n; best = next; }
+  }
+  for (let i = 0; i < m.length; i++) if (m[i] && lab[i] !== best) m[i] = 0;
 }
 
 /** Connected opaque components (8-neighbour), biggest-first filter, sorted left to right. */
