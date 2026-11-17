@@ -207,5 +207,5 @@ export interface NightPlan {
   points: number;
   label: string;
   special?: string; // fog, horde, rain, siren...
-  spawns: { type: string; t: number; y?: number; name?: string; pack?: string }[]; // pack: a combination template (sim/director.ts)
+  spawns: { type: string; t: number; y?: number; name?: string; pack?: string; dark?: boolean }[]; // pack: a combination template (sim/director.ts); dark: forms up close, in the dark
 }

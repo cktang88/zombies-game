@@ -92,6 +92,8 @@ export interface Zombie {
   variant: number; // crowd variant (0 neutral, 1 cold, 2 sickly)
   laneCd: number; // seconds before it may hop lanes again
   blocked: number; // seconds spent held up behind the one ahead
+  pass?: number; // squeezing past a slower body ahead in its lane: seconds left
+  rise?: number; // formed up out of the dark close in: seconds of fade-in left
   // ---- combat depth (research 05) ----
   stun: number; // staggered: no walking, no wall damage
   legDmg: number; // accumulated leg damage (×limbMul); ≥35% max HP → crippled
@@ -217,7 +219,7 @@ export interface NightResult {
 
 export class Battle {
   /** Balance knobs (docs/balance.md §9): guard rate of fire, aim error and head-aim share, the Turned at the wall. */
-  static tune = { guardCd: 2.2, guardErr: 1.15, guardHead: 0.85, wallDps: 1.3, guardRange: 0.55, guardShove: 0.35 };
+  static tune = { guardCd: 2.2, guardErr: 1.15, guardHead: 0.85, wallDps: 1.3, guardRange: 0.55, guardShove: 0.35, guardPierce: 0, passSpeed: 0.75 }; // guardPierce: bodies past the first a guard's round goes on through (0 = it stops in the first; the player keeps full pierce)
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
   ground: HTMLCanvasElement;
@@ -724,7 +726,8 @@ export class Battle {
     this.drainOpen = Math.max(0, this.drainOpen - dt);
     // spawns
     while (this.spawnIdx < this.plan.spawns.length && this.plan.spawns[this.spawnIdx].t <= this.t) {
-      this.spawn(this.plan.spawns[this.spawnIdx].type, false, this.plan.spawns[this.spawnIdx].name);
+      const sp = this.plan.spawns[this.spawnIdx];
+      this.spawn(sp.type, false, sp.name, sp.dark);
       this.spawnIdx++;
     }
     // noise draws stragglers
@@ -795,9 +798,11 @@ export class Battle {
     }
   }
 
-  spawn(type: string, straggler = false, name?: string) {
+  spawn(type: string, straggler = false, name?: string, dark = false) {
     const def = ZOMBIES[type];
     if (!def) return;
+    // a big wave forms up out in the dark, close in: past what the guards and the floodlights make out (balance.md §10)
+    const darkX = dark && !def.boss && !def.tunnel && !def.ranged ? this.darkBand() : 0;
     // the lane with the fewest bodies in the rightmost 300px; ties at random
     const count = [0, 0, 0, 0];
     for (const o of this.zombies) if (o.x > W - 300 && this.inLane(o)) count[o.lane]++;
@@ -809,7 +814,7 @@ export class Battle {
     const hpMul = def.ranged || def.boss ? 1 : 1 + Math.max(0, G.day - 8) * 0.02; // balance.md §8.9
     const sprite = R.pick(def.sprites);
     const z: Zombie = {
-      id: this.nextId++, def, sprite, x: W + R.range(30, 120), y, hp: def.hp * hpMul, maxHp: def.hp * hpMul, state: 'walk',
+      id: this.nextId++, def, sprite, x: darkX ? R.range(darkX, 1150) : W + R.range(30, 120), y, rise: darkX ? 1.2 : undefined, hp: def.hp * hpMul, maxHp: def.hp * hpMul, state: 'walk',
       phase: R.range(0, 10), flash: 0, slow: 0, burn: 0, dieT: 0, maulT: 0, lungeT: R.range(1, 3), screamT: R.range(3, 6), scale: depthScale(y) * jit, wallHit: 0, name,
       lane, ty: y, jit, variant: R.int(0, 2), laneCd: 1, blocked: 0, stun: 0, legDmg: 0, armDmg: 0,
     };
@@ -874,7 +879,17 @@ export class Battle {
     }
     if (straggler && R.chance(0.3)) this.say('Your shooting carries. More are coming up the road.', 3);
     const v = voiceOf(def.id);
-    if (v && (def.cost >= 3 || R.chance(0.2))) sfx.zombieVoice(v, 'alert', { far: true, pan: 0.75, volume: def.cost >= 3 ? 0.9 : 0.55 });
+    if (darkX) {
+      // the telegraph: a chorus out in the dark, closer than it should be
+      if (v && this.t - this.alertT > 0.25) { this.alertT = this.t; sfx.zombieVoice(v, 'alert', { pan: panOf(z.x), volume: 0.8 }); }
+      if (this.t - this.darkSaid > 12) { this.darkSaid = this.t; this.say('Out in the dark, close: a lot of them, all at once.', 3); }
+    } else if (v && (def.cost >= 3 || R.chance(0.2))) sfx.zombieVoice(v, 'alert', { far: true, pan: 0.75, volume: def.cost >= 3 ? 0.9 : 0.55 });
+  }
+  darkSaid = -99;
+  /** Where a body can form up unseen: past the guards' sight in this light (and the floodlights' best throw), never past 1090. */
+  darkBand() {
+    const sight = WALL_X + ((this.plan.special === 'fog' ? 640 : 820) - WALL_X) * Battle.tune.guardRange + Math.min(3, G.fort.lights) * 130 + (this.guards.some((g) => g.post === 'roof') ? 260 : 0);
+    return Math.min(1090, Math.max(this.plan.special === 'fog' ? 820 : 900, sight + 60));
   }
 
   /** Ringing ears: sustained loud fire near the leader without ear defenders muffles the world for a few seconds. */
@@ -1977,7 +1992,7 @@ export class Battle {
         const a = base + R.gauss(0, prof.pellets > 1 ? prof.spread * 0.7 * (g.post === 'loop' ? 0.8 : 1) : err * 0.6);
         let ly = g.burstLane;
         if (prof.pellets > 1 && R.chance(0.25)) { const adj = LANES[li + (R.chance(0.5) ? 1 : -1)]; if (adj !== undefined) ly = adj; }
-        this.castShot(g, mz.x, mz.y, a, prof.dmg, prof.pierce, prof.knock * (prof.pellets > 1 ? Battle.tune.guardShove : 1), prof.pellets > 1, false, prof, ly);
+        this.castShot(g, mz.x, mz.y, a, prof.dmg, Math.min(Battle.tune.guardPierce, prof.pierce), prof.knock * (prof.pellets > 1 ? Battle.tune.guardShove : 1), prof.pellets > 1, false, prof, ly);
       }
       this.roundFired(g, prof, mz, true, base);
       g.w.cond = Math.max(0.05, g.w.cond - 0.0006);
@@ -2014,6 +2029,7 @@ export class Battle {
     }
     z.phase += dt;
     z.laneCd -= dt;
+    if (z.rise) z.rise = Math.max(0, z.rise - dt);
     // ease toward the lane's feet (lane hops, or onto a defenders' row behind the wall)
     // another module may have pulled it off the pile or out of the air
     if (z.state !== 'climb') z.climb = undefined;
@@ -2252,9 +2268,18 @@ export class Battle {
     if (ahead) {
       const gap = (queued ? 0.45 : 0.55) * Math.max(w, aw);
       const lim = ahead.x + gap;
+      // overtaking: a faster body stuck behind a slow or staggered one shoulders past it, a half-step to the side
+      const slow = !queued && ahead.state === 'walk' && (z.def.speed > ahead.def.speed * 1.2 || ahead.stun > 0 || (ahead.down ?? 0) > 0);
+      if (slow && z.blocked > 0.35 && !z.pass) {
+        z.pass = 2.5;
+        const side = z.lane === 0 ? 1 : z.lane === LANES.length - 1 ? -1 : R.chance(0.5) ? 1 : -1;
+        z.ty = LANES[z.lane] + side * 9;
+      }
+      if (z.pass && slow) nx = z.x - speed * Battle.tune.passSpeed * dt;
       // never closer than the gap; a body knocked back into the one behind just stops it
-      if (nx < lim) { nx = Math.min(z.x, lim); held = true; }
+      else if (nx < lim) { nx = Math.min(z.x, lim); held = true; }
     }
+    if (z.pass && (z.pass -= dt) <= 0) { z.pass = undefined; z.ty = LANES[z.lane] + R.range(-3, 3); }
     z.x = nx;
     if (z.x <= face) { z.x = face; z.state = standing ? 'wall' : 'over'; if (z.state === 'wall') { this.laneQ[z.lane]++; this.alertVoice(z); } return; }
     if (held && queued && standing) { z.state = 'wall'; this.laneQ[z.lane]++; return; }
@@ -3343,9 +3368,10 @@ export class Battle {
 
   /** In fog the far ones fade into it (by x), the far lanes sooner. 1 on a clear night. */
   fogAlpha(z: Zombie) {
-    if (this.plan.special !== 'fog') return 1;
+    const r = z.rise ? 1 - z.rise / 1.25 : 1; // forming up out of the dark
+    if (this.plan.special !== 'fog') return r;
     const farFade = Math.max(0.15, 1 - Math.max(0, z.x - 620) / 400);
-    return Math.max(0.15, 1 - (1 - farFade) * (1.4 - 0.4 * depthT(z.y)));
+    return r * Math.max(0.15, 1 - (1 - farFade) * (1.4 - 0.4 * depthT(z.y)));
   }
 
   drawZombie(c: CanvasRenderingContext2D, z: Zombie, env: ReturnType<Battle['lightEnv']>) {
@@ -3739,6 +3765,8 @@ export class Battle {
       tunneler: ['_', '#9a8a6a'], bellwether: ['☗', '#e0c070'],
     };
     let lastPack = '';
+    const close = up.find((s) => s.dark);
+    if (close) { c.font = '8px "Special Elite", monospace'; c.fillStyle = '#d06050'; c.textAlign = 'right'; c.fillText('CLOSE IN THE DARK', x1, y - 2); }
     for (const s of up) {
       const k = (s.t - this.t) / look;
       const x = x0 + 40 + k * (x1 - x0 - 40);
