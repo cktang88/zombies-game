@@ -2,6 +2,7 @@
   "id": "surv_m_old",
   "source": "surv_m_old__riga",
   "height": 240,
+  "aimUnits": { "revolver": "unit_surv_m_old_revolver" },
   "joints": {
     "headTop": [
       640,
