@@ -137,7 +137,7 @@ function buildDark() {
   for (const f of fires) hole(f.x, f.y - 20, 260, 0.9 * Math.min(1, f.life));
 }
 
-let frameMs = 0, frames = 0, frameSum = 0, frameMax = 0;
+let frameMs = 0, frames = 0, frameSum = 0, frameMax = 0, vfxSum = 0, vfxMax = 0, nMax = 0;
 function step(dt: number) {
   t += dt;
   for (const l of lights) l.life -= dt;
@@ -208,6 +208,8 @@ function draw() {
   c.fillStyle = v; c.fillRect(-W, -H, W * 2, H * 2); c.restore();
   frameMs = performance.now() - f0;
   frames++; frameSum += frameMs; frameMax = Math.max(frameMax, frameMs);
+  const vc = vfx.cost.update + vfx.cost.draw;
+  vfxSum += vc; vfxMax = Math.max(vfxMax, vc); nMax = Math.max(nMax, vfx.P.n);
   (document.getElementById('status') as HTMLElement).textContent =
     `particles ${vfx.P.n}/${vfx.P.limit}  vfx update ${vfx.cost.update.toFixed(2)} ms  vfx draw ${vfx.cost.draw.toFixed(2)} ms  frame ${frameMs.toFixed(2)} ms  sprites built in ${vfx.S.ms.toFixed(0)} ms`;
 }
@@ -255,11 +257,13 @@ function ui() {
 }
 
 /** The perf scene: an LMG on the trigger, a shotgun every half second, a blast every 1.5 s, a fire burning. */
+let heavyId = 0;
 function heavy() {
+  clearInterval(heavyId);
   wpn = 'lmg'; auto = true;
   fires.push({ x: 900, y: LANES[1], w: 150, life: 30 });
   let n = 0;
-  const id = setInterval(() => {
+  const id = heavyId = window.setInterval(() => {
     n++;
     const l0 = lane; lane = (n % 4); fire('pump'); lane = l0;
     if (n % 3 === 0) vfx.explosion(650 + (n % 5) * 90, LANES[n % 4], 150);
@@ -271,8 +275,8 @@ function heavy() {
   vfx, fire: (id: string, o?: { ammo?: string; suppressed?: boolean }) => fire(id, o), effect: (k: string) => EFFECTS[k](),
   pause: (p = true) => { paused = p; }, step: (n = 1, dt = 1 / 60) => { for (let i = 0; i < n; i++) step(dt); draw(); },
   set: (o: { lit?: boolean; snow?: boolean; gore?: boolean; lane?: number; auto?: boolean; wpn?: string }) => { if (o.lit !== undefined) lit = o.lit; if (o.snow !== undefined) snow = o.snow; if (o.gore !== undefined) gore = o.gore; if (o.lane !== undefined) lane = o.lane; if (o.auto !== undefined) auto = o.auto; if (o.wpn) wpn = o.wpn; },
-  quality: (q: Quality) => vfx.setQuality(q), clear: () => { gctx.clearRect(0, 0, W, H); vfx.clear(); fires = []; lights = []; lobs = []; for (const d of dummies) d.burn = 0; flaming = 0; auto = false; },
-  heavy, stats: () => ({ n: vfx.P.n, frameAvg: frameSum / Math.max(1, frames), frameMax, ...vfx.cost }), resetStats: () => { frames = 0; frameSum = 0; frameMax = 0; },
+  quality: (q: Quality) => vfx.setQuality(q), clear: () => { clearInterval(heavyId); gctx.clearRect(0, 0, W, H); vfx.clear(); fires = []; lights = []; lobs = []; for (const d of dummies) d.burn = 0; flaming = 0; auto = false; },
+  heavy, stats: () => ({ n: vfx.P.n, nMax, frames, frameAvg: frameSum / Math.max(1, frames), frameMax, vfxAvg: vfxSum / Math.max(1, frames), vfxMax }), resetStats: () => { frames = 0; frameSum = 0; frameMax = 0; vfxSum = 0; vfxMax = 0; nMax = 0; },
   ready: false, laneScale,
 };
 void loadAssets().then(() => {

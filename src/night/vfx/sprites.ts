@@ -123,7 +123,7 @@ function flameTongue(variant: number, W = 40, H = 88): Cv {
     const t = 1 - (y + 0.5) / H; // 0 bottom .. 1 top
     // teardrop: round base low, pinching to a curled tip
     const base = 0.16;
-    const half = t < base ? Math.sqrt(Math.max(0, 1 - ((base - t) / base) ** 2)) * 0.82 * fat : 0.82 * fat * Math.pow(Math.max(0, 1 - (t - base) / (1 - base)), 0.85);
+    const half = t < base ? Math.sqrt(Math.max(0, 1 - ((base - t) / base) ** 2)) * 0.95 * fat : 0.95 * fat * Math.pow(Math.max(0, 1 - (t - base) / (1 - base)), 0.62);
     const cx = curl * t * t * 1.4 + Math.sin(t * 5 + variant) * 0.08 * t;
     let f = half > 0 ? 1 - Math.abs(u - cx) / half : -1;
     f -= (fbm(u * 2.4 + variant, t * 4.2, sd) - 0.5) * 0.7 * (0.3 + t);
@@ -281,9 +281,9 @@ function ringTex(S = 128): Cv {
   const [c, g] = mk(S, S);
   const gr = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
   gr.addColorStop(0, 'rgba(255,236,200,0)');
-  gr.addColorStop(0.66, 'rgba(255,236,200,0.06)');
-  gr.addColorStop(0.88, 'rgba(255,236,200,0.6)');
-  gr.addColorStop(0.95, 'rgba(255,250,236,1)');
+  gr.addColorStop(0.8, 'rgba(255,236,200,0.03)');
+  gr.addColorStop(0.92, 'rgba(255,236,200,0.45)');
+  gr.addColorStop(0.965, 'rgba(255,250,236,1)');
   gr.addColorStop(1, 'rgba(255,236,200,0)');
   g.fillStyle = gr;
   g.fillRect(0, 0, S, S);

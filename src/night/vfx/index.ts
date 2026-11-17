@@ -55,7 +55,7 @@ const FLASH_K = 1.5;
 /** perspective scale for a ground y (render.ts depthScale) */
 export const laneScale = (y: number) => Math.max(0.55, Math.min(1.2, (y - HORIZON) / (REF_Y - HORIZON)));
 
-interface FlashInst { x: number; y: number; ang: number; spec: FlashSpec; s: number; age: number; seed: number; on: boolean }
+interface FlashInst { x: number; y: number; ang: number; spec: FlashSpec; s: number; age: number; seed: number; on: boolean; gy: number }
 interface Round {
   on: boolean; kind: RoundKind; tracer: boolean; x0: number; y0: number; dx: number; dy: number; len: number; speed: number;
   t: number; width: number; end: 'ground' | 'body' | 'air'; gy: number; seed: number; fire: boolean; arrived: boolean; emit: number; s: number;
@@ -95,6 +95,8 @@ export class Vfx {
   quality: Quality = 'high';
   /** count multiplier from quality */
   qk = 1;
+  /** soft-glow (bloom) fill multiplier from quality: these big additive quads are the fill-rate cost on a CPU rasteriser */
+  gk = 1;
   t = 0;
   wind = 14;
   private flashes: FlashInst[] = [];
@@ -110,6 +112,8 @@ export class Vfx {
   private rocketsIn: { x: number; arrive: number }[] = [];
   private washA = 0; private washX = 0; private washY = 0; private washR = 600;
   private emitT = new Map<string, number>();
+  /** fire pools burning this frame (their glow is drawn once per frame, then the list is cleared) */
+  private pools: { x: number; y: number; w: number; k: number }[] = [];
   /** frame cost probe (ms): update + draw, for the perf report */
   cost = { update: 0, draw: 0 };
 
@@ -117,7 +121,7 @@ export class Vfx {
     this.host = host;
     this.S = sprites();
     this.P = new Pool(2000);
-    for (let i = 0; i < 48; i++) this.flashes.push({ x: 0, y: 0, ang: 0, spec: null as unknown as FlashSpec, s: 1, age: 0, seed: 0, on: false });
+    for (let i = 0; i < 48; i++) this.flashes.push({ x: 0, y: 0, ang: 0, spec: null as unknown as FlashSpec, s: 1, age: 0, seed: 0, on: false, gy: 0 });
     for (let i = 0; i < 256; i++) this.rounds.push({ on: false, kind: 'bullet', tracer: false, x0: 0, y0: 0, dx: 1, dy: 0, len: 0, speed: 1, t: 0, width: 1, end: 'air', gy: 0, seed: 0, fire: false, arrived: false, emit: 0, s: 1 });
     for (let i = 0; i < 128; i++) this.pend.push({ on: false, surf: 'ground', x: 0, y: 0, ang: 0, ground: 0, power: 1, pellet: false, t: 0 });
     this.setQuality(quality);
@@ -126,6 +130,7 @@ export class Vfx {
   setQuality(q: Quality) {
     this.quality = q;
     this.qk = q === 'high' ? 1 : q === 'medium' ? 0.6 : 0.32;
+    this.gk = q === 'high' ? 1 : q === 'medium' ? 0.7 : 0;
     this.P.limit = q === 'high' ? 2000 : q === 'medium' ? 1100 : 450;
     if (this.P.n > this.P.limit) this.P.n = this.P.limit;
   }
@@ -151,11 +156,11 @@ export class Vfx {
     const ca = Math.cos(o.ang), sa = Math.sin(o.ang);
     if (sp.life > 0.015) {
       const f = this.flashes.find((x) => !x.on) ?? this.flashes[(this.t * 997) % this.flashes.length | 0];
-      f.on = true; f.x = o.x; f.y = o.y; f.ang = o.ang; f.spec = sp; f.s = s * FLASH_K * rr(0.9, 1.12); f.age = 0; f.seed = rnd();
+      f.on = true; f.x = o.x; f.y = o.y; f.ang = o.ang; f.spec = sp; f.s = s * FLASH_K * rr(0.9, 1.12); f.age = 0; f.seed = rnd(); f.gy = o.eject?.ground ?? o.y + 110 * s;
     }
     if (sp.light > 0 && o.light !== false) this.host.light(o.x + ca * 12, o.y + sa * 12, sp.light * (o.far ? 0.8 : 1), Math.max(0.05, sp.life), sp.lightCol);
     if (sp.wash > 0 && this.quality !== 'low' && (this.host.flashes?.() ?? true)) {
-      this.washA = Math.max(this.washA, sp.wash * (o.far ? 0.5 : 1)); this.washX = o.x; this.washY = o.y; this.washR = 700;
+      this.washA = Math.max(this.washA, sp.wash * (o.far ? 0.5 : 1)); this.washX = o.x; this.washY = o.y; this.washR = 520 * this.gk;
     }
     const P = this.P;
     // smoke: a puff driven forward that brakes hard, then hangs and drifts with the wind
@@ -170,7 +175,7 @@ export class Vfx {
       P.vx[j] = Math.cos(o.ang + sp2) * v; P.vy[j] = Math.sin(o.ang + sp2) * v - rr(5, 25);
       P.drag[j] = powder ? 2.2 : 3.2; P.grav[j] = -rr(10, 22);
       P.s0[j] = sp.smokeSize * 0.45 * s; P.s1[j] = sp.smokeSize * rr(1.8, 2.8) * s * (powder ? 1.6 : 1);
-      P.a0[j] = powder ? rr(0.55, 0.8) : rr(0.28, 0.45);
+      P.a0[j] = powder ? rr(0.55, 0.8) : rr(0.34, 0.52);
       P.col[j] = pcol; P.flags[j] = F_WIND; P.rot[j] = rr(0, 6.28); P.vr[j] = rr(-0.6, 0.6); P.delay[j] = k * 0.05;
     }
     // unburnt powder: sparks thrown down the bore line
@@ -419,15 +424,15 @@ export class Vfx {
     const sz = Math.max(0.6, Math.min(1.7, radius / 150)) * laneScale(y);
     const cy = y - 18 * sz;
     // (1) the instant: a white pop, a hot glow, a light that floods the road, the wash
-    let j = P.add(GLOWK, x, cy, 0.1); P.s0[j] = 150 * sz; P.s1[j] = 190 * sz; P.col[j] = gc('white');
-    j = P.add(GLOWK, x, cy, 0.4); P.s0[j] = 260 * sz; P.s1[j] = 340 * sz; P.col[j] = gc('orange'); P.a0[j] = 0.8;
+    let j = P.add(GLOWK, x, cy, 0.09); P.s0[j] = 100 * sz; P.s1[j] = 130 * sz; P.col[j] = gc('white'); P.a0[j] = 0.9;
+    j = P.add(GLOWK, x, cy, 0.4); P.s0[j] = 200 * sz * (0.5 + 0.5 * this.gk); P.s1[j] = 280 * sz * (0.5 + 0.5 * this.gk); P.col[j] = gc('orange'); P.a0[j] = 0.8;
     this.host.light(x, y - 40, 520 * sz, 0.5, '255,170,80');
-    if (this.host.flashes?.() ?? true) { this.washA = Math.max(this.washA, 0.22); this.washX = x; this.washY = cy; this.washR = 1000; }
+    if (this.gk > 0 && (this.host.flashes?.() ?? true)) { this.washA = Math.max(this.washA, 0.22); this.washX = x; this.washY = cy; this.washR = 700 * this.gk; }
     // (2) the shock: a bright ring racing out along the road, and the air ring with its dark refraction band
-    j = P.add(RING, x, y, 0.32); P.s0[j] = 20 * sz; P.s1[j] = 330 * sz; P.flags[j] = F_GROUNDED; P.a0[j] = 0.9;
+    j = P.add(RING, x, y, 0.3); P.s0[j] = 20 * sz; P.s1[j] = 300 * sz; P.flags[j] = F_GROUNDED; P.a0[j] = 0.45;
     if (this.quality !== 'low') {
-      j = P.add(SHOCK, x, cy, 0.28); P.s0[j] = 20 * sz; P.s1[j] = 260 * sz;
-      j = P.add(RING, x, cy, 0.22); P.s0[j] = 20 * sz; P.s1[j] = 250 * sz; P.a0[j] = 0.35;
+      j = P.add(SHOCK, x, cy, 0.2); P.s0[j] = 20 * sz; P.s1[j] = 230 * sz; P.a0[j] = 0.6;
+      j = P.add(RING, x, cy, 0.16); P.s0[j] = 20 * sz; P.s1[j] = 220 * sz; P.a0[j] = 0.14;
     }
     // (3) the fireball: a white-hot core and lobes punched out, braked, rising, cooling through the ramp
     j = P.add(FIRE, x, cy, 0.42); P.s0[j] = 60 * sz; P.s1[j] = 96 * sz; P.vy[j] = -60; P.col[j] = 0; P.flags[j] = F_RISE;
@@ -491,9 +496,18 @@ export class Vfx {
     const P = this.P;
     const k = Math.min(1, strength) * P.room * this.qk;
     const s = laneScale(y);
-    if (this.chance(dt * 34 * k * (w / 150))) {
-      const j = P.add(FLAME, x + rr(-0.5, 0.5) * w, y + rr(-6, 10), rr(0.45, 0.9));
-      P.vx[j] = rr(-10, 10) + this.wind * 0.2; P.vy[j] = -rr(30, 70); P.s0[j] = rr(16, 30) * s * (0.6 + 0.4 * strength); P.s1[j] = 3; P.asp[j] = rr(1.8, 2.6); P.col[j] = (rnd() * 6) | 0;
+    if (this.pools.length < 16) this.pools.push({ x, y, w, k: Math.min(1, strength) });
+    // licking tongues: tall ones in the middle, short ones at the edges
+    const nt = dt * 60 * k * (w / 150);
+    for (let n = Math.floor(nt) + (this.chance(nt % 1) ? 1 : 0); n > 0; n--) {
+      const u = rr(-0.5, 0.5), mid = 1 - Math.abs(u) * 1.2;
+      const j = P.add(FLAME, x + u * w, y + rr(-5, 8), rr(0.4, 0.8));
+      P.vx[j] = rr(-10, 10) + this.wind * 0.2; P.vy[j] = -rr(30, 70); P.s0[j] = rr(18, 34) * s * (0.6 + 0.4 * strength) * (0.6 + 0.5 * mid); P.s1[j] = 3; P.asp[j] = rr(1.3, 2.3) * (0.7 + 0.5 * mid); P.col[j] = (rnd() * 6) | 0;
+    }
+    // the burning bed: low lumps of fire along the ground
+    if (this.chance(dt * 22 * k * (w / 150))) {
+      const j = P.add(FIRE, x + rr(-0.45, 0.45) * w, y - rr(2, 10) * s, rr(0.35, 0.6));
+      P.vy[j] = -rr(20, 50); P.s0[j] = rr(10, 16) * s; P.s1[j] = rr(18, 26) * s; P.col[j] = 1 + ((rnd() * 2) | 0); P.rot[j] = rr(0, 6.28);
     }
     if (this.chance(dt * 6 * k)) {
       const j = P.add(EMBER, x + rr(-0.4, 0.4) * w, y - rr(10, 50), rr(1.2, 2.6));
@@ -641,11 +655,12 @@ export class Vfx {
         const step = r.kind === 'rocket' ? 0.008 : 0.016;
         while (r.emit > step) {
           r.emit -= step;
-          const [hx, hy] = this.roundPos(r, Math.min(d, r.len));
+          // spread the sub-steps back along the path, so the trail is a ribbon, not beads
+          const [hx, hy] = this.roundPos(r, Math.max(0, Math.min(d - r.emit * r.speed, r.len)));
           if (r.kind === 'rocket') {
             const j = P.add(SMOKE, hx - r.dx * 14, hy - r.dy * 14, rr(1.6, 2.8));
             P.vx[j] = -r.dx * 40 + rr(-10, 10); P.vy[j] = -r.dy * 40 + rr(-14, 4); P.drag[j] = 1.5; P.grav[j] = -8;
-            P.s0[j] = 5; P.s1[j] = rr(22, 34); P.a0[j] = 0.55; P.col[j] = pc('steam'); P.flags[j] = F_WIND; P.rot[j] = rr(0, 6);
+            P.s0[j] = 7; P.s1[j] = rr(24, 38); P.a0[j] = 0.45; P.col[j] = pc('steam'); P.flags[j] = F_WIND; P.rot[j] = rr(0, 6);
             const k = P.add(FIRE, hx - r.dx * 12, hy - r.dy * 12, 0.09);
             P.vx[k] = -r.dx * 300; P.vy[k] = -r.dy * 300; P.s0[k] = 6; P.s1[k] = 12; P.col[k] = 0;
           } else if (r.kind === 'flare') {
@@ -789,6 +804,7 @@ export class Vfx {
     const t0 = performance.now();
     const P = this.P, S = this.S;
     const m = c.getTransform();
+    this.drawSmoke(c, m);
     let fill = '';
     for (let i = 0; i < P.n; i++) {
       const k = P.kind[i];
@@ -797,13 +813,7 @@ export class Vfx {
       const u = P.age[i] / P.life[i];
       const x = P.x[i], y = P.y[i];
       if (k === SMOKE || k === DUST || k === MIST) {
-        const s = P.s0[i] + (P.s1[i] - P.s0[i]) * easeOut(u);
-        const fadeIn = Math.min(1, P.age[i] / 0.06);
-        const a = P.a0[i] * fadeIn * Math.pow(1 - u, k === MIST ? 1.6 : 1.2);
-        if (a < 0.01 || s < 0.6) continue;
-        const im = S.puff[PUFF_KEYS[P.col[i]]][(P.seed[i] * 4) | 0];
-        const sy = P.flags[i] & F_GROUNDED ? 0.55 : 1;
-        rot(c, m, im, x, y, s * 2, s * 2 * sy, P.rot[i], 0.5, 0.5, a);
+        continue; // drawn into the half-resolution smoke layer (drawSmoke)
       } else if (k === BLOOD) {
         // a droplet stretched along its velocity
         const s = P.s0[i];
@@ -830,7 +840,7 @@ export class Vfx {
         rot(c, m, im, x, y, L, L * (16 / im.width), P.rot[i], 0.72, 0.5, Math.min(1, (1 - u) * 6));
       } else if (k === SHOCK) {
         const s = P.s0[i] + (P.s1[i] - P.s0[i]) * easeOut(u);
-        rot(c, m, S.shock, x, y, s * 2, s * 2, 0, 0.5, 0.5, (1 - u) * 0.9);
+        rot(c, m, S.shock, x, y, s * 2, s * 2, 0, 0.5, 0.5, (1 - u) * P.a0[i]);
       }
     }
     c.globalAlpha = 1;
@@ -860,6 +870,62 @@ export class Vfx {
     this.cost.draw = performance.now() - t0;
   }
 
+  /**
+   * Smoke, dust and blood mist are big, soft and many: on a CPU rasteriser their fill is most of the cost of the
+   * whole system. They go into a half-resolution layer (only the dirty rectangle is cleared and blitted), which is
+   * then stretched over the scene in one drawImage (after siege-game's half-resolution smoke field).
+   */
+  private smokeCv: HTMLCanvasElement | null = null;
+  private smokeCx: CanvasRenderingContext2D | null = null;
+  private drawSmoke(c: CanvasRenderingContext2D, m: DOMMatrix) {
+    const P = this.P, S = this.S;
+    const W = c.canvas.width, H = c.canvas.height;
+    const K = this.quality === 'high' ? 0.5 : 0.4;
+    if (!this.smokeCv || this.smokeCv.width !== Math.ceil(W * K)) {
+      this.smokeCv = document.createElement('canvas');
+      this.smokeCv.width = Math.ceil(W * K); this.smokeCv.height = Math.ceil(H * K);
+      this.smokeCx = this.smokeCv.getContext('2d')!;
+    }
+    const g = this.smokeCx!;
+    const id = new DOMMatrix([K, 0, 0, K, 0, 0]);
+    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    let any = false;
+    for (let i = 0; i < P.n; i++) {
+      const k = P.kind[i];
+      if ((k !== SMOKE && k !== DUST && k !== MIST) || P.delay[i] > 0) continue;
+      const u = P.age[i] / P.life[i];
+      const s = P.s0[i] + (P.s1[i] - P.s0[i]) * easeOut(u);
+      const fadeIn = Math.min(1, P.age[i] / 0.06);
+      const a = P.a0[i] * fadeIn * Math.pow(1 - u, k === MIST ? 1.6 : 1.2);
+      if (a < 0.01 || s < 0.6) continue;
+      if (!any) { g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(this.dirty[0], this.dirty[1], this.dirty[2], this.dirty[3]); any = true; }
+      void id;
+      const x = P.x[i], y = P.y[i];
+      const r = s * 1.42;
+      if (x - r < x0) x0 = x - r; if (y - r < y0) y0 = y - r; if (x + r > x1) x1 = x + r; if (y + r > y1) y1 = y + r;
+      const im = S.puff[PUFF_KEYS[P.col[i]]][(P.seed[i] * 4) | 0];
+      const sy = P.flags[i] & F_GROUNDED ? 0.55 : 1;
+      // unrotated (an axis-aligned scaled blit is the fast path); the four variants and the drift hide it
+      g.globalAlpha = a > 1 ? 1 : a;
+      g.drawImage(im, (x - s) * K, (y - s * sy) * K, s * 2 * K, s * 2 * sy * K);
+    }
+    if (!any) {
+      if (this.dirty[2] > 0) { g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(this.dirty[0], this.dirty[1], this.dirty[2], this.dirty[3]); this.dirty[2] = 0; }
+      return;
+    }
+    g.globalAlpha = 1;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    // the layer's dirty rect (layer px), clamped; clear it next frame, blit it now
+    const lx = Math.max(0, Math.floor(x0 * K) - 1), ly = Math.max(0, Math.floor(y0 * K) - 1);
+    const lw = Math.min(this.smokeCv!.width, Math.ceil(x1 * K) + 1) - lx, lh = Math.min(this.smokeCv!.height, Math.ceil(y1 * K) + 1) - ly;
+    this.dirty = [lx, ly, Math.max(0, lw), Math.max(0, lh)];
+    if (lw <= 0 || lh <= 0) return;
+    c.setTransform(m);
+    c.globalAlpha = 1;
+    c.drawImage(this.smokeCv!, lx, ly, lw, lh, lx / K, ly / K, lw / K, lh / K);
+  }
+  private dirty: [number, number, number, number] = [0, 0, 0, 0];
+
   /** Additive light: flashes, tracers, sparks, fire, glows. Draw after the darkness, before the vignette. */
   drawAdd(c: CanvasRenderingContext2D) {
     const t0 = performance.now();
@@ -872,6 +938,13 @@ export class Vfx {
       const R0 = this.washR;
       rot(c, m, S.glow.warm, this.washX, this.washY, R0 * 2, R0 * 1.4, 0, 0.5, 0.5, Math.min(0.5, this.washA));
     }
+    // the glow of each fire pool: a hot smear on the road and a soft column of light over it
+    for (const p of this.pools) {
+      const fl = 0.85 + 0.15 * Math.sin(this.t * 19 + p.x) * Math.sin(this.t * 7.7);
+      rot(c, m, S.glow.orange, p.x, p.y, p.w * 2.2, p.w * 0.5, 0, 0.5, 0.5, 0.55 * p.k * fl);
+      if (this.gk > 0) rot(c, m, S.glow.ember, p.x, p.y - p.w * 0.35, p.w * 2 * this.gk, p.w * 1.6 * this.gk, 0, 0.5, 0.5, 0.22 * p.k * fl);
+    }
+    this.pools.length = 0;
     // burning flares on the road
     for (const b of this.burners) {
       const fl = 0.75 + 0.25 * Math.sin(this.t * 31 + b.x) * Math.sin(this.t * 17.3);
@@ -901,15 +974,15 @@ export class Vfx {
         const stage = Math.min(3, ((u * 3.6) | 0) + P.col[i]);
         const im = S.fire[stage][(P.seed[i] * 4) | 0];
         const a = (u < 0.1 ? 1 : 1 - (u - 0.1) / 0.9) * 0.95;
-        rot(c, m, im, x, y, s * 2, s * 2, P.rot[i], 0.5, 0.5, a);
-        if (u < 0.35) rot(c, m, S.glow.orange, x, y, s * 3.4, s * 3.4, 0, 0.5, 0.5, (0.35 - u) * 0.9);
+        rot(c, m, im, x, y, s * 2, s * 2, this.gk === 1 ? P.rot[i] : 0, 0.5, 0.5, a);
+        if (u < 0.35 && this.gk === 1) rot(c, m, S.glow.orange, x, y, s * 3.4, s * 3.4, 0, 0.5, 0.5, (0.35 - u) * 0.9);
       } else if (k === FLAME) {
         const s = P.s0[i] * (1 - u * 0.6);
         const h = s * P.asp[i];
         const a = u < 0.15 ? u / 0.15 : 1 - (u - 0.15) / 0.85;
         const sway = Math.sin(this.t * 7 + P.seed[i] * 20) * 0.12;
         rot(c, m, S.flame[P.col[i] % 6], x, y, s, h, sway, 0.5, 1, a);
-        if (P.seed[i] < 0.4) rot(c, m, S.glow.orange, x, y - h * 0.4, s * 3, h * 1.4, 0, 0.5, 0.5, a * 0.35);
+        if (P.seed[i] < 0.4 * this.gk) rot(c, m, S.glow.orange, x, y - h * 0.4, s * 3, h * 1.4, 0, 0.5, 0.5, a * 0.35);
       } else if (k === GLOWK) {
         const s = P.s0[i] + (P.s1[i] - P.s0[i]) * u;
         rot(c, m, S.glow[GLOW_KEYS[P.col[i]]], x, y, s * 2, s * 2, 0, 0.5, 0.5, P.a0[i] * (1 - u) * (1 - u));
@@ -957,7 +1030,8 @@ export class Vfx {
             rot(c, m, S.streak.fire, hx, hy, L, 7 * s, ang, 1, 0.5, gone);
             rot(c, m, S.glow.orange, hx, hy, 18 * s, 18 * s, 0, 0.5, 0.5, 0.8 * gone);
           } else if (r.kind === 'pellet') {
-            rot(c, m, S.streak.warm, hx, hy, L, 3 * s, ang, 1, 0.5, 0.55 * gone);
+            rot(c, m, S.streak.warm, hx, hy, L, 4.4 * s, ang, 1, 0.5, 0.85 * gone);
+            rot(c, m, S.glow.warm, hx, hy, 9 * s, 7 * s, ang, 0.6, 0.5, 0.45 * gone);
           } else if (r.kind === 'nail' || r.kind === 'rivet') {
             rot(c, m, S.streak.pale, hx, hy, L * 0.6, 2.4 * s, ang, 1, 0.5, 0.35 * gone);
           } else {
@@ -1014,8 +1088,13 @@ export class Vfx {
       const ca = Math.cos(f.ang), sa = Math.sin(f.ang);
       const v = (f.seed * 6) | 0;
       const red = sp.tint === 1;
+      // the light the flash throws on the road under the gun
+      if (sp.light > 120 && this.gk > 0) rot(c, m, red ? S.glow.flare : S.glow.warm, f.x + ca * 30, f.gy, sp.light * 1.3, sp.light * 0.22, 0, 0.5, 0.5, 0.3 * I);
       // bloom first, under the hard shapes
-      if (sp.bloom) rot(c, m, red ? S.glow.flare : S.glow.warm, f.x + ca * sp.plume * 0.3 * s, f.y + sa * sp.plume * 0.3 * s, sp.bloom * 2 * s, sp.bloom * 1.5 * s, f.ang, 0.5, 0.5, 0.6 * I);
+      if (sp.bloom) {
+        const b = sp.bloom * (this.gk || 0.35);
+        rot(c, m, red ? S.glow.flare : S.glow.warm, f.x + ca * sp.plume * 0.3 * s, f.y + sa * sp.plume * 0.3 * s, b * 2 * s, b * 1.5 * s, f.ang, 0.5, 0.5, 0.6 * I);
+      }
       // secondary flash: the fuel-rich gas catching in the air, a beat after the primary
       if (sp.ball && k > 0.1) {
         const kb = Math.min(1, (k - 0.1) / 0.5);

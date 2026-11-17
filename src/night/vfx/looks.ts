@@ -62,7 +62,7 @@ export interface GunLook {
 
 const F = (o: Partial<FlashSpec>): FlashSpec => ({
   core: 8, plume: 30, plumeW: 12, petals: 0, petalLen: 16, petalA: 0.8, burst: 0, ball: 0, ballOff: 0, disc: 0, bloom: 60,
-  life: 0.05, sparks: 0, smoke: 1, smokeSize: 8, smokeCol: 'smoke', light: 180, lightCol: '255,196,120', wash: 0, ...o,
+  life: 0.05, sparks: 0, smoke: 1, smokeSize: 8, smokeCol: 'steam', light: 180, lightCol: '255,196,120', wash: 0, ...o,
 });
 
 export const FLASHES = {
