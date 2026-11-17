@@ -67,6 +67,9 @@ export interface Recipe {
   mod?: string; // MODS key: an attachment goes onto the bench (G.modStock)
   trap?: string; // TRAPS key: makes trap kits into G.trapStock (see data/traps.ts)
   trapCount?: number; // kits per craft (default 1)
+  emplacement?: string; // EMPLACEMENTS key (data/emplacements.ts): builds a crew-served gun into G.flags.emplacements
+  empRepair?: boolean; // restores the worst emplacement's condition
+  hidden?: boolean; // kept for old queues/saves, not offered in the craft list
   special?: 'spikes' | 'wire' | 'light' | 'trap' | 'armor' | 'molotov' | 'liquor' | 'fortify' | 'repair' | 'turret' | 'duffel' | 'repairMelee';
   desc: string;
 }
@@ -117,7 +120,7 @@ export const RECIPES: Recipe[] = [
   { id: 'repair_melee', name: 'Sharpen & re-haft', needs: 'workbench', cost: { scrap: 2, wood: 1 }, work: 2, special: 'repairMelee', desc: 'Grind the worst edge, re-wedge the loosest handle (+50% condition).' },
   { id: 'repair', name: 'Repair the worst gun', needs: 'workbench', cost: { scrap: 3, parts: 1 }, work: 3, special: 'repair', desc: 'Strip, clean, file, pray.' },
   { id: 'nailer', name: 'Nail driver', needs: 'workbench', level: 2, cost: { scrap: 14, parts: 8, fuel: 2 }, work: 12, weapon: 'nailer', desc: 'A framing nailer fed from a welding bottle. Quiet. Eats scrap.' },
-  { id: 'trap', name: 'Nail bomb trap', needs: 'workbench', cost: { scrap: 4, fuel: 2, parts: 1 }, work: 4, special: 'trap', desc: 'Pipe, nails, a tripwire. Goes off once, loudly.' },
+  { id: 'trap', name: 'Nail bomb trap', needs: 'workbench', cost: { scrap: 4, fuel: 2, parts: 1 }, work: 4, special: 'trap', hidden: true, desc: 'Pipe, nails, a tripwire. Goes off once, loudly.' },
   { id: 'fortify', name: 'Reinforce the wall', needs: 'forge', cost: { scrap: 20, wood: 20 }, work: 10, special: 'fortify', desc: '+60 max wall. Sheet steel and railroad ties.' },
   { id: 'spikes', name: 'Spike row', needs: 'forge', cost: { wood: 8, scrap: 4 }, work: 4, special: 'spikes', desc: 'Sharpened rebar at shin height. The Turned impale themselves at the wall.' },
   { id: 'wire', name: 'Wire belt', needs: 'forge', cost: { scrap: 8 }, work: 3, special: 'wire', desc: 'Barbed wire strung across the road. Slows them in the kill zone.' },
@@ -131,6 +134,13 @@ export const RECIPES: Recipe[] = [
 ];
 // --- trap kits (data/traps.ts): placed on the road at dusk with the deployment planner ---
 RECIPES.push(...TRAP_RECIPES);
+// --- crew-served emplacements (data/emplacements.ts): manned at night from the firestep or the roof scaffold ---
+RECIPES.push(
+  { id: 'emp_mgnest', name: 'MG nest', needs: 'forge', level: 2, cost: { scrap: 16, wood: 6, parts: 8, cloth: 4 }, work: 10, emplacement: 'mgnest', desc: 'Belt-fed 5.56 from the Line on a sandbagged tripod, with a spare barrel. Huge fire; overheats in untrained hands. Eats 5.56.' },
+  { id: 'emp_swivel', name: 'Swivel deer rifle', needs: 'forge', cost: { scrap: 8, wood: 4, parts: 3 }, work: 6, emplacement: 'swivel', desc: 'A .30-06 on a pontoon-boat seat bolted to a post: slow, braced, through four in a line. Eats rifle rounds.' },
+  { id: 'emp_flamer', name: 'Propane flame projector', needs: 'workbench', level: 2, cost: { scrap: 10, parts: 4, fuel: 4 }, work: 8, emplacement: 'flamer', desc: 'A weed burner on two grill tanks over the barricade: a short cone that sets everything burning. Drinks fuel.' },
+  { id: 'emp_repair', name: 'Overhaul a gun nest', needs: 'forge', cost: { scrap: 4, parts: 2 }, work: 3, empRepair: true, desc: 'New springs, a cleaned feed tray, the sandbags restacked (+50% condition on the most worn emplacement).' },
+);
 
 export const RES_LABEL: Record<Res, string> = {
   food: 'Food', scrap: 'Scrap', wood: 'Timber', parts: 'Parts', meds: 'Medicine', fuel: 'Fuel', cloth: 'Cloth', light: 'Pistol ammo', shell: 'Shells', rifle: 'Rifle ammo', liquor: 'Liquor', molotov: 'Firebombs',

@@ -357,8 +357,8 @@ function workshopHtml() {
       ${lvl < b.maxLevel ? `<div class="bc">${costHtml(next)} <button data-act="build" data-id="${b.id}" ${has(next) ? '' : 'disabled'}>${lvl ? 'Upgrade' : 'Build'}</button></div>` : ''}
     </div>`;
   }).join('');
-  const recipes = RECIPES.filter((r) => buildingLevel(r.needs) >= (r.level ?? 1));
-  const locked = RECIPES.filter((r) => buildingLevel(r.needs) < (r.level ?? 1));
+  const recipes = RECIPES.filter((r) => !r.hidden && buildingLevel(r.needs) >= (r.level ?? 1));
+  const locked = RECIPES.filter((r) => !r.hidden && buildingLevel(r.needs) < (r.level ?? 1));
   const crafters = living().filter((s) => s.job === 'craft' && canWork(s));
   return `<div class="ws">
     <div class="wscol">
