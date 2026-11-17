@@ -1,7 +1,7 @@
 import type { Survivor, Res, WeaponItem } from '../types';
 import { G, R, log, add, newWeapon, findDoc, uid } from '../state';
 import { ZOMBIES, type ZombieDef } from '../data/zombies';
-import { WEAPONS, fireProfile, ammoTypesFor, ammoLabel, AMMO_TYPES, armorDamage, roundsInStores, shotSound, BURN, FLARE_LIGHT, MODS, wearMods, type FireProfile } from '../data/weapons';
+import { WEAPONS, fireProfile, ammoTypesFor, ammoLabel, AMMO_TYPES, armorDamage, roundsInStores, shotSound, BURN, FLARE_LIGHT, MODS, wearMods, blastDamage, type FireProfile } from '../data/weapons';
 import { SITES, RES_LABEL, type Site } from '../data/world';
 import { img, flashImg, shadeImg } from '../assets';
 import { sfx, wind } from '../audio';
@@ -177,6 +177,7 @@ export class Expedition {
   burstT = 0;
   spent: Partial<Record<Res, number>> = {};
   roundsFired = 0;
+  lobs: { x0: number; y0: number; x1: number; y1: number; t: number; dur: number; p: FireProfile }[] = [];
   glows: { x: number; y: number; life: number; max: number }[] = [];
   reload = 0;
   cd = 0;
@@ -362,6 +363,8 @@ export class Expedition {
       if (this.burstT <= 0) this.shootRound();
     }
     if (this.mouse.down && this.w && this.prof()!.auto) this.fire(false);
+    for (const l of this.lobs) { l.t += dt; if (l.t >= l.dur) this.explode(l.x1, l.y1, l.p); }
+    this.lobs = this.lobs.filter((l) => l.t < l.dur);
     for (const g of this.glows) g.life -= dt;
     this.glows = this.glows.filter((g) => g.life > 0);
     // daylight
@@ -536,7 +539,14 @@ export class Expedition {
       const spreadA = p.spread * (1.75 - aimFactor(this.s)) + this.bloom;
       const laneY = this.targetLane();
       const li = LANES.indexOf(laneY);
-      for (let i = 0; i < p.pellets; i++) {
+      if (p.explosive && p.arc) {
+        // lobbed: lands where you aim, on the target lane, after a short flight
+        const tx = this.mouse.x + this.cam + (R.next() + R.next() - 1) * spreadA * Math.abs(this.mouse.x - mz.x) * 1.5;
+        this.lobs.push({ x0: mz.x + this.cam, y0: mz.y, x1: tx, y1: laneY, t: 0, dur: 0.35 + Math.abs(tx - mz.x - this.cam) / 1400, p });
+      } else if (p.explosive) {
+        const hit = this.ray(mz.x + this.cam, mz.y, base + (R.next() + R.next() - 1) * spreadA, p, false, laneY);
+        this.explode(hit.x, laneY, p);
+      } else for (let i = 0; i < p.pellets; i++) {
         // buckshot sprays a little through depth: 25% per pellet into an adjacent lane
         let ly = laneY;
         if (p.pellets > 1 && R.chance(0.25)) { const adj = LANES[li + (R.chance(0.5) ? 1 : -1)]; if (adj !== undefined) ly = adj; }
@@ -555,7 +565,35 @@ export class Expedition {
     if (this.mag === 0 && this.burstLeft === 0) this.startReload();
   }
 
-  ray(ox: number, oy: number, a: number, p: FireProfile, pellet: boolean, laneY: number) {
+  // Ground-space blast (contract: blastDamage ellipse); armour ignored, knocks outward.
+  explode(x: number, y: number, p: FireProfile) {
+    const ex = p.explosive!;
+    sfx.boom();
+    this.shake = Math.max(this.shake, 16);
+    this.noise = 4;
+    this.glows.push({ x, y: y - 20, life: 0.6, max: 0.6 });
+    for (let i = 0; i < 40; i++) this.parts.push({ x: x + R.range(-20, 20), y: y - R.range(0, 40), vx: R.range(-380, 380), vy: R.range(-520, -80), life: R.range(0.4, 1.1), color: R.pick(['#ffb347', '#ff7a2a', '#3a3530', '#5a524a', '#e8d090']), size: R.range(2, 6), g: y + 6 });
+    for (const z of this.zs) {
+      if (z.state === 'dying') continue;
+      const dmg = blastDamage(ex, z.x - x, z.y - y);
+      if (dmg <= 0) continue;
+      z.hp -= dmg;
+      z.flash = 0.12;
+      if (z.state === 'sleep' || z.state === 'kin' || z.state === 'grab') z.state = 'walk';
+      z.x += Math.sign(z.x - x || 1) * p.knock * (dmg / ex.dmg) * (z.def.id === 'ferryman' ? 0.2 : 1);
+      if (z.hp <= 0) this.kill(z);
+    }
+    // too close: it gets you too
+    const d = Math.abs(this.px - x);
+    if (d < ex.radius * 0.45 && Math.abs(GROUND - y) <= 30) {
+      wound(this.s, 'burn', 0.25 + 0.3 * (1 - d / (ex.radius * 0.45)));
+      sfx.hurt();
+      this.say('Too close!', 2);
+      if (pain(this.s) > 1.45) this.finish(true, `caught in a blast of their own at ${this.site.name}`);
+    }
+  }
+
+  ray(ox: number, oy: number, a: number, p: FireProfile, pellet: boolean, laneY: number): { x: number; y: number } {
     const { pierce, knock, armorPen } = p;
     const dmg = p.dmg;
     const dx = Math.cos(a), dy = Math.sin(a);
@@ -604,6 +642,7 @@ export class Expedition {
     }
     this.tracers.push({ x1: ox + dx * 20, y1: oy + dy * 20, x2: ox + dx * end, y2: oy + dy * end, life: 0.07 });
     if (p.flare && (!pellet || R.chance(0.2))) this.glows.push({ x: ox + dx * Math.min(end, 1100), y: Math.min(GROUND, oy + dy * Math.min(end, 1100)), life: pellet ? 1.5 : FLARE_LIGHT.time, max: pellet ? 1.5 : FLARE_LIGHT.time });
+    return { x: ox + dx * end, y: oy + dy * end };
   }
 
   kill(z: EZ) {
@@ -763,6 +802,13 @@ export class Expedition {
       for (let x = -off; x < W; x += 2560) c.drawImage(fgC, x, H - 38);
     }
     for (const p of this.parts) { c.fillStyle = p.color; c.fillRect(p.x - this.cam, p.y, p.size, p.size); }
+    for (const l of this.lobs) {
+      const k = l.t / l.dur;
+      const x = l.x0 + (l.x1 - l.x0) * k - this.cam;
+      const y = l.y0 + (l.y1 - 20 - l.y0) * k - Math.sin(k * Math.PI) * (120 + Math.abs(l.x1 - l.x0) * 0.25);
+      c.fillStyle = '#1a1814';
+      c.beginPath(); c.arc(x, y, 5, 0, 7); c.fill();
+    }
     const pf = this.prof();
     if (pf && pf.light > 0 && dusk > 0.15) {
       const mz = this.muzzle();

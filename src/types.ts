@@ -2,7 +2,8 @@
 
 export type Res = 'food' | 'scrap' | 'wood' | 'parts' | 'meds' | 'fuel' | 'cloth' | 'light' | 'shell' | 'rifle' | 'liquor' | 'molotov'
   // ammunition by caliber & bullet type (see src/data/weapons.ts CALIBERS / AMMO_TYPES)
-  | 'r22' | 'light_hp' | 'shell_slug' | 'shell_flech' | 'shell_fire' | 'rifle_sp' | 'rifle_ap' | 'r556' | 'ball' | 'bolt' | 'bolt_fire' | 'flare';
+  | 'r22' | 'light_hp' | 'shell_slug' | 'shell_flech' | 'shell_fire' | 'rifle_sp' | 'rifle_ap' | 'r556' | 'ball' | 'bolt' | 'bolt_fire' | 'flare'
+  | 'rocket' | 'g40' | 'g40_buck' | 'pipebomb';
 export type Stores = Record<Res, number>;
 
 export type SkillId = 'shooting' | 'building' | 'crafting' | 'medicine' | 'scavenging' | 'farming' | 'social';
@@ -77,6 +78,9 @@ export interface Survivor {
   child?: boolean; // a non-combatant child: eats, lifts spirits, never stands the wall
 }
 
+// Weapon class: what a survivor's proficiency is in (see CLASS_NAMES in data/weapons.ts)
+export type WeaponClass = 'handgun' | 'smg' | 'rifle' | 'assault' | 'marksman' | 'shotgun' | 'heavy' | 'launcher' | 'bow' | 'improvised';
+
 export interface WeaponDef {
   id: string;
   name: string;
@@ -94,6 +98,7 @@ export interface WeaponDef {
   noise: number; // draws more zombies
   desc: string;
   // --- arsenal extensions (all optional; read them through fireProfile() in data/weapons.ts) ---
+  cls: WeaponClass;
   niche?: string; // one line: what this gun is FOR
   caliber?: string; // CALIBERS key; decides which ammo types it can load
   armorPen?: number; // 0..1 fraction of a Deputy's body armour ignored (negative = armour hurts more)
@@ -107,6 +112,8 @@ export interface WeaponDef {
   flare?: boolean; // the shot lights up where it lands for a few seconds
   smoke?: boolean; // big muzzle smoke cloud (black powder)
   craftable?: boolean;
+  explosive?: { radius: number; dmg: number }; // blast on impact (launchers)
+  arc?: boolean; // lobbed: lands where aimed instead of travelling a straight ray
   limbMul?: number; // damage multiplier on arm/leg zones (default 1, pellets 1.2)
   stagger?: number; // 0..1 stagger chance per body hit (default derived from knockback)
 }

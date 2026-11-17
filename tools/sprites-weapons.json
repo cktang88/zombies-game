@@ -215,6 +215,42 @@
       "height": 72,
       "prompt": "a coiled olive canvas rifle sling and a rubber recoil pad.",
       "kind": "icon"
+    },
+    {
+      "id": "icon_law",
+      "height": 96,
+      "prompt": "an olive drab M72 LAW disposable rocket launcher tube with a folded sight, side view, front end pointing right, muzzle on the right side.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_m79",
+      "height": 96,
+      "prompt": "an M79 40mm break-open grenade launcher with a wooden stock and fat short barrel, side view, pointing right, muzzle on the right side.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_pipemortar",
+      "height": 96,
+      "prompt": "an improvised launcher made from a thick steel fence-post tube bolted to a wooden shotgun stock with hose clamps, side view, pointing right, muzzle on the right side.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_rocket",
+      "height": 72,
+      "prompt": "a single 66mm olive drab rocket with folded fins.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_g40",
+      "height": 72,
+      "prompt": "three stubby 40mm grenade rounds with brass cases and gold tips.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_pipebomb",
+      "height": 72,
+      "prompt": "two capped steel pipe bombs with short fuses, wrapped in tape.",
+      "kind": "icon"
     }
   ]
 }

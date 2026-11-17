@@ -2,7 +2,7 @@ import type { Survivor, JobId, Res, WeaponItem, ModSlot } from '../types';
 import { G, dateLabel, ICE_DAY, has, pay, ordinal, docsFound, rep } from '../state';
 import { DOCS, FACTIONS } from '../data/lore';
 import { spriteUrl } from '../assets';
-import { WEAPONS, CALIBERS, AMMO_TYPES, MODS, MOD_SLOTS, fireProfile, ammoTypesFor, ammoLabel, selectedAmmo, slotsFor, attachMod, detachMod, type FireProfile } from '../data/weapons';
+import { WEAPONS, CLASS_NAMES, CALIBERS, AMMO_TYPES, MODS, MOD_SLOTS, fireProfile, ammoTypesFor, ammoLabel, selectedAmmo, slotsFor, attachMod, detachMod, type FireProfile } from '../data/weapons';
 import { TRAITS } from '../data/traits';
 import { SKILL_NAMES } from '../data/names';
 import { SITES, BUILDINGS, RECIPES, RES_LABEL, RES_ICON } from '../data/world';
@@ -364,12 +364,14 @@ function armoryHtml() {
     if (p.incendiary) tags.push('incendiary');
     if (p.flare) tags.push('lights the road');
     if (p.smoke) tags.push('smoke');
+    if (p.explosive) tags.push(`blast ${p.explosive.dmg} r${p.explosive.radius}`);
+    if (p.arc) tags.push('lobbed');
     if (p.recoverable > 0) tags.push(`${Math.round(p.recoverable * 100)}% ammo recovered`);
     if (p.noise <= 0.6) tags.push('quiet');
     else if (p.noise >= 2.5) tags.push('loud');
     if (p.jam >= 0.02) tags.push(`jams ${Math.round(p.jam * 100)}%`);
     const types = ammoTypesFor(w.def);
-    return `<div class="gun"><img src="${spriteUrl(d.icon)}" alt=""><div><b>${w.name ? `"${esc(w.name)}" ` : ''}${d.name}</b> <span class="dim">${Math.round(w.cond * 100)}% · ${w.kills} kills · ${holder ? first(holder) : 'on the rack'}</span>
+    return `<div class="gun"><img src="${spriteUrl(d.icon)}" alt=""><div><b>${w.name ? `"${esc(w.name)}" ` : ''}${d.name}</b> <span class="dim">${CLASS_NAMES[d.cls].toLowerCase()} · ${Math.round(w.cond * 100)}% · ${w.kills} kills · ${holder ? first(holder) : 'on the rack'}</span>
       ${d.niche ? `<div class="bd"><i>${esc(d.niche)}</i></div>` : ''}
       <div class="bd dim">${esc(d.desc)}</div>
       <div class="stats">dmg ${Math.round(p.dmg)}${p.pellets > 1 ? `×${p.pellets}` : ''} · ${+p.rof.toFixed(2)}/s · mag ${p.mag} · reload ${p.reloadPerRound ? `${p.reload.toFixed(2)}s/round` : `${+p.reload.toFixed(1)}s`}${p.pierce ? ` · pierce ${p.pierce}` : ''}${p.perShot !== 1 ? ` · ${p.perShot} ${ammoLabel(p.ammoRes).toLowerCase()}/shot` : ''}${tags.length ? ` · ${tags.join(' · ')}` : ''}</div>
