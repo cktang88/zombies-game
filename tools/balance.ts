@@ -55,12 +55,18 @@ interface Model {
   sway: number; // px of crosshair sway at aim 0 (scaled by 1 - aim): survivor skill moves the player's hand
   hpMul: (day: number) => number;
 }
+// BASE = the battle model as implemented in src/night/battle.ts + src/night/gunplay.ts (balance.md §8 applied):
+// per-class kick to a 0.30 cap, hold 0.12 s then 0.15 s half-life, aimed shot ×0.6, sway, pellet cone follows aim,
+// buckshot falloff, head radius 0.56, 0.3 s stagger, hp growth 0.02/day, dawn salvage. (Not modelled here: limb
+// zones and limbMul, weakspots, heat, Focus, recoil climb.)
 const BASE_MODEL: Model = {
-  name: 'base', headMul: 3, pelletHeadMul: 2, falloff: 0.7, bloomCap: 0.12,
-  bloomDecay: 'linear', bloomRate: 0.12, bloomHalfLife: 0, bloomHold: 0,
-  bloomK: 0.35, bloomSemi: 0.012, bloomAuto: 0.004, kick: null,
-  aimedMul: 1, aimedDelay: 0, aimedBloomMax: 0, pelletAim: false, staggerS: 0, pelletFall: null, sway: 0, headR: 0.62, salvage: 0,
-  hpMul: (day) => 1 + Math.max(0, day - 8) * 0.03,
+  name: 'base', headMul: 3, pelletHeadMul: 2, falloff: 0.7, bloomCap: 0.3,
+  bloomDecay: 'exp', bloomRate: 0.12, bloomHalfLife: 0.15, bloomHold: 0.12,
+  bloomK: 0.35, bloomSemi: 0.012, bloomAuto: 0.004,
+  // gunplay.ts KICK_ID / KICK_CLS (by weapon id first, then WeaponClass)
+  kick: { carbine: 0.085, handgun: 0.022, smg: 0.065, shotgun: 0.05, rifle: 0.03, assault: 0.03, marksman: 0.03, heavy: 0.045, bow: 0.02, improvised: 0.04, launcher: 0.05 },
+  aimedMul: 0.6, aimedDelay: 0.35, aimedBloomMax: 0.01, pelletAim: true, staggerS: 0.3, pelletFall: [250, 650, 0.35], sway: 16, headR: 0.56, salvage: 0.12,
+  hpMul: (day) => 1 + Math.max(0, day - 8) * 0.02,
 };
 let M: Model = BASE_MODEL;
 
@@ -664,18 +670,9 @@ function feel(rows: Row[]): string {
 // Exact numbers proposed for src/. Each line is one change. applyPatch() mutates the imported
 // module objects in-memory only.
 type WPatch = Partial<WeaponDef>;
+// The battle-model patch from balance.md §4a is now implemented in src/ (see BASE_MODEL), so this layer is empty.
 const PATCH_MODEL: Partial<Model> = {
   name: 'patch',
-  // doc 05 §3: fast exponential recovery, aimed-shot bonus, per-class kick, higher cap
-  bloomCap: 0.3, bloomDecay: 'exp', bloomHalfLife: 0.15, bloomHold: 0.12,
-  kick: { pistol: 0.022, smg: 0.065, shotgun: 0.05, rifle: 0.03, lmg: 0.045, bow: 0.02, tool: 0.04, carbine: 0.085 },
-  sway: 16, // crosshair sway (1 - aim) × 16 px: shooting 2 ≈ 7 px, 8 ≈ 2.4 px
-  headR: 0.56, // the skull, not the hair: head circle radius 0.62 → 0.56 of the head band
-  salvage: 0.12, // dawn salvage: 1 scrap per ~8 kills when the wall held
-  aimedMul: 0.6, aimedDelay: 0.35, aimedBloomMax: 0.01, pelletAim: true,
-  pelletFall: [250, 650, 0.35], // buckshot loses bite past the wire: ×1 to 250 px, ×0.35 from 650 px
-  staggerS: 0.3,
-  hpMul: (day) => 1 + Math.max(0, day - 8) * 0.02,
 };
 // The data changes below were applied to src/ (weapons.ts, zombies.ts, world.ts, newgame.ts;
 // see docs/balance.md §4b–c). They stay as empty layers so new data experiments can go here.
