@@ -1,5 +1,5 @@
 // Anim lab: dev page for the cutout bone rig (animlab.html).
-import { createRig, loadAllGuns, loadRig, SPRITE_RIGS, type Rig } from './anim';
+import { createRig, gradedAtlas, loadAllGuns, loadRig, SPRITE_RIGS, type Rig } from './anim';
 import { WEAPONS } from './data/weapons';
 import { spriteUrl } from './assets';
 
@@ -376,8 +376,59 @@ const galApi = {
   step: (n: number) => { for (let i = 0; i < n; i++) galleryStep(1 / 60); galleryRender(); },
 };
 
+// ---------------------------------------------------------------- close-up (?closeup)
+// Every survivor rig (and the raiders) holding a gun, at the night's display size, graded and
+// inked like the wall's near row: for checking hands and held guns. ?w=<gun> overrides each
+// sprite's own gun; ?h=<px> the body height (default 158, the battle's); ?lane=2 the far row.
+const CU: Actor[] = [];
+function closeupSetup() {
+  const ids = Object.keys(SPRITE_RIGS).filter((id) => SPRITE_RIGS[id].kind === 'survivor');
+  const h = +(params.get('h') ?? 158), cols = 5;
+  const dx = Math.max(220, h * 1.25), dy = Math.max(210, h * 1.25);
+  cv.width = Math.round(40 + cols * dx); cv.height = Math.round(h + 40 + Math.ceil(ids.length / cols - 1) * dy);
+  ids.forEach((id, i) => {
+    const sr = SPRITE_RIGS[id];
+    const rig = createRig('survivor', id, { seed: 7 + i * 13 });
+    rig.setWeapon(params.get('w') ?? sr.weapon ?? 'ar15');
+    const a: Actor = { rig, x: 70 + (i % cols) * dx, y: h + 20 + Math.floor(i / cols) * dy, h, facing: 1, vx: 0, label: `${id.replace(/^(z|surv)_/, '')} · ${rig.weaponId}` };
+    CU.push(a);
+  });
+}
+function closeupRender() {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = '#39404a'; ctx.fillRect(0, 0, cv.width, cv.height);
+  const far = params.get('lane') === '2';
+  const look = far ? { b: 0.9, s: 0.88, fog: 0.06, outline: 1.5 } : { b: 1, s: 1, fog: 0, outline: 2 };
+  for (const a of CU) {
+    ctx.fillStyle = '#2a2620'; ctx.fillRect(a.x - 60, a.y, 170, 8);
+    const s = a.h / 240;
+    const as = a.rig.asset;
+    if (as) {
+      const key = `cu|${far ? 2 : 3}`;
+      const filter = `brightness(${look.b}) saturate(${look.s})`;
+      const tints: [string, number][] = [['#1b2333', look.fog]];
+      const grow = Math.min(6, Math.max(1, Math.round(look.outline / Math.max(0.2, s))));
+      a.rig.skin = { atlas: gradedAtlas(as, key, filter, tints, false, grow), dark: gradedAtlas(as, key, filter, tints, true, grow), grow };
+      (a.rig as unknown as { gunLook: unknown }).gunLook = { key, filter, tints, ink: look.outline };
+    }
+    a.rig.aimAt(a.x + 400, a.y - a.h * 0.62);
+    a.rig.update(1 / 60);
+    a.rig.draw(ctx, a.x, a.y, s, a.facing);
+    ctx.fillStyle = 'rgba(240,235,220,0.9)'; ctx.font = '11px system-ui'; ctx.fillText(a.label ?? '', a.x - 50, a.y + 22);
+  }
+}
+
 // ---------------------------------------------------------------- boot
-if (params.has('gallery')) (async () => {
+if (params.has('closeup')) (async () => {
+  const ids = Object.keys(SPRITE_RIGS);
+  await Promise.all([...ids.map(loadRig), loadAllGuns()]);
+  closeupSetup();
+  for (let i = 0; i < 40; i++) closeupRender();
+  (window as unknown as { __cu: unknown }).__cu = { render: closeupRender, actors: CU };
+  const tick = () => { closeupRender(); requestAnimationFrame(tick); };
+  if (!params.has('still')) requestAnimationFrame(tick);
+})();
+else if (params.has('gallery')) (async () => {
   const ids = Object.keys(SPRITE_RIGS);
   await Promise.all([...ids.map(loadImg), ...ids.map(loadRig), loadAllGuns()]);
   gallerySetup();
