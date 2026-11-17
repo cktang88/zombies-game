@@ -5,7 +5,15 @@ import { WEAPONS, fireProfile, ammoTypesFor, ammoLabel, AMMO_TYPES, armorDamage,
 import { SITES, RES_LABEL, type Site } from '../data/world';
 import { img, flashImg, shadeImg } from '../assets';
 import { depthScale, canvas, bakeSprite, bakeLayer, bakeGround, fgStrip, type Look, type Baked } from './render';
-import { sfx, wind } from '../audio';
+import { sfx, wind, gunSoundFor, type Surface } from '../audio';
+import { reduceGore, shakeScale } from '../ui/settings';
+import { flashKind, gunFeel, drawFlash, casingLook, voiceOf, panOf, isSuppressed, type FlashKind } from './gunfx';
+
+/** What underfoot sounds like at each site (footsteps). */
+const SURFACE: Record<string, Surface> = {
+  route9: 'asphalt', diner: 'asphalt', rexall: 'asphalt', millyard: 'gravel', legion: 'asphalt', boathouse: 'wood', deercamp: 'leaves',
+  hardware: 'gravel', firehouse: 'asphalt', manor: 'grass', school: 'asphalt', gunshop: 'asphalt', courthouse: 'asphalt', corliss: 'mud',
+};
 import { aimFactor, first, displayName, wound, pain, killSurvivor, tale, addThought, skillOf, makeSurvivor, byId, canWork, changeOpinion } from '../sim/survivors';
 
 // A daylight scavenging run you play yourself: walk right through the street,
@@ -92,7 +100,7 @@ interface EZ {
   id: number; lane: number; sc: number; variant: number;
 }
 interface Spot { x: number; searched: boolean; kind: 'door' | 'car' | 'shed' | 'body' | 'kin' | 'cache' | 'truck' | 'drop'; label: string; loot: number; survivor?: boolean; zone: number; items?: PackItem[] }
-interface P { x: number; y: number; vx: number; vy: number; life: number; color: string; size: number; g: number }
+interface P { x: number; y: number; vx: number; vy: number; life: number; color: string; size: number; g: number; kind?: 'shell' | 'dust' | 'puff'; w?: number; h?: number; rot?: number; bounces?: number; max?: number }
 
 export interface ExpeditionResult { loot: Partial<Record<Res, number>>; weapons: string[]; died: boolean; found?: Survivor; lines: string[] }
 
@@ -169,6 +177,23 @@ export class Expedition {
   kh: (e: KeyboardEvent) => void;
   ku: (e: KeyboardEvent) => void;
   canvas: HTMLCanvasElement;
+  // ---- feel (night/gunfx.ts) and sound ----
+  flash = 0;
+  flashK: FlashKind = 'long';
+  flashAng = 0;
+  flashSize = 1;
+  recoil = 0;
+  kick = 6;
+  hitstop = 0;
+  hitMark: { t: number; kill: boolean; head: boolean } | null = null;
+  ammoPunch = 0;
+  reloadSfx?: { cancel(): void };
+  stepT = 0;
+  mateStepT = 0;
+  idleT = 3;
+  rummageT = 0;
+  surface: Surface = 'asphalt';
+  decals: { x: number; y: number; w: number; h: number; rot: number; color: string }[] = [];
 
   constructor(canvas: HTMLCanvasElement, s: Survivor, siteId: string, onEnd: (r: ExpeditionResult) => void) {
     this.canvas = canvas;
@@ -193,6 +218,8 @@ export class Expedition {
     this.kn = G.melee?.find((x) => x.uid === s.melee) ?? null;
     this.mag = this.w ? this.prof()!.mag : 0;
     this.magRes = this.w ? this.prof()!.ammoRes : null;
+    this.surface = SURFACE[this.site.id] ?? 'asphalt';
+    if (G.weather === 'snow') this.surface = this.surface === 'wood' ? 'wood' : 'gravel';
     this.build();
     this.kh = (e) => this.key(e, true);
     this.ku = (e) => this.key(e, false);
@@ -327,7 +354,12 @@ export class Expedition {
     const loop = (now: number) => {
       const dt = Math.min(0.05, (now - this.last) / 1000);
       this.last = now;
-      this.update(dt);
+      this.flash = Math.max(0, this.flash - dt);
+      this.recoil = Math.max(0, this.recoil - dt * 8);
+      this.ammoPunch = Math.max(0, this.ammoPunch - dt * 6);
+      if (this.hitMark) { this.hitMark.t -= dt; if (this.hitMark.t <= 0) this.hitMark = null; }
+      if (this.hitstop > 0) this.hitstop -= dt;
+      else this.update(dt);
       this.draw();
       if (!this.ended) this.raf = requestAnimationFrame(loop);
     };
@@ -340,6 +372,7 @@ export class Expedition {
     window.removeEventListener('keyup', this.ku);
     const c = this.canvas;
     c.onmousemove = c.onmousedown = c.onmouseup = null;
+    this.reloadSfx?.cancel();
     wind(false);
   }
 
@@ -357,8 +390,12 @@ export class Expedition {
     const grabbed = this.zs.some((z) => z.state === 'grab' && z.grabWho !== 'm');
     if (this.downed > 0 || this.dragging) this.updDowned(dt);
     else if (!grabbed && !this.searching) {
+      const x0 = this.px;
       if (this.keys.has('a') || this.keys.has('arrowleft')) { this.px -= speed * dt; this.face = -1; }
       if (this.keys.has('d') || this.keys.has('arrowright')) { this.px += speed * dt; this.face = 1; }
+      // footfalls: one per ~62 px of road (≈ 0.42 s at a walk; slower when hurt or overloaded)
+      this.stepT += Math.abs(this.px - x0);
+      if (this.stepT > 62) { this.stepT = 0; sfx.footstep(this.surface, { volume: over > 0 ? 0.85 : 0.7, pan: panOf(this.px - this.cam) * 0.4 }); }
     }
     if (this.mouse.x + this.cam < this.px) this.face = -1; else this.face = 1;
     this.px = Math.max(20, Math.min(this.len - 40, this.px));
@@ -374,7 +411,10 @@ export class Expedition {
     const near = mateNear ? undefined : this.spots.find((s) => !s.searched && Math.abs(s.x - this.px) < 60);
     if (this.keys.has('e') && near && !this.searching && !this.downed) {
       if (near.kind === 'truck' && (G.stores.fuel < 2 || G.stores.parts < 1)) this.say('It would take 2 fuel and a part to start it. The house does not have them.', 2.5);
-      else { this.searching = near; this.searchT = 0; }
+      else {
+        this.searching = near; this.searchT = 0; this.rummageT = 0.7;
+        sfx.search(near.kind === 'door' || near.kind === 'shed' || near.kind === 'cache' ? 'door' : near.kind === 'car' || near.kind === 'truck' ? 'creak' : 'rummage', { pan: panOf(near.x - this.cam) * 0.5 });
+      }
     }
     if (this.searching) {
       if (!this.keys.has('e') || Math.abs(this.searching.x - this.px) > 70 || grabbed || this.downed) this.searching = null;
@@ -382,6 +422,11 @@ export class Expedition {
         const helper = this.mate && !this.mateDown && Math.abs(this.mateX - this.searching.x) < 140 ? skillOf(this.mate, 'scavenging') * 0.05 : 0;
         const pry = ['door', 'car', 'shed', 'cache'].includes(this.searching.kind) ? this.mprof().pry : 1;
         this.searchT += dt * (0.7 + skillOf(this.s, 'scavenging') * 0.06 + helper) * pry;
+        this.rummageT -= dt;
+        if (this.rummageT <= 0 && this.searching.kind !== 'truck' && this.searching.kind !== 'drop') {
+          this.rummageT = R.range(0.8, 1.3);
+          sfx.search(R.chance(0.3) ? 'drawer' : 'rummage', { pan: panOf(this.searching.x - this.cam) * 0.5, volume: 0.8 });
+        }
         if (this.searchT >= this.searchTime(this.searching)) this.finishSearch(this.searching);
       }
     }
@@ -425,6 +470,15 @@ export class Expedition {
     }
     if (Math.floor(this.daylight) === 30 && Math.floor(this.daylight + dt) === 31) this.say('The light is going. Get back.', 4);
     if (Math.floor(this.daylight) === 0 && Math.floor(this.daylight + dt) === 1) this.say('Dusk. They are waking up everywhere.', 5);
+    // a groan now and then from something close (sleepers breathe; the awake ones moan)
+    this.idleT -= dt;
+    if (this.idleT <= 0) {
+      const near = this.zs.filter((z) => z.state !== 'dying' && Math.abs(z.x - this.px) < 900);
+      this.idleT = (near.length ? Math.max(1.2, 5 / Math.sqrt(near.length)) : 3) * R.range(0.7, 1.4);
+      const z = near.length ? R.pick(near) : null;
+      const v = z ? voiceOf(z.def.id) : null;
+      if (z && v) sfx.zombieVoice(v, 'idle', { pan: panOf(z.x - this.cam), far: Math.abs(z.x - this.px) > 500, volume: z.state === 'sleep' || z.state === 'kin' ? 0.35 : 0.65 });
+    }
     // zombies
     for (const z of this.zs) this.updZ(z, dt);
     this.zs = this.zs.filter((z) => !(z.state === 'dying' && z.dieT > 0.6));
@@ -434,7 +488,20 @@ export class Expedition {
       this.heat = Math.min(6, this.heat + this.noise * dt * 0.05);
       this.noise = Math.max(0, this.noise - dt * 3);
     }
-    for (const p of this.parts) { p.life -= dt; p.vy += 900 * dt; p.x += p.vx * dt; p.y += p.vy * dt; if (p.y > p.g) p.life = 0; }
+    for (const p of this.parts) {
+      p.life -= dt;
+      if (p.kind === 'dust' || p.kind === 'puff') { p.vy += 40 * dt; p.vx *= 0.9; }
+      else p.vy += 900 * dt;
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      if (p.kind === 'shell') {
+        p.rot = (p.rot ?? 0) + p.vx * dt * 0.25;
+        if (p.y >= p.g && p.vy > 0) {
+          p.y = p.g;
+          if ((p.bounces ?? 0) > 0) { p.bounces = (p.bounces ?? 0) - 1; p.vy *= -0.35; p.vx *= 0.55; }
+          else { p.life = 0; this.decals.push({ x: p.x, y: p.y, w: p.w ?? 3, h: p.h ?? 1.5, rot: Math.round((p.rot ?? 0) / 0.5) * 0.15, color: p.color }); if (this.decals.length > 120) this.decals.shift(); }
+        }
+      } else if (p.y > p.g) p.life = 0;
+    }
     this.parts = this.parts.filter((p) => p.life > 0);
     for (const t of this.tracers) t.life -= dt;
     this.tracers = this.tracers.filter((t) => t.life > 0);
@@ -470,7 +537,7 @@ export class Expedition {
     if (z.state === 'sleep') {
       // close by, a Sleeper stirs after a moment: long enough to put a blade in it first
       if (Math.abs(d) < 110) z.wake = (z.wake ?? 0) + dt; else z.wake = 0;
-      if ((z.wake ?? 0) > 1.1 || Math.abs(d) < 26 || (this.daylight < 0 && R.chance(dt * 0.3))) { z.state = 'walk'; if (R.chance(0.5)) sfx.groan(); }
+      if ((z.wake ?? 0) > 1.1 || Math.abs(d) < 26 || (this.daylight < 0 && R.chance(dt * 0.3))) { z.state = 'walk'; const v = voiceOf(z.def.id); if (v && R.chance(0.6)) sfx.zombieVoice(v, 'alert', { pan: panOf(z.x - this.cam) }); }
       return;
     }
     if (z.state === 'walk') {
@@ -478,7 +545,7 @@ export class Expedition {
       let sp = z.def.speed * 0.9;
       if (z.def.lunge) { z.lungeT -= dt; if (z.lungeT < 0) { sp *= 0.15; if (z.lungeT < -0.8) z.lungeT = R.range(1.2, 2.6); } }
       z.x += z.dir * sp * dt;
-      if (Math.abs(d) < 34) { z.state = 'grab'; z.grabWho = who; z.grabT = 0.8; this.say(who === 'm' ? `${first(this.mate!)} is grabbed!` : 'Grabbed!', 1.5); }
+      if (Math.abs(d) < 34) { z.state = 'grab'; z.grabWho = who; z.grabT = 0.8; this.say(who === 'm' ? `${first(this.mate!)} is grabbed!` : 'Grabbed!', 1.5); const v = voiceOf(z.def.id); if (v) sfx.zombieVoice(v, 'attack', { pan: panOf(z.x - this.cam) }); }
     } else if (z.state === 'grab') {
       if (Math.abs(d) > 60) { z.state = 'walk'; return; }
       z.grabT -= dt;
@@ -489,6 +556,8 @@ export class Expedition {
         const bite = R.chance(0.3);
         const wd = wound(this.s, bite ? 'bite' : R.pick(['laceration', 'scratch', 'bruise']), R.range(0.18, 0.4));
         sfx.hurt();
+        const v = voiceOf(z.def.id);
+        if (v) sfx.zombieVoice(v, 'attack', { pan: panOf(z.x - this.cam), volume: 0.8 });
         this.shake = 6;
         for (let i = 0; i < 6; i++) this.parts.push({ x: this.px, y: GROUND - 90, vx: R.range(-120, 120), vy: R.range(-160, 0), life: 1, color: '#5e1410', size: 3, g: GROUND });
         this.say(bite ? `${first(this.s)} is BITTEN.` : `${wd.kind}.`, 2.5);
@@ -623,7 +692,7 @@ export class Expedition {
     this.shooter = 'p';
     this.noise = Math.min(4, this.noise + p.noise * 0.7);
     if (this.mateW) this.mateW.cond = Math.max(0.05, this.mateW.cond - 0.0008);
-    sfx.shot(shotSound(this.mateW!.def), true);
+    sfx.shoot(this.mateW!.def, { far: 0.3, suppressed: isSuppressed(this.mateW), pan: panOf(this.mateX - this.cam) * 0.6, volume: 0.85 });
   }
 
   mateMelee() {
@@ -671,6 +740,7 @@ export class Expedition {
     const next = have[(have.indexOf(cur!) + 1) % have.length];
     if (!next || next === cur) { this.say(`No other ammunition for the ${WEAPONS[this.w.def].name.toLowerCase()}.`, 2); return; }
     this.unload();
+    this.reloadSfx?.cancel();
     this.w.ammoType = next;
     this.say(`Loading ${ammoLabel(next).toLowerCase()}.`, 2);
     this.reload = 0;
@@ -688,10 +758,12 @@ export class Expedition {
     const p = this.prof()!;
     if (this.magRes !== p.ammoRes) this.unload();
     if (this.mag >= p.mag) return;
-    if (roundsInStores(p, G.stores) < 1) { this.say(`No ${ammoLabel(p.ammoRes).toLowerCase()}. ${ammoTypesFor(this.w.def).length > 1 ? '[T] switch ammo, or shove' : 'Shove [Space]'} and run.`, 2); sfx.click(); return; }
+    if (roundsInStores(p, G.stores) < 1) { this.say(`No ${ammoLabel(p.ammoRes).toLowerCase()}. ${ammoTypesFor(this.w.def).length > 1 ? '[T] switch ammo, or shove' : 'Shove [Space]'} and run.`, 2); sfx.dry(); return; }
     const armHurt = this.s.wounds.some((w) => w.part === 'larm' || w.part === 'rarm') ? 1.35 : 1;
     this.reload = p.reload * armHurt;
-    sfx.reload();
+    this.reloadSfx?.cancel();
+    if (p.reloadPerRound) sfx.reload(gunSoundFor(this.w.def).reload, 'shell');
+    else this.reloadSfx = sfx.reloadFor(this.w.def, this.reload, p.mag - this.mag);
   }
 
   doReload() {
@@ -703,8 +775,8 @@ export class Expedition {
     this.mag += got;
     this.magRes = p.ammoRes;
     if (p.reloadPerRound) {
-      sfx.shell();
       if (got > 0 && this.mag < p.mag) this.startReload();
+      else sfx.reload(gunSoundFor(this.w.def).reload, 'rack');
     }
   }
 
@@ -718,14 +790,14 @@ export class Expedition {
     if (!click && !p.auto) return;
     if (this.reload > 0) {
       // a one-at-a-time reload can be interrupted by firing
-      if (p.reloadPerRound && this.mag > 0) this.reload = 0;
+      if (p.reloadPerRound && this.mag > 0) { this.reload = 0; this.reloadSfx?.cancel(); }
       else return;
     }
-    if (this.mag <= 0) { sfx.click(); this.startReload(); this.cd = 0.25; return; }
+    if (this.mag <= 0) { sfx.dry(); this.startReload(); this.cd = 0.25; return; }
     this.cd = 1 / p.rof;
     if (R.chance(p.jam)) {
       this.say(`${this.w.name ?? WEAPONS[this.w.def].name} jammed.`, 1.5);
-      sfx.click();
+      sfx.jam();
       this.cd = p.jamClear;
       return;
     }
@@ -761,14 +833,24 @@ export class Expedition {
         this.ray(mz.x + this.cam, mz.y, base + (R.next() + R.next() - 1) * (p.pellets > 1 ? p.spread : spreadA), p, p.pellets > 1, ly);
       }
       this.bloom = Math.min(0.12, this.bloom + (p.spread * 0.35 / Math.max(1, p.burst) + 0.01) * p.bloomMul);
-      this.shake = Math.max(this.shake, p.knock * (p.pellets > 1 ? p.pellets * 0.25 : 1) / 7 * p.recoilMul);
+      const fe = gunFeel(p);
+      this.shake = Math.max(this.shake, fe.shake * (p.auto ? 0.5 : 0.6));
+      this.recoil = 1;
+      this.kick = fe.kick;
+      this.flash = fe.light > 0 ? 0.06 : 0;
+      this.flashK = flashKind(this.w, p);
+      this.flashAng = base;
+      this.flashSize = fe.size;
+      this.ammoPunch = 1;
+      const cl = casingLook(this.w.def);
+      if (cl && (!p.auto || R.chance(0.7))) this.parts.push({ x: mz.x + this.cam - 30 * this.face, y: mz.y + 6, vx: -this.face * R.range(30, 90), vy: R.range(-190, -110), life: 2.5, color: cl.color, size: cl.w, w: cl.w, h: cl.h, rot: R.range(0, 6), bounces: 2, kind: 'shell', g: GROUND - R.range(-4, 6) });
       this.roundsFired++;
       this.heat = Math.min(6, this.heat + p.noise * 0.12);
       this.noise = Math.min(4, this.noise + p.noise);
       G.stats.shots++;
       this.w.cond = Math.max(0.05, this.w.cond - 0.0008);
       if (p.smoke) for (let i = 0; i < 14; i++) this.parts.push({ x: mz.x + this.cam + this.face * R.range(0, 60), y: mz.y + R.range(-14, 14), vx: this.face * R.range(20, 110), vy: R.range(-240, -120), life: R.range(0.5, 0.9), color: R.pick(['rgba(200,196,186,0.35)', 'rgba(160,156,150,0.3)']), size: R.range(8, 18), g: mz.y + 40 });
-      sfx.shot(shotSound(this.w.def));
+      sfx.shoot(this.w.def, { suppressed: isSuppressed(this.w), incendiary: p.incendiary, pan: panOf(mz.x) * 0.4 });
     } while (this.burstLeft > 0 && p.burstGap <= 0);
     if (this.burstLeft > 0) this.burstT = p.burstGap;
     if (this.mag === 0 && this.burstLeft === 0) this.startReload();
@@ -777,7 +859,7 @@ export class Expedition {
   // Ground-space blast (contract: blastDamage ellipse); armour ignored, knocks outward.
   explode(x: number, y: number, p: FireProfile) {
     const ex = p.explosive!;
-    sfx.boom();
+    sfx.explosion(Math.max(0.6, Math.min(1.6, ex.radius / 150)));
     this.shake = Math.max(this.shake, 16);
     this.noise = 4;
     this.heat = Math.min(6, this.heat + 1);
@@ -841,14 +923,44 @@ export class Expedition {
       z.x += Math.sign(dx) * knock * (pellet ? 0.25 : 1);
       if (z.state === 'grab' && knock > 15) z.state = 'walk';
       const px = ox + dx * h.t, py = oy + dy * h.t;
-      for (let i = 0; i < (h.head ? 9 : 4); i++) this.parts.push({ x: px, y: py, vx: Math.sign(dx) * R.range(20, 200), vy: R.range(-200, 30), life: 1.4, color: R.pick(['#4a0d0b', '#5e1410', '#3a0a08']), size: R.range(1.5, 4), g: z.y });
+      const plate = !h.head && !!z.def.armor && dd < dr * 0.6;
+      const mine = this.shooter === 'p';
+      if (plate) {
+        for (let i = 0; i < 5; i++) this.parts.push({ x: px, y: py, vx: -Math.sign(dx) * R.range(40, 200), vy: R.range(-180, 30), life: 0.3, color: R.pick(['#ffe8b0', '#ffd080']), size: 2, g: z.y });
+      } else {
+        const big = Math.min(1.6, 0.6 + dd / 60);
+        const n = Math.round((h.head ? 8 : 3) * big * (reduceGore() ? 0.4 : 1)) + 1;
+        for (let i = 0; i < n; i++) this.parts.push({ x: px, y: py, vx: Math.sign(dx) * R.range(20, 200), vy: R.range(-200, 30), life: 1.4, color: reduceGore() ? '#2c0a08' : R.pick(['#4a0d0b', '#5e1410', '#3a0a08']), size: R.range(1.5, 4) * (reduceGore() ? 0.6 : 1), g: z.y });
+        if (!pellet || R.chance(0.3)) this.parts.push({ x: px, y: py, vx: Math.sign(dx) * R.range(10, 40), vy: R.range(-20, 0), life: 0.35, max: 0.35, color: reduceGore() ? '40,10,8' : '110,18,14', size: (reduceGore() ? 3 : 5) * big * (h.head ? 1.4 : 1), g: 9999, kind: 'puff' });
+      }
+      const imp = h.head ? 'head' : plate ? 'armor' : 'flesh';
+      const v = voiceOf(z.def.id);
       if (z.hp <= 0) {
-        if (h.head && !z.headless && z.def.id !== 'drag') { z.headless = true; sfx.headpop(); }
+        if (h.head && !z.headless && z.def.id !== 'drag' && !reduceGore()) { z.headless = true; sfx.headpop(); }
+        sfx.impact(imp, { volume: mine ? 1 : 0.5 });
+        if (mine) {
+          sfx.confirm(1);
+          this.hitMark = { t: 0.24, kill: true, head: h.head };
+          // §5 hitstop on a kill, scaled by the pull (autos at most a nudge)
+          const pull = (p.dmg * p.pellets) / 64;
+          this.hitstop = Math.max(this.hitstop, p.auto ? 0.025 : Math.min(0.11, Math.max(0.018, 0.04 + 0.045 * Math.log2(Math.max(0.1, pull))) + (h.head ? 0.025 : 0.01)));
+        }
+        if (v && R.chance(0.5)) sfx.zombieVoice(v, 'death', { pan: panOf(z.x - this.cam), volume: 0.8 });
         this.kill(z);
-      } else sfx.hit();
+      } else {
+        sfx.impact(imp, { volume: mine ? 1 : 0.5 });
+        if (mine) this.hitMark = { t: 0.18, kill: false, head: h.head };
+        if (v && dd >= 12) sfx.zombieVoice(v, 'pain', { pan: panOf(z.x - this.cam), volume: 0.7 });
+      }
       n++; end = h.t;
       if (n > pierce) break;
       d *= 0.7;
+    }
+    if (n === 0 && dy > 0.01 && end < 1500) {
+      // a miss kicks up the road
+      this.parts.push({ x: ox + dx * end, y: oy + dy * end - 2, vx: R.range(-15, 15), vy: R.range(-40, -20), life: 0.7, max: 0.7, color: '#8a7c66', size: R.range(4, 7) * (pellet ? 0.6 : 1), g: 9999, kind: 'dust' });
+      for (let i = 0; i < (pellet ? 1 : 3); i++) this.parts.push({ x: ox + dx * end, y: oy + dy * end, vx: R.range(-50, 50), vy: R.range(-120, -40), life: 0.45, color: '#6b5d4a', size: 2, g: laneY + 1 });
+      if (!pellet && this.shooter === 'p') sfx.impact('ground', { volume: 0.3 });
     }
     this.tracers.push({ x1: ox + dx * 20, y1: oy + dy * 20, x2: ox + dx * end, y2: oy + dy * end, life: 0.07 });
     if (p.flare && (!pellet || R.chance(0.2))) this.glows.push({ x: ox + dx * Math.min(end, 1100), y: Math.min(GROUND, oy + dy * Math.min(end, 1100)), life: pellet ? 1.5 : FLARE_LIGHT.time, max: pellet ? 1.5 : FLARE_LIGHT.time });
@@ -891,15 +1003,14 @@ export class Expedition {
     if (p.fuel && G.stores.fuel < p.fuel) { if (this.t - this.fuelNag > 2) { this.say('The saw coughs and dies. No fuel.', 2); this.fuelNag = this.t; } return; }
     this.swingTired = this.stamina < p.stamina;
     this.stamina = Math.max(0, this.stamina - p.stamina);
+    sfx.melee('swing', this.kn?.def ?? 'fists', { volume: this.swingTired ? 0.7 : 1 });
     this.swingT = Math.max(0.01, p.swingTime * (this.swingTired ? 1.5 : 1));
   }
   fuelNag = -9;
 
   meleeSound(kind: string) {
-    const a = sfx as unknown as { melee?: (kind: string, weapon: string) => void };
-    if (a.melee) a.melee(kind, this.kn?.def ?? 'fists');
-    else if (kind === 'miss') sfx.thud();
-    else sfx.hit();
+    if (kind === 'miss') return; // the whoosh already played at the start of the swing
+    sfx.melee(kind === 'crit' || kind === 'finisher' ? 'heavy' : 'hit', this.kn?.def ?? 'fists');
   }
 
   resolveSwing() {
@@ -966,7 +1077,9 @@ export class Expedition {
   finishSearch(sp: Spot) {
     sp.searched = true;
     this.searching = null;
-    sfx.ui();
+    if (sp.kind === 'door' || sp.kind === 'shed') sfx.search('close', { volume: 0.7 });
+    else if (sp.kind === 'cache') sfx.search('glass', { volume: 0.8 });
+    else if (sp.kind !== 'truck') sfx.search('rummage', { volume: 0.6 });
     if (sp.kind === 'drop') {
       for (const it of sp.items ?? []) this.toPack(it);
       this.spots = this.spots.filter((x) => x !== sp);
@@ -997,7 +1110,7 @@ export class Expedition {
     }
     if (sp.kind !== 'car' && R.chance(0.22)) {
       const d = findDoc();
-      if (d) { got.push(`papers: "${d.title}"`); this.lines.push(`Found papers: ${d.title}. (Town tab)`); }
+      if (d) { got.push(`papers: "${d.title}"`); this.lines.push(`Found papers: ${d.title}. (Town tab)`); sfx.search('paper', { delay: 0.25 }); }
     }
     const cache = sp.kind === 'cache';
     if (this.site.mods?.length && R.chance(cache ? 0.6 : 0.14 * sp.loot * ZONE_LOOT[sp.zone])) {
@@ -1023,7 +1136,8 @@ export class Expedition {
   driveOut() {
     add('fuel', -2);
     add('parts', -1);
-    sfx.boom();
+    sfx.search('door');
+    sfx.impact('metal', { delay: 0.3 }); sfx.thud();
     this.noise = 4;
     for (const sp of this.spots) if (sp.kind === 'drop') for (const it of sp.items ?? []) this.toPack(it);
     this.lines.push(`${first(this.s)} hotwired a pickup at ${this.site.name} and drove it home with everything in the bed.`);
@@ -1082,7 +1196,8 @@ export class Expedition {
   draw() {
     const c = this.c;
     c.save();
-    if (this.shake) c.translate(R.range(-this.shake, this.shake), R.range(-this.shake, this.shake));
+    const sk = this.shake * shakeScale();
+    if (sk > 0) c.translate(R.range(-sk, sk), R.range(-sk, sk) * 0.6);
     bakeBackgrounds();
     const dusk = Math.max(0, Math.min(1, 1 - this.daylight / Math.min(150, this.dayMax)));
     if (bgBakes) {
@@ -1106,6 +1221,12 @@ export class Expedition {
       c.font = '13px "Special Elite", monospace';
       c.fillStyle = '#d8c89a';
       c.fillText('← home', 30 - this.cam, 420);
+    }
+    // spent brass in the road
+    for (const d of this.decals) {
+      const x = d.x - this.cam;
+      if (x < -10 || x > W + 10) continue;
+      c.save(); c.translate(x, d.y); c.rotate(d.rot); c.globalAlpha = 0.85; c.fillStyle = d.color; c.fillRect(-d.w / 2, -d.h / 2, d.w, d.h); c.restore();
     }
     // contact shadows: one path, one fill (spots, zombies, player, follower)
     const SPR: Record<Spot['kind'], [string, number]> = { door: ['obj_door', 200], car: ['obj_car', 120], shed: ['obj_shed', 190], body: ['obj_body', 44], kin: ['obj_kin', 175], cache: ['obj_shed', 205], truck: ['obj_car', 140], drop: ['obj_body', 20] };
@@ -1181,7 +1302,17 @@ export class Expedition {
       const off = Math.round((this.cam * 1.3) % 2560);
       for (let x = -off; x < W; x += 2560) c.drawImage(fgC, x, H - 38);
     }
-    for (const p of this.parts) { c.fillStyle = p.color; c.fillRect(p.x - this.cam, p.y, p.size, p.size); }
+    for (const p of this.parts) {
+      const x = p.x - this.cam;
+      if (p.kind === 'shell') { c.save(); c.translate(x, p.y); c.rotate(p.rot ?? 0); c.fillStyle = p.color; c.fillRect(-(p.w ?? 3) / 2, -(p.h ?? 1.5) / 2, p.w ?? 3, p.h ?? 1.5); c.restore(); }
+      else if (p.kind === 'dust' || p.kind === 'puff') {
+        const a = Math.max(0, p.life / (p.max ?? 0.5));
+        c.fillStyle = p.kind === 'dust' ? `rgba(120,108,90,${a * 0.4})` : `rgba(${p.color},${a * 0.45})`;
+        c.beginPath(); c.arc(x, p.y, p.size * (1.7 - a * 0.7), 0, 7); c.fill();
+      } else { c.fillStyle = p.color; c.fillRect(x, p.y, p.size, p.size); }
+    }
+    // the muzzle flash, shaped by the gun
+    if (this.flash > 0 && this.w) { const mz = this.muzzle(); drawFlash(c, mz.x, mz.y, this.flashAng, this.flashK, this.flash / 0.06, this.flashSize, this.roundsFired); }
     for (const l of this.lobs) {
       const k = l.t / l.dur;
       const x = l.x0 + (l.x1 - l.x0) * k - this.cam;
@@ -1229,9 +1360,10 @@ export class Expedition {
     const moving = this.keys.has('a') || this.keys.has('d') || this.keys.has('arrowleft') || this.keys.has('arrowright');
     const bob = moving ? -Math.abs(Math.sin(this.t * 9)) * 4 : 0;
     c.save();
-    c.translate(x, GROUND + bob);
+    c.translate(x - this.face * this.recoil * this.recoil * this.kick * 0.7, GROUND + bob);
     if (this.downed > 0 || this.dragging) c.rotate(1.45);
     c.scale(this.face, 1);
+    if (this.kick >= 10 && this.recoil > 0) c.rotate(-this.recoil * this.recoil * 0.035 * (this.kick / 18));
     c.drawImage(im, -w / 2, -h, w, h);
     c.restore();
     if (this.slashT > 0) {
@@ -1395,9 +1527,9 @@ export class Expedition {
       const p = this.prof()!;
       const left = roundsInStores(p, G.stores);
       c.textAlign = 'right';
-      c.font = '20px "Special Elite", monospace';
-      c.fillStyle = this.mag ? '#efe2c2' : '#c04030';
-      c.fillText(`${this.mag} / ${Number.isFinite(left) ? left : '∞'}`, W - 20, H - 20);
+      c.font = `${Math.round(20 + this.ammoPunch * 4)}px "Special Elite", monospace`;
+      c.fillStyle = this.mag ? (this.ammoPunch > 0.5 ? '#fff6dc' : '#efe2c2') : '#c04030';
+      c.fillText(`${this.mag} / ${Number.isFinite(left) ? left : '∞'}`, W - 20, H - 20 - this.ammoPunch * 2);
       c.font = '12px "Special Elite", monospace';
       c.fillStyle = '#a89c84';
       const multi = ammoTypesFor(this.w.def).length > 1;
@@ -1418,6 +1550,17 @@ export class Expedition {
       c.strokeStyle = 'rgba(235,225,200,0.85)';
       c.lineWidth = 1.5;
       c.beginPath(); c.arc(this.mouse.x, this.mouse.y, r, 0, 7); c.stroke();
+      // hit marker: a kill reads bigger and warmer
+      const hm = this.hitMark;
+      if (hm) {
+        const q = (hm.kill ? 8 : 6) + ((hm.kill ? 0.24 : 0.18) - hm.t) * (hm.kill ? 30 : 20);
+        c.strokeStyle = hm.kill ? (hm.head ? '#ffe6c0' : '#e8a080') : hm.head ? '#f4ecd8' : '#d8c8b0';
+        c.lineWidth = hm.kill ? 3 : 1.8;
+        const mx = this.mouse.x, my = this.mouse.y;
+        c.beginPath();
+        for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { c.moveTo(mx + sx * q, my + sy * q); c.lineTo(mx + sx * q / 2, my + sy * q / 2); }
+        c.stroke();
+      }
     }
     c.textAlign = 'left';
   }

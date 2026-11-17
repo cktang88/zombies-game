@@ -70,7 +70,7 @@ export interface Recipe {
   emplacement?: string; // EMPLACEMENTS key (data/emplacements.ts): builds a crew-served gun into G.flags.emplacements
   empRepair?: boolean; // restores the worst emplacement's condition
   hidden?: boolean; // kept for old queues/saves, not offered in the craft list
-  special?: 'spikes' | 'wire' | 'light' | 'trap' | 'armor' | 'molotov' | 'liquor' | 'fortify' | 'repair' | 'turret' | 'duffel' | 'repairMelee';
+  special?: 'spikes' | 'wire' | 'light' | 'trap' | 'armor' | 'molotov' | 'liquor' | 'fortify' | 'repair' | 'turret' | 'duffel' | 'repairMelee' | 'roofnest';
   desc: string;
 }
 
@@ -122,6 +122,7 @@ export const RECIPES: Recipe[] = [
   { id: 'nailer', name: 'Nail driver', needs: 'workbench', level: 2, cost: { scrap: 14, parts: 8, fuel: 2 }, work: 12, weapon: 'nailer', desc: 'A framing nailer fed from a welding bottle. Quiet. Eats scrap.' },
   { id: 'trap', name: 'Nail bomb trap', needs: 'workbench', cost: { scrap: 4, fuel: 2, parts: 1 }, work: 4, special: 'trap', hidden: true, desc: 'Pipe, nails, a tripwire. Goes off once, loudly.' },
   { id: 'fortify', name: 'Reinforce the wall', needs: 'forge', cost: { scrap: 20, wood: 20 }, work: 10, special: 'fortify', desc: '+60 max wall. Sheet steel and railroad ties.' },
+  { id: 'roofnest', name: 'Roof nest', needs: 'workbench', cost: { wood: 10, scrap: 4, cloth: 2 }, work: 5, special: 'roofnest', desc: 'A plank deck and sandbags on the garage roof: one rifle sees farther and steadier, out of reach while the wall stands. Post a guard there at dusk.' },
   { id: 'spikes', name: 'Spike row', needs: 'forge', cost: { wood: 8, scrap: 4 }, work: 4, special: 'spikes', desc: 'Sharpened rebar at shin height. The Turned impale themselves at the wall.' },
   { id: 'wire', name: 'Wire belt', needs: 'forge', cost: { scrap: 8 }, work: 3, special: 'wire', desc: 'Barbed wire strung across the road. Slows them in the kill zone.' },
   { id: 'armor', name: 'Mill-plate vest', needs: 'forge', cost: { scrap: 10, cloth: 4 }, work: 6, special: 'armor', desc: 'Saw-blade steel sewn into a Carhartt. Lessens wounds. Not bites.' },

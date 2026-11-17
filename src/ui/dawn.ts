@@ -8,7 +8,7 @@ import { spriteUrl } from '../assets';
 import { RES_LABEL } from '../data/world';
 import { ammoLabel, AMMO_TYPES } from '../data/weapons';
 import { byId, displayName } from '../sim/survivors';
-import { sfx } from '../audio';
+import { sfx, stinger } from '../audio';
 import { countUp } from './juice';
 
 export interface DawnData {
@@ -83,7 +83,14 @@ export function showDawnReport(app: HTMLElement, d: DawnData, onClose: () => voi
       } else requestAnimationFrame(() => requestAnimationFrame(() => (bar.style.width = to)));
     }
     if (el.dataset.bell && !instant) sfx.bell();
+    if (!instant) {
+      if (el.classList.contains('wallrow') || el.querySelector('.hsstamp')) sfx.ui('stamp');
+      else if (el.classList.contains('lines') || el.classList.contains('teaser')) { sfx.ui('type'); window.setTimeout(() => sfx.ui('type'), 110); window.setTimeout(() => sfx.ui('type'), 260); }
+      else if (el.classList.contains('spent') || el.classList.contains('mvp')) sfx.ui('paper');
+    }
   };
+  sfx.ui('paper');
+  if (r.wallHeld && !d.dead.length && !r.fell) window.setTimeout(() => stinger('dawn'), 300);
   const finish = () => {
     if (done) return;
     done = true;

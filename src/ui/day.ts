@@ -14,10 +14,11 @@ import {
 import {
   buildingLevel, queueRecipe, WEATHER_LABEL, DAY_HOURS, DEFAULT_HOURS, jobHours, setJobHours, hoursAvailable, travelHours, survivorSite,
   searchHours, searchFactor, planConfirmed, confirmPlan, ranToday, onRunToday, runDaylightFor, prepareRun, clockLabel, heatNeed,
-  drillPlan, emplacements, tomorrowTeaser,
+  drillPlan, emplacements, tomorrowTeaser, oilGuns, clearPile, choreHand,
 } from '../sim/day';
+import { calendar } from '../sim/calendar';
 import { persona, forecast, threatPoints } from '../sim/director';
-import { sfx, music } from '../audio';
+import { sfx, music, stinger, distant } from '../audio';
 import { openSettings } from './settings';
 import { openHelp } from './help';
 import { hintHtml, markHintTarget, nextHint, skipHints } from './onboarding';
@@ -357,7 +358,7 @@ function workshopHtml() {
       ${lvl < b.maxLevel ? `<div class="bc">${costHtml(next)} <button data-act="build" data-id="${b.id}" ${has(next) ? '' : 'disabled'}>${lvl ? 'Upgrade' : 'Build'}</button></div>` : ''}
     </div>`;
   }).join('');
-  const recipes = RECIPES.filter((r) => !r.hidden && buildingLevel(r.needs) >= (r.level ?? 1));
+  const recipes = RECIPES.filter((r) => !r.hidden && !(r.special === 'roofnest' && G.flags.roofNest) && buildingLevel(r.needs) >= (r.level ?? 1));
   const locked = RECIPES.filter((r) => !r.hidden && buildingLevel(r.needs) < (r.level ?? 1));
   const crafters = living().filter((s) => s.job === 'craft' && canWork(s));
   return `<div class="ws">
@@ -390,7 +391,29 @@ function wallHtml() {
       <li>Nail-bomb traps: <b>${f.traps}</b> <span class="dim">— one use each, out in the road</span></li>
       <li>Firebombs: <b>${G.stores.molotov}</b> <span class="dim">— [F] or right-click at night</span></li>
     </ul>
+    ${choresHtml()}
   </div>`;
+}
+
+// One-click chores: a few hours of someone's day (the leader first), no job slot needed.
+function choresHtml() {
+  const out: string[] = [];
+  const cold = G.weather === 'cold' || G.weather === 'snow' || G.day >= 20;
+  if (G.flags.oiledDay === G.day) out.push('<li>The guns are oiled for tonight. <span class="dim">The cold will not seize them.</span></li>');
+  else {
+    const hand = choreHand(1);
+    const can = !!hand && ((G.stores.cloth ?? 0) >= 1 || (G.stores.fuel ?? 0) >= 1);
+    out.push(`<li><button class="mini" data-act="oil" ${can ? '' : 'disabled'}>Oil the guns</button> <span class="dim">1 hour${hand ? ` (${esc(first(hand))})` : ''} · a rag or 1 fuel${cold ? ' · <b>dry guns jam in this cold</b>' : ' · fewer stoppages in the cold'}</span></li>`);
+  }
+  if (G.flags.pileCarry) {
+    let tot = 0;
+    try { tot = (JSON.parse(G.flags.pileCarry as string) as number[]).reduce((a, b) => a + b, 0); } catch { tot = 0; }
+    const h3 = choreHand(3), h1 = choreHand(1);
+    out.push(`<li>Bodies against the wall from last night <span class="dim">(${tot >= 6 ? 'a ramp by tonight' : 'a low heap'})</span><br>
+      <button class="mini" data-act="pile" data-how="haul" ${h3 ? '' : 'disabled'}>Haul them off</button> <span class="dim">3 hours, grim work</span>
+      <button class="mini" data-act="pile" data-how="burn" ${h1 && (G.stores.fuel ?? 0) >= 2 ? '' : 'disabled'}>Burn the pile</button> <span class="dim">2 fuel, 1 hour</span></li>`);
+  }
+  return `<h3>Chores <span class="dim">done by whoever has the hours: the leader first</span></h3><ul class="fort chores">${out.join('')}</ul>`;
 }
 
 // Hand weapon carried alongside the gun (Survivor.melee → G.melee).
@@ -582,7 +605,15 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
   const r0 = R.s;
   const tp = threatPoints();
   R.s = r0;
-  root.innerHTML = `<div class="day ${duskArmed && stale.length ? 'armed' : ''}" style="background-image:linear-gradient(rgba(10,10,12,.72),rgba(10,10,12,.9)),url(${spriteUrl('bg_far')})">
+  const tonight = calendar(1)[0];
+  const dread = tonight.kind === 'tide' || tonight.kind === 'crossing' || tonight.kind === 'band';
+  if (dread && G.flags.dreadCue !== G.day) {
+    // once per tide day: a sting, and the dogs out on Route 9
+    G.flags.dreadCue = G.day;
+    window.setTimeout(() => { stinger('dread'); distant('dog', { delay: 1.2 }); distant('dog', { delay: 3.4, gain: 0.3 }); distant('dog', { delay: 7, gain: 0.35 }); }, 400);
+  }
+  const sky = dread ? 'linear-gradient(rgba(70,14,10,.62),rgba(24,8,8,.78) 45%,rgba(10,10,12,.92))' : 'linear-gradient(rgba(10,10,12,.72),rgba(10,10,12,.9))';
+  root.innerHTML = `<div class="day ${duskArmed && stale.length ? 'armed' : ''} ${dread ? 'dread' : ''}" style="background-image:${sky},url(${spriteUrl('bg_far')})">
     <header>
       <div class="date"><b>${dateLabel()}</b> · day ${G.day} · ${WEATHER_LABEL[G.weather] ?? G.weather} <span class="seed" title="This town's seed. Start a new game from it on the title screen to replay the same Vessey.">seed ${G.seed}${G.flags.daily ? ` · daily ${esc(String(G.flags.daily))}` : ''}</span></div>
       <div class="ice">${ice > 0 ? `River freezes in <b>${ice}</b> day${ice === 1 ? '' : 's'}` : ice === 0 ? '<b>The river is freezing tonight.</b>' : 'The river is ice.'}</div>
@@ -632,6 +663,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
     }
     duskArmed = false;
     for (const s of living()) confirmPlan(s);
+    sfx.ui('stamp');
     h.onDusk();
   };
   duskKey = goDusk;
@@ -699,8 +731,19 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
     if (act === 'closedetail') {
       if (e.target !== el && el.classList.contains('overlay')) return;
       detail = null;
-    } else if (act === 'detail') detail = el.dataset.id!;
-    else if (act === 'tab') tab = el.dataset.id!;
+    } else if (act === 'detail') { detail = el.dataset.id!; sfx.ui('paper'); h.rerender(); return; }
+    else if (act === 'tab') {
+      tab = el.dataset.id!;
+      if (tab === 'chronicle') { sfx.ui('type'); window.setTimeout(() => sfx.ui('type'), 90); window.setTimeout(() => sfx.ui('type'), 210); } else sfx.ui('paper');
+      h.rerender();
+      return;
+    } else if (act === 'oil' || act === 'pile') {
+      const line = act === 'oil' ? oilGuns() : clearPile(el.dataset.how === 'burn' ? 'burn' : 'haul');
+      if (line) report.push(line);
+      sfx.ui('stamp');
+      h.rerender();
+      return;
+    }
     else if (act === 'queue') queueRecipe(el.dataset.id!);
     else if (act === 'unqueue') {
       const i = +el.dataset.i!;
@@ -719,6 +762,9 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
         const ex = G.buildings.find((x) => x.id === b.id);
         if (ex) ex.level++;
         else G.buildings.push({ id: b.id, level: 1 });
+        sfx.ui('stamp');
+        h.rerender();
+        return;
       }
     } else if (act === 'choice') {
       h.onChoice(+el.dataset.i!);

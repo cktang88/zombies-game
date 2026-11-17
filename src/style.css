@@ -275,3 +275,23 @@ dl.keys dd, dl.gloss dd { margin: 0; }
   .tquote { font-size: 13px; }
   .gun { flex-wrap: wrap; }
 }
+
+/* ---- the 7-day calendar strip (sim/calendar.ts calendarHtml) ---- */
+.calendar { margin: .7em 0; }
+.calendar .calstrip { display: flex; border: 1px solid rgba(200,160,90,.45); border-right: 0; background: rgba(8,7,6,.35); }
+.calendar .calday { flex: 1 1 0; min-width: 0; text-align: center; padding: 4px 0 2px; border-right: 1px solid rgba(200,160,90,.25); }
+.calendar .calday.today { background: rgba(232,210,160,.1); box-shadow: inset 0 -2px 0 #c9a95a; }
+.calendar .calday .cd { font-family: var(--type); font-size: 12px; color: #c9bc9e; white-space: nowrap; }
+.calendar .calday.today .cd { color: var(--ink); }
+.calendar .calday .cg { font-size: 19px; line-height: 1.15; }
+.calendar .calday .cg.likely { opacity: .8; }
+.calendar .calday .cdl { font-size: 11px; color: #d8b060; height: 13px; line-height: 13px; }
+.calendar .calday.red .cg { color: #d0463c; text-shadow: 0 0 6px rgba(208,70,60,.35); }
+.calendar .calday.ice .cg { color: #a8d0e4; }
+.calendar .calday.crossing { outline: 1px solid #a8d0e4; outline-offset: -1px; }
+.calendar .calkey { font-size: 13px; color: #b5a98f; margin-top: 4px; line-height: 1.35; }
+.calendar .smell { margin-top: .5em; font-size: 13px; }
+.calendar .smell .row { display: flex; align-items: center; gap: .5em; }
+.calendar .smell .bar { flex: 1; height: 7px; background: rgba(255,255,255,.12); }
+.calendar .smell .bar div { height: 100%; }
+@media (max-width: 700px) { .calendar .calday .cd { font-size: 11px; } .calendar .calday .cg { font-size: 17px; } }
