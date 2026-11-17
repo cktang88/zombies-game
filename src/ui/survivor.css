@@ -1,0 +1,102 @@
+/* Survivor card (day screen) and survivor sheet: pictures and numbers first, the sentences in tooltips.
+   Built on the kit (src/ui/kit.ts, style.css "UI kit"). */
+
+/* an icon's fallback word: shown only while the icon art is missing (kit ico() hides a failed image) */
+.fb { font-family: var(--type); font-size: var(--fs-xs); color: var(--dim); text-transform: lowercase; }
+:is(.sv-sk, .sv-chip, .sv-pi):has(> img.ico:not([style*="none"])) > .fb { display: none; }
+
+/* ---- the card */
+.sv-card .body { gap: 5px; }
+.sv-card .name a { font-size: var(--fs-l); font-weight: 600; }
+.sv-card .name .age { font-weight: normal; }
+.sv-card .tag.sv-perknew { font-size: 10px; padding: 1px 5px; }
+.sv-perknew { display: inline-flex; align-items: center; gap: 2px; color: var(--ochre); border-color: #8a6a2a; text-decoration: none; }
+.sv-perknew .ico { width: 14px; height: 14px; }
+.sv-state { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.sv-chip { padding: 1px 6px 1px 2px; gap: 3px; }
+.sv-chip .ico.sm { width: 18px; height: 18px; }
+.sv-chip:not(:has(.ico)) { padding-left: 6px; }
+.sv-chip.bad { border-color: #8e2a20; color: #f0a090; background: rgba(142, 42, 32, .18); }
+.sv-chip.bite { background: var(--blood); color: #fff; }
+.sv-chip.lead { border-color: #6a5426; color: var(--ochre); }
+.sv-chip.lo { opacity: .55; }
+.sv-mood b { font-size: var(--fs-m); }
+.sv-mood.hi { border-color: var(--moss); } .sv-mood.hi b { color: #b8d080; }
+.sv-mood.mid { border-color: #6a5426; } .sv-mood.mid b { color: #e0b860; }
+.sv-mood.lo { border-color: #8e2a20; } .sv-mood.lo b { color: #f08070; }
+.sv-moodbar { height: 4px; max-width: 320px; }
+
+.sv-skills { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.sv-sk { display: inline-flex; align-items: center; gap: 4px; }
+.sv-sk .ico.sm, .sv-pi .ico.sm { width: 22px; height: 22px; }
+.sv-sk .pips i, .sv-pips i { width: 5px; height: 5px; }
+.pas { color: var(--ochre); font-style: normal; font-size: 10px; margin-left: -3px; }
+.sv-attrs { display: inline-flex; gap: 4px; }
+.sv-attr { border-color: transparent; background: none; color: var(--dim); }
+
+.surv .sv-jobrow { flex-wrap: wrap; }
+.surv .sv-jobrow select { min-width: 0; flex: 1 1 120px; }
+.surv .sv-jobrow select[data-act=job] { flex: 1 1 calc(100% - 40px); }
+@media (min-width: 701px) { .surv .sv-jobrow select[data-act=job] { flex-basis: 120px; } }
+.sv-job { flex: none; display: inline-flex; width: 28px; height: 28px; align-items: center; justify-content: center; border: 1px solid var(--line); background: rgba(255,255,255,.03); }
+.sv-job .ico { width: 24px; height: 24px; }
+.sv-job:not(:has(.ico:not([style*="none"]))) { display: none; }
+.sv-hours { flex-direction: row; align-items: center; gap: 6px; }
+.sv-hours .hstrip { flex: 1; max-width: 260px; height: 9px; }
+.sv-hours .hlabel { min-width: 2.2em; font-family: var(--type); }
+.sv-hours .hlabel.bad { color: #f08070; }
+.sv-gear .chip { font-size: var(--fs-xs); }
+.surv .stock { font-size: 11px; letter-spacing: 1px; color: var(--ochre); width: max-content; }
+
+/* ---- the sheet */
+.sv-sheet { max-width: 920px; }
+.sv-head { gap: 18px; margin-bottom: 8px; }
+.sv-id { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.sv-id h2 { margin: 2px 0 0; }
+.sv-id .titles span { color: var(--ochre); font-style: italic; }
+.sv-cols { display: grid; grid-template-columns: 1fr; gap: 0 28px; }
+@media (min-width: 900px) { .sv-cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
+.sv-fold > summary { gap: 10px; padding: 8px 0; }
+.sv-fold > summary .t-l { color: #e2d6b8; }
+.sv-meta { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; font-family: var(--serif); font-size: var(--fs-s); color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%; }
+.sv-meta .ico.sm { width: 16px; height: 16px; }
+.sv-hot { color: var(--ochre); }
+.sv-big { font-family: var(--type); font-weight: normal; font-size: 26px; line-height: 1; }
+.sv-big.hi { color: #b8d080; } .sv-big.mid { color: #e0b860; } .sv-big.lo { color: #f08070; }
+.sv-fold .fold-body { padding-left: 4px; }
+.sv-inner { border-top: 0; margin-top: 4px; }
+.sv-inner > summary { padding: 2px 0; font-size: var(--fs-s); }
+.sv-sub { margin: 10px 0 4px; }
+.sv-chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 4px 0; }
+.sv-fold .mp { font-size: var(--fs-m); padding: 1px 0; }
+.sv-fold .mp b { font-family: var(--type); font-weight: normal; }
+.sv-fold .sv-moodbar { margin: 2px 0 8px; max-width: none; }
+
+.sv-prog { display: grid; grid-template-columns: 22px 84px auto 18px 1fr; align-items: center; gap: 8px; padding: 2px 0; }
+.sv-pi { display: inline-flex; align-items: center; }
+.sv-pn { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sv-pips i.on.new { background: #f0c060; box-shadow: 0 0 3px rgba(240, 192, 96, .6); }
+.sv-pips i.on:not(.new) { background: #8a6a2a; }
+.sv-lv { font-family: var(--type); font-weight: normal; font-size: var(--fs-s); text-align: right; }
+.sv-prog .xpbar { height: 4px; }
+.sv-prog .xpbar i, .sv-wound .xpbar i { display: block; height: 100%; background: #8a9a5b; }
+.sv-wound { display: flex; align-items: center; gap: 6px; font-size: var(--fs-s); padding: 2px 0; }
+.sv-wound .xpbar.sev { width: 50px; flex: none; }
+.sv-wound .xpbar.sev i { background: #a8462a; }
+.sv-wound .neg { color: #f08070; font-weight: normal; font-family: var(--type); font-size: var(--fs-xs); }
+.sv-rel { align-items: center; font-size: var(--fs-m); padding: 1px 0; }
+.sv-rel b { font-family: var(--type); font-weight: normal; }
+.sv-perks { border-top-color: #8a6a2a; }
+.sv-offer { margin: 2px 0 10px; }
+.sv-offers { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px; margin-top: 4px; }
+.sv-perkbtn { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 8px 10px; border-color: #8a6a2a; background: rgba(184, 134, 47, .08); }
+.sv-perkbtn:hover { background: rgba(184, 134, 47, .2); }
+.sv-perkbtn span { font-family: var(--serif); }
+.sv-perkbtn b { font-weight: normal; color: var(--ochre); font-family: var(--type); }
+
+@media (max-width: 700px) {
+  .sv-head { flex-direction: row; gap: 12px; }
+  .sv-head img.portrait.big { width: 80px; height: 100px; }
+  .sv-id h2.t-xl { font-size: 21px; }
+  .sv-meta { max-width: 60%; }
+}

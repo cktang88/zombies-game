@@ -1,4 +1,4 @@
-import type { Survivor, JobId, Res, WeaponItem, ModSlot } from '../types';
+import type { Survivor, JobId, SkillId, Res, WeaponItem, ModSlot } from '../types';
 import { G, R, dateLabel, ICE_DAY, has, pay, ordinal, docsFound, rep } from '../state';
 import { DOCS, FACTIONS } from '../data/lore';
 import { spriteUrl } from '../assets';
@@ -40,6 +40,9 @@ const JOBS: { id: JobId; label: string; hint: string }[] = [
   { id: 'radio', label: 'Work the radio', hint: 'Social. Needs a radio mast.' },
   { id: 'rest', label: 'Rest', hint: 'Recover. The whole day off.' },
 ];
+
+import { tip, ico, fold, chip, pips } from './kit';
+import './survivor.css';
 
 // What a job is likely to yield today for this survivor (mirrors sim/day.ts resolveDayWork).
 function jobOutlook(s: Survivor, j: JobId): string {
@@ -84,13 +87,13 @@ function jobOutlook(s: Survivor, j: JobId): string {
   }
 }
 
-// The top two named reasons behind a mood (skipping the baseline).
-function moodWhy(s: Survivor) {
+// The named reasons behind a mood, biggest first (skipping the baseline).
+function moodWhy(s: Survivor, n = 2) {
   return moodBreakdown(s)
     .slice(1)
     .filter((p) => p.v !== 0)
     .sort((a, b) => Math.abs(b.v) - Math.abs(a.v))
-    .slice(0, 2);
+    .slice(0, n);
 }
 
 function warnings(): string[] {
@@ -147,29 +150,48 @@ function costHtml(cost: Partial<Record<Res, number>>) {
   return parts.length ? parts.join(' ') : '<span class="cost">free</span>';
 }
 
+// ---- survivor: a picture and a number first, the sentence on hover (src/ui/kit.ts, survivor.css)
+const signed = (v: number) => `${v > 0 ? '+' : v < 0 ? '−' : '±'}${Math.abs(v)}`;
+const moodTone = (s: Survivor) => (s.mood > 50 ? 'hi' : s.mood > breakThresholds(s).minor ? 'mid' : 'lo');
+/** icon with a word that shows only while the icon art is missing (survivor.css hides .fb once it loads) */
+const icoFb = (id: string, word: string, cls = 'sm') => `${ico(id, '', cls)}<span class="fb">${esc(word)}</span>`;
+const stChip = (st: string, text: string, tipHtml: string, cls = '') =>
+  `<span class="chip sv-chip ${cls}"${tip(tipHtml)}>${ico('st_' + st, '', 'sm')}<b>${text}</b></span>`;
+
+function moodTip(s: Survivor, n = 6) {
+  const th = breakThresholds(s);
+  return `<b>${esc(moodWord(s.mood))}</b> · mood ${Math.round(s.mood)}<br>${moodWhy(s, n).map((p) => `${esc(p.label)} ${signed(p.v)}`).join('<br>')}<br><span class="dim">Breaks below ${Math.round(th.minor)}</span>`;
+}
+
+/** mood as one coloured number; the reasons are in its tooltip */
+function moodChip(s: Survivor) {
+  const up = s.mood > 50;
+  return `<span class="chip sv-chip sv-mood ${moodTone(s)}"${tip(moodTip(s))}>${ico(up ? 'st_mood_up' : 'st_mood_down', '', 'sm')}<b>${Math.round(s.mood)}</b></span>`;
+}
+
 function moodBar(s: Survivor) {
   const th = breakThresholds(s);
-  const why = moodWhy(s);
-  const whyTxt = why.map((p) => `${p.label} ${p.v > 0 ? '+' : '−'}${Math.abs(p.v)}`).join(' · ');
-  return `<div class="mood" tabindex="0" title="${esc(whyTxt)}" aria-label="Mood ${Math.round(s.mood)}, ${esc(moodWord(s.mood))}${whyTxt ? `: ${esc(whyTxt)}` : ''}">
-  <div class="moodbar">
+  return `<div class="moodbar sv-moodbar" aria-label="Mood ${Math.round(s.mood)}, ${esc(moodWord(s.mood))}">
     <div class="fill" data-tw="mood_${s.id}" style="width:${s.mood}%;background:${s.mood > 50 ? '#8a9a5b' : s.mood > th.minor ? '#b08a3c' : '#a8322a'}"></div>
     <i style="left:${th.minor}%"></i><i style="left:${th.major}%"></i><i style="left:${th.extreme}%"></i>
-  </div>
-  <div class="why"><b>${esc(moodWord(s.mood))}</b>${why.map((p) => ` <span class="${p.v > 0 ? 'pos' : 'neg'}">${esc(p.label)} ${p.v > 0 ? '+' : '−'}${Math.abs(p.v)}</span>`).join('')}</div>
   </div>`;
 }
 
+/** state at a glance: one icon chip per thing that matters, the explanation on hover */
 function statusTags(s: Survivor) {
   const t: string[] = [];
-  if (s.isLeader) t.push('<span class="tag lead">leads the house</span>');
-  if (s.breakState) t.push(`<span class="tag bad">${s.breakState.kind === 'away' ? 'away' : s.breakState.kind}</span>`);
+  if (s.isLeader) t.push(stChip('faction', 'lead', '<b>Leads the house</b><br>Goes on the runs. If they fall, it is over.', 'lead'));
+  if (s.breakState) t.push(stChip('break', esc(s.breakState.kind === 'away' ? 'away' : s.breakState.kind), `<b>Mental break</b><br>${esc(s.breakState.kind)}, ${Math.ceil(s.breakState.days)} more day${Math.ceil(s.breakState.days) === 1 ? '' : 's'}. Counsel helps.`, 'bad'));
   const p = pain(s);
-  if (p > 0.05) t.push(`<span class="tag ${p > 0.8 ? 'bad' : 'warn'}">${p > 1 ? 'badly hurt' : p > 0.5 ? 'hurt' : 'scratched up'}</span>`);
-  if (isBitten(s) && !s.wounds.some((w) => w.hidden)) t.push('<span class="tag bite">BITTEN</span>');
-  if (s.infection > 0.3 && s.wounds.some((w) => w.hidden)) t.push('<span class="tag warn">feverish?</span>');
-  if (G.flags[`inspired_${s.id}`]) t.push('<span class="tag good">inspired</span>');
-  for (const sc of s.scars) if (sc.label.startsWith('lost')) t.push(`<span class="tag">${esc(sc.label)}</span>`);
+  const wounds = s.wounds.filter((w) => !w.hidden);
+  if (p > 0.05) t.push(stChip('wound', wounds.length > 1 ? String(wounds.length) : p > 1 ? 'bad' : p > 0.5 ? 'hurt' : 'cut', `<b>${p > 1 ? 'Badly hurt' : p > 0.5 ? 'Hurt' : 'Scratched up'}</b><br>${wounds.map((w) => `${esc(woundLabel(w))} ${Math.round(w.severity * 100)}%${w.tended ? ' · tended' : ''}${w.bleeding ? ' · bleeding' : ''}`).join('<br>')}`, p > 0.8 ? 'bad' : 'warn'));
+  if (isBitten(s) && !s.wounds.some((w) => w.hidden)) t.push(stChip('bite', 'bitten', '<b>Bitten</b><br>The Turn is coming. Nobody has walked one back.', 'bad bite'));
+  if (s.infection > 0.3 && s.wounds.some((w) => w.hidden)) t.push(stChip('sick', '?', '<b>Feverish?</b><br>Sweating, keeping a sleeve down. Something is wrong.', 'warn'));
+  if (s.rest < 0.45) t.push(stChip('tired', `${Math.round(s.rest * 100)}%`, `<b>${s.rest < 0.25 ? 'Worn out' : 'Tired'}</b> · rested ${Math.round(s.rest * 100)}%<br>Short hours or a day of rest.`, s.rest < 0.25 ? 'warn' : ''));
+  if (s.hunger < 0.35) t.push(stChip('hungry', s.hunger < 0.1 ? 'starving' : 'hungry', `<b>${s.hunger < 0.1 ? 'Starving' : 'Hungry'}</b><br>Fed ${Math.round(s.hunger * 100)}%. Food comes from the stores at dusk.`, s.hunger < 0.1 ? 'bad' : 'warn'));
+  if (G.flags[`inspired_${s.id}`]) t.push(stChip('mood_up', 'inspired', '<b>Inspired</b><br>Works and fights better today.', 'good'));
+  for (const sc of s.scars) if (sc.label.startsWith('lost')) t.push(stChip('wound', esc(sc.label.replace(/^lost /, '−')), `<b>${esc(sc.label)}</b><br>For good.`));
+  if (!s.dead && !canFight(s)) t.push(stChip('wall', 'off wall', `<b>Won't stand the wall</b><br>${esc(first(s))} sits tonight out.`, 'warn'));
   return t.join('');
 }
 
@@ -180,7 +202,7 @@ function siteStock(id: string) {
   return { left, max: site.stock, pips: `${'▮'.repeat(left)}${'▯'.repeat(Math.max(0, site.stock - left))}` };
 }
 
-// 07:00–17:00 strip: walking (hatched), working, resting, away on a run.
+// 07:00–17:00 strip: walking (hatched), working, resting, away on a run. The words are in its tooltip.
 function hoursBar(s: Survivor) {
   const avail = hoursAvailable(s);
   const h = jobHours(s);
@@ -188,27 +210,40 @@ function hoursBar(s: Survivor) {
   const cells: string[] = [];
   for (let i = 0; i < DAY_HOURS; i++) {
     const k = i < travel / 2 ? 'tr' : i < h - travel / 2 ? 'wk' : i < h ? 'tr' : i < avail ? 'rs' : 'aw';
-    cells.push(`<i class="${k}" title="${clockLabel(i)}"></i>`);
+    cells.push(`<i class="${k}"></i>`);
   }
   const job = JOBS.find((j) => j.id === s.job)?.label ?? s.job;
   const away = onRunToday(s);
+  const noSearch = s.job === 'scavenge' && h - travel <= 0;
   let label: string;
   if (s.job === 'rest') label = away ? `Out on a run from ${clockLabel(avail)}` : 'Rest all day';
-  else if (s.job === 'scavenge') label = `${travel}h walking · ${Math.max(0, h - travel)}h searching${avail - h > 0 ? ` · rest ${avail - h}h` : ''}${h - travel <= 0 ? ' — <b>no time to search</b>' : ''}`;
+  else if (s.job === 'scavenge') label = `${travel}h walking · ${Math.max(0, h - travel)}h searching${avail - h > 0 ? ` · rest ${avail - h}h` : ''}${noSearch ? '<br><b>No time left to search.</b>' : ''}`;
   else label = `${esc(job)} ${h}h${avail - h > 0 ? ` + rest ${avail - h}h` : ''}${away ? ` · run from ${clockLabel(avail)}` : ''}`;
+  const legend = '<span class="dim">07:00–17:00 · ▨ walking · ■ work · □ rest</span>';
   const can = s.job !== 'rest' && canWork(s) && avail > 0;
-  return `<div class="hours" aria-label="Day plan for ${esc(first(s))}">
-    <div class="hstrip">${cells.join('')}</div>
-    <div class="hrow"><span class="hlabel">${label}</span>${can ? `<button class="mini hb" data-act="hrs" data-d="-1" data-id="${s.id}" aria-label="Fewer hours" ${h <= 1 ? 'disabled' : ''}>−</button><button class="mini hb" data-act="hrs" data-d="1" data-id="${s.id}" aria-label="More hours" ${h >= avail ? 'disabled' : ''}>+</button>` : ''}</div>
+  const short = s.job === 'rest' ? (away ? `run ${clockLabel(avail)}` : 'rest') : `${h}h`;
+  return `<div class="hours sv-hours" aria-label="Day plan for ${esc(first(s))}">
+    <div class="hstrip"${tip(`${label}<br>${legend}`)}>${cells.join('')}</div>
+    <span class="hlabel t-s ${noSearch ? 'bad' : ''}">${short}</span>${can ? `<button class="mini hb" data-act="hrs" data-d="-1" data-id="${s.id}" aria-label="Fewer hours" ${h <= 1 ? 'disabled' : ''}>−</button><button class="mini hb" data-act="hrs" data-d="1" data-id="${s.id}" aria-label="More hours" ${h >= avail ? 'disabled' : ''}>+</button>` : ''}
   </div>`;
 }
 
+/** one skill as icon + pips; the name and numbers on hover */
+function skillPip(s: Survivor, k: SkillId) {
+  const pas = s.passions.includes(k);
+  return `<span class="sv-sk"${tip(`<b>${esc(SKILL_NAMES[k])} ${s.skills[k]}</b>${pas ? '<br>Passion: learns 50% faster' : ''}`)}>${icoFb('skill_' + k, SKILL_NAMES[k].slice(0, 5))}${pas ? '<i class="pas">♦</i>' : ''}${pips(s.skills[k], 10)}</span>`;
+}
+
 function skillsMini(s: Survivor) {
-  const top = topSkills(s, 2).map((k) => `<span${s.passions.includes(k) ? ' class="pas" title="Passion: learns 50% faster"' : ''}>${esc(SKILL_NAMES[k])} ${s.skills[k]}</span>`);
+  const top = topSkills(s, 2).map((k) => skillPip(s, k));
   const heavy = s.training?.heavy ?? 0;
-  if (heavy > 0 || emplacements().length) top.push(`<span title="Crew-served weapons (gun nests)">heavy ${heavy}</span>`);
-  top.push(`<span class="dim" title="Courage: nerve on the wall · Grit: fatigue and pain">nerve ${attr(s, 'courage')} · grit ${attr(s, 'grit')}</span>`);
-  return `<div class="skmini">${top.join('')}</div>`;
+  const at = (st: string, word: string, v: number, t: string) => `<span class="chip sv-chip sv-attr"${tip(t)}>${icoFb(st, word)}<b>${v}</b></span>`;
+  const attrs = [
+    at('st_courage', 'nerve', attr(s, 'courage'), `<b>Courage ${attr(s, 'courage')}</b><br>Nerve on the wall: holds when it breaks.`),
+    at('st_grit', 'grit', attr(s, 'grit'), `<b>Grit ${attr(s, 'grit')}</b><br>Shrugs off fatigue and pain.`),
+  ];
+  if (heavy > 0 || emplacements().length) attrs.push(at('st_wall', 'heavy', heavy, `<b>Heavy weapons ${heavy}</b><br>Crew-served guns in the nests.`));
+  return `<div class="skmini sv-skills">${top.join('')}<span class="sv-attrs">${attrs.join('')}</span></div>`;
 }
 
 function survivorCard(s: Survivor) {
@@ -219,111 +254,139 @@ function survivorCard(s: Survivor) {
   const disabled = !canWork(s);
   const stale = !disabled && G.day > 1 && !planConfirmed(s) && !(onRunToday(s));
   const hp = heldProf(s);
-  return `<div class="card surv ${stale ? 'stale' : ''}" data-id="${s.id}">
+  const jobDef = JOBS.find((j) => j.id === s.job);
+  const drill = s.job === 'drill' ? (() => { const d = drillPlan(s); return d.live ? `${d.rounds} ${esc(ammoLabel(d.ammo).toLowerCase())}` : 'No live rounds: dry-fire.'; })() : '';
+  const jobTip = `<b>${esc(jobDef?.label ?? s.job)}</b> · ${esc(jobOutlook(s, s.job))}<br>${esc(jobDef?.hint ?? '')}${drill ? `<br>${drill}` : ''}`;
+  const st = s.job === 'scavenge' ? siteStock(site) : null;
+  return `<div class="card surv sv-card ${stale ? 'stale' : ''}" data-id="${s.id}">
     ${portraitImg(s.sprite, `portrait${s.isLeader ? ' lead' : ''}`)}
     <div class="body">
-      <div class="name"><a data-act="detail" data-id="${s.id}">${esc(displayName(s))}</a> <span class="age">${s.age}</span>${s.perkOffers?.length ? `<a class="tag" data-act="detail" data-id="${s.id}" title="A skill reached ${s.perkOffers[0].tier}: pick a perk on the sheet">perk ✦</a>` : ''}${stale ? '<span class="tag carried" title="Yesterday\'s job carried over. Change it, or press Keep to confirm.">same as yesterday?</span>' : ''}</div>
-      <div class="tags">${statusTags(s)}</div>
+      <div class="name"><a data-act="detail" data-id="${s.id}">${esc(displayName(s))}</a> <span class="age t-xs">${s.age}</span>${s.perkOffers?.length ? `<a class="tag sv-perknew" data-act="detail" data-id="${s.id}"${tip(`<b>New perk</b><br>${esc(progressName(s.perkOffers[0].skill))} reached ${s.perkOffers[0].tier}: pick one on the sheet.`)}>${ico('st_perk', '', 'sm')}perk</a>` : ''}${stale ? `<span class="tag carried"${tip("Yesterday's job carried over. Change it, or press Keep to confirm.")}>same?</span>` : ''}</div>
+      <div class="sv-state">${moodChip(s)}${statusTags(s)}</div>
       ${moodBar(s)}
       ${skillsMini(s)}
-      <div class="row">
+      <div class="row sv-jobrow">
+        <span class="sv-job"${tip(jobTip)}>${ico('job_' + s.job, '', '')}</span>
         <select data-act="job" data-id="${s.id}" ${disabled ? 'disabled' : ''} aria-label="Job for ${esc(first(s))}">
           ${JOBS.map((j) => `<option value="${j.id}" ${s.job === j.id ? 'selected' : ''}>${j.label} — ${jobOutlook(s, j.id)}</option>`).join('')}
         </select>
         ${s.job === 'scavenge' ? `<select data-act="site" data-id="${s.id}" aria-label="Where ${esc(first(s))} scavenges">${sites.map((x) => {
-          const st = siteStock(x.id);
+          const xs = siteStock(x.id);
           const walk = travelHours(x.id);
           const search = Math.max(0, jobHours(s) - walk);
-          return `<option value="${x.id}" ${site === x.id ? 'selected' : ''}>${x.name} · ${walk}h walk, ${search}h search · ${st.left <= 0 ? 'picked clean' : `${st.left}/${st.max} left`} · ${riskWord(x.risk)} risk</option>`;
+          return `<option value="${x.id}" ${site === x.id ? 'selected' : ''}>${x.name} · ${walk}h walk, ${search}h search · ${xs.left <= 0 ? 'picked clean' : `${xs.left}/${xs.max} left`} · ${riskWord(x.risk)} risk</option>`;
         }).join('')}</select>` : ''}
       </div>
-      ${s.job === 'scavenge' ? `<div class="stock" title="What is left at ${esc(SITES.find((x) => x.id === site)?.name ?? '')}: every trip strips it further">${siteStock(site).pips}<span class="dim">${siteStock(site).left <= 0 ? ' picked clean' : ` ${Math.round(searchFactor(searchHours(s)) * 100)}% of a full search`}</span></div>` : ''}
+      ${st ? `<div class="stock"${tip(`<b>${esc(SITES.find((x) => x.id === site)?.name ?? '')}</b>: ${st.left <= 0 ? 'picked clean' : `${st.left} of ${st.max} left`}<br>Every trip strips it further. ${Math.round(searchFactor(searchHours(s)) * 100)}% of a full search today.`)}>${st.pips}</div>` : ''}
       ${disabled ? '' : hoursBar(s)}
-      ${disabled ? '' : `<div class="jobhint">${esc(JOBS.find((j) => j.id === s.job)?.hint ?? '')}${s.job === 'drill' ? ` <span class="dim">${(() => { const d = drillPlan(s); return d.live ? `${d.rounds} ${esc(ammoLabel(d.ammo).toLowerCase())}` : 'no live rounds: dry-fire'; })()}</span>` : ''}</div>`}
-      <div class="row small">
-        <select data-act="weapon" data-id="${s.id}">
+      <div class="row small sv-gear">
+        <select data-act="weapon" data-id="${s.id}" aria-label="Gun for ${esc(first(s))}">
           <option value="">— unarmed —</option>
           ${freeWeapons.map((x) => `<option value="${x.uid}" ${x.uid === s.weapon ? 'selected' : ''}>${esc(x.name ? `"${x.name}"` : WEAPONS[x.def].name)} (${Math.round(x.cond * 100)}%)</option>`).join('')}
         </select>
         ${ammoSelect(G.weapons.find((x) => x.uid === s.weapon), true)}
         ${meleeSelect(s)}
-        ${hp ? `<span class="prof" title="${esc(first(s))}'s proficiency with ${esc(CLASS_NAMES[hp.cls].toLowerCase())} (0–10). Grows with drill and use.">${esc(CLASS_SHORT[hp.cls])} ${hp.v}</span>` : ''}
-        <span class="aim" title="Aim on the wall">aim ${Math.round(aimFactor(s) * 100)}</span>
-        ${s.armor ? `<button class="mini" data-act="unarmor" data-id="${s.id}" title="Mill-plate vest: wounds 30% lighter. Take it off.">vest ✓</button>` : (G.flags.armorStock as number) > 0 ? `<button class="mini" data-act="armor" data-id="${s.id}" title="Give a mill-plate vest">+ vest</button>` : ''}
-        ${canFight(s) ? '' : '<span class="tag bad">won\'t stand the wall</span>'}
+        ${hp ? `<span class="chip sv-chip"${tip(`<b>${esc(CLASS_NAMES[hp.cls])} ${hp.v}</b><br>${esc(first(s))}'s proficiency (0–10). Grows with drill and use.`)}><b>${esc(CLASS_SHORT[hp.cls])} ${hp.v}</b></span>` : ''}
+        <span class="chip sv-chip"${tip('<b>Aim on the wall</b><br>Shooting, traits, arm wounds, mood and rest.')}><b>aim ${Math.round(aimFactor(s) * 100)}</b></span>
+        ${s.armor ? `<button class="mini" data-act="unarmor" data-id="${s.id}"${tip('Mill-plate vest: wounds 30% lighter. Click to take it off.')}>vest ✓</button>` : (G.flags.armorStock as number) > 0 ? `<button class="mini" data-act="armor" data-id="${s.id}"${tip('Give a mill-plate vest: wounds 30% lighter.')}>+ vest</button>` : ''}
       </div>
     </div>
   </div>`;
 }
 
-// one row on the survivor sheet: base pips, grown pips, empty pips, and the xp bar to the next level
-function progRow(s: Survivor, k: ProgressKey, name: string, passion = false) {
+// one row on the survivor sheet: icon, pips (dark = at arrival, bright = learned here), the xp bar; numbers on hover
+function progRow(s: Survivor, k: ProgressKey, name: string, icon: string, passion = false) {
   const cur = level(s, k);
   const base = Math.min(cur, (s.base?.[k] as number | undefined) ?? cur);
-  return `<div class="skill prog"><span>${esc(name)}${passion ? ' <b class="pas" title="Passion: learns 50% faster">♦</b>' : ''}</span>
-    <div class="pips" title="${base} at arrival${cur > base ? `, +${cur - base} learned here` : ''}">${'■'.repeat(base)}<i>${'■'.repeat(cur - base)}</i><span>${'■'.repeat(10 - cur)}</span></div>
-    <div class="xpbar" title="${Math.round(xpProgress(s, k) * 100)}% to ${Math.min(10, cur + 1)}"><i style="width:${xpProgress(s, k) * 100}%"></i></div></div>`;
+  const xp = xpProgress(s, k);
+  const t = `<b>${esc(name)} ${cur}</b><br>${base} at arrival${cur > base ? `, +${cur - base} learned here` : ''}<br>${cur >= 10 ? 'Mastered' : `${Math.round(xp * 100)}% to ${cur + 1}`}${passion ? '<br>Passion: learns 50% faster' : ''}`;
+  return `<div class="sv-prog"${tip(t)}><span class="sv-pi">${ico(icon, '', 'sm')}${passion ? '<i class="pas">♦</i>' : ''}</span><span class="sv-pn t-s">${esc(name)}</span>
+    <span class="pips sv-pips">${'<i class="on"></i>'.repeat(base)}${'<i class="on new"></i>'.repeat(cur - base)}${'<i></i>'.repeat(Math.max(0, 10 - cur))}</span>
+    <b class="sv-lv">${cur}</b><span class="xpbar"><i style="width:${xp * 100}%"></i></span></div>`;
 }
 
-// Perks kept, and offers waiting (a skill reached 4 or 7): pick one, or they pick at the second dawn.
+// Perks kept (chips), and offers waiting (a skill reached 4 or 7): pick one, or they pick at the second dawn.
 function perksHtml(s: Survivor) {
   const kept = (s.perks ?? []).filter((id) => PERKS[id]);
   const offers = s.dead ? [] : s.perkOffers ?? [];
   if (!kept.length && !offers.length) return '';
-  return `<h3>Perks <span class="dim">at skill 4 and 7</span></h3>
-    ${kept.map((id) => `<div class="trait"><b>${esc(PERKS[id].name)}</b> <span class="dim">${esc(progressName(PERKS[id].skill))} ${PERKS[id].tier}</span> — ${esc(PERKS[id].desc)}</div>`).join('')}
-    ${offers.map((o) => `<div class="trait"><b>${esc(progressName(o.skill))} ${o.tier}: choose one</b> ${o.options.map((id) => `<button class="mini" data-act="perk" data-id="${s.id}" data-perk="${id}" title="${esc(PERKS[id].desc)}">${esc(PERKS[id].name)}</button>`).join(' ')}<div class="dim small">${o.options.map((id) => `${esc(PERKS[id].name)}: ${esc(PERKS[id].desc)}`).join(' · ')}</div></div>`).join('')}`;
+  const body = `${offers.map((o) => `<div class="sv-offer"><div class="t-xs">${esc(progressName(o.skill))} ${o.tier} · choose one</div>
+      <div class="sv-offers">${o.options.map((id) => `<button class="sv-perkbtn" data-act="perk" data-id="${s.id}" data-perk="${id}"><b class="t-m">${esc(PERKS[id].name)}</b><span class="t-s">${esc(PERKS[id].desc)}</span></button>`).join('')}</div></div>`).join('')}
+    ${kept.length ? `<div class="sv-chips">${kept.map((id) => `<span class="chip sv-chip"${tip(`<b>${esc(PERKS[id].name)}</b> · ${esc(progressName(PERKS[id].skill))} ${PERKS[id].tier}<br>${esc(PERKS[id].desc)}`)}>${ico('st_perk', '', 'sm')}<b>${esc(PERKS[id].name)}</b></span>`).join('')}</div>` : ''}`;
+  const head = `<span class="t-l">Perks</span>${offers.length ? `<span class="sv-meta sv-hot">${ico('st_perk', '', 'sm')}${offers.length} to choose</span>` : `<span class="sv-meta">${kept.length}</span>`}`;
+  // an open offer always shows (no remembered state); kept perks remember the reader's choice
+  return offers.length ? fold(head, body, { open: true, cls: 'sv-fold sv-perks' }) : fold(head, body, { id: 'sv-perks', open: false, cls: 'sv-fold' });
 }
 
 function detailHtml(s: Survivor) {
   computeMood(s);
   const parts = moodBreakdown(s);
+  const named = parts.slice(1).filter((p) => p.v !== 0).sort((a, b) => Math.abs(b.v) - Math.abs(a.v));
   const rels = Object.entries(s.rel)
-    .map(([id, r]) => ({ o: byId(id), r }))
+    .map(([id, r]) => ({ id, o: byId(id), r }))
     .filter((x) => x.o)
-    .sort((a, b) => Math.abs(b.r.opinion) - Math.abs(a.r.opinion) + (b.r.bond ? 100 : 0) - (a.r.bond ? 100 : 0))
-    .slice(0, 5);
+    .sort((a, b) => Math.abs(b.r.opinion) - Math.abs(a.r.opinion) + (b.r.bond ? 100 : 0) - (a.r.bond ? 100 : 0));
   const heavy = s.training?.heavy ?? 0;
-  return `<div class="modal detail">
-    <button class="close" data-act="closedetail">×</button>
-    <div class="dhead">
+  const wounds = s.wounds.filter((w) => !w.hidden);
+  const best = topSkills(s, 1)[0];
+  const mp = (p: { label: string; v: number }) => `<div class="mp ${p.v >= 0 ? 'pos' : 'neg'}"><span>${esc(p.label)}</span><b>${signed(p.v)}</b></div>`;
+
+  const traits = fold(`<span class="t-l">Traits</span><span class="sv-meta">${s.traits.map((t) => esc(TRAITS[t].name)).join(' · ')}</span>`,
+    `<div class="sv-chips">${s.traits.map((t) => `<span class="chip sv-chip"${tip(`<b>${esc(TRAITS[t].name)}</b><br>${esc(TRAITS[t].desc)}`)}>${ico('st_trait', '', 'sm')}<b>${esc(TRAITS[t].name)}</b></span>`).join('')}</div>`,
+    { id: 'sv-traits', open: true, cls: 'sv-fold' });
+
+  const skills = fold(`<span class="t-l">Skills</span><span class="sv-meta">best ${esc(SKILL_NAMES[best])} ${s.skills[best]}</span>`,
+    `${SKILLS.map((k) => progRow(s, k, SKILL_NAMES[k], 'skill_' + k, s.passions.includes(k))).join('')}
+    <div class="t-xs sv-sub">Nerve and body</div>
+    ${progRow(s, 'courage', ATTR_NAMES.courage, 'st_courage')}${progRow(s, 'grit', ATTR_NAMES.grit, 'st_grit')}
+    ${heavy > 0 || emplacements().length ? progRow(s, 'heavy', progressName('heavy'), 'st_wall') : ''}
+    <div class="t-xs sv-sub">Guns</div>
+    <div class="sv-chips">${WEAPON_CLASSES.map((c) => `<span class="chip sv-chip sv-gun ${prof(s, c) >= 5 ? 'good' : prof(s, c) <= 1 ? 'lo' : ''}"${tip(`<b>${esc(CLASS_NAMES[c])} ${prof(s, c)}</b><br>${Math.round(xpProgress(s, `prof_${c}`) * 100)}% to the next`)}><b>${esc(CLASS_SHORT[c])} ${prof(s, c)}</b></span>`).join('')}</div>`,
+    { id: 'sv-skills', open: true, cls: 'sv-fold' });
+
+  const mood = fold(`<span class="t-l">Mood</span><span class="sv-meta"><b class="sv-big ${moodTone(s)}">${Math.round(s.mood)}</b> ${esc(moodWord(s.mood))}</span>`,
+    `${moodBar(s)}
+    ${named.slice(0, 3).map(mp).join('') || '<div class="t-s">Nothing on their mind.</div>'}
+    ${named.length > 3 ? fold(`<span class="t-s">All ${parts.length} reasons</span>`, parts.map(mp).join(''), { id: 'sv-moodall', cls: 'sv-fold sv-inner' }) : ''}`,
+    { id: 'sv-mood', open: true, cls: 'sv-fold' });
+
+  const body = fold(`<span class="t-l">Body</span><span class="sv-meta">${wounds.length ? `${ico('st_wound', '', 'sm')}${wounds.length} wound${wounds.length > 1 ? 's' : ''}` : 'whole'} · rested ${Math.round(s.rest * 100)}%</span>`,
+    `${wounds.map((w) => `<div class="sv-wound"${tip(`<b>${esc(woundLabel(w))}</b><br>${Math.round(w.severity * 100)}% severe${w.tended ? ' · tended' : ' · untended'}${w.bleeding ? '<br>Bleeding.' : ''}${w.infected ? (w.kind === 'bite' ? '<br>The Turn.' : '<br>Infected.') : ''}`)}>${ico(w.kind === 'bite' ? 'st_bite' : 'st_wound', '', 'sm')}<span>${esc(woundLabel(w))}</span><span class="xpbar sev"><i style="width:${w.severity * 100}%"></i></span>${w.bleeding ? '<b class="neg">bleeding</b>' : ''}${w.infected ? `<b class="neg">${w.kind === 'bite' ? 'the Turn' : 'infected'}</b>` : ''}${w.tended ? '<span class="t-xs">tended</span>' : ''}</div>`).join('') || '<div class="t-s">Whole, for now.</div>'}
+    ${s.scars.length ? `<div class="sv-chips">${s.scars.map((sc) => `<span class="chip sv-chip"${tip('<b>Scar</b><br>For good.')}><b>${esc(sc.label)}</b></span>`).join('')}</div>` : ''}
+    <div class="sv-chips">${stChip('tired', `${Math.round(s.rest * 100)}%`, `<b>Rested ${Math.round(s.rest * 100)}%</b>`)}${stChip('hungry', `${Math.round(s.hunger * 100)}%`, `<b>Fed ${Math.round(s.hunger * 100)}%</b>`)}</div>`,
+    { id: 'sv-body', open: wounds.length > 0, cls: 'sv-fold' });
+
+  const people = fold(`<span class="t-l">People</span><span class="sv-meta">${rels.length}</span>`,
+    rels.map(({ id, o, r }) => {
+      const about = s.thoughts.filter((t) => t.about === id);
+      const back = o!.rel[s.id]?.opinion;
+      const t = `<b>${esc(first(o!))}</b>${r.bond ? ` · ${r.bond}` : ''}${o!.dead ? ' · dead' : ''}<br>${esc(first(s))}'s opinion ${signed(r.opinion)} (−100…+100)${back !== undefined ? `<br>${esc(first(o!))} thinks ${signed(back)} back` : ''}${about.length ? `<br>${about.map((a) => `${esc(a.label)} ${signed(Math.round(a.mood))}`).join('<br>')}` : ''}`;
+      return `<div class="rel sv-rel"${tip(t)}>${ico(o!.dead ? 'st_dead' : r.opinion >= 0 ? 'st_love' : 'st_hate', '', 'sm')}<span>${esc(first(o!))}${o!.dead ? ' †' : ''}</span>${r.bond ? `<em>${r.bond}</em>` : ''}<b class="${r.opinion >= 0 ? 'pos' : 'neg'}">${signed(r.opinion)}</b></div>`;
+    }).join('') || '<div class="t-s">Keeps to themself.</div>',
+    { id: 'sv-people', open: true, cls: 'sv-fold' });
+
+  const story = fold(`<span class="t-l">Backstory</span><span class="sv-meta">${s.tales.length ? `${s.tales.length} tale${s.tales.length > 1 ? 's' : ''}` : ''}</span>`,
+    `<p class="story"><b>Before.</b> ${esc(s.before)}</p>
+    <p class="story"><b>When it began.</b> ${esc(s.outbreak)}</p>
+    <div class="t-xs sv-sub">Remembered for</div>
+    ${s.tales.length ? s.tales.map((t) => `<div class="tale">${esc(t)}</div>`).join('') : '<div class="t-s">Nothing yet. Give it time.</div>'}`,
+    { id: 'sv-story', open: false, cls: 'sv-fold' });
+
+  return `<div class="modal detail sv-sheet">
+    <button class="close" data-act="closedetail" aria-label="Close">×</button>
+    <div class="dhead sv-head">
       ${portraitImg(s.sprite, `portrait big${s.dead ? ' dead' : ''}`)}
-      <div>
-        <h2>${esc(displayName(s))}</h2>
-        <div class="sub">${s.age}, ${s.sex === 'm' ? 'man' : 'woman'} · with us since ${dateLabel(s.arrivedDay)} · ${s.kills} put down${s.dead ? ` · died ${dateLabel(s.dead.day)}` : ''}</div>
-        ${s.titles?.length ? `<div class="titles">${s.titles.map((t) => `<span>“${esc(t)}”</span>`).join(' ')}</div>` : ''}
-        <p class="story"><b>Before.</b> ${esc(s.before)}</p>
-        <p class="story"><b>When it began.</b> ${esc(s.outbreak)}</p>
+      <div class="sv-id">
+        <h2 class="t-xl">${esc(displayName(s))}</h2>
+        ${s.titles?.length ? `<div class="titles t-s">${s.titles.map((t) => `<span>“${esc(t)}”</span>`).join(' ')}</div>` : ''}
+        <div class="t-s sv-line"><span${tip(`${s.sex === 'm' ? 'Man' : 'Woman'}, ${s.age}`)}>${s.age}</span> · <span${tip('Arrived at the house')}>since ${dateLabel(s.arrivedDay)}</span> · <span${tip('Turned put down, all told')}>${s.kills} put down</span>${s.dead ? ` · <b>died ${dateLabel(s.dead.day)}</b>` : ''}</div>
+        <div class="sv-state">${s.dead ? '' : moodChip(s)}${s.dead ? '' : statusTags(s)}</div>
         ${s.dead ? `<p class="story epitaph">${esc(s.dead.cause)}. <i>${esc(s.dead.epitaph)}</i></p>` : ''}
       </div>
     </div>
-    <div class="cols">
-      <div>
-        <h3>Traits</h3>
-        ${s.traits.map((t) => `<div class="trait"><b>${TRAITS[t].name}</b> — ${TRAITS[t].desc}</div>`).join('')}
-        ${perksHtml(s)}
-        <h3>Skills <span class="dim">dark = at arrival · bright = learned here</span></h3>
-        ${SKILLS.map((k) => progRow(s, k, SKILL_NAMES[k], s.passions.includes(k))).join('')}
-        <h3>Nerve and body</h3>
-        ${ATTRS.map((a) => progRow(s, a, ATTR_NAMES[a])).join('')}
-        ${heavy > 0 || emplacements().length ? progRow(s, 'heavy', progressName('heavy')) : ''}
-        <h3>Guns <span class="dim">proficiency by kind</span></h3>
-        <div class="profs">${WEAPON_CLASSES.map((c) => `<span class="${prof(s, c) >= 5 ? 'hi' : prof(s, c) <= 1 ? 'lo' : ''}" title="${Math.round(xpProgress(s, `prof_${c}`) * 100)}% to the next">${esc(CLASS_SHORT[c])} ${prof(s, c)}</span>`).join('')}</div>
-      </div>
-      <div>
-        <h3>Mood ${Math.round(s.mood)} — ${moodWord(s.mood)}</h3>
-        ${parts.map((p) => `<div class="mp ${p.v >= 0 ? 'pos' : 'neg'}"><span>${esc(p.label)}</span><b>${p.v > 0 ? '+' : ''}${p.v}</b></div>`).join('')}
-        <h3>Body</h3>
-        ${s.wounds.filter((w) => !w.hidden).map((w) => `<div class="wound">${esc(woundLabel(w))} · ${Math.round(w.severity * 100)}%${w.tended ? ' · tended' : ''}${w.bleeding ? ' · <b>bleeding</b>' : ''}${w.infected && w.kind !== 'bite' ? ' · <b>infected</b>' : ''}${w.kind === 'bite' && w.infected ? ' · <b class="bite">the Turn</b>' : ''}</div>`).join('') || '<div class="dim">Whole, for now.</div>'}
-        ${s.scars.map((sc) => `<div class="wound scar">${esc(sc.label)}</div>`).join('')}
-        <div class="dim small">Rested ${Math.round(s.rest * 100)}%</div>
-      </div>
-      <div>
-        <h3>People</h3>
-        ${rels.map(({ o, r }) => `<div class="rel"><span>${esc(first(o!))}${o!.dead ? ' †' : ''}</span>${r.bond ? `<em>${r.bond}</em>` : ''}<b class="${r.opinion >= 0 ? 'pos' : 'neg'}">${r.opinion > 0 ? '+' : ''}${r.opinion}</b></div>`).join('') || '<div class="dim">Keeps to themself.</div>'}
-        <h3>Remembered for</h3>
-        ${s.tales.length ? s.tales.map((t) => `<div class="tale">${esc(t)}</div>`).join('') : '<div class="dim">Nothing yet. Give it time.</div>'}
-      </div>
+    <div class="sv-cols">
+      <div>${perksHtml(s)}${skills}${traits}</div>
+      <div>${mood}${body}${people}${story}</div>
     </div>
   </div>`;
 }
