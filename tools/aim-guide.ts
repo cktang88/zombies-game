@@ -24,7 +24,9 @@ const px = (p: P): P => [O[0] + p[0] * K, O[1] + p[1] * K];
 const J = meta.joints, Pm = meta.parts;
 const torsoLen = Math.hypot(J.neck[0] - J.pelvis[0], J.neck[1] - J.pelvis[1]);
 const pistol = A.hold === 'pistol';
-const lean = pistol ? 0.1 : 0.16; // into the gun (fault #6)
+// hip fire (the LMG's stance, src/anim/stances.ts `hip`): butt tucked under the armpit, gun at the belt line, head up
+const hip = A.stance === 'hip';
+const lean = pistol ? 0.1 : hip ? 0.22 : 0.16; // into the gun (fault #6)
 const u: P = [Math.sin(lean), -Math.cos(lean)], v: P = [Math.cos(lean), Math.sin(lean)]; // up the spine, forward
 const at = (along: number, fwd: number): P => [u[0] * along + v[0] * fwd, u[1] * along + v[1] * fwd];
 const shAlong = -(J.shoulder[1] - J.pelvis[1]), shFwd = J.shoulder[0] - J.pelvis[0];
@@ -34,8 +36,12 @@ const k = A.len / (await sharp(path.join(ROOT, `public/sprites/${A.icon}.png`)).
 const fl = A.flip ? -1 : 1;
 // gun placement: rig units, gun horizontal, `grip` at gp
 let gp: P;
-if (!pistol) {
-  const pocket = at(torsoLen - 3, shFwd + 14);
+// a stockless long gun (the riot auto-shotgun's bird's-head grip: `butt` is a few px behind the grip) is not
+// shouldered: it is held out in front of the chest at shoulder height, the trigger arm bent, sighting down the rib
+const stockless = !pistol && A.butt !== undefined && Math.abs(A.grip[0] - A.butt[0]) * k < 8;
+if (stockless) gp = [sh[0] + (ua + fa) * 0.8, sh[1] - 4];
+else if (!pistol) {
+  const pocket = hip ? at(torsoLen - 50, shFwd + 18) : at(torsoLen - 3, shFwd + 14);
   const butt = A.butt!;
   gp = [pocket[0] + (A.grip[0] - butt[0]) * k * fl, pocket[1] + (A.grip[1] - butt[1]) * k];
 } else gp = [sh[0] + (ua + fa) * 0.93, sh[1] - 4];
@@ -71,7 +77,7 @@ const gunBuf = await sharp(path.join(ROOT, `public/sprites/${A.icon}.png`)).png(
 const gm = await sharp(gunBuf).metadata();
 const line = (a: P, b: P, w: number, c: string) => { const [x0, y0] = px(a), [x1, y1] = px(b); return `<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" stroke="${c}" stroke-width="${w * K}" stroke-linecap="round"/>`; };
 const arm = (s: P, e: P, w: P, c: string) => line(s, e, 13, c) + line(e, w, 10, c) + line(w, [w[0] + hand, w[1] + 1], 9, c);
-const headRot = -Math.PI / 2 + lean + (pistol ? 0.05 : 0.3) - Pm.head.rest; // chin down onto the stock
+const headRot = -Math.PI / 2 + lean + (pistol || hip ? 0.05 : stockless ? 0.15 : 0.3) - Pm.head.rest; // chin down onto the stock (not in hip fire)
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${H}">
 <rect width="100%" height="100%" fill="#ff00ff"/>
 ${arm(fsh, fE, fW, '#5a5a5a')}
