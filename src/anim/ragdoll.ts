@@ -103,7 +103,7 @@ export class Ragdoll {
       legN: [P_NKNEE, P_NANK, P_NTOE], legF: [P_FKNEE, P_FANK, P_FTOE],
     };
     const pts = zone[o.at ?? 'torso'] ?? zone.torso;
-    const k = 1 / 60;
+    const k = 1 / 120; // one Verlet substep (step() runs two per 1/60 s frame)
     for (let i = 0; i < RAGDOLL_POINTS; i++) {
       const w = pts.includes(i) ? 1 : 0.3;
       this.ox[i] -= ix * w * k;
@@ -150,8 +150,8 @@ export class Ragdoll {
       }
       for (let i = 0; i < RAGDOLL_POINTS; i++) maxMove = Math.max(maxMove, Math.abs(this.x[i] - this.ox[i]) + Math.abs(this.y[i] - this.oy[i]));
     }
-    this.still = maxMove < 0.08 ? this.still + dt : 0;
-    if (this.still > 0.35 || this.t > 3.2) this.settled = true;
+    this.still = maxMove < 0.25 ? this.still + dt : 0;
+    if ((this.still > 0.3 && this.t > 0.6) || this.t > 2.6) this.settled = true;
   }
 
   private solveDist(c: Dist) {
@@ -169,14 +169,20 @@ export class Ragdoll {
     const delta = wrapAngle(want - r);
     if (Math.abs(delta) < 1e-4) return;
     // rotate the child about the joint (and the parent a little the other way)
-    this.rotate(l.c, l.j, delta * 0.7);
-    if (l.a !== P_PELVIS) this.rotate(l.a, l.j, -delta * 0.3);
+    this.rotate(l.c, l.j, delta * 0.5);
+    // a limit fighting contact otherwise pumps energy: bleed the child's velocity
+    const c = l.c;
+    this.ox[c] += (this.x[c] - this.ox[c]) * 0.35; this.oy[c] += (this.y[c] - this.oy[c]) * 0.35;
+    this.ox[l.j] += (this.x[l.j] - this.ox[l.j]) * 0.2; this.oy[l.j] += (this.y[l.j] - this.oy[l.j]) * 0.2;
   }
   private rotate(p: number, about: number, a: number) {
     const c = Math.cos(a), s = Math.sin(a);
     const dx = this.x[p] - this.x[about], dy = this.y[p] - this.y[about];
-    this.x[p] = this.x[about] + dx * c - dy * s;
-    this.y[p] = this.y[about] + dx * s + dy * c;
+    const nx = this.x[about] + dx * c - dy * s, ny = this.y[about] + dx * s + dy * c;
+    // move the previous position by the same amount: a joint limit is a kinematic projection
+    // and must not inject velocity (otherwise limits fighting the ground pump energy in)
+    this.ox[p] += nx - this.x[p]; this.oy[p] += ny - this.y[p];
+    this.x[p] = nx; this.y[p] = ny;
   }
 
   private collide() {

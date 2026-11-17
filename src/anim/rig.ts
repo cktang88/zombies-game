@@ -22,6 +22,7 @@ import {
   geomOf, type Channels, type NumCh, type RigGeom, type Target,
 } from './skeleton';
 import { STYLES, type Style } from './styles';
+import { flipFrame, setTemplateFactory } from './flipbook';
 import { anchorsFor, type WeaponAnchors } from './weaponAnchors';
 
 export type RigKind = 'survivor' | 'turned';
@@ -41,6 +42,8 @@ export interface CreateOpts {
   gait?: string;
   /** called for every animation event of every clip (audio hook) */
   onEvent?: (name: string, rig: Rig) => void;
+  /** false: use the gait preset exactly (no per-instance variation) */
+  jitter?: boolean;
 }
 interface Active {
   clip: Clip;
@@ -116,6 +119,8 @@ export class Rig {
   ragdoll: Ragdoll | null = null;
   dead = false;
   props: Prop[] = [];
+  /** crowd LOD: draw from the shared flipbook while only walking (see flipbook.ts) */
+  lod = false;
   /** idle behaviours scheduled automatically when standing still (Turned) */
   autoIdle = false;
   private idleIn = 3;
@@ -128,7 +133,7 @@ export class Rig {
     this.r = rng(this.seed);
     this.style = STYLES[o.style ?? (kind === 'survivor' ? 'survivor' : 'sleeper')] ?? STYLES.sleeper;
     const walk = o.gait ?? this.style.walks[Math.floor(this.r() * this.style.walks.length)];
-    this.baseGait = kind === 'turned' ? jitterGait(GAITS[walk] ?? GAITS.walk, this.r) : GAITS[walk] ?? GAITS.walk;
+    this.baseGait = kind === 'turned' && o.jitter !== false ? jitterGait(GAITS[walk] ?? GAITS.walk, this.r) : GAITS[walk] ?? GAITS.walk;
     this.gait = this.baseGait;
     this.crawling = !!this.gait.crawl;
     this.phase = this.r();
@@ -244,6 +249,7 @@ export class Rig {
 
   // ------------------------------------------------------------------ update
   update(dt: number) {
+    if (this.baked) return;
     dt = Math.min(dt, 1 / 20);
     this.t += dt;
     this.updateProps(dt);
@@ -646,9 +652,19 @@ export class Rig {
    * full-body sprite (procedural bob) when the part atlas is missing.
    */
   draw(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number, facing: 1 | -1, fallback?: CanvasImageSource) {
+    if (this.baked) return;
     this.dx = x; this.dy = y; this.ds = scale; this.df = facing;
     const as = this.asset;
     if (!as || !this.geo) { this.drawFallback(ctx, x, y, scale, facing, fallback); return; }
+    if (this.lod && !this.ragdoll && !this.weaponId && this.flashT <= 0 && this.actions.length === 0) {
+      const fr = flipFrame(this, scale);
+      if (fr) {
+        ctx.setTransform(facing, 0, 0, 1, x, y);
+        ctx.drawImage(fr.c, -fr.ox, -fr.oy);
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        return;
+      }
+    }
     if (this.ragdoll) this.poseFromRagdoll();
     const flash = this.flashT > 0;
     const atlas = as.atlas;
@@ -659,14 +675,13 @@ export class Rig {
     this.part(ctx, as.dark, F_UA, 'upperArm');
     this.part(ctx, as.dark, F_FA, 'forearm');
     if (this.gunState === 'slung' && this.gun && this.weaponId && this.anchors?.hold !== 'melee') this.drawSlung(ctx);
-    if (this.anchors?.hold === 'bow' && this.gunVisible) this.drawGun(ctx);
     // trunk
     this.part(ctx, atlas, TORSO, 'torso');
     this.part(ctx, atlas, HEAD, 'head', this.headFlip > 0.5);
     this.part(ctx, atlas, N_TH, 'thigh');
     this.part(ctx, atlas, N_SN, 'shin');
     this.part(ctx, atlas, N_FT, 'foot');
-    if (this.gunVisible && this.anchors?.hold !== 'bow' && this.anchors?.hold !== 'melee') this.drawGun(ctx);
+    if (this.gunVisible && this.anchors?.hold !== 'melee') this.drawGun(ctx);
     // far (trigger) hand wraps the grip: in front of the gun
     this.part(ctx, this.weaponId && this.kind === 'survivor' && this.gunState === 'held' ? atlas : as.dark, F_H, this.handF);
     if (this.fprop) this.drawProp(ctx, this.fprop, this.palmFX, this.palmFY, this.rhoF);
@@ -717,7 +732,10 @@ export class Rig {
     this.props = props;
     ctx.filter = f;
     this.ragdoll = null;
+    this.baked = true;
   }
+  /** true once bakeCorpse() ran: the rig no longer draws or updates (drop it) */
+  baked = false;
 
   private poseFromRagdoll() {
     const r = this.ragdoll!, J = this.jx, K = this.jy, A = this.ja;
@@ -847,6 +865,8 @@ export class Rig {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
 }
+
+setTemplateFactory((spriteId, style, gait) => new Rig('turned', spriteId, { style, gait, jitter: false, seed: 1 }));
 
 // ---- keyframe sampling
 function sampleKeys(keys: Key[], t: number): number {

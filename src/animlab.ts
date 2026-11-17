@@ -9,6 +9,7 @@ const W = cv.width, H = cv.height, GROUND = 560;
 const params = new URLSearchParams(location.search);
 const BENCH = params.get('bench');
 let DEBUG = params.has('debug');
+const RAGDOLL_CAP = 24;
 
 const images = new Map<string, HTMLImageElement>();
 function loadImg(id: string) {
@@ -140,7 +141,7 @@ function kill(a: Actor, kind: K) {
   if (r.dead) return;
   // impulses in display px/s, world axes; the shooter stands to the left
   const dir = a === surv ? -1 : 1;
-  const imp = { headshot: { x: 180 * dir, y: -60 }, shotgun: { x: 420 * dir, y: -160 }, explosion: { x: 380 * dir, y: -520 }, melee: { x: 30 * dir, y: 40 } }[kind];
+  const imp = { headshot: { x: 140 * dir, y: -50 }, shotgun: { x: 260 * dir, y: -150 }, explosion: { x: 300 * dir, y: -420 }, melee: { x: 20 * dir, y: 60 } }[kind];
   const at = kind === 'headshot' ? 'head' : kind === 'melee' ? 'head' : 'torso';
   r.die({ worldImpulse: imp, at, kind: kind === 'headshot' ? 'headshot' : kind, authored: a === ferry ? true : undefined });
   a.vx = 0;
@@ -182,6 +183,12 @@ function step(dt: number) {
       a.respawn?.();
     }
   }
+  // capped active ragdolls: bake the oldest first when over budget
+  const live = actors.filter((a) => a.rig.ragdoll);
+  if (live.length > RAGDOLL_CAP) {
+    live.sort((p, q) => (q.rig.ragdoll!.t - p.rig.ragdoll!.t));
+    for (const a of live.slice(0, live.length - RAGDOLL_CAP)) { a.rig.bakeCorpse(dctx, a.x, a.y, scaleOf(a), a.facing); a.respawn?.(); }
+  }
 }
 function render() {
   // daylight backdrop
@@ -209,6 +216,19 @@ function render() {
 }
 
 // ---------------------------------------------------------------- bench
+const FLAT = params.has('flat');
+/** Baseline: the old single-image draw (same actors, same sizes) for comparison. */
+function renderFlat() {
+  ctx.fillStyle = '#6f8a9a'; ctx.fillRect(0, 0, W, H);
+  const b = bg(); if (b) ctx.drawImage(b, 0, GROUND - 420, W, 440);
+  for (const a of actors) {
+    const im = images.get(a.rig.spriteId); if (!im) continue;
+    const h = a.h, w = (im.width / im.height) * h, bob = Math.abs(Math.sin(performance.now() / 300 + a.x)) * 2;
+    ctx.setTransform(a.facing * (a.rig.kind === 'turned' ? -1 : 1), 0, 0, 1, a.x, a.y - bob);
+    ctx.drawImage(im, -w / 2, -h, w, h);
+  }
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+}
 async function bench() {
   actors.length = 0; sleepers.length = 0;
   const kinds = [['z_shambler', 'sleeper'], ['z_runner', 'deer'], ['z_shambler', 'sleeper'], ['z_brute', 'ferryman']] as const;
@@ -217,6 +237,7 @@ async function bench() {
     const [sp, st] = kinds[i % kinds.length];
     const a: Actor = { rig: createRig('turned', sp, { style: st, seed: 1000 + i }), x: 420 + ((i * 53) % 840), y: GROUND - (i % 6) * 14, h: 110 + (st === 'ferryman' ? 30 : 0), facing: -1, vx: -(18 + (i % 7) * 3), minX: 400, maxX: 1270 };
     a.rig.autoIdle = true;
+    a.rig.lod = params.has('lod');
     actors.push(a);
   }
   for (let i = 0; i < 6; i++) {
@@ -256,7 +277,8 @@ async function bench() {
       const u0 = performance.now();
       step(dt);
       const u1 = performance.now();
-      render();
+      if (FLAT) renderFlat(); else render();
+      if (params.has('sync')) ctx.getImageData(0, 0, 1, 1); // force the raster to finish inside the timing
       const e = performance.now();
       times.push(e - s); upd.push(u1 - u0);
       if (++n < N) requestAnimationFrame(tick); else done();

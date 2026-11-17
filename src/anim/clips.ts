@@ -322,12 +322,12 @@ const rummage: Clip = {
   loop: true,
   fadeIn: 0.35, fadeOut: 0.35,
   num: {
-    crouch: [[0, 0.62], [0.5, 0.66], [1, 0.62]],
-    lean: [[0, 0.78], [0.25, 0.86], [0.5, 0.74], [0.75, 0.84], [1, 0.78]],
+    crouch: [[0, 0.8], [0.5, 0.84], [1, 0.8]],
+    lean: [[0, 0.82], [0.25, 0.92], [0.5, 0.78], [0.75, 0.9], [1, 0.82]],
     head: [[0, 0.35], [0.5, 0.45], [1, 0.35]],
     nFx: [[0, 18], [1, 18]], fFx: [[0, -16], [1, -16]],
   },
-  n: [[0, GR(44, 2, 'open', 0.6)], [0.2, GR(52, 0, 'pinch', 0.9)], [0.35, GR(40, 6, 'pinch', 0.2)], [0.55, GR(48, 2, 'open', 0.7)], [0.75, GR(56, 3, 'fist', 0.4)], [1, GR(44, 2, 'open', 0.6)]],
+  n: [[0, GR(40, 2, 'open', 0.6)], [0.2, GR(48, 0, 'pinch', 0.9)], [0.35, GR(36, 6, 'pinch', 0.2)], [0.55, GR(44, 2, 'open', 0.7)], [0.75, GR(50, 3, 'fist', 0.4)], [1, GR(40, 2, 'open', 0.6)]],
   f: [[0, GR(30, 2, 'open', 0.8)], [0.3, GR(36, 4, 'open', 1.0)], [0.6, GR(26, 1, 'open', 0.6)], [1, GR(30, 2, 'open', 0.8)]],
   set: [[0, 'gun', 'slung']],
   ev: [[0.2, 'rustle'], [0.55, 'rustle'], [0.75, 'clink']],
@@ -462,7 +462,7 @@ const burstWindup: Clip = { id: 'burstWindup', dur: 1.2, num: { lean: [[0, -0.1]
 // authored deaths that still beat ragdoll where they matter
 const deathChoke: Clip = { id: 'deathChoke', dur: 1.8, hold: true, num: { lean: [[0, 0.1], [0.3, -0.3], [0.7, 0.5], [1, 1.2, 'in']], crouch: [[0, 0], [0.5, 0.3], [1, 0.9, 'in']], head: [[0, 0], [0.3, -0.8], [1, 0.4]] }, n: [[0, null], [0.2, B('face', -4, 14, 'fist')], [0.9, B('face', -4, 14, 'fist')]], f: [[0, null], [0.25, B('face', -8, 16, 'fist')], [0.9, B('face', -8, 16, 'fist')]], ev: [[0.2, 'choke'], [1, 'ragdoll']] };
 /** A crippling leg hit: the legs go and it drops to the ground (then crawls). */
-const buckle: Clip = { id: 'buckle', dur: 0.8, hold: true, num: { crouch: [[0, 0], [0.35, 0.55, 'in'], [1, 0.0]], lean: [[0, 0.1], [0.35, 0.6], [1, 1.42, 'in']], py: [[0, 0], [0.35, 0], [1, 0]], head: [[0, 0], [0.5, 0.4], [1, -0.9]], nSh: [[0, 1], [0.6, 2.4], [1, 2.6]], fSh: [[0, 1], [0.6, 2.2], [1, 2.4]] }, ev: [[0.35, 'buckle'], [0.95, 'thud']] };
+const buckle: Clip = { id: 'buckle', dur: 0.8, fadeOut: 0.2, num: { crouch: [[0, 0], [0.35, 0.55, 'in'], [1, 0.0]], lean: [[0, 0.1], [0.35, 0.6], [1, 1.42, 'in']], py: [[0, 0], [0.35, 0], [1, 0]], head: [[0, 0], [0.5, 0.4], [1, -0.9]], nSh: [[0, 1], [0.6, 2.4], [1, 2.6]], fSh: [[0, 1], [0.6, 2.2], [1, 2.4]] }, ev: [[0.35, 'buckle'], [0.95, 'thud']] };
 const deathCollapse: Clip = { id: 'deathCollapse', dur: 0.9, hold: true, num: { crouch: [[0, 0], [0.6, 0.85, 'in'], [1, 0.95]], lean: [[0, 0.1], [0.5, 0.4], [1, 1.1, 'in']], head: [[0, 0], [1, 0.6]], nSh: [[0, 0.5], [1, 0.1]], fSh: [[0, 0.4], [1, 0.0]] }, ev: [[0.6, 'knees'], [1, 'ragdoll']] };
 
 export const CLIPS: Record<string, Clip> = Object.fromEntries([
