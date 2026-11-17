@@ -29,6 +29,8 @@ interface RigSrc {
   // added to a part's rest angle (the art is drawn rotated by -bias). z_crawler: its prone
   // source already has the head raised, while the crawl gaits lift the head of upright rigs
   restBias?: Record<string, number>;
+  capless?: string[]; // parts that get no joint cap (e.g. a thigh whose hip sits under a long coat or
+  // apron: the cap would copy a disc of the coat onto the leg)
   hands?: { source: string; refPose: string; scale?: number; poses: Record<string, { index: number; wrist: P; tip: P; grip?: P }> };
 }
 interface Bone { part: string; a: string; b: string; parent?: string; ignore?: boolean; front?: boolean }
@@ -137,7 +139,7 @@ async function segment(rig: RigSrc) {
     for (let i = 0; i < m.length; i++) if (own[i] === k) m[i] = 1;
     masks.set(bn.part, m);
   }
-  for (const bn of BONES) if (bn.parent) {
+  for (const bn of BONES) if (bn.parent && !rig.capless?.includes(bn.part)) {
     const [cx, cy] = J[bn.a];
     const r = R(bn.part) * 1.15;
     const cm = masks.get(bn.part)!, pm = masks.get(bn.parent)!;
