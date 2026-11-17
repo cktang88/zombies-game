@@ -659,3 +659,18 @@ Falls: passive 5/8 with reactions, 5/8 without; decent 3/8 vs 2/8; prep 1/8 vs 2
 | 1.2 | – | 0, 0 |
 
 The outcome is a cliff, not a slope: once the bunched middle wave reaches the planks, the wall goes. 1.45 sits on the edge, a coin-flip for both, and is the new default. Follow-up: soften the cliff (stagger the middle wave's arrival) so a decent leader's skill buys planks, not a whole night.
+
+### §11c Spreading the tide's middle wave (sub-waves)
+
+New knobs in `DIRECTOR_TUNE` (director.ts): `tideSub` splits the tide's middle wave (budget × tideMid) into that many equal sub-waves, each a normal `span` surge, `tideGap` of the night apart (3 × 0.1: at 0.42 / 0.52 / 0.62 of the night, clear of the late surge at 0.78). `tideSubTo` (12) limits it to the first tide; later tides keep the one bunched wave. Day-6 tide, 2 seeds, wall lost of 360 (FELL = gone):
+
+| config | passive | decent |
+|---|---|---|
+| bunched (tideSub 1), tideMid 1.45 | −90, 0 | −268, −45 |
+| **tideSub 3, gap 0.1, tideMid 1.45** | FELL, −331 | −272, −135 |
+| tideSub 3, gap 0.1, tideMid 1.7 | −90, −135 | FELL, FELL |
+| tideSub 4, gap 0.08, tideMid 2.0 | FELL, FELL | −180, 0 |
+
+Sanity (sub-waves on): day 8 (no tide) passive FELL ×2, decent 0 ×2; day 23 decent Crossing held −197. Day 20 tide with sub-waves applied had decent FELL where the bunched run held −291, but the same run's non-tide (tunnel) night also flipped (−48 → FELL), so that is mostly bot noise; `tideSubTo` keeps later tides exactly as before anyway.
+
+Reading: the sub-waves turn the result into a slope. With 3 sub-waves at tideMid 1.45 a passive house breaks or nearly breaks (−331..FELL) and a decent leader holds at a plank cost (−135..−272), as wanted. Caveat: the harness is noisy: the decent bot aims with `Math.random`, the bunched baseline did not reproduce §11b's coin-flip this time, and the guards end the night with every round of r22/revolver/lever spent, so ammo, not arrival shape, sets the ceiling. 2 seeds is a signal, not proof; rerun with more seeds before going further. New default: tideSub 3, tideGap 0.1, tideSubTo 12, tideMid 1.45.
