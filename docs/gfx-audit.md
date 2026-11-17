@@ -123,3 +123,40 @@ None. The Turned busts are cut from the existing sprites, so the image model was
 **Checked, fine:** the scaffold legs sit behind the firestep crews; labels de-collide in the crowded six-guard line; the counter stays at or above 0; the horde (44 bodies) and the pile/climb frames show no z-fighting or popping; no new page errors in any scene.
 
 **Left:** a real portrait layout for the night (a second canvas framing, or a rotate-device prompt) belongs with the stage/UI owner (`src/main.ts`, `src/ui/*`). The moodle word over every guard ("starving", "exhausted") is accurate but busy on a hungry house. A one-glyph form when three or more guards share it would help. **Art spend:** none.
+
+## Round 3 — runs scale & style
+
+**Method.** A capture script stages a day-12 run on Route 9 with a companion and teleports the leader through it via `__EX`. Shots: noon (home, cars, a door and a kin scene), late afternoon (shed, rail crossing, a body, a dropped pack), dusk (stop sign, pickup, cache), plus a sleeper and walkers in a fight, a shot, and a search. Each frame was captured before and after the fix. The scale check takes a survivor (`SH` = 158 px) as 1.75 m, which is **90 px/m** on the walking lane. Lane depth scale is `depthScale(y)` (640 → 0.93, 664 → 1, 688 → 1.07).
+
+| Thing | Before (px → m) | Real | After |
+|---|---|---|---|
+| Survivor / Shambler | 158 / 156 → 1.75 / 1.73 | 1.75 | unchanged |
+| Station wagon (sprite incl. raised tailgate) | 120 tall, 336 long → roof 1.07 m, 3.7 m | roof 1.45 m, ~4.5 m | 145 px at the kerb (roof 1.45 m, 4.5 m with its spill) |
+| Pickup (`obj_truck`) | 135 → 1.5 m tall, 3.7 m long | 1.85 m, 4.8–5.3 m | 157 px (1.95 m, 4.8 m) |
+| Door unit (frame + stoop) | 200 → door slab ~1.8 m | 2.0 m | 204 px (slab 2.03 m) |
+| Shed | 190 → door ~1.5 m | ~1.9 m door | 209 px |
+| Kin scene (seated woman at a table) | 175 → **1.94 m seated**, taller than a standing survivor | ~1.3 m | 108 px |
+| Gun cabinet / cache | 150 → 1.67 m | 1.8–1.9 m | 148 px |
+| Railroad crossbuck | 200 → **2.2 m**, sign at shoulder height | ~4 m | 321 px |
+| Stop sign | 200 → plate at head height | 2.1 m to the plate bottom | 229 px |
+| Body / duffel (in the road) | 44 / 30 | 0.6 m deep, 1.7 m long / a 0.6 m bag | 56 / 32 px |
+| Backdrop (`bg_mid`) | painted pickup ~180 px at the road edge; house doors ~70 px at depth 0.39 | — | consistent with 90 px/m. It was the foreground props that were small. |
+
+| Scene | Sev | Issue | Fix |
+|---|---|---|---|
+| Every prop | H | Street props were 15–45% undersized: a toy wagon next to the painted full-size pickup behind it, a crossbuck shoulder high, a seated woman taller than the leader. | Heights are in metres (`PROP_M`) × 90 px/m. |
+| Companion / far lane | H | Props stood on the middle lane (base 668) but were drawn under every actor, so the companion on the far lane (640) appeared *in front of* a car with her feet above its wheels, as if standing on it. | Props stand on a kerb line (`KERB` = far lane − 12) with that depth's scale (0.89), so all three lanes walk in front of them. Bodies and dropped packs stay in the road. Shadows and prompts follow the base. |
+| Dusk | H | Props and backdrop fell to dusk, but survivors and Turned stayed fully lit: bright cut-outs on a dark street. | `looksAt(dusk)`: the lane looks step (6 steps) darker, greyer and toward the dusk fog, matching the props' dusk copy (about 0.57 brightness at full dusk). The stepping keeps the graded atlases at a handful of bakes. |
+| Placement | M | With true-size props, the 300–520 px spot spacing overlapped neighbours (two wagons fused). The zone-3 pickup sat on the stop sign. | Spacing by footprint (`SPOT_W`). The pickup moved to boundary + 250, and the cache to at least +540. |
+| Repetition | L | The same wagon or shed sprite repeated identically along the street. | Alternate cars, doors, sheds and bodies are mirrored (by x). |
+| Zone plate | L | Fixed at y 426, it covered the taller sign. | Rides 10 px above the sign's top. |
+| Labels | L | "Search a county cruiser / minivan / storefront / garage / woodpile" on a station wagon, a house door and a plank shed. | Labels match the sprites. |
+
+**Checked and fine:** contact shadows under every prop and actor; no magenta fringes on the `obj_*` sprites; the ground tile and `bg_mid` mirror seam (its mirrored copy repeats the poles and pickup, but at 0.7× parallax it reads as more of the street); muzzle light at dusk; no page errors.
+
+**Left / hooks for other owners:**
+- **Run corpses** bake at a fixed `b: 0.6` in `actors.ts` (`bakeRun`, `drawCorpses`), so at full dusk they read slightly brighter than the living. A `look.b * 0.6` in place of the constant would make them follow the dusk look this file now passes in.
+- The search progress bar and the companion's name can overlap when the leader crouches beside her (both near y 484).
+- The door sprite has its own stoop, so it stands alone at the kerb with no house wall. A facade/porch sprite, or drawing doors only where the backdrop's houses are, would read better (art).
+
+**Art spend:** none ($0.00). The existing sprites only needed true scale.
