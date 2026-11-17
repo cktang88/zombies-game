@@ -13,10 +13,141 @@ const W = 1280, H = 720;
 const GROUND = 664;
 const SH = 158;
 const ZS = 1.3;
+// Depth (docs/research/04 §3.8): three walking lanes, perspective scale, y-sort by feet.
+const HORIZON = 330;
+const LANES = [640, 664, 688]; // feet y, far → near; the player walks the middle lane
+const LANE_TOL = 16;
+const depthScale = (y: number) => (y - HORIZON) / (GROUND - HORIZON);
+// per-lane bake look (by day: a lighter version of the night table)
+const LANE_LOOK = [
+  { b: 0.86, s: 0.78, fog: 0.12, outline: 1 },
+  { b: 0.95, s: 0.9, fog: 0.05, outline: 1.5 },
+  { b: 1, s: 1, fog: 0, outline: 2 },
+];
+const VARIANT_TINT: [string, number, number][] = [['#000', 0, 1], ['#5a6f8c', 0.1, 0.92], ['#8a8a4a', 0.08, 1.06]];
+
+function canvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
+  const cv = document.createElement('canvas');
+  cv.width = Math.max(1, Math.ceil(w));
+  cv.height = Math.max(1, Math.ceil(h));
+  return [cv, cv.getContext('2d')!];
+}
+
+// Baked zombie: outline stamps + lane grade + fog + variant tint, at the lane's display size.
+// Filters are used here, at bake time only — never per frame.
+interface Baked { cv: HTMLCanvasElement; pad: number; h: number }
+const zCache = new Map<string, Baked>();
+function bakeZ(sprite: string, h: number, lane: number, variant: number, kin: boolean): Baked | null {
+  const key = `${sprite}|${Math.round(h)}|${lane}|${variant}|${kin ? 1 : 0}`;
+  const hit = zCache.get(key);
+  if (hit) return hit;
+  const im = img(sprite);
+  if (!im) return null;
+  const look = LANE_LOOK[lane];
+  const w = (im.width / im.height) * h;
+  const pad = Math.ceil(look.outline) + 1;
+  const [cv, x] = canvas(w + pad * 2, h + pad * 2);
+  const sil = shadeImg(sprite, '#050608');
+  if (sil) for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    x.drawImage(sil, pad + Math.cos(a) * look.outline, pad + Math.sin(a) * look.outline, w, h);
+  }
+  const [tint, ta, vb] = VARIANT_TINT[variant];
+  x.filter = `brightness(${(look.b * vb * (kin ? 0.8 : 1)).toFixed(3)}) saturate(${(look.s * (kin ? 0.4 : 1)).toFixed(3)})`;
+  x.drawImage(im, pad, pad, w, h);
+  x.filter = 'none';
+  x.globalCompositeOperation = 'source-atop';
+  if (look.fog) { x.globalAlpha = look.fog; x.fillStyle = '#1b2333'; x.fillRect(0, 0, cv.width, cv.height); }
+  if (ta) { x.globalAlpha = ta; x.fillStyle = tint; x.fillRect(0, 0, cv.width, cv.height); }
+  const b = { cv, pad, h };
+  zCache.set(key, b);
+  return b;
+}
+
+// Searched spots: a baked darker copy drawn opaque (no translucent box, no per-frame filter).
+const spotCache = new Map<string, HTMLCanvasElement>();
+function bakeSpot(id: string, h: number, dark: boolean): HTMLCanvasElement | null {
+  const key = `${id}|${h}|${dark ? 1 : 0}`;
+  const hit = spotCache.get(key);
+  if (hit) return hit;
+  const im = img(id);
+  if (!im) return null;
+  const w = (im.width / im.height) * h;
+  const [cv, x] = canvas(w, h);
+  if (dark) x.filter = 'brightness(0.5) saturate(0.6)';
+  x.drawImage(im, 0, 0, cv.width, cv.height);
+  spotCache.set(key, cv);
+  return cv;
+}
+
+// Backgrounds: far & mid baked once each for day and dusk; dusk is a crossfade.
+interface BgBake { far: HTMLCanvasElement; mid: HTMLCanvasElement }
+let bgBakes: { day: BgBake; dusk: BgBake } | null = null;
+let groundC: HTMLCanvasElement | null = null;
+let fgC: HTMLCanvasElement | null = null;
+function bakeLayer(id: string, w: number, h: number, filter: string, fog: string, fogA: number, mirror: boolean): HTMLCanvasElement {
+  const [cv, x] = canvas(mirror ? w * 2 : w, h);
+  const im = img(id);
+  if (im) {
+    x.filter = filter;
+    x.drawImage(im, 0, 0, w, h);
+    if (mirror) { x.save(); x.translate(w * 2, 0); x.scale(-1, 1); x.drawImage(im, 0, 0, w, h); x.restore(); }
+    x.filter = 'none';
+  }
+  // atmospheric lift: thickest over the far street band
+  const g = x.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, `${fog}00`);
+  g.addColorStop(0.5, `${fog}${Math.round(fogA * 255).toString(16).padStart(2, '0')}`);
+  g.addColorStop(0.72, `${fog}${Math.round(fogA * 255).toString(16).padStart(2, '0')}`);
+  g.addColorStop(0.85, `${fog}${Math.round(fogA * 0.4 * 255).toString(16).padStart(2, '0')}`);
+  x.fillStyle = g;
+  x.fillRect(0, 0, cv.width, h);
+  return cv;
+}
+function bakeBackgrounds() {
+  if (bgBakes || !img('bg_far') || !img('bg_mid')) return;
+  bgBakes = {
+    day: {
+      far: bakeLayer('bg_far', 1600, 720, 'brightness(0.72) saturate(0.5) blur(2px)', '#9aa3ae', 0.28, false),
+      mid: bakeLayer('bg_mid', 1600, 720, 'brightness(0.8) saturate(0.6) contrast(0.85) blur(1.2px)', '#9aa3ae', 0.16, true),
+    },
+    dusk: {
+      far: bakeLayer('bg_far', 1600, 720, 'brightness(0.4) saturate(0.4) blur(2px)', '#1b2333', 0.4, false),
+      mid: bakeLayer('bg_mid', 1600, 720, 'brightness(0.45) saturate(0.45) contrast(0.85) blur(1.2px)', '#1b2333', 0.35, true),
+    },
+  };
+  // ground plane: dark asphalt, speckle, faint ruts along the lanes (tiles every 256px)
+  const [gc, g] = canvas(W + 256, H - 596);
+  const grd = g.createLinearGradient(0, 0, 0, gc.height);
+  grd.addColorStop(0, 'rgba(22,23,26,0.2)');
+  grd.addColorStop(0.25, 'rgba(22,23,26,0.6)');
+  grd.addColorStop(1, 'rgba(12,12,14,0.85)');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, gc.width, gc.height);
+  for (let i = 0; i < 900; i++) {
+    g.fillStyle = Math.random() < 0.5 ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.12)';
+    g.fillRect((i * 97.13) % gc.width, 20 + ((i * 53.7) % (gc.height - 20)), 2, 1);
+  }
+  g.fillStyle = 'rgba(200,200,210,0.05)';
+  for (const ly of LANES) for (let x0 = 0; x0 < gc.width; x0 += 64) g.fillRect(x0 + (ly % 7), ly - 596 + 2, 40, 2);
+  groundC = gc;
+  // foreground strip: near-black weeds, kerb rubble, a tyre (tiles every 2560px)
+  const [fc, f] = canvas(2560, 40);
+  f.fillStyle = '#07080b';
+  f.globalAlpha = 0.9;
+  for (let x0 = 0; x0 < 2560; x0 += 6 + ((x0 * 7) % 11)) {
+    const hh = 6 + ((x0 * 13) % 17);
+    f.beginPath(); f.moveTo(x0, 40); f.lineTo(x0 + 2 + ((x0 * 3) % 5), 40 - hh); f.lineTo(x0 + 5, 40); f.fill();
+  }
+  for (let x0 = 90; x0 < 2560; x0 += 230 + ((x0 * 17) % 190)) { f.beginPath(); f.ellipse(x0, 36, 14 + (x0 % 13), 7, 0, 0, 7); f.fill(); }
+  for (const tx of [700, 1900]) { f.beginPath(); f.ellipse(tx, 30, 22, 12, 0, 0, 7); f.fill(); }
+  fgC = fc;
+}
 
 interface EZ {
   def: ZombieDef; sprite: string; x: number; y: number; hp: number; state: 'sleep' | 'walk' | 'grab' | 'dying' | 'kin';
   phase: number; flash: number; dieT: number; grabT: number; dir: number; headless?: boolean; lungeT: number; burn?: number;
+  id: number; lane: number; sc: number; variant: number;
 }
 interface Spot { x: number; searched: boolean; kind: 'door' | 'car' | 'shed' | 'body' | 'kin'; label: string; loot: number; survivor?: boolean }
 interface P { x: number; y: number; vx: number; vy: number; life: number; color: string; size: number; g: number }
@@ -113,8 +244,32 @@ export class Expedition {
     }
   }
 
+  zid = 0;
   mk(def: ZombieDef, x: number, state: EZ['state']): EZ {
-    return { def, sprite: R.pick(def.sprites), x, y: GROUND + R.range(-6, 8), hp: def.hp, state, phase: R.range(0, 9), flash: 0, dieT: 0, grabT: 0, dir: -1, lungeT: R.range(1, 3) };
+    const lane = R.int(0, 2);
+    const y = LANES[lane] + R.range(-2, 2);
+    const sprite = R.pick(def.sprites);
+    // never the same (sprite, variant) as a neighbour within 120px in this or an adjacent lane
+    let variant = R.int(0, 2);
+    for (let k = 0; k < 3 && this.zs.some((o) => o.sprite === sprite && o.variant === variant && Math.abs(o.x - x) < 120 && Math.abs(o.lane - lane) <= 1); k++) variant = (variant + 1) % 3;
+    return { def, sprite, x, y, hp: def.hp, state, phase: R.range(0, 9), flash: 0, dieT: 0, grabT: 0, dir: -1, lungeT: R.range(1, 3), id: ++this.zid, lane, sc: depthScale(y) * R.range(0.96, 1.04), variant };
+  }
+  zh(z: EZ) { return z.def.height * ZS * z.sc; }
+  zw(z: EZ) { return z.def.width * ZS * z.sc; }
+
+  // Last-Stand style lane lock: the shot goes into the lane under the crosshair.
+  targetLane(): number {
+    const mx = this.mouse.x + this.cam, my = this.mouse.y;
+    let best: EZ | null = null;
+    for (const z of this.zs) {
+      if (z.state === 'dying') continue;
+      const h = this.zh(z), w = this.zw(z);
+      if (mx > z.x - w / 2 - 4 && mx < z.x + w / 2 + 4 && my > z.y - h && my < z.y && (!best || z.y > best.y)) best = z;
+    }
+    if (best) return best.y;
+    let li = 0, bd = Infinity;
+    LANES.forEach((L, i) => { const d = Math.abs(my - (L - 0.55 * 156 * depthScale(L))); if (d < bd) { bd = d; li = i; } });
+    return LANES[li];
   }
 
   bind() {
@@ -240,7 +395,7 @@ export class Expedition {
       z.burn -= dt;
       z.hp -= BURN.dps * dt;
       if (z.state === 'sleep' || z.state === 'kin') z.state = 'walk';
-      if (R.chance(dt * 18)) this.parts.push({ x: z.x + R.range(-12, 12), y: z.y - R.range(20, z.def.height), vx: R.range(-20, 20), vy: R.range(-260, -120), life: 0.5, color: R.pick(['#ff9a3a', '#ffcf6a', '#d8501c']), size: R.range(2, 4), g: GROUND + 40 });
+      if (R.chance(dt * 18)) this.parts.push({ x: z.x + R.range(-12, 12), y: z.y - R.range(20, this.zh(z)), vx: R.range(-20, 20), vy: R.range(-260, -120), life: 0.5, color: R.pick(['#ff9a3a', '#ffcf6a', '#d8501c']), size: R.range(2, 4), g: GROUND + 40 });
       if (z.hp <= 0) { this.kill(z); return; }
     }
     z.phase += dt;
@@ -378,7 +533,14 @@ export class Expedition {
       const mz = this.muzzle();
       const base = Math.atan2(this.mouse.y - mz.y, this.mouse.x - mz.x);
       const spreadA = p.spread * (1.75 - aimFactor(this.s)) + this.bloom;
-      for (let i = 0; i < p.pellets; i++) this.ray(mz.x + this.cam, mz.y, base + (R.next() + R.next() - 1) * (p.pellets > 1 ? p.spread : spreadA), p, p.pellets > 1);
+      const laneY = this.targetLane();
+      const li = LANES.indexOf(laneY);
+      for (let i = 0; i < p.pellets; i++) {
+        // buckshot sprays a little through depth: 25% per pellet into an adjacent lane
+        let ly = laneY;
+        if (p.pellets > 1 && R.chance(0.25)) { const adj = LANES[li + (R.chance(0.5) ? 1 : -1)]; if (adj !== undefined) ly = adj; }
+        this.ray(mz.x + this.cam, mz.y, base + (R.next() + R.next() - 1) * (p.pellets > 1 ? p.spread : spreadA), p, p.pellets > 1, ly);
+      }
       this.bloom = Math.min(0.12, this.bloom + p.spread * 0.35 / Math.max(1, p.burst) + 0.01);
       this.shake = Math.max(this.shake, p.knock * (p.pellets > 1 ? p.pellets * 0.25 : 1) / 7);
       this.noise = Math.min(4, this.noise + p.noise);
@@ -391,14 +553,14 @@ export class Expedition {
     if (this.mag === 0 && this.burstLeft === 0) this.startReload();
   }
 
-  ray(ox: number, oy: number, a: number, p: FireProfile, pellet: boolean) {
+  ray(ox: number, oy: number, a: number, p: FireProfile, pellet: boolean, laneY: number) {
     const { pierce, knock, armorPen } = p;
     const dmg = p.dmg;
     const dx = Math.cos(a), dy = Math.sin(a);
     const hits: { z: EZ; t: number; head: boolean }[] = [];
     for (const z of this.zs) {
-      if (z.state === 'dying') continue;
-      const h = z.def.height * ZS, w = z.def.width * ZS;
+      if (z.state === 'dying' || Math.abs(z.y - laneY) > LANE_TOL) continue;
+      const h = this.zh(z), w = this.zw(z);
       const crawl = z.def.id === 'drag';
       const hx = (crawl ? z.x + z.dir * w * 0.36 : z.x + z.dir * w * 0.12) - ox;
       const hy = (crawl ? z.y - h * 0.62 : z.y - h + h * z.def.head * 0.5) - oy;
@@ -411,7 +573,8 @@ export class Expedition {
       if (tmax >= 0 && tmin <= tmax) hits.push({ z, t: Math.max(0, tmin), head: false });
     }
     hits.sort((p, q) => p.t - q.t);
-    let end = 1500, n = 0, d = dmg;
+    // a miss lands on this lane's ground row
+    let end = dy > 0.01 ? Math.min(1500, (laneY - 2 - oy) / dy) : 1500, n = 0, d = dmg;
     for (const h of hits) {
       const z = h.z;
       let dd = h.head ? d * (pellet ? 2 : 3) : armorDamage(d, z.def.armor, armorPen);
@@ -515,32 +678,22 @@ export class Expedition {
     const c = this.c;
     c.save();
     if (this.shake) c.translate(R.range(-this.shake, this.shake), R.range(-this.shake, this.shake));
-    const far = img('bg_far'), mid = img('bg_mid');
-    // far layer: slow parallax, tiled
-    if (far) for (let x = -((this.cam * 0.25) % 1600); x < W; x += 1600) c.drawImage(far, x, -60, 1600, 720);
-    // mid layer tiled (flipped alternately to hide the seam)
-    if (mid) {
-      const off = (this.cam * 0.7) % 3200;
-      for (let i = -1; i < 3; i++) {
-        const x = i * 1600 - off;
-        if (x > W || x + 1600 < 0) continue;
-        c.save();
-        if (i % 2 !== 0) { c.translate(x + 1600, 0); c.scale(-1, 1); c.drawImage(mid, 0, 20, 1600, 720); }
-        else c.drawImage(mid, x, 20, 1600, 720);
-        c.restore();
+    bakeBackgrounds();
+    const dusk = Math.max(0, Math.min(1, 1 - this.daylight / 150));
+    if (bgBakes) {
+      // far: slow parallax; mid: baked with its mirrored copy (3200 wide), tiled
+      for (const [bk, al] of [[bgBakes.day, 1], [bgBakes.dusk, dusk]] as [BgBake, number][]) {
+        if (al <= 0.01) continue;
+        c.globalAlpha = al;
+        for (let x = -Math.round((this.cam * 0.25) % 1600); x < W; x += 1600) c.drawImage(bk.far, x, -60);
+        const off = Math.round((this.cam * 0.7) % 3200);
+        for (let x = -off; x < W; x += 3200) c.drawImage(bk.mid, x, 20);
+        c.globalAlpha = 1;
       }
     }
-    // dusk grade by daylight left
-    const dusk = Math.max(0, 1 - this.daylight / 150);
-    c.fillStyle = `rgba(30,24,40,${0.05 + dusk * 0.5})`;
-    c.fillRect(0, 0, W, H);
-    // ground strip
-    const g = c.createLinearGradient(0, 620, 0, H);
-    g.addColorStop(0, 'rgba(20,20,22,0)');
-    g.addColorStop(0.3, 'rgba(20,20,22,0.7)');
-    g.addColorStop(1, 'rgba(10,10,12,0.95)');
-    c.fillStyle = g;
-    c.fillRect(0, 620, W, H - 620);
+    // ground plane
+    if (groundC) c.drawImage(groundC, -Math.round(this.cam % 256), 596);
+    if (dusk > 0) { c.fillStyle = `rgba(8,10,16,${dusk * 0.35})`; c.fillRect(0, 596, W, H - 596); }
     // home marker
     if (this.cam < 200) {
       c.fillStyle = 'rgba(232,200,120,0.15)';
@@ -549,21 +702,34 @@ export class Expedition {
       c.fillStyle = '#d8c89a';
       c.fillText('← home', 30 - this.cam, 420);
     }
-    // spots
+    // contact shadows: one path, one fill (spots, zombies, player, follower)
     const SPR: Record<Spot['kind'], [string, number]> = { door: ['obj_door', 200], car: ['obj_car', 120], shed: ['obj_shed', 190], body: ['obj_body', 44], kin: ['obj_kin', 175] };
+    c.fillStyle = 'rgba(0,0,0,0.45)';
+    c.beginPath();
+    for (const sp of this.spots) {
+      const x = sp.x - this.cam;
+      if (x < -250 || x > W + 250) continue;
+      const im = img(SPR[sp.kind][0]);
+      const w = im ? (im.width / im.height) * SPR[sp.kind][1] : 80;
+      c.moveTo(x + w * 0.45, GROUND + 3); c.ellipse(x, GROUND + 3, w * 0.45, 7, 0, 0, 7);
+    }
+    for (const z of this.zs) {
+      const x = z.x - this.cam;
+      if (x < -200 || x > W + 200) continue;
+      const rx = this.zw(z) * (z.def.id === 'drag' ? 0.5 : 0.38) * (z.state === 'dying' ? Math.max(0, 1 - z.dieT * 1.6) : 1);
+      if (rx <= 0.5) continue;
+      c.moveTo(x + rx, z.y + 1); c.ellipse(x, z.y + 1, rx, rx * 0.22, 0, 0, 7);
+    }
+    c.moveTo(this.px - this.cam + 26, GROUND + 1); c.ellipse(this.px - this.cam, GROUND + 1, 26, 6, 0, 0, 7);
+    if (this.found && this.fx) { const fy = LANES[0], r = 24 * depthScale(fy); c.moveTo(this.fx - this.cam + r, fy + 1); c.ellipse(this.fx - this.cam, fy + 1, r, r * 0.22, 0, 0, 7); }
+    c.fill();
+    // spots
     for (const sp of this.spots) {
       const x = sp.x - this.cam;
       if (x < -250 || x > W + 250) continue;
       const [id, h] = SPR[sp.kind];
-      const im = img(id);
-      if (im) {
-        const w = (im.width / im.height) * h;
-        c.globalAlpha = sp.searched ? 0.55 : 1;
-        c.filter = sp.searched ? 'brightness(0.6)' : 'none';
-        c.drawImage(im, x - w / 2, GROUND - h + (sp.kind === 'body' ? 6 : 4), w, h);
-        c.filter = 'none';
-        c.globalAlpha = 1;
-      }
+      const cv = bakeSpot(id, h, sp.searched);
+      if (cv) c.drawImage(cv, Math.round(x - cv.width / 2), GROUND - h + (sp.kind === 'body' ? 6 : 4));
       if (!sp.searched && Math.abs(sp.x - this.px) < 60) {
         c.font = '13px "Special Elite", monospace';
         c.fillStyle = '#efe2c2';
@@ -575,13 +741,18 @@ export class Expedition {
         c.beginPath(); c.arc(x, GROUND - h - 10, 3, 0, 7); c.fill();
       }
     }
-    // actors by y
+    // actors, y-sorted by feet (id epsilon breaks ties)
     const list: { y: number; f: () => void }[] = [];
-    for (const z of this.zs) list.push({ y: z.y, f: () => this.drawZ(z) });
-    list.push({ y: GROUND, f: () => this.drawP() });
-    if (this.found) list.push({ y: GROUND - 2, f: () => this.drawFollower() });
+    for (const z of this.zs) list.push({ y: z.y + z.id * 1e-4, f: () => this.drawZ(z) });
+    list.push({ y: GROUND + 0.5, f: () => this.drawP() });
+    if (this.found) list.push({ y: LANES[0] + 0.5, f: () => this.drawFollower() });
     list.sort((a, b) => a.y - b.y);
     for (const l of list) l.f();
+    // foreground strip at 1.3x camera speed
+    if (fgC) {
+      const off = Math.round((this.cam * 1.3) % 2560);
+      for (let x = -off; x < W; x += 2560) c.drawImage(fgC, x, H - 38);
+    }
     for (const p of this.parts) { c.fillStyle = p.color; c.fillRect(p.x - this.cam, p.y, p.size, p.size); }
     for (const t of this.tracers) {
       c.strokeStyle = `rgba(255,226,170,${t.life * 12})`;
@@ -630,36 +801,38 @@ export class Expedition {
     if (!im) return;
     const target = this.px - this.face * 70;
     this.fx = this.fx ? this.fx + (target - this.fx) * 0.05 : target;
-    const h = SH * 0.97, w = (im.width / im.height) * h;
+    const h = SH, w = (im.width / im.height) * h;
+    const k = depthScale(LANES[0]);
     c.save();
-    c.translate(this.fx - this.cam, GROUND - 2);
-    c.scale(this.face, 1);
-    c.filter = 'brightness(0.85)';
+    c.translate(Math.round(this.fx - this.cam), LANES[0]);
+    c.scale(this.face * k, k);
     c.drawImage(im, -w / 2, -h, w, h);
     c.restore();
   }
 
   drawZ(z: EZ) {
     const c = this.c;
-    const im = img(z.sprite);
-    if (!im) return;
-    const h = z.def.height * ZS, w = (im.width / im.height) * h;
-    const x = z.x - this.cam;
+    const lane = Math.max(0, Math.min(2, z.lane));
+    const bh = Math.round(z.def.height * ZS * depthScale(LANES[lane]));
+    const bk = bakeZ(z.sprite, bh, lane, z.variant, z.state === 'kin');
+    if (!bk) return;
+    const h = this.zh(z), k = h / bk.h;
+    const w = (bk.cv.width - bk.pad * 2) * k;
+    const x = Math.round(z.x - this.cam);
     if (x < -200 || x > W + 200) return;
     c.save();
     let rot = 0, dy = 0;
-    if (z.state === 'walk') { rot = Math.sin(z.phase * 3.2) * 0.04; dy = -Math.abs(Math.sin(z.phase * 3.2)) * 2.5; }
+    if (z.state === 'walk') { rot = Math.sin(z.phase * 3.2) * 0.04; dy = -Math.abs(Math.sin(z.phase * 3.2)) * 2.5 * z.sc; }
     if (z.state === 'sleep' || z.state === 'kin') rot = 0.06 + Math.sin(z.phase * 0.7) * 0.01;
     if (z.state === 'grab') rot = -0.1 + Math.sin(z.phase * 7) * 0.06;
-    if (z.state === 'dying') { const k = Math.min(1, z.dieT / 0.45); rot = k * 1.2; dy = k * h * 0.15; c.globalAlpha = 1 - Math.max(0, z.dieT - 0.4) * 5; }
+    if (z.state === 'dying') { const t = Math.min(1, z.dieT / 0.45); rot = t * 1.2; dy = t * h * 0.15; c.globalAlpha = 1 - Math.max(0, z.dieT - 0.4) * 5; }
     c.translate(x, z.y + dy);
     c.scale(-z.dir, 1); // sprites face left by default
     c.rotate(rot);
     if (z.headless) { c.beginPath(); c.rect(-w / 2 - 10, -h + h * z.def.head * 0.95, w + 20, h); c.clip(); }
-    if (z.state === 'kin') c.filter = 'saturate(0.4) brightness(0.8)';
-    c.drawImage(im, -w / 2, -h, w, h);
-    c.filter = 'none';
+    c.drawImage(bk.cv, -w / 2 - bk.pad * k, -h - bk.pad * k, bk.cv.width * k, bk.cv.height * k);
     if (z.flash > 0) { const f = flashImg(z.sprite); if (f) { c.globalAlpha = 0.6; c.drawImage(f, -w / 2, -h, w, h); } }
+    if (z.burn && z.burn > 0) { const f = shadeImg(z.sprite, '#ff7a2a'); if (f) { c.globalAlpha = 0.25 + Math.sin(this.t * 24 + z.id) * 0.1; c.drawImage(f, -w / 2, -h, w, h); } }
     c.restore();
     if (z.state === 'sleep') {
       c.font = '11px "Special Elite", monospace';
@@ -668,7 +841,6 @@ export class Expedition {
       c.fillText('standing still', x, z.y - h - 8);
       c.textAlign = 'left';
     }
-    void shadeImg;
   }
 
   hud() {
