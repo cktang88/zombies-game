@@ -17,8 +17,16 @@ export function ico(id: string, label = '', cls = '') {
 }
 
 export function fold(head: string, body: string, o: { open?: boolean; id?: string; cls?: string } = {}) {
-  const open = o.id ? foldState(o.id) ?? o.open : o.open;
-  return `<details class="fold ${o.cls ?? ''}"${o.id ? ` data-fold="${o.id}"` : ''}${open ? ' open' : ''}><summary>${head}</summary><div class="fold-body">${body}</div></details>`;
+  // a fold without an id still keeps its state across re-renders of the page (in memory, keyed by its content)
+  const key = o.id ? '' : hashStr(head + '\u0000' + body);
+  const open = o.id ? foldState(o.id) ?? o.open : foldMem.get(key) ?? o.open;
+  return `<details class="fold ${o.cls ?? ''}"${o.id ? ` data-fold="${o.id}"` : ` data-fk="${key}"`}${open ? ' open' : ''}><summary>${head}</summary><div class="fold-body">${body}</div></details>`;
+}
+const foldMem = new Map<string, boolean>();
+function hashStr(s: string): string {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  return (h >>> 0).toString(36) + s.length.toString(36);
 }
 
 export const chip = (icon: string, text: string | number, tipHtml = '', cls = '') =>
@@ -68,5 +76,6 @@ export function installKit() {
   document.addEventListener('toggle', (e) => {
     const d = e.target as HTMLDetailsElement;
     if (d.dataset?.fold) try { localStorage.setItem('vessey-fold-' + d.dataset.fold, d.open ? '1' : '0'); } catch { /* private window */ }
+    else if (d.dataset?.fk) { foldMem.set(d.dataset.fk, d.open); if (foldMem.size > 500) foldMem.delete(foldMem.keys().next().value!); }
   }, true);
 }
