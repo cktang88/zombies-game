@@ -182,8 +182,10 @@ export function morningSummary(killsBy: Record<string, number>, people: Survivor
 export type Fate = 'went' | 'stayed' | 'held' | 'dead' | 'left';
 export function fateLine(s: Survivor, fate: Fate, ending: string) {
   const r = seeded(`fate:${s.id}:${ending}:${fate}`);
-  const t = s.tales.length ? lowerFirst(s.tales[s.tales.length - 1]).replace(/\.$/, '') : '';
-  const older = s.tales.length > 1 ? lowerFirst(r.pick(s.tales.slice(0, -1))).replace(/\.$/, '') : '';
+  // the ending's own tales are told by the epilogue; remember them by something else
+  const tales = s.tales.filter((x) => !/^(Crossed the St\. Aubin|Stayed on Ferry Road|Stayed behind)/.test(x));
+  const t = tales.length ? lowerFirst(tales[tales.length - 1]).replace(/\.$/, '') : '';
+  const older = tales.length > 1 ? lowerFirst(r.pick(tales.slice(0, -1))).replace(/\.$/, '') : '';
   const where = ending === 'ferry' ? 'across the river' : ending === 'mill' ? 'at the mill' : 'on Ferry Road';
   if (fate === 'dead') {
     return r.pick([
@@ -200,10 +202,18 @@ export function fateLine(s: Survivor, fate: Fate, ending: string) {
     ]).trim();
   }
   // survived: went / held
+  const quiet = [
+    `${cap(he(s))} kept a jar of river stones on the windowsill.`,
+    `${cap(he(s))} never once, in all the years after, left a porch light off.`,
+    `${cap(he(s))} could not stand the smell of fresh bread for the rest of ${his(s)} life.`,
+    `Every year when the river froze ${he(s)} sat up the whole night, listening.`,
+    `${cap(he(s))} wrote the names of the dead on the inside of a cupboard door, and kept adding to it.`,
+    `${cap(he(s))} never spoke much about November.`,
+  ];
   const base = r.pick([
-    `${full(s)} lived. ${t ? `For years ${he(s)} would not talk about the time ${he(s)} ${t}, and then one winter ${he(s)} did.` : `${cap(he(s))} never spoke much about November.`}`,
-    `${full(s)} lived, ${where}. ${older ? `${cap(he(s))} kept one story for the grandkids: how ${he(s)} ${older}.` : t ? `${cap(he(s))} kept one story: how ${he(s)} ${t}.` : ''}`,
-    `${full(s)} made it. ${s.scars.length ? `${cap(his(s))} ${s.scars[0].label} ached every November after.` : `${cap(he(s))} kept a jar of river stones on the windowsill.`} ${t ? `${cap(he(s))} ${t}.` : ''}`,
+    `${full(s)} lived. ${t ? `For years ${he(s)} would not talk about the time ${he(s)} ${t}, and then one winter ${he(s)} did.` : r.pick(quiet)}`,
+    `${full(s)} lived, ${where}. ${older ? `${cap(he(s))} kept one story for the grandkids: how ${he(s)} ${older}.` : t ? `${cap(he(s))} kept one story: how ${he(s)} ${t}.` : r.pick(quiet)}`,
+    `${full(s)} made it. ${s.scars.length ? `${cap(his(s))} ${s.scars[0].label} ached every November after.` : r.pick(quiet)} ${t ? `${cap(he(s))} ${t}.` : ''}`,
   ]);
   const tail = s.child ? ` ${cap(he(s))} grew up and, the story goes, drove a ferry.` : '';
   return (base + tail).replace(/\s+/g, ' ').trim();

@@ -250,7 +250,7 @@ function epilogue() {
   app.innerHTML = `<div class="over epilogue" data-ending="${esc(ending)}">
     <h1>${esc(E.title)}</h1>
     <p class="sub">${dateLabel(1)} – ${dateLabel()} · ${G.day} days · ${G.stats.kills} of the Turned put down · ${G.stats.headshots} headshots</p>
-    <p class="epi" style="max-width:46em;margin:1em auto;line-height:1.55">${esc(E.text(went, stayed))}</p>
+    <p class="epi" style="max-width:46em;margin:1em 0 1.5em;line-height:1.55">${esc(E.text(went, stayed))}</p>
     <h2>What became of them</h2>
     <div class="graves">${fates.map(card).join('')}</div>
     <h2>The chronicle</h2>
@@ -289,6 +289,12 @@ function gameOver() {
     }
   };
 }
+
+// debug handle for story testing: roll today's incident now, or force an ending screen
+(globalThis as unknown as { __story: object }).__story = {
+  roll: () => { G.pendingEvent = rollIncident(); day(); return G.pendingEvent?.id ?? null; },
+  ending: (kind: string) => { G.flags.ending = kind; G.flags.endWent ??= JSON.stringify(living().map((s) => s.id)); epilogue(); },
+};
 
 app.innerHTML = '<div class="loading">Vessey, November<div class="bar"><div></div></div></div>';
 loadAssets((p) => {
