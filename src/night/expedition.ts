@@ -42,6 +42,7 @@ type PackItem = { kind: 'res'; res: Res; n: number } | { kind: 'gun'; def: strin
 const itemSlots = (it: PackItem) => (it.kind === 'gun' ? 3 : it.kind === 'melee' ? 2 : it.kind === 'mod' ? 1 : Math.ceil(it.n / (STACK[it.res] ?? 5)));
 const itemLabel = (it: PackItem) => (it.kind === 'gun' ? WEAPONS[it.def].name.toLowerCase() : it.kind === 'melee' ? MELEE[it.def].name.toLowerCase() : it.kind === 'mod' ? MODS[it.def].name.toLowerCase() : `${it.n} ${RES_LABEL[it.res].toLowerCase()}`);
 const GROUND = 664;
+const DECAL_TOP = 560, DECAL_H = 200; // the run's decal band (world y)
 const SH = 158;
 const ZS = 1.3;
 // Depth (docs/research/04 §3.8): three walking lanes, perspective scale, y-sort by feet.
@@ -200,7 +201,10 @@ export class Expedition {
   decals: { x: number; y: number; w: number; h: number; rot: number; color: string }[] = [];
   actors = new RunActors(); // rigged bodies: night/actors.ts
 
-  vfx = new Vfx({ ground: null, light: () => {}, gore: reduceGore, flashes: screenFx }, fxQuality());
+  /** the road's own decal layer, in world space (brass, blood, chips stay where they land); the
+   *  band y DECAL_TOP..DECAL_TOP+DECAL_H across the whole run */
+  decalCv = (() => { const cv = document.createElement('canvas'); cv.width = 6400; cv.height = DECAL_H; const g = cv.getContext('2d')!; g.translate(0, -DECAL_TOP); return cv; })();
+  vfx = new Vfx({ ground: this.decalCv.getContext('2d'), light: () => {}, gore: reduceGore, flashes: screenFx }, fxQuality());
   constructor(canvas: HTMLCanvasElement, s: Survivor, siteId: string, onEnd: (r: ExpeditionResult) => void) {
     this.canvas = canvas;
     this.c = canvas.getContext('2d')!;
@@ -1250,6 +1254,8 @@ export class Expedition {
       c.fillStyle = '#d8c89a';
       c.fillText('← home', 30 - this.cam, 420);
     }
+    // what the guns and the fighting left on the road (vfx stamps: brass, blood, chips)
+    c.drawImage(this.decalCv, Math.max(0, this.cam), 0, W, DECAL_H, Math.max(0, -this.cam), DECAL_TOP, W, DECAL_H);
     // spent brass in the road
     for (const d of this.decals) {
       const x = d.x - this.cam;

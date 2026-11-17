@@ -417,7 +417,9 @@ export class Emplacements implements BattleHook {
     for (const m of this.mounts) {
       // firestep guns sit on the barricade top, in front of it; roof guns on the scaffold deck
       // the nail turret's stand stands behind the barricade (its seat and gun clear the top) when drawn from sprites
-      const y = !m.def.crew ? (has('emp_nail_base') ? 699.5 : 700 + 1) : m.post === 'roof' ? ROOF_Y + 0.5 : 701.2;
+      // a roof gun sorts just after its own crew (guards sort by y + homeX·1e-5), so the left
+      // crew's long barrel passes behind the next crew along instead of through them
+      const y = !m.def.crew ? (has('emp_nail_base') ? 699.5 : 700 + 1) : m.post === 'roof' ? ROOF_Y + m.x * 1e-5 + 5e-6 : 701.2;
       out.push({ y, f: () => this.drawGun(c, m) });
     }
     return out;
@@ -453,7 +455,6 @@ export class Emplacements implements BattleHook {
       c.rotate(m.ang);
       c.fillStyle = '#5a4a32'; c.fillRect(-10, -7, 34, 14);
       c.fillStyle = '#8a7a5a'; c.fillRect(20, -3, 14, 6);
-      if (m.flash > 0) { c.fillStyle = 'rgba(255,230,160,0.9)'; c.fillRect(34, -3, 12, 6); }
       c.restore();
       return;
     }
@@ -496,7 +497,6 @@ export class Emplacements implements BattleHook {
       c.fillStyle = '#6a665e'; c.fillRect(-10, -5, 26, 10); rim(-10, -5, 26, 10);
       c.fillStyle = '#8a8478'; c.fillRect(14, -3, 26, 6); rim(14, -3, 26, 6);
     }
-    if (m.flash > 0) { c.fillStyle = 'rgba(255,230,160,0.95)'; c.beginPath(); c.moveTo(54, 0); c.lineTo(72, -5); c.lineTo(78, 0); c.lineTo(72, 5); c.fill(); }
     if (m.firing > 0) {
       c.globalCompositeOperation = 'lighter';
       const g = c.createLinearGradient(38, 0, 38 + (m.def.cone?.reach ?? 200), 0);
@@ -524,15 +524,12 @@ export class Emplacements implements BattleHook {
     c.translate(m.px, m.py);
     c.rotate(m.ang);
     c.globalCompositeOperation = 'lighter';
+    // (the muzzle flash itself is the pooled vfx.muzzle burst: no second, smaller flash drawn here)
     // the barrel glows as it heats; a swap shows it cherry red
     const hot = m.swap > 0 ? 0.8 : m.heat;
     if (hot > 0.25) {
       c.fillStyle = `rgba(255,${Math.round(110 - hot * 60)},40,${(hot - 0.25) * 0.75})`;
       c.fillRect(reach * 0.45, -2.5, reach * 0.55, 5);
-    }
-    if (m.flash > 0) {
-      c.fillStyle = 'rgba(255,230,160,0.95)';
-      c.beginPath(); c.moveTo(reach, -2); c.lineTo(reach + 16, -6); c.lineTo(reach + 24, 0); c.lineTo(reach + 16, 6); c.lineTo(reach, 2); c.fill();
     }
     if (m.firing > 0) {
       const r = m.def.cone?.reach ?? 200;
@@ -553,7 +550,7 @@ export class Emplacements implements BattleHook {
     c.save();
     c.font = '11px "Special Elite", monospace';
     c.textAlign = 'left';
-    let y = 74;
+    let y = 98; // below the nerve bar
     for (const m of crewable) {
       const who = m.crew ? (m.byPlayer ? 'you' : first(m.crew.s)) : 'unmanned';
       const ammo = m.def.id === 'flamer' ? `fuel ${Math.floor(G.stores.fuel ?? 0)}` : `${m.mag}/${m.def.mag}${m.reload > 0 ? ' loading' : ''}`;

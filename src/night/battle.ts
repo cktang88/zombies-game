@@ -451,6 +451,7 @@ export class Battle {
         if (run && (!run.w || WEAPONS[run.w.def].cls === 'handgun')) run.post = 'runner';
       }
     }
+    for (const g of others) g.homeX = -1e3; // slots are handed out afresh, from the wall back
     for (const g of others) this.placePost(g, g.post);
     // the frayed may come apart on the wall tonight
     for (const g of this.guards) {
@@ -487,12 +488,15 @@ export class Battle {
     if (post === 'roof') { g.homeX = 150; g.y = 548; }
     else if (post === 'loop') { g.homeX = WALL_X - 28; g.y = DEF_LANES[1]; }
     else {
-      // back to a free slot on the step
-      const used = new Set(this.guards.filter((o) => o !== g && o.post !== 'roof' && o.post !== 'loop').map((o) => Math.round(o.homeX)));
-      let x = 262;
-      while (used.has(x) && x > 60) x -= 50;
-      g.homeX = x;
-      g.y = DEF_LANES[this.guards.indexOf(g) % 2 === 0 ? 1 : 0];
+      // back to a free slot on the step: slots from the wall back, neighbours on alternate rows
+      // (near, far, near…) so two bodies side by side never stand on the same line
+      const on = this.guards.filter((o) => o !== g && o.post !== 'roof' && o.post !== 'loop');
+      const gap = on.length + 1 > 4 ? 50 : 58;
+      const used = new Set(on.map((o) => Math.round((262 - o.homeX) / gap)));
+      let k = 0;
+      while (used.has(k) && k < 6) k++;
+      g.homeX = 262 - k * gap;
+      g.y = DEF_LANES[k % 2 === 0 ? 1 : 0];
     }
     g.x = g.homeX;
     g.sc = depthScale(post === 'roof' ? DEF_LANES[0] : g.y) * (post === 'roof' ? 0.92 : 1);
@@ -2972,7 +2976,7 @@ export class Battle {
     for (const gd of this.guards) if (!gd.s.dead && !gd.fled) list.push({ y: gd.y + (gd.downed ? -0.5 : 0) + gd.homeX * 1e-5, f: () => this.drawGuard(c, gd) });
     list.push({ y: WALL_KEY, f: () => { this.drawWall(c); this.vfx.drawWall(c); } });
     for (let l = 0; l < 4; l++) if (this.piles[l] >= 0.3) list.push({ y: LANES[l] + 0.5, f: () => this.drawPile(c, l) });
-    list.push({ y: 650, f: () => this.drawPoles(c) });
+    list.push({ y: 500, f: () => this.drawPoles(c) }); // behind the scaffold and the roof crews
     for (const cv of this.covers) list.push({ y: cv.y, f: () => this.drawCover(c, cv) });
     if (this.dog) list.push({ y: this.dog.y, f: () => this.drawDog(c) });
     if (G.fort.wire > 0) {
@@ -2983,7 +2987,6 @@ export class Battle {
     for (const h of this.hooks) if (h.sorted) list.push(...h.sorted(c)); // night modules
     list.sort((a, b) => a.y - b.y);
     for (const d of list) d.f();
-    for (const gd of this.guards) if (gd.downed && !gd.s.dead && !gd.fled) this.drawDownedLabel(c, gd);
     // the front plane: near-black weeds and kerb rubble, parallaxed faster than the backdrop
     const fg = fgStrip();
     c.drawImage(fg, Math.round(-400 + px * 1.4), H - 44);
@@ -3035,6 +3038,8 @@ export class Battle {
     c.globalAlpha = 1;
     this.vfx.drawAdd(c); // flashes, tracers, sparks, fire: emissive, so over the darkness
     this.drawGlow(c);
+    this.drawGuardLabels(c);
+    for (const gd of this.guards) if (gd.downed && !gd.s.dead && !gd.fled) this.drawDownedLabel(c, gd);
     // texts
     for (const t of this.texts) {
       c.font = `bold ${t.size}px "Special Elite", monospace`;
@@ -3340,40 +3345,7 @@ export class Battle {
       c.drawImage(body.cv, -w / 2 - PAD * k, -h - PAD * k, body.cv.width * k, body.cv.height * k);
       c.restore();
     }
-    // muzzle flash, shaped by the gun (night/gunfx.ts)
-    // label; a far-row label steps up out of the way of a near-row neighbour's
-    let top = g.y - h;
-    if (g.y < DEF_LANES[1] && this.guards.some((o) => o !== g && o.y >= DEF_LANES[1] && !o.s.dead && !o.fled && !o.downed && Math.abs(o.x - g.x) < 50)) top -= 14;
-    c.font = '11px "Special Elite", monospace';
-    c.textAlign = 'center';
-    c.fillStyle = isP ? '#f0d890' : '#cfc6b0';
-    c.fillText(first(g.s) + (isP ? ' ◆' : ''), g.x, top - 14);
-    if (!isP) this.drawOrderGlyph(c, g, g.x + c.measureText(first(g.s)).width / 2 + 9, top - 18);
-    const hp = Math.max(0, 1 - pain(g.s) / DOWN_PAIN);
-    c.fillStyle = 'rgba(0,0,0,0.6)';
-    c.fillRect(g.x - 20, top - 9, 40, 4);
-    c.fillStyle = hp > 0.5 ? '#9db070' : hp > 0.25 ? '#d0a040' : '#c04030';
-    c.fillRect(g.x - 20, top - 9, 40 * hp, 4);
-    // one status line at most, then the moodle above it
-    let line = top - 26;
-    let status = '', sc = '#d9c9a0';
-    if (g.dragging) { status = `hauling ${first(g.dragging.s)}`; sc = '#e0c080'; }
-    else if (g.mode) { status = g.mode === 'panic' ? 'panicking' : 'enraged'; sc = g.mode === 'panic' ? '#d0a040' : '#e05040'; }
-    else if (g.reload > 0 || (isP && this.playerReload > 0)) status = 'reloading';
-    if (status) { c.fillStyle = sc; c.fillText(status, g.x, line); line -= 12; }
-    if (isBitten(g.s) && !g.s.wounds.some((w) => w.hidden)) {
-      c.fillStyle = '#b8862f';
-      c.fillText('bitten', g.x, line);
-      line -= 12;
-    }
-    if (g.moodle && !g.mode) {
-      c.font = 'italic 12px "Crimson Text", Georgia, serif';
-      const tw = c.measureText(g.moodle).width;
-      c.fillStyle = 'rgba(8,8,10,0.55)';
-      c.fillRect(g.x - tw / 2 - 4, line - 10, tw + 8, 13);
-      c.fillStyle = g.moodleC;
-      c.fillText(g.moodle, g.x, line);
-    }
+    // the name, health and status are drawn later, in one de-collided pass (drawGuardLabels)
   }
 
   drawDowned(c: CanvasRenderingContext2D, g: Guard, im: HTMLImageElement | undefined) {
@@ -3396,6 +3368,103 @@ export class Battle {
       if (sh) c.drawImage(sh, -w / 2, -h / 2, w, h);
       c.restore();
     }
+  }
+
+  /**
+   * Names, health bars, status and moodles for every standing guard, drawn after the actors (so
+   * no body or prop covers them) and de-collided: each label is pushed up until it clears the
+   * ones already placed. When the line is crowded a label shrinks to the name and the bar; the
+   * status line and the moodle come back for the leader, the selected guard and the one under
+   * the mouse, or when there is room for them.
+   */
+  drawGuardLabels(c: CanvasRenderingContext2D) {
+    const gs = this.guards.filter((g) => !g.s.dead && !g.fled && !g.downed);
+    if (!gs.length) return;
+    const sel = this.selected();
+    const mx = this.mouse.x, my = this.mouse.y;
+    const hovered = gs.find((g) => Math.abs(mx - g.x) < 22 * g.sc && my < g.y && my > g.y - SH * g.sc - 30);
+    c.save();
+    c.textAlign = 'center';
+    type Lab = { g: Guard; x: number; top: number; name: string; l: number; r: number; lines: { t: string; c: string; moodle?: boolean }[]; full: boolean; y0: number; y1: number };
+    const labs: Lab[] = [];
+    for (const g of gs) {
+      const isP = g === this.player;
+      c.font = '11px "Special Elite", monospace';
+      const name = first(g.s) + (isP ? ' ◆' : '');
+      const lines: Lab['lines'] = [];
+      if (g.dragging) lines.push({ t: `hauling ${first(g.dragging.s)}`, c: '#e0c080' });
+      else if (g.mode) lines.push({ t: g.mode === 'panic' ? 'panicking' : 'enraged', c: g.mode === 'panic' ? '#d0a040' : '#e05040' });
+      else if (g.reload > 0 || (isP && this.playerReload > 0)) lines.push({ t: 'reloading', c: '#d9c9a0' });
+      if (isBitten(g.s) && !g.s.wounds.some((w) => w.hidden)) lines.push({ t: 'bitten', c: '#b8862f' });
+      if (g.moodle && !g.mode) lines.push({ t: g.moodle, c: g.moodleC, moodle: true });
+      // the box: the name centred on the guard, the order glyph (and the post word) to its right
+      const nw = c.measureText(name).width;
+      let r = nw / 2 + (isP ? 3 : 14);
+      if (!isP && g.post !== 'step') { c.font = '9px "Special Elite", monospace'; r += 7 + c.measureText(g.post === 'roof' ? 'roof' : g.post === 'loop' ? 'loophole' : 'runner').width; }
+      labs.push({ g, x: g.x, top: g.y - SH * g.sc, name, l: -Math.max(22, nw / 2 + 3), r: Math.max(22, r), lines, full: false, y0: 0, y1: 0 });
+    }
+    // the important ones first: they keep their place, the rest step around them
+    const pri = (l: Lab) => (l.g === this.player ? 0 : l.g === hovered ? 1 : l.g === sel ? 2 : 3 + (DEF_LANES[1] - l.g.y) * 0.01);
+    labs.sort((a, b) => pri(a) - pri(b));
+    const placed: Lab[] = [];
+    const hit = (l: Lab, x: number, y1: number, y0: number) => placed.some((o) => x + l.l < o.x + o.r + 4 && x + l.r > o.x + o.l - 4 && y0 < o.y1 && y1 > o.y0);
+    for (const l of labs) {
+      const focus = l.g === this.player || l.g === hovered || l.g === sel;
+      // the block: name (baseline top-14) and bar (top-9..top-5); each extra line 12 px above
+      let base = l.top;
+      const want = (full: boolean) => 22 + (full ? l.lines.length * 12 + (l.lines.some((q) => q.moodle) ? 2 : 0) : 0);
+      // a full label if it fits where it stands (or it is the one being looked at)
+      let full = focus || !hit(l, l.x, base - 4, base - 4 - want(true));
+      const urgent = l.lines.some((q) => !q.moodle && q.c !== '#d9c9a0');
+      if (!full && urgent) full = true; // panic, bitten, hauling: always said
+      // first a small sideways step, then up
+      if (hit(l, l.x, base - 4, base - 4 - want(full))) {
+        const dx = [14, -14, 26, -26, 40, -40].find((d) => !hit(l, l.x + d, base - 4, base - 4 - want(full)));
+        if (dx !== undefined) l.x += dx;
+      }
+      for (let k = 0; k < 12 && hit(l, l.x, base - 4, base - 4 - want(full)); k++) base -= 7;
+      l.full = full;
+      l.y1 = base - 4; l.y0 = base - 4 - want(full);
+      l.top = base;
+      placed.push(l);
+    }
+    for (const l of placed) {
+      const g = l.g, isP = g === this.player;
+      const top = l.top, x = l.x;
+      // a lifted label keeps a hairline back to its owner
+      const natural = g.y - SH * g.sc;
+      if (natural - top > 10) {
+        c.strokeStyle = 'rgba(207,198,176,0.25)'; c.lineWidth = 1;
+        c.beginPath(); c.moveTo(x, top - 4); c.lineTo(g.x, natural - 2); c.stroke();
+      }
+      c.font = '11px "Special Elite", monospace';
+      c.textAlign = 'center';
+      c.fillStyle = 'rgba(8,8,10,0.5)';
+      const nw = c.measureText(l.name).width;
+      c.fillRect(x - nw / 2 - 3, top - 24, nw + 6, 13);
+      c.fillStyle = isP ? '#f0d890' : '#cfc6b0';
+      c.fillText(l.name, x, top - 14);
+      if (!isP) this.drawOrderGlyph(c, g, x + nw / 2 + 9, top - 18, l.full || g === sel);
+      const hp = Math.max(0, 1 - pain(g.s) / DOWN_PAIN);
+      c.fillStyle = 'rgba(0,0,0,0.6)';
+      c.fillRect(x - 20, top - 9, 40, 4);
+      c.fillStyle = hp > 0.5 ? '#9db070' : hp > 0.25 ? '#d0a040' : '#c04030';
+      c.fillRect(x - 20, top - 9, 40 * hp, 4);
+      if (!l.full) continue;
+      let line = top - 26;
+      for (const q of l.lines) {
+        if (q.moodle) {
+          c.font = 'italic 12px "Crimson Text", Georgia, serif';
+          const tw = c.measureText(q.t).width;
+          c.fillStyle = 'rgba(8,8,10,0.55)';
+          c.fillRect(x - tw / 2 - 4, line - 10, tw + 8, 13);
+        } else c.font = '11px "Special Elite", monospace';
+        c.fillStyle = q.c;
+        c.fillText(q.t, x, line);
+        line -= 12;
+      }
+    }
+    c.restore();
   }
 
   drawDownedLabel(c: CanvasRenderingContext2D, g: Guard) {
@@ -3732,7 +3801,7 @@ export class Battle {
   }
 
   /** open circle = free fire, bar = hold fire, dot = heads only, square = protect wall; a post letter beside it */
-  drawOrderGlyph(c: CanvasRenderingContext2D, g: Guard, x: number, y: number) {
+  drawOrderGlyph(c: CanvasRenderingContext2D, g: Guard, x: number, y: number, post = true) {
     c.save();
     c.strokeStyle = c.fillStyle = g.order === 'hold' ? '#c9a95a' : g.order === 'heads' ? '#e8dcc0' : g.order === 'wall' ? '#b08060' : '#9a9282';
     c.lineWidth = 1.5;
@@ -3740,7 +3809,7 @@ export class Battle {
     else if (g.order === 'hold') c.fillRect(x - 4, y - 1.2, 8, 2.6);
     else if (g.order === 'heads') { c.beginPath(); c.arc(x, y, 3.5, 0, 7); c.stroke(); c.beginPath(); c.arc(x, y, 1.4, 0, 7); c.fill(); }
     else c.strokeRect(x - 3.5, y - 3.5, 7, 7);
-    if (g.post !== 'step') {
+    if (post && g.post !== 'step') {
       c.font = '9px "Special Elite", monospace';
       c.textAlign = 'left';
       c.fillStyle = '#a89c84';
@@ -3931,7 +4000,7 @@ export class Battle {
     c.font = '11px "Special Elite", monospace';
     c.fillStyle = '#a89c84';
     // the Turned and the County men are counted apart; a man running for the trees is not "out there"
-    const left = this.plan.spawns.length - this.spawnIdx + this.zombies.filter((z) => z.state !== 'dying' && z.state !== 'flee').length;
+    const left = Math.max(0, this.plan.spawns.length - Math.min(this.spawnIdx, this.plan.spawns.length)) + this.zombies.filter((z) => z.state !== 'dying' && z.state !== 'flee').length;
     c.fillText(`night ${G.day}   ·   ${this.res.kills} down${this.raidersDown ? `   ·   ${this.raidersDown} County ${this.raidersDown === 1 ? 'man' : 'men'}` : ''}   ·   ${left} still out there`, W / 2, 54);
     // the Bellwether
     const b = this.boss;
