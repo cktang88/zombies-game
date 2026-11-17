@@ -1,8 +1,8 @@
-import type { Survivor, JobId, Res } from '../types';
+import type { Survivor, JobId, Res, WeaponItem } from '../types';
 import { G, dateLabel, ICE_DAY, has, pay, ordinal, docsFound, rep } from '../state';
 import { DOCS, FACTIONS } from '../data/lore';
 import { spriteUrl } from '../assets';
-import { WEAPONS } from '../data/weapons';
+import { WEAPONS, CALIBERS, AMMO_TYPES, fireProfile, ammoTypesFor, ammoLabel, selectedAmmo } from '../data/weapons';
 import { TRAITS } from '../data/traits';
 import { SKILL_NAMES } from '../data/names';
 import { SITES, BUILDINGS, RECIPES, RES_LABEL, RES_ICON } from '../data/world';
@@ -104,7 +104,7 @@ const nl = (s: string) => esc(s).replace(/\n/g, '<br>');
 
 function costHtml(cost: Partial<Record<Res, number>>) {
   const parts = Object.entries(cost).map(([k, v]) => {
-    const ok = G.stores[k as Res] >= (v ?? 0);
+    const ok = (G.stores[k as Res] ?? 0) >= (v ?? 0);
     return `<span class="cost ${ok ? '' : 'short'}"><img src="${spriteUrl(RES_ICON[k as Res])}" alt="">${v} ${RES_LABEL[k as Res].toLowerCase()}</span>`;
   });
   return parts.length ? parts.join(' ') : '<span class="cost">free</span>';
@@ -164,6 +164,7 @@ function survivorCard(s: Survivor) {
           <option value="">— unarmed —</option>
           ${freeWeapons.map((x) => `<option value="${x.uid}" ${x.uid === s.weapon ? 'selected' : ''}>${esc(x.name ? `"${x.name}"` : WEAPONS[x.def].name)} (${Math.round(x.cond * 100)}%)</option>`).join('')}
         </select>
+        ${ammoSelect(G.weapons.find((x) => x.uid === s.weapon), true)}
         <span class="aim" title="Aim on the wall">aim ${Math.round(aimFactor(s) * 100)}</span>
         ${s.armor ? `<button class="mini" data-act="unarmor" data-id="${s.id}" title="Mill-plate vest: wounds 30% lighter. Take it off.">vest ✓</button>` : (G.flags.armorStock as number) > 0 ? `<button class="mini" data-act="armor" data-id="${s.id}" title="Give a mill-plate vest">+ vest</button>` : ''}
         ${canFight(s) ? '' : '<span class="tag bad">won\'t stand the wall</span>'}
@@ -276,15 +277,57 @@ function wallHtml() {
   </div>`;
 }
 
+// Bullet-type dropdown for one gun (only when its caliber has more than one type).
+function ammoSelect(w: WeaponItem | undefined, compact = false) {
+  if (!w) return '';
+  const types = ammoTypesFor(w.def);
+  if (types.length < 2) return '';
+  const cur = selectedAmmo(w);
+  return `<select data-act="ammo" data-w="${w.uid}" title="Bullet type" ${compact ? 'style="flex:0 1 auto;min-width:0"' : ''}>${types.map((t) => {
+    const n = Math.floor(G.stores[t] ?? 0);
+    return `<option value="${t}" ${t === cur ? 'selected' : ''}>${esc(compact ? AMMO_TYPES[t]!.short : ammoLabel(t))} (${n})</option>`;
+  }).join('')}</select>`;
+}
+
 function armoryHtml() {
-  return `<div class="armory">${G.weapons.map((w) => {
+  const stock = Object.values(CALIBERS).map((c) => {
+    const items = c.types.map((t) => {
+      const n = Math.floor(G.stores[t] ?? 0);
+      return `<span class="cost ${n ? '' : 'short'}" title="${esc(AMMO_TYPES[t]!.desc)}"><img src="${spriteUrl(AMMO_TYPES[t]!.icon)}" alt="">${n} ${esc(ammoLabel(t).toLowerCase())}</span>`;
+    }).join(' ');
+    return `<div class="stats" style="padding:2px 0"><b style="color:var(--ink)">${esc(c.name)}</b> · ${items}</div>`;
+  }).join('');
+  const order = Object.keys(WEAPONS);
+  const guns = [...G.weapons].sort((a, b) => order.indexOf(a.def) - order.indexOf(b.def));
+  return `<div class="armory">
+  <h3>Ammunition <span class="dim">by caliber · hover a type for what it does</span></h3>
+  ${stock}
+  <h3>Guns</h3>
+  ${guns.map((w) => {
     const d = WEAPONS[w.def];
+    const p = fireProfile(w);
     const holder = living().find((s) => s.weapon === w.uid);
+    const tags: string[] = [];
+    if (p.auto) tags.push('full-auto');
+    if (p.burst > 1) tags.push(p.burstGap <= 0 ? `${p.burst} barrels at once` : `${p.burst}-round burst`);
+    if (p.reloadPerRound) tags.push('loads one at a time');
+    if (p.armorPen > 0.3) tags.push('cracks plate');
+    if (p.armorPen < 0) tags.push('poor vs plate');
+    if (p.incendiary) tags.push('incendiary');
+    if (p.flare) tags.push('lights the road');
+    if (p.smoke) tags.push('smoke');
+    if (p.recoverable > 0) tags.push(`${Math.round(p.recoverable * 100)}% ammo recovered`);
+    if (p.noise <= 0.6) tags.push('quiet');
+    else if (p.noise >= 2.5) tags.push('loud');
+    if (p.jam >= 0.02) tags.push(`jams ${Math.round(p.jam * 100)}%`);
+    const types = ammoTypesFor(w.def);
     return `<div class="gun"><img src="${spriteUrl(d.icon)}" alt=""><div><b>${w.name ? `"${esc(w.name)}" ` : ''}${d.name}</b> <span class="dim">${Math.round(w.cond * 100)}% · ${w.kills} kills · ${holder ? first(holder) : 'on the rack'}</span>
-      <div class="bd">${d.desc}</div>
-      <div class="stats">dmg ${d.dmg}${d.pellets > 1 ? `×${d.pellets}` : ''} · ${d.rof}/s · mag ${d.mag} · reload ${d.reload}s · ${d.ammo ? RES_LABEL[d.ammo as Res].toLowerCase() : '—'}${d.pierce ? ` · pierce ${d.pierce}` : ''}</div></div></div>`;
+      ${d.niche ? `<div class="bd"><i>${esc(d.niche)}</i></div>` : ''}
+      <div class="bd dim">${esc(d.desc)}</div>
+      <div class="stats">dmg ${Math.round(p.dmg)}${p.pellets > 1 ? `×${p.pellets}` : ''} · ${p.rof}/s · mag ${p.mag} · reload ${p.reloadPerRound ? `${p.reload.toFixed(2)}s/round` : `${p.reload}s`}${p.pierce ? ` · pierce ${p.pierce}` : ''}${p.perShot !== 1 ? ` · ${p.perShot} ${ammoLabel(p.ammoRes).toLowerCase()}/shot` : ''}${tags.length ? ` · ${tags.join(' · ')}` : ''}</div>
+      <div class="stats">${types.length > 1 ? `loaded with ${ammoSelect(w)}` : `ammo: ${esc(ammoLabel(p.ammoRes).toLowerCase())} (${Math.floor(G.stores[p.ammoRes!] ?? 0)})`}${p.ammoRes && AMMO_TYPES[p.ammoRes] ? ` <span class="dim">— ${esc(AMMO_TYPES[p.ammoRes]!.desc)}</span>` : ''}</div></div></div>`;
   }).join('')}
-  <p class="dim">Weapons on the rack can be picked up on the wall at night with [Q] or number keys. Worn guns jam.</p></div>`;
+  <p class="dim">Weapons on the rack can be picked up on the wall at night with [Q] or number keys. Worn guns jam. On a daylight run, [T] switches bullet type.</p></div>`;
 }
 
 function chronicleHtml() {
@@ -363,6 +406,13 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
   root.onchange = (e) => {
     const t = e.target as HTMLSelectElement;
     if (t.dataset.act === 'runsite') return;
+    if (t.dataset.act === 'ammo') {
+      const w = G.weapons.find((x) => x.uid === t.dataset.w);
+      if (w) w.ammoType = t.value as Res;
+      sfx.ui();
+      h.rerender();
+      return;
+    }
     const s = byId(t.dataset.id ?? '');
     if (!s) return;
     if (t.dataset.act === 'job') s.job = t.value as JobId;
