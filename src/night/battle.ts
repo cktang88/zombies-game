@@ -1711,7 +1711,7 @@ export class Battle {
     if (z.crippled || z.def.crawl || z.def.boss || z.def.ranged) return;
     z.crippled = true;
     z.stun = Math.max(z.stun, 0.4);
-    this.text(z.x, z.y - this.zh(z) * 0.5, z.def.id === 'ferryman' ? 'LIMPING' : 'LEGS', '#d0a050', 12);
+    if (isPlayer) this.text(z.x, z.y - this.zh(z) * 0.5, z.def.id === 'ferryman' ? 'LIMPING' : 'LEGS', '#d0a050', 12);
     sfx.impact('bone');
     if (isPlayer && !this.hints.has('legs')) { this.hints.add('legs'); this.say('Legs gone — it crawls now', 3); }
     if (z.def.id !== 'ferryman' && z.state === 'wall') z.state = 'walk';
@@ -1759,7 +1759,7 @@ export class Battle {
         z.armDmg += d;
         if (!z.disarmed && z.armDmg >= z.maxHp * 0.25 && !z.def.ranged && !z.def.boss) {
           z.disarmed = true;
-          this.text(z.x, z.y - this.zh(z) * 0.7, 'ARM', '#a8a8a0', 11);
+          if (isPlayer) this.text(z.x, z.y - this.zh(z) * 0.7, 'ARM', '#a8a8a0', 11);
         }
       }
     } else if (z.def.armor) {
@@ -2839,6 +2839,9 @@ export class Battle {
     // a hit out past the edge of the road (traps, guards' long shots) gets no label: clamped on
     // screen they stacked into a column of "LEGS" at the right edge, pointing at nothing
     if (x > W + 10 || x < -10) return;
+    // the same word close by (a crowd taking a burst): refresh that label instead of stacking another
+    const near = this.texts.find((t) => t.text === text && Math.abs(t.x - x) < 110 && Math.abs(t.y - y) < 80);
+    if (near) { near.life = Math.max(near.life, 1.0); return; }
     this.texts.push({ x, y, text, color, size, life: 1.2 });
   }
 
