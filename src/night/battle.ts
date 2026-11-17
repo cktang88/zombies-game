@@ -1,7 +1,7 @@
 import type { Survivor, WeaponItem, Res, NightPlan } from '../types';
 import { G, R, log, add } from '../state';
 import { ZOMBIES, type ZombieDef } from '../data/zombies';
-import { WEAPONS, fireProfile, armorDamage, roundsInStores, ammoLabel, AMMO_RES, AMMO_TYPES, BURN, FLARE_LIGHT, type FireProfile } from '../data/weapons';
+import { WEAPONS, fireProfile, armorDamage, roundsInStores, ammoLabel, ammoTypesFor, shotSound, wearMods, AMMO_RES, AMMO_TYPES, BURN, FLARE_LIGHT, type FireProfile } from '../data/weapons';
 import { img, flashImg, shadeImg } from '../assets';
 import { sfx, wind } from '../audio';
 import {
@@ -75,6 +75,7 @@ interface Guard {
   burstT: number;
   burstAng: number; // guards: where the burst is pointed
   burstErr: number;
+  lastTgt: number; // id of the last thing they fired at (scopes are slow to re-acquire)
   dragging?: Guard; // the downed guard this one is hauling back
   dragT: number;
   moodle?: string;
@@ -155,6 +156,7 @@ export class Battle {
   covers: { x: number; y: number; w: number; h: number; seed: number }[] = [];
   raidersDown = 0;
   recover: Partial<Record<Res, number>> = {}; // arrows and bolts to pick up off the road at dawn
+  fired = new Map<string, number>(); // rounds per gun tonight, for wear on suppressors and mods
   keyUp = (e: KeyboardEvent) => { if (e.key === ' ') this.fast = false; };
 
   constructor(canvas: HTMLCanvasElement, plan: NightPlan, onEnd: (r: NightResult) => void) {
@@ -194,7 +196,7 @@ export class Battle {
     const slots = [262, 192, 124, 58, 0, 160];
     fighters.slice(0, 6).forEach((s, i) => {
       const w = G.weapons.find((x) => x.uid === s.weapon) ?? null;
-      this.guards.push({ s, w, x: slots[i], y: SURV_Y + (i % 2) * 8 - (i >= 4 ? 30 : 0), cd: R.range(0, 1), mag: 0, reload: 0, kills: 0, flash: 0, fled: false, recoil: 0, homeX: slots[i], face: 1, mauledT: 0, burstLeft: 0, burstT: 0, burstAng: 0, burstErr: 0, dragT: 0, moodleC: '', moodleT: R.range(0, 1) });
+      this.guards.push({ s, w, x: slots[i], y: SURV_Y + (i % 2) * 8 - (i >= 4 ? 30 : 0), cd: R.range(0, 1), mag: 0, reload: 0, kills: 0, flash: 0, fled: false, recoil: 0, homeX: slots[i], face: 1, mauledT: 0, burstLeft: 0, burstT: 0, burstAng: 0, burstErr: 0, lastTgt: 0, dragT: 0, moodleC: '', moodleT: R.range(0, 1) });
     });
     // magazines are loaded from the stores, not conjured
     for (const g of this.guards) {
@@ -265,6 +267,7 @@ export class Battle {
     else if (e.key === 'Escape' || e.key === 'p') this.paused = !this.paused;
     else if (/^[1-9]$/.test(e.key)) this.switchWeapon(+e.key - 1);
     else if (e.key === 'q' || e.key === 'Q') this.cycleWeapon();
+    else if (e.key === 't' || e.key === 'T') this.cycleAmmo();
     else if (e.key === ' ') { this.fast = true; e.preventDefault(); }
   }
 
@@ -284,6 +287,27 @@ export class Battle {
     this.playerReload = 0;
     if (!this.playerMag.has(p.w.uid)) this.playerMag.set(p.w.uid, 0);
     sfx.reload();
+  }
+
+  // [T]: the next bullet type for the leader's gun; what's in the magazine goes back to the stores
+  cycleAmmo() {
+    const p = this.player;
+    if (!p || !p.w) return;
+    const types = ammoTypesFor(p.w.def);
+    if (types.length < 2) return;
+    const prof = this.prof(p.w);
+    const cur = prof.ammoRes;
+    const have = types.filter((t) => t === cur || (G.stores[t] ?? 0) > 0);
+    const next = have[(have.indexOf(cur!) + 1) % have.length];
+    if (!next || next === cur) { this.say(`No other ammunition for the ${WEAPONS[p.w.def].name.toLowerCase()}.`, 2); return; }
+    const m = this.playerMag.get(p.w.uid) ?? 0;
+    if (cur && m > 0) add(cur, m * prof.perShot);
+    this.playerMag.set(p.w.uid, 0);
+    p.burstLeft = 0;
+    p.w.ammoType = next;
+    this.playerReload = 0;
+    this.say(`Loading ${ammoLabel(next).toLowerCase()}.`, 2);
+    this.startReload();
   }
 
   cycleWeapon() {
@@ -570,7 +594,7 @@ export class Battle {
     if (R.chance(prof.jam)) {
       this.say(`${p.w.name ?? WEAPONS[p.w.def].name} jammed.`, 1.5);
       sfx.click();
-      this.playerCd = 0.9;
+      this.playerCd = prof.jamClear;
       return;
     }
     this.playerCd = 1 / prof.rof;
@@ -595,9 +619,10 @@ export class Battle {
         const a = base + (R.next() + R.next() - 1) * (prof.pellets > 1 ? prof.spread : spreadA);
         this.castShot(p, mz.x, mz.y, a, prof.dmg, prof.pierce, prof.knock, prof.pellets > 1, true, prof);
       }
-      this.bloom = Math.min(0.12, this.bloom + prof.spread * 0.35 + (prof.auto ? 0.004 : 0.012));
+      // the leader fires from the wall: a bipod braces
+      this.bloom = Math.min(0.12, this.bloom + (prof.spread * 0.35 + (prof.auto ? 0.004 : 0.012)) * prof.bloomMul * prof.braceBloomMul);
       this.roundFired(p, prof, mz, false);
-      this.shake = Math.max(this.shake, prof.knock / 6);
+      this.shake = Math.max(this.shake, (prof.knock / 6) * prof.recoilMul);
       G.stats.shots++;
       p.w.cond = Math.max(0.05, p.w.cond - 0.0008);
     } while (p.burstLeft > 0 && prof.burstGap <= 0);
@@ -607,14 +632,15 @@ export class Battle {
 
   // what every round does besides the bullet: flash, noise, brass, smoke, arrows to pick up later
   roundFired(g: Guard, prof: FireProfile, mz: { x: number; y: number }, far: boolean) {
-    g.recoil = 1;
+    g.recoil = Math.min(1, prof.recoilMul);
     g.flash = 0.06;
     this.noise += prof.noise * (far ? 0.7 : 1);
+    this.fired.set(g.w!.uid, (this.fired.get(g.w!.uid) ?? 0) + 1);
     if (prof.recoverable > 0 && prof.ammoRes) this.recover[prof.ammoRes] = (this.recover[prof.ammoRes] ?? 0) + prof.recoverable * prof.perShot;
     const quiet = prof.noise < 0.5;
     if (!quiet) this.lights.push({ x: mz.x + 10 * g.face, y: mz.y, r: far ? 180 : 220, life: 0.06, max: 0.06, color: '255,200,120' });
     const def = WEAPONS[g.w!.def];
-    sfx.shot(quiet ? 'nailer' : prof.pellets > 1 ? 'pump' : def.caliber === 'rifle' ? 'hunting' : prof.auto ? 'smg' : def.id, far);
+    sfx.shot(quiet ? 'nailer' : shotSound(def.id), far);
     if (prof.smoke) for (let i = 0; i < 4; i++) this.particles.push({ x: mz.x + g.face * R.range(0, 30), y: mz.y + R.range(-6, 6), vx: g.face * R.range(10, 50), vy: R.range(-20, 5), life: 2.2, max: 2.2, size: R.range(8, 14), color: '#bbb', kind: 'smoke', ground: 0 });
     const brass = !quiet && prof.recoverable <= 0 && def.caliber !== 'bolt';
     if (!far && brass) this.particles.push({ x: mz.x - 30 * g.face, y: mz.y + 4, vx: -g.face * R.range(20, 60), vy: R.range(-160, -90), life: 1.2, max: 1.2, size: 2.4, color: '#c9a24a', kind: 'shell', ground: SURV_Y - 4 });
@@ -653,7 +679,9 @@ export class Battle {
     let d = dmg;
     let n = 0;
     for (const h of hits) {
-      this.damage(h.z, d, h.head, knock, g, pellet, ox + dx * h.t, oy + dy * h.t, isPlayer, fx);
+      // sawed-off barrels and the like: half damage past their range
+      const far = fx && h.t > fx.range ? 0.5 : 1;
+      this.damage(h.z, d * far, h.head, knock * far, g, pellet, ox + dx * h.t, oy + dy * h.t, isPlayer, fx);
       if (isPlayer) G.stats.hits++;
       n++;
       endT = h.t;
@@ -827,7 +855,7 @@ export class Battle {
     if (g.cd > 0) return;
     const fog = this.plan.special === 'fog';
     // guards only engage what they can make out in the dark
-    const range = (fog ? 640 : 820) + Math.min(3, G.fort.lights) * 130 + (hasTrait(g.s, 'nightowl') ? 120 : 0);
+    const range = Math.max((fog ? 640 : 820) + Math.min(3, G.fort.lights) * 130 + (hasTrait(g.s, 'nightowl') ? 120 : 0), g.x + SH * 0.45 + prof.light);
     // the road ahead, anything already behind the line, and any rifleman who just showed himself
     let tgt: Zombie | undefined;
     let bp = 1e9;
@@ -845,15 +873,20 @@ export class Battle {
     if (face !== g.face) {
       // turning on something behind you takes a moment
       g.face = face;
-      g.cd = R.range(0.5, 0.9);
+      g.cd = R.range(0.5, 0.9) + prof.switchTime;
       return;
+    }
+    if (tgt.id !== g.lastTgt) {
+      // settling on a new target (a scope is slow, a red dot quick)
+      g.lastTgt = tgt.id;
+      if (prof.switchTime > 0) { g.cd = prof.switchTime; return; }
     }
     if (g.mag <= 0) {
       if (roundsInStores(prof, G.stores) < 1) {
         // out of ammunition: hatchets and fence pickets at the wall
         const reach = this.zombies.find((z) => z.state !== 'dying' && (z.state === 'wall' && g.x > 200 || ((z.state === 'over' || z.state === 'maul') && Math.abs(z.x - g.x) < 70)));
         if (reach) {
-          reach.hp -= 14 + g.s.skills.building;
+          reach.hp -= prof.melee > 0 ? prof.melee : 14 + g.s.skills.building;
           reach.flash = 0.1;
           sfx.thud();
           g.recoil = 1;
@@ -868,7 +901,7 @@ export class Battle {
       g.reload = (prof.reloadPerRound ? prof.reload * prof.mag * 0.75 : prof.reload) * 1.15;
       return;
     }
-    if (R.chance(prof.jam)) { g.cd = 1.2; this.text(g.x + 20, g.y - 150, 'jammed', '#c8a070', 10); return; }
+    if (R.chance(prof.jam)) { g.cd = prof.jamClear * 1.3; this.text(g.x + 20, g.y - 150, 'jammed', '#c8a070', 10); return; }
     let aim = aimFactor(g.s);
     if (g.mode === 'panic') aim *= 0.4;
     if (g.mode === 'rage') aim = Math.min(1.3, aim + 0.3);
@@ -881,7 +914,7 @@ export class Battle {
     const goHead = R.chance((0.2 + aim * 0.25) * (tgt.def.ranged ? 0.5 : 1));
     const ty = goHead ? hb.hy : (hb.y1 + hb.y2) / 2;
     const tx = goHead ? hb.hx : tgt.x;
-    const err = (prof.spread * 1.2 + (1.15 - aim - lightBonus) * 0.07 + (fog ? 0.04 : 0)) * (1 + dist / 900) * (tgt.def.ranged ? 1.8 : 1);
+    const err = (prof.spread * 1.2 + (1.15 - aim - lightBonus) * 0.07 + (fog ? 0.04 : 0)) * (1 + dist / 900) * (tgt.def.ranged ? 1.8 : 1) * (0.5 + 0.5 * prof.braceBloomMul);
     const base = Math.atan2(ty - mz.y, tx - mz.x);
     g.cd = (1 / prof.rof) * (prof.auto ? 1.3 : 1.6) * R.range(0.9, 1.25) * (g.mode === 'panic' ? 0.55 : g.mode === 'rage' ? 0.7 : 1);
     g.burstLeft = Math.min(prof.burst, g.mag);
@@ -1821,6 +1854,24 @@ export class Battle {
     };
     // the house: a lantern behind the line
     hole(120, 560, 260, 0.6);
+    // flashlights taped to barrels
+    for (const g of this.guards) {
+      if (!g.w || g.s.dead || g.fled || g.downed) continue;
+      const len = this.prof(g.w).light;
+      if (len <= 0) continue;
+      const mz = this.muzzle(g);
+      const ex = mz.x + g.face * len;
+      const lg = d.createLinearGradient(mz.x * s, 0, ex * s, 0);
+      lg.addColorStop(0, 'rgba(0,0,0,0.8)');
+      lg.addColorStop(1, 'rgba(0,0,0,0)');
+      d.fillStyle = lg;
+      d.beginPath();
+      d.moveTo(mz.x * s, mz.y * s);
+      d.lineTo(ex * s, (mz.y - len * 0.12) * s);
+      d.lineTo(ex * s, (mz.y + len * 0.2) * s);
+      d.closePath();
+      d.fill();
+    }
     for (let i = 0; i < Math.min(3, G.fort.lights); i++) {
       // floodlight cone toward the road
       d.save();
@@ -1842,6 +1893,23 @@ export class Battle {
     // warm additive glow for flashes
     c.save();
     c.globalCompositeOperation = 'lighter';
+    for (const g of this.guards) {
+      if (!g.w || g.s.dead || g.fled || g.downed) continue;
+      const len = this.prof(g.w).light;
+      if (len <= 0) continue;
+      const mz = this.muzzle(g);
+      const ex = mz.x + g.face * len;
+      const bg = c.createLinearGradient(mz.x, 0, ex, 0);
+      bg.addColorStop(0, 'rgba(255,240,200,0.16)');
+      bg.addColorStop(1, 'rgba(255,240,200,0)');
+      c.fillStyle = bg;
+      c.beginPath();
+      c.moveTo(mz.x, mz.y);
+      c.lineTo(ex, mz.y - len * 0.12);
+      c.lineTo(ex, mz.y + len * 0.2);
+      c.closePath();
+      c.fill();
+    }
     for (const l of this.lights) {
       const a = (l.life / l.max) * 0.25;
       const g = c.createRadialGradient(l.x, l.y, 0, l.x, l.y, l.r * 0.6);
@@ -1946,7 +2014,8 @@ export class Battle {
     c.textAlign = 'left';
     c.font = '12px "Special Elite", monospace';
     c.fillStyle = '#a89c84';
-    c.fillText(`firebombs ${G.stores.molotov} [F]   ·   [R] reload   [Q]/[1-9] weapon   [hold Space] hurry   [P] pause`, 20, H - 22);
+    const multiAmmo = !!(p?.w && ammoTypesFor(p.w.def).length > 1);
+    c.fillText(`firebombs ${G.stores.molotov} [F]   ·   [R] reload   [Q]/[1-9] weapon${multiAmmo ? '   [T] ammo' : ''}   [hold Space] hurry   [P] pause`, 20, H - 22);
     // messages
     c.textAlign = 'center';
     this.messages.forEach((m, i) => {
@@ -2019,6 +2088,11 @@ export class Battle {
       if (!w || m <= 0) continue;
       const prof = fireProfile(w);
       if (prof.ammoRes) add(prof.ammoRes, m * prof.perShot);
+    }
+    // suppressors and lashed-on gear wear out
+    for (const [uid, n] of this.fired) {
+      const w = G.weapons.find((x) => x.uid === uid);
+      if (w) for (const l of wearMods(w, n)) r.lines.push(l);
     }
     // arrows and bolts off the road
     for (const [k, v] of Object.entries(this.recover) as [Res, number][]) {
