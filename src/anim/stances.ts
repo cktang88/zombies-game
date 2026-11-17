@@ -50,7 +50,7 @@ export interface Stance {
 /** The far (support) arm passes behind the torso, its forearm runs under the gun, its hand wraps the
  * fore-end in front of the gun; the trigger arm and hand are over everything. Head before the gun:
  * the stock covers the jaw (cheek weld seen from the right). */
-const LONG: Slot[] = ['fLeg', 'fUA', 'slung', 'torso', 'nLeg', 'head', 'fFA', 'gun', 'fH', 'nShadow', 'nUA', 'nFA', 'nH'];
+const LONG: Slot[] = ['fLeg', 'fUA', 'slung', 'torso', 'nLeg', 'head', 'fFA', 'fH', 'gun', 'nShadow', 'nUA', 'nFA', 'nH'];
 /** Two-handed pistol: the far arm reaches out behind the near one; the support hand cups the grip behind it. */
 const PISTOL: Slot[] = ['fLeg', 'fUA', 'slung', 'torso', 'nLeg', 'head', 'fFA', 'fH', 'gun', 'nShadow', 'nUA', 'nFA', 'nH'];
 /** Bow: the bow hand is the far (left) one, the right hand draws the string to the cheek. */
