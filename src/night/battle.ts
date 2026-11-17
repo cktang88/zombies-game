@@ -303,7 +303,7 @@ export class Battle {
   turrets: { x: number; y: number; cd: number; flash: number; ang: number }[] = [];
   surge = 0; // the bell: the Turned move faster while it rings
   boss?: Zombie;
-  dog?: { x: number; y: number; barkT: number; cd: number; name: string; rig?: QuadRig };
+  dog?: { x: number; y: number; barkT: number; cd: number; name: string; rig?: QuadRig; face?: 1 | -1; biteCd?: number };
   sharp = 0; // the dog's warning: guards aim better for a moment
   drainOpen = 0;
   covers: { x: number; y: number; w: number; h: number; seed: number }[] = [];
@@ -2690,6 +2690,27 @@ export class Battle {
     const d = this.dog!;
     d.cd -= dt;
     d.barkT = Math.max(0, d.barkT - dt);
+    // the dog goes for anything that gets over the wall: gallops in, bites, and trots home after
+    const foe = this.zombies.filter((z) => (z.state === 'over' || z.state === 'maul') && z.hp > 0)
+      .sort((a, b) => Math.abs(a.x - d.x) - Math.abs(b.x - d.x))[0];
+    const hx = foe ? foe.x + (foe.x > d.x ? -26 : 26) : 172, hy = foe ? Math.min(712, Math.max(690, foe.y)) : 699;
+    const dx = hx - d.x, dist = Math.abs(dx);
+    const v = dist < 4 ? 0 : Math.min(foe ? 230 : 90, dist * 4);
+    d.x += Math.sign(dx) * Math.min(dist, v * dt);
+    d.y += (hy - d.y) * Math.min(1, dt * 3);
+    if (Math.abs(dx) > 2) d.face = dx > 0 ? 1 : -1;
+    d.biteCd = Math.max(0, (d.biteCd ?? 0) - dt);
+    if (foe && dist < 10 && d.biteCd <= 0) {
+      d.biteCd = 1.1;
+      d.rig?.play('bite');
+      d.barkT = Math.max(d.barkT, 0.4);
+      foe.hp -= 16;
+      foe.flash = 0.08;
+      react(foe, { dmg: 16, knock: 0, zone: 'leg', dir: d.face ?? 1 }, this.t, () => R.next());
+      this.text(foe.x, foe.y - 90, `${d.name} bites`, '#d8c8a0', 10);
+      if (foe.hp <= 0) this.kill(foe, null);
+    }
+    d.rig?.setSpeed(v * dt > 0 ? v : 0);
     d.rig?.update(dt);
     if (d.rig && d.barkT > 0.3 && !d.rig.action) d.rig.play('bark');
     // one word at a time, not a pile of them
@@ -3234,7 +3255,7 @@ export class Battle {
     const im = img('dog');
     if (!im) return;
     const h = 62 * depthScale(d.y);
-    if (d.rig?.ready) { d.rig.draw(c, d.x, d.y, h / 120); return; }
+    if (d.rig?.ready) { d.rig.draw(c, d.x, d.y, h / 120, d.face ?? 1); return; }
     const w = (im.width / im.height) * h;
     const hop = d.barkT > 0 ? -Math.abs(Math.sin(this.t * 14)) * 4 : Math.sin(this.t * 2) * 0.6;
     const bk = bakeSprite('dog', Math.round(h), LOOK[3], 0, { pad: PAD });

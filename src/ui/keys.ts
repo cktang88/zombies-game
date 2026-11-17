@@ -141,6 +141,7 @@ export const PAD: Record<'night' | 'run', PadBind[]> = {
     { btn: 14, to: 'night.heads', label: 'Order: heads only' },
     { btn: 15, to: 'night.wall', label: 'Order: protect the wall' },
     { btn: 11, to: 'night.firebomb', label: 'Firebomb' },
+    { btn: 10, to: 'night.sally', label: 'Sally over the wall / back' },
     { btn: 8, to: 'night.hurry', label: 'Hurry the night (hold)' },
     { btn: 9, to: '@pause', label: 'Pause' },
   ],

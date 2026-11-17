@@ -71,7 +71,7 @@ All keys below are defaults; every one can be changed in **Settings › Controls
 | hold `Space` | hurry the night along | | |
 | `P` / `Esc` | pause menu | | |
 
-**Gamepad** (standard mapping; a toast says when one connects): right stick aims, **RT** fire, **LT** Focus, **X** reload (hold: speed reload), **Y** next gun, **B** duck, **A** rally, **LB/RB** previous / next guard, **D-pad** orders (↑ free, ↓ hold, ← heads, → wall), **R3** firebomb, **Back** (hold) hurry, **Start** pause. On runs the left stick walks, **A** searches, **B** shoves, **LT** swings. In menus the D-pad moves, **A** picks, **B** backs out. The pad presses the bound keys, so rebinding a key moves it too; the full list is in Settings › Controls.
+**Gamepad** (standard mapping; a toast says when one connects): right stick aims, **RT** fire, **LT** Focus, **X** reload (hold: speed reload), **Y** next gun, **B** duck, **A** rally, **LB/RB** previous / next guard, **D-pad** orders (↑ free, ↓ hold, ← heads, → wall), **R3** firebomb, **L3** sally, **Back** (hold) hurry, **Start** pause. On runs the left stick walks, **A** searches, **B** shoves, **LT** swings. In menus the D-pad moves, **A** picks, **B** backs out. The pad presses the bound keys, so rebinding a key moves it too; the full list is in Settings › Controls.
 
 **Touch:** tap or drag on the night to aim and fire; round buttons at the edges duck, focus, reload, change guns and pause (on runs: walk, search, reload, swing, shove). Held upright, a phone asks to be turned: **Play sideways** rotates the night to fill the screen (for when rotation is locked), or play it small.
 
