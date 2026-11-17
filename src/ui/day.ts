@@ -980,6 +980,16 @@ function installKeys() {
   if (keysInstalled) return;
   keysInstalled = true;
   window.addEventListener('keydown', (e) => {
+    // Esc (and the pad's B) closes the survivor sheet when it is the top layer
+    if (e.key === 'Escape' && !e.defaultPrevented && G.phase === 'day') {
+      const ovs = document.querySelectorAll('.overlay');
+      const top = ovs[ovs.length - 1] as HTMLElement | undefined;
+      if (top?.dataset.act === 'closedetail' && top.closest('.day')) {
+        e.preventDefault();
+        (top.querySelector('.close[data-act=closedetail]') as HTMLElement | null)?.click();
+        return;
+      }
+    }
     if (G.phase !== 'day' || !duskKey || e.repeat || e.altKey || e.ctrlKey || e.metaKey) return;
     if (!document.querySelector('.day') || document.querySelector('.overlay') || G.pendingEvent) return;
     const t = e.target as HTMLElement | null;
