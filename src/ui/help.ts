@@ -48,7 +48,7 @@ const PAGES: Record<Page, { label: string; html: () => string }> = {
     label: 'The Turned',
     html: () => `<div class="turned">${Object.values(ZOMBIES).map((z) => `
       <div class="tz"><img src="${spriteUrl(z.sprites[0])}" alt="" loading="lazy">
-        <div><b>${esc(z.name)}</b> <span class="dim">from day ${z.minDay}${z.armor && z.armor > 10 ? ' · armoured' : ''}${z.burst ? ' · bursts' : ''}${z.scream ? ' · calls others' : ''}${z.lunge ? ' · sprints' : ''}</span>
+        <div><b>${esc(z.name)}</b> <span class="dim">${z.minDay >= 100 ? 'special nights' : `from day ${z.minDay}`}${z.armor && z.armor > 10 ? ' · armoured' : ''}${z.burst ? ' · bursts' : ''}${z.scream ? ' · calls others' : ''}${z.lunge ? ' · sprints' : ''}</span>
         <p>${esc(z.lore)}</p></div></div>`).join('')}</div>
       <p class="dim">They were all somebody. The town gave them these names.</p>`,
   },

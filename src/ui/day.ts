@@ -2,6 +2,7 @@ import type { Survivor, JobId, Res, WeaponItem, ModSlot } from '../types';
 import { G, R, dateLabel, ICE_DAY, has, pay, ordinal, docsFound, rep } from '../state';
 import { DOCS, FACTIONS } from '../data/lore';
 import { spriteUrl } from '../assets';
+import { portraitImg } from './portrait';
 import { WEAPONS, MELEE, meleeProfile, CLASS_NAMES, CALIBERS, AMMO_TYPES, MODS, MOD_SLOTS, fireProfile, ammoTypesFor, ammoLabel, selectedAmmo, slotsFor, attachMod, detachMod, type FireProfile } from '../data/weapons';
 import { TRAITS } from '../data/traits';
 import { SKILL_NAMES } from '../data/names';
@@ -218,7 +219,7 @@ function survivorCard(s: Survivor) {
   const stale = !disabled && G.day > 1 && !planConfirmed(s) && !(onRunToday(s));
   const hp = heldProf(s);
   return `<div class="card surv ${stale ? 'stale' : ''}" data-id="${s.id}">
-    <img class="portrait" src="${spriteUrl(s.sprite)}" alt="">
+    ${portraitImg(s.sprite, `portrait${s.isLeader ? ' lead' : ''}`)}
     <div class="body">
       <div class="name"><a data-act="detail" data-id="${s.id}">${esc(displayName(s))}</a> <span class="age">${s.age}</span>${stale ? '<span class="tag carried" title="Yesterday\'s job carried over. Change it, or press Keep to confirm.">same as yesterday?</span>' : ''}</div>
       <div class="tags">${statusTags(s)}</div>
@@ -275,7 +276,7 @@ function detailHtml(s: Survivor) {
   return `<div class="modal detail">
     <button class="close" data-act="closedetail">×</button>
     <div class="dhead">
-      <img src="${spriteUrl(s.sprite)}" alt="">
+      ${portraitImg(s.sprite, `portrait big${s.dead ? ' dead' : ''}`)}
       <div>
         <h2>${esc(displayName(s))}</h2>
         <div class="sub">${s.age}, ${s.sex === 'm' ? 'man' : 'woman'} · with us since ${dateLabel(s.arrivedDay)} · ${s.kills} put down${s.dead ? ` · died ${dateLabel(s.dead.day)}` : ''}</div>
@@ -571,10 +572,10 @@ function townHtml() {
 function gravesHtml() {
   if (!G.graves.length) return '<p class="dim">No graves yet behind the house.</p>';
   return `<div class="graves">${G.graves.map((g) => `<div class="grave" data-act="detail" data-id="${g.id}">
-    <div class="gn">${esc(displayName(g))}</div>
+    ${portraitImg(g.sprite, 'portrait dead')}<div class="gtext"><div class="gn">${esc(displayName(g))}</div>
     <div class="gd">${g.age} · ${dateLabel(g.arrivedDay)} – ${dateLabel(g.dead!.day)}</div>
     <div class="gc">${esc(g.dead!.cause)}</div>
-    <div class="ge">${esc(g.dead!.epitaph)}</div></div>`).join('')}</div>`;
+    <div class="ge">${esc(g.dead!.epitaph)}</div></div></div>`).join('')}</div>`;
 }
 
 const STORE_RES: Res[] = ['food', 'wood', 'scrap', 'parts', 'cloth', 'fuel', 'meds', 'liquor', 'molotov'];

@@ -77,3 +77,22 @@
   .dep-info > img { width: 40px; height: 40px; }
   .dep-f button { flex: 1; }
 }
+
+/* the dusk page around the planner (main.ts deployStep): the town behind, one column of ledger cards */
+.deploywrap { min-height: 100vh; overflow: auto; padding: 16px 12px 28px; background-color: #0e0d0b; background-size: cover; background-position: center; background-attachment: fixed; display: flex; flex-direction: column; gap: 12px; }
+.deploywrap > div:empty { display: none; }
+.deploywrap .dep { box-shadow: 0 8px 30px rgba(0, 0, 0, .55); width: 100%; }
+.dep.posts .postrow:has(select) { display: grid; grid-template-columns: 7em minmax(8em, 11em) 12em 1fr; gap: 10px; align-items: center; margin: 4px 0; padding: 3px 0; border-bottom: 1px dotted rgba(90, 79, 60, .5); }
+.dep.posts .postrow b { min-width: 0; }
+.dep.posts .postrow select { width: 100%; }
+.dep.posts .postrow:not(:has(select)) { margin-top: 10px; }
+.dep.crew .crewrow { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 6px 0; }
+.dep.crew .crewrow > b { min-width: 9em; }
+.dep.crew label { display: inline-flex; gap: 6px; align-items: center; font-family: var(--type); font-size: 12px; color: var(--dim); }
+.dep-end { text-align: right; }
+@media (max-width: 700px) {
+  .dep.posts .postrow:has(select) { grid-template-columns: 1fr 1fr; }
+  .dep.posts .postrow:has(select) select { grid-column: 1 / -1; }
+  .dep.posts .postrow:has(select) > span:last-child:empty { display: none; }
+}
+@media (max-width: 700px) { .dep-h { flex-wrap: wrap; } .dep-h .dep-count { white-space: normal; } }

@@ -4,7 +4,7 @@ import './juice.css';
 import type { Res, Survivor } from '../types';
 import type { NightResult } from '../night/battle';
 import { G, dateLabel } from '../state';
-import { spriteUrl } from '../assets';
+import { portraitImg } from './portrait';
 import { RES_LABEL } from '../data/world';
 import { ammoLabel, AMMO_TYPES } from '../data/weapons';
 import { byId, displayName } from '../sim/survivors';
@@ -38,7 +38,7 @@ export function showDawnReport(app: HTMLElement, d: DawnData, onClose: () => voi
   div.className = 'overlay dawn';
   div.innerHTML = `<div class="modal ledger dawnrep" role="dialog" aria-label="Dawn report">
     <h2>Dawn, ${dateLabel()} <small>the ${esc(dateLabel(d.night))} night</small></h2>
-    ${d.dead.map((s) => `<div class="st deathcard" data-pause="1300" data-bell="1"><img src="${spriteUrl(s.sprite)}" alt=""><div>
+    ${d.dead.map((s) => `<div class="st deathcard" data-pause="1300" data-bell="1">${portraitImg(s.sprite, 'portrait dead')}<div>
       <div class="dn">${esc(displayName(s))}</div>
       <div class="dc">${esc(s.dead?.cause ?? 'died in the night')}</div>
       <div class="de">${esc(s.dead?.epitaph ?? '')}</div></div></div>`).join('')}
@@ -52,7 +52,7 @@ export function showDawnReport(app: HTMLElement, d: DawnData, onClose: () => voi
       <div class="dim small">${!r.wallHeld ? 'They came over the wall.' : lost > max * 0.4 ? 'The wall took a beating.' : lost ? 'The wall held.' : 'Not a board out of place.'}</div>
     </div>
     ${spent.length ? `<div class="st spent" data-pause="600">Spent: ${spent.map(([k, v]) => `${v} ${esc(ammoName(k))}`).join(', ')}.</div>` : ''}
-    ${mvp ? `<div class="st mvp" data-pause="900"><img src="${spriteUrl(mvp.sprite)}" alt=""><div><small>Carried the night</small><b>${esc(displayName(mvp))}</b><div class="dim">${top[1]} put down${r.kills ? `, ${Math.round((top[1] / r.kills) * 100)}% of the night` : ''}.${mvp.dead ? ' Buried this morning.' : ''}</div></div></div>` : ''}
+    ${mvp ? `<div class="st mvp" data-pause="900">${portraitImg(mvp.sprite, `portrait${mvp.dead ? ' dead' : ''}`)}<div><small>Carried the night</small><b>${esc(displayName(mvp))}</b><div class="dim">${top[1]} put down${r.kills ? `, ${Math.round((top[1] / r.kills) * 100)}% of the night` : ''}.${mvp.dead ? ' Buried this morning.' : ''}</div></div></div>` : ''}
     <div class="st lines" data-pause="500">${d.lines.map((l) => `<p>${esc(l)}</p>`).join('')}</div>
     ${d.teaser ? `<div class="st teaser" data-pause="300"><b>This morning</b>${esc(d.teaser)}</div>` : ''}
     <div class="skiphint">click to skip</div>

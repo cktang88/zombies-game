@@ -24,6 +24,8 @@ import { openHelp } from './ui/help';
 import { onQuitToTitle } from './ui/pause';
 import { keyCap } from './ui/keys';
 import { startAsh } from './ui/titlefx';
+import { portraitImg } from './ui/portrait';
+import './ui/ledger.css';
 import { renderDeploy } from './ui/deploy';
 import { TRAPS, placementsAllowed, spendStock, dawnRetrieve, migrateTrapStock, type Placement } from './data/traps';
 import { takeSpent } from './night/traps';
@@ -39,6 +41,7 @@ const app = document.getElementById('app')!;
 let report: string[] = [];
 let battle: Battle | null = null;
 
+const artUrl = (id: string) => `${import.meta.env.BASE_URL}art/${id}.jpg`;
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 function title() {
@@ -46,7 +49,7 @@ function title() {
   ambience('title');
   const saved = loadSave();
   const daily = dailySeed();
-  app.innerHTML = `<div class="title" style="background-image:linear-gradient(rgba(8,8,10,.35),rgba(8,8,10,.92)),url(${spriteUrl('bg_sky')})">
+  app.innerHTML = `<div class="title"><div class="tart" aria-hidden="true"><i style="background-image:url(${spriteUrl('bg_far')})"></i><i style="background-image:url(${artUrl('key_title')})"></i></div>
     <div class="tbox">
       <h1>VESSEY</h1>
       <div class="tsub">before the ice</div>
@@ -234,7 +237,7 @@ function deployStep() {
   if (!kits && !emps.length && !guards.length) return night();
   app.onclick = null;
   app.onchange = null;
-  app.innerHTML = '<div class="deploywrap" style="min-height:100vh;overflow:auto;padding:12px 0;background:#0e0d0b"><div class="dep-posts"></div><div class="dep-crew"></div><div class="dep-root"></div></div>';
+  app.innerHTML = `<div class="deploywrap" style="background-image:linear-gradient(rgba(10,9,8,.84),rgba(10,9,8,.95)),url(${spriteUrl('bg_far')})"><div class="dep-posts"></div><div class="dep-crew"></div><div class="dep-root"></div></div>`;
   const postsEl = app.querySelector('.dep-posts') as HTMLElement;
   const crewEl = app.querySelector('.dep-crew') as HTMLElement;
   const rootEl = app.querySelector('.dep-root') as HTMLElement;
@@ -290,11 +293,11 @@ function deployStep() {
   });
   const plan = crewPlan();
   if (emps.length) {
-    crewEl.innerHTML = `<div class="dep" style="margin-bottom:10px"><header class="dep-h"><h2>The guns</h2><span class="dep-count">heavy-weapons training decides how well a crew works one</span></header>
+    crewEl.innerHTML = `<div class="dep crew"><header class="dep-h"><h2>The guns</h2><span class="dep-count">heavy-weapons training decides how well a crew works one</span></header>
       ${emps.map((e, i) => {
         const d = EMPLACEMENTS[e.id];
         const want = plan[String(i)] ?? 'auto';
-        return `<p style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:6px 0"><b style="min-width:13em">${esc(d.name)}</b>
+        return `<p class="crewrow"><b>${esc(d.name)}</b>
           <span class="dim">${Math.round(e.cond * 100)}%</span>
           <label>post <select data-emp-post="${i}">${d.posts.map((p) => `<option value="${p}" ${p === e.post ? 'selected' : ''}>${p === 'roof' ? 'roof scaffold' : 'firestep'}</option>`).join('')}</select></label>
           <label>crew <select data-emp-crew="${i}">
@@ -357,7 +360,7 @@ function deployStep() {
       onDone: (ps) => finish(ps.slice(0, allowed)),
     });
   } else {
-    rootEl.innerHTML = '<div class="dep" style="text-align:right"><button type="button" class="dep-done">To the wall. Night falls.</button></div>';
+    rootEl.innerHTML = '<div class="dep dep-end"><button type="button" class="dep-done">To the wall. Night falls.</button></div>';
     rootEl.querySelector('.dep-done')!.addEventListener('click', () => { sfx.ui(); finish([]); });
   }
 }
@@ -488,11 +491,11 @@ let endRender: (() => void) | null = null;
 function scoreHtml(fresh: string[] = []) {
   const sc = scoreCard();
   return `<h2>The ledger</h2>
-    <div class="score" style="max-width:46em;border:1px solid rgba(200,160,90,.35);padding:.6em 1em;margin:.4em 0 1.2em">
-      ${sc.rows.map(([k, v]) => `<div style="display:flex;justify-content:space-between;gap:1em;border-bottom:1px dotted rgba(255,255,255,.12);padding:.15em 0"><span>${esc(k)}</span><b style="text-align:right">${esc(v)}</b></div>`).join('')}
-      <div style="display:flex;justify-content:space-between;padding:.35em 0 .1em"><span>Score</span><b>${sc.score}</b></div>
-      <p style="margin:.5em 0 0;font-style:italic">${esc(sc.grade)}</p>
-      ${fresh.length ? `<p style="margin:.5em 0 0">Unlocked for future runs: <b>${fresh.map(esc).join(', ')}</b>. (Choose boons from the Ledger on the title screen.)</p>` : ''}
+    <div class="score">
+      ${sc.rows.map(([k, v]) => `<div class="srow"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}
+      <div class="srow total"><span>Score</span><b>${sc.score}</b></div>
+      <p class="grade">${esc(sc.grade)}</p>
+      ${fresh.length ? `<p class="unlock">Unlocked for future runs: <b>${fresh.map(esc).join(', ')}</b>. <span class="dim">Choose boons from the Ledger on the title screen.</span></p>` : ''}
     </div>`;
 }
 
@@ -500,23 +503,25 @@ function cardHtml(x: Card, ending: string) {
   const s = x.s;
   const label = x.f === 'dead' ? 'buried' : x.f === 'left' ? 'gone' : x.f === 'stayed' ? 'stayed behind' : 'lived';
   const line = x.f === 'dead' && !ending ? `${s.dead?.cause ?? ''}. ${s.dead?.epitaph ?? ''}` : fateLine(s, x.f, ending || 'fell');
-  return `<div class="grave"><div class="gn">${esc(displayName(s))}</div>
+  return `<div class="grave fate-${x.f}">${portraitImg(s.sprite, `portrait${x.f === 'dead' ? ' dead' : ''}`)}<div class="gtext"><div class="gn">${esc(displayName(s))}</div>
     <div class="gd">${s.age}${s.child ? ' (a child)' : ''} · ${s.kills} put down · ${s.daysSurvived} days · <b>${label}</b></div>
     <div class="ge">${esc(line)}</div>
     ${s.tales.length ? `<ul>${s.tales.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}
-    ${isInscribed(s) ? '<div class="gd"><b>Inscribed in the Ledger.</b></div>' : canInscribe(s) ? `<button class="mute" data-act="inscribe" data-id="${esc(s.id)}" data-fate="${label}">Inscribe in the Ledger</button>` : ''}</div>`;
+    ${isInscribed(s) ? '<div class="gd inscribed"><b>Inscribed in the Ledger.</b></div>' : canInscribe(s) ? `<button class="mute" data-act="inscribe" data-id="${esc(s.id)}" data-fate="${label}">Inscribe in the Ledger</button>` : ''}</div></div>`;
 }
 
 function endScreen(o: { title: string; cls?: string; intro: string; cards: Card[]; ending: string; buttons: string; fresh: string[] }) {
   app.onclick = null;
   app.onchange = null;
+  const plate = o.ending || 'fell';
   app.innerHTML = `<div class="over ${o.cls ?? ''}" data-ending="${esc(o.ending)}">
+    <div class="plate p-${esc(plate)}" aria-hidden="true"><i style="background-image:url(${spriteUrl(plate === 'fell' ? 'bg_mid' : 'bg_far')})"></i><i style="background-image:url(${artUrl(`end_${plate}`)})"></i></div>
     <h1>${esc(o.title)}</h1>
     <p class="sub">${dateLabel(1)} – ${dateLabel()} · ${G.day} days · ${G.stats.kills} of the Turned put down · ${G.stats.headshots} headshots · seed ${G.seed}</p>
-    ${o.intro ? `<p class="epi" style="max-width:46em;margin:1em 0 1.5em;line-height:1.55">${esc(o.intro)}</p>` : ''}
+    ${o.intro ? `<p class="epi">${esc(o.intro)}</p>` : ''}
     ${scoreHtml(o.fresh)}
     <h2>What became of them</h2>
-    <p class="dim" style="margin:.2em 0 .6em">Inscribe up to two names in the Ledger. Their people may come to the gate in another November.</p>
+    <p class="dim inscribe-note">Inscribe up to two names in the Ledger. Their people may come to the gate in another November.</p>
     <div class="graves">${o.cards.map((c) => cardHtml(c, o.ending)).join('')}</div>
     <h2>The chronicle</h2>
     <div class="chron">${G.chronicle.map((e) => `<p class="ce ${e.kind}"><b>${dateLabel(e.day)}.</b> ${esc(e.text)}</p>`).join('')}</div>
@@ -564,9 +569,9 @@ function crossing(fell: boolean) {
     intro: `They came across the St. Aubin in the dark, hundreds of them, the ice booming under their weight. ${fell ? 'They went through the house on Ferry Road like water through a net. Whoever lived did it hiding in the root cellar, listening to them walk overhead until dawn.' : 'In the morning the house on Ferry Road was still standing.'} ${alive.map(displayName).join(', ')} saw the first light of December. ${G.graves.length ? `Behind the house: ${G.graves.map(first).join(', ')}.` : 'Nobody is buried behind the house. Nobody.'} The ice will hold until April.`,
     cards: [...alive.map((s) => ({ s, f: 'held' as Fate })), ...evacuees().map((s) => ({ s, f: 'went' as Fate })), ...graveCards()],
     fresh: [],
-    buttons: `<div style="display:flex;gap:1em;flex-wrap:wrap;margin:1.2em 0">
-      <button data-act="endure">Endure the winter<small style="display:block;opacity:.7">Endless mode: hold the house as long as you can. Spring comes on day ${SPRING_DAY}.</small></button>
-      <button data-act="closeledger">Close the ledger<small style="display:block;opacity:.7">End the story here, with the epilogue.</small></button></div>`,
+    buttons: `<div class="endchoice">
+      <button data-act="endure">Endure the winter<small>Endless mode: hold the house as long as you can. Spring comes on day ${SPRING_DAY}.</small></button>
+      <button data-act="closeledger">Close the ledger<small>End the story here, with the epilogue.</small></button></div>`,
   });
   endRender();
 }
@@ -593,7 +598,7 @@ function epilogue() {
     title: E.title, cls: 'epilogue', ending, fresh,
     intro: E.text(went, stayed) + (ev.length ? ` Somewhere downriver, ${ev.map(first).join(' and ')} got off Old Peltier's boat at his sister's dock in Ashby, and never once spoke about the seat.` : ''),
     cards,
-    buttons: '<button data-act="again">Begin again</button>',
+    buttons: '<div class="endchoice"><button class="go" data-act="again">Begin again</button></div>',
   });
   endRender();
 }
@@ -606,7 +611,7 @@ function gameOver() {
     title: 'The house on Ferry Road', ending: '', fresh,
     intro: evacuees().length ? `Nobody is left in the house on Ferry Road. ${evacuees().map(first).join(' and ')} got out on Old Peltier's boat, and lived.` : '',
     cards: [...evacuees().map((s) => ({ s, f: 'went' as Fate })), ...graveCards()],
-    buttons: '<button data-act="again">Begin again</button>',
+    buttons: '<div class="endchoice"><button class="go" data-act="again">Begin again</button></div>',
   });
   endRender();
 }
@@ -623,7 +628,7 @@ function openLedger() {
       <h3>Boons for the next run</h3>
       ${BOONS.map((b) => {
         const un = L.unlocked.includes(b.id), on = L.chosen.includes(b.id);
-        return `<p><button class="mute" data-act="boon" data-id="${b.id}" ${un ? '' : 'disabled'} aria-pressed="${on}">${un ? (on ? '☑' : '☐') : '🔒'} ${esc(b.name)}</button> <span class="dim">${esc(un ? b.desc : `Locked. ${b.how}`)}</span></p>`;
+        return `<p><button class="mute" data-act="boon" data-id="${b.id}" ${un ? '' : 'disabled'} aria-pressed="${on}">${un ? (on ? '☑' : '☐') : '☐'} ${esc(b.name)}</button> <span class="dim">${esc(un ? b.desc : `Locked. ${b.how}`)}</span></p>`;
       }).join('')}
       <h3>Names</h3>
       ${L.entries.length ? L.entries.slice().reverse().map((e) => `<div class="doc"><b>${esc(e.name)}</b>, ${e.age} <span class="dim">· ${esc(e.fate)} · ${e.days} days · ${e.kills} put down${e.heirloom ? ` · carried "${esc(e.heirloom.name)}"` : ''}</span><p>${esc(e.tale)}</p></div>`).join('') : '<p class="dim">No names yet. At the end of a run, inscribe up to two survivors here. Their people may come to the gate.</p>'}
