@@ -6,6 +6,9 @@
 import './deploy.css';
 import { TRAPS, type Placement, type TrapDef, placementProblem, combos, trapHalfWidth } from '../data/traps';
 import { spriteUrl, spriteExists, img } from '../assets';
+import { ZOMBIES } from '../data/zombies';
+import { RES_ICON } from '../data/world';
+import { tip, chip } from './kit';
 
 /** The road's asphalt: the bottom band of the night backdrop (bg_mid), tiled down with every other
  *  copy mirrored so it never seams, as a data URL (cached). null until the backdrop has loaded. */
@@ -59,6 +62,16 @@ const TRIGGER_LABEL: Record<TrapDef['trigger'], string> = {
   manual: 'pulled by hand',
   always: 'works all night',
 };
+const TRIGGER_SHORT: Record<TrapDef['trigger'], string> = { step: 'underfoot', shot: 'shoot it', timer: 'burns down', manual: 'by hand', always: 'all night' };
+const HOW_TO = 'Pick a kit, then tap a lane, or drag it onto the road.<br>Drag a placed trap to move it; tap it to see it or take it up.<br>Arrow keys nudge the selected trap; Delete takes it up.';
+
+/** A Turned as a small portrait (its first sprite), its name on hover; struck through when the trap is poor on it. */
+function turnedPic(id: string, bad: boolean): string {
+  const z = ZOMBIES[id];
+  const name = id === 'tunneler' ? 'Drag (tunnelling)' : z?.name ?? id;
+  const src = z?.sprites[0] ? spriteUrl(z.sprites[0]) : '';
+  return `<span class="dep-z${bad ? ' bad' : ''}"${tip(`<b>${esc(name)}</b>: ${bad ? 'poor against' : 'good against'}`)}>${src ? `<img src="${src}" alt="${esc(name)}" draggable="false">` : esc(name)}</span>`;
+}
 
 export function renderDeploy(root: HTMLElement, opts: DeployOpts): DeployHandle {
   const lanes = opts.laneCount ?? 4;
@@ -80,8 +93,7 @@ export function renderDeploy(root: HTMLElement, opts: DeployOpts): DeployHandle 
   el.tabIndex = -1;
   root.appendChild(el);
   el.innerHTML = `
-    <header class="dep-h"><h2>${esc(opts.title ?? 'Dusk. The road.')}</h2><span class="dep-count"></span></header>
-    <p class="dep-help">Pick a kit, then tap a lane, or drag it onto the road. Drag a placed trap to move it; tap it to see it or take it up.</p>
+    <header class="dep-h"><h2>${esc(opts.title ?? 'Dusk. The road.')}<span class="qi"${tip(HOW_TO)} aria-label="How to place traps">?</span></h2><span class="dep-count"></span></header>
     <div class="dep-kits" role="toolbar" aria-label="Trap kits"></div>
     <div class="dep-scroll"><div class="dep-strip">
       <div class="dep-scene"><img class="dep-wallimg" alt="" draggable="false"><div class="dep-pegs"></div></div>
@@ -181,21 +193,47 @@ export function renderDeploy(root: HTMLElement, opts: DeployOpts): DeployHandle 
     // palette
     const ids = Object.keys(TRAPS).filter((id) => (opts.stock[id] ?? 0) > 0);
     kitsEl.innerHTML = ids.length
-      ? ids.map((id) => { const n = avail(id); return `<button type="button" class="dep-kit${kit === id ? ' on' : ''}" data-kit="${id}" ${n <= 0 ? 'aria-disabled="true"' : ''} title="${esc(TRAPS[id].niche)}"><img src="${spriteUrl(TRAPS[id].icon)}" alt="" draggable="false"><span>${esc(TRAPS[id].name)}</span><b>${n}</b></button>`; }).join('')
+      ? ids.map((id) => { const n = avail(id); return `<button type="button" class="dep-kit${kit === id ? ' on' : ''}" data-kit="${id}" ${n <= 0 ? 'aria-disabled="true"' : ''} ${tip(`<b>${esc(TRAPS[id].name)}</b><br>${esc(TRAPS[id].niche)}`)}><img src="${spriteUrl(TRAPS[id].icon)}" alt="" draggable="false"><span>${esc(TRAPS[id].name)}</span><b>${n}</b></button>`; }).join('')
       : '<p class="dep-none">No kits made. Traps are crafted at the workbench, forge, still and generator.</p>';
     countEl.textContent = `${placed.length} / ${opts.placementsAllowed} placed`;
     countEl.classList.toggle('full', placed.length >= opts.placementsAllowed);
-    msgEl.textContent = msg;
-    // info card
+    msgEl.textContent = msg || (placed.length ? '' : 'Pick a kit, then tap the road.');
+    msgEl.classList.toggle('idle', !msg);
+    // the selected trap: picture, name, a row of chips, who it is good and poor on; the prose on hover
     const it = act ? TRAPS[act] : null;
-    infoEl.innerHTML = it ? `<img src="${spriteUrl(it.icon)}" alt=""><div><b>${esc(it.name)}</b> <span class="dep-niche">${esc(it.niche)}</span>
-      <p>${esc(it.desc)}</p>
-      <p class="dep-meta">${esc(TRIGGER_LABEL[it.trigger])}${it.key ? ` [${it.key}]` : ''}${it.area.allLanes ? ' · all lanes' : ' · one lane'} · ${it.layer === 'wall' ? 'at the wall only' : `${it.minD}–${it.maxD} out`} · ${it.noise >= 8 ? 'loud' : it.noise >= 3 ? 'audible' : 'quiet'} · ${it.retrieve === 'yes' ? 'comes back at dawn' : it.retrieve === 'partial' ? 'may come back' : 'used up'}${it.upkeep ? ` · ${Object.entries(it.upkeep).map(([r, n]) => `${n} ${r}`).join(', ')} a night` : ''}</p>
-      <p class="dep-counter"><b>Good on</b> ${it.good.join(', ') || '—'} · <b>poor on</b> ${it.bad.join(', ') || '—'}. ${esc(it.counter)}</p>
-      ${sel >= 0 && !drag && placed[sel] ? '<button type="button" class="dep-remove">Take it up</button>' : ''}</div>` : '';
-    // summary
+    infoEl.innerHTML = it ? infoHtml(it, sel >= 0 && !drag && !!placed[sel]) : '';
+    // tonight's road: one chip per placement, nearest first; a tap selects it
     const cs = combos(placed);
-    sumEl.innerHTML = placed.length ? `<h3>Tonight's road</h3><ol>${placed.map((p) => ({ p, d: p.x - wallX })).sort((a, b) => a.d - b.d).map(({ p, d }) => `<li>${esc(TRAPS[p.trap].name)} <span>${TRAPS[p.trap].layer === 'wall' ? 'at the wall' : `${d} out`}${TRAPS[p.trap].area.allLanes ? ', across the road' : `, lane ${p.lane + 1}`}</span></li>`).join('')}</ol>${cs.length ? `<ul class="dep-combos">${cs.map((c) => `<li>${esc(c)}</li>`).join('')}</ul>` : ''}` : '<h3>Tonight\'s road</h3><p class="dep-none">Nothing on the road yet.</p>';
+    sumEl.innerHTML = placed.length
+      ? `<div class="dep-row"><span class="t-xs">Tonight</span>${placed.map((p, i) => ({ p, i, d: p.x - wallX })).sort((a, b) => a.d - b.d).map(({ p, i, d }) => {
+          const t = TRAPS[p.trap];
+          const wall = t.layer === 'wall';
+          const where = wall ? 'at the wall' : `${d} out${t.area.allLanes ? ', across the road' : `, lane ${p.lane + 1}`}`;
+          return `<button type="button" class="chip dep-pl${i === sel ? ' on' : ''}" data-sel="${i}"${tip(`<b>${esc(t.name)}</b> ${where}`)}><img src="${spriteUrl(t.icon)}" alt="${esc(t.name)}" draggable="false"><b>${wall ? 'wall' : d}</b>${wall || t.area.allLanes ? '' : `<i>L${p.lane + 1}</i>`}</button>`;
+        }).join('')}</div>${cs.length ? `<div class="dep-row">${cs.map((c) => `<span class="chip good dep-combo"${tip(esc(c))}><b>combo</b> ${esc(c.split(/[:.]/)[0])}</span>`).join('')}</div>` : ''}`
+      : '';
+  }
+
+  function infoHtml(it: TrapDef, placedSel: boolean): string {
+    const noise = it.noise >= 8 ? 'loud' : it.noise >= 3 ? 'audible' : 'quiet';
+    const back = it.retrieve === 'yes' ? 'reusable' : it.retrieve === 'partial' ? 'may return' : 'one use';
+    const upkeep = it.upkeep ? Object.entries(it.upkeep).map(([r, n]) => `<span class="chip"${tip(`Burns ${n} ${esc(r)} a night`)}><img class="ico" src="${spriteUrl(RES_ICON[r as keyof typeof RES_ICON] ?? 'icon_parts')}" alt="${esc(r)}"><b>${n}/night</b></span>`) : [];
+    const chips = [
+      chip('', TRIGGER_SHORT[it.trigger] + (it.key ? ` [${it.key}]` : ''), esc(TRIGGER_LABEL[it.trigger] + (it.autoWhen ? `; fires on its own when ${it.autoWhen}` : ''))),
+      chip('', it.area.allLanes ? 'all lanes' : '1 lane', it.area.allLanes ? 'Covers the whole road' : 'One lane only'),
+      chip('st_wall', it.layer === 'wall' ? 'wall' : `${it.minD}–${it.maxD}`, it.layer === 'wall' ? 'Set on the wall face only' : `Sits ${it.minD}–${it.maxD} out from the wall`),
+      chip('st_noise', noise, `Noise ${it.noise}: ${noise === 'loud' ? 'draws stragglers up the road' : noise === 'audible' ? 'some will hear it' : 'barely a sound'}`, noise === 'loud' ? 'warn' : ''),
+      chip('st_time', back, it.retrieve === 'yes' ? 'Comes back at dawn if not spent' : it.retrieve === 'partial' ? 'May come back at dawn' : 'Used up when it goes off'),
+      ...upkeep,
+    ].join('');
+    const vs = (ids: string[], bad: boolean) => (ids.length ? ids.map((z) => turnedPic(z, bad)).join('') : '<span class="t-s">—</span>');
+    return `<img class="dep-ci" src="${spriteUrl(it.icon)}" alt=""${tip(esc(it.desc))}>
+      <div class="dep-cm">
+        <div class="dep-ct"><b class="t-l"${tip(esc(it.desc))}>${esc(it.name)}</b> <span class="t-s dep-niche">${esc(it.niche)}</span></div>
+        <div class="chips">${chips}</div>
+        <div class="dep-vs"><span class="dep-vg"><span class="t-xs">good vs</span>${vs(it.good, false)}</span><span class="dep-vg"><span class="t-xs">poor vs</span>${vs(it.bad, true)}<span class="qi"${tip(esc(it.counter))} aria-label="How the Turned beat it">?</span></span></div>
+      </div>
+      ${placedSel ? '<button type="button" class="dep-remove">Take it up</button>' : ''}`;
   }
 
   function say(m: string) { msg = m; msgEl.textContent = m; }
@@ -306,6 +344,8 @@ export function renderDeploy(root: HTMLElement, opts: DeployOpts): DeployHandle 
 
   el.addEventListener('click', (e) => {
     const t = e.target as HTMLElement;
+    const pl = t.closest('.dep-pl') as HTMLElement | null;
+    if (pl) { sel = Number(pl.dataset.sel); kit = null; say(''); draw(); return; }
     if (t.closest('.dep-remove') && sel >= 0) { const n = TRAPS[placed[sel].trap].name; placed.splice(sel, 1); sel = -1; say(`${n} taken up.`); draw(); }
     else if (t.closest('.dep-clear')) { placed.length = 0; sel = -1; kit = null; say('Everything taken up.'); draw(); }
     else if (t.closest('.dep-done')) opts.onDone(placed.map((p) => ({ ...p })));
