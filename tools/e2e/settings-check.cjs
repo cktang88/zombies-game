@@ -149,6 +149,17 @@ const ok = (cond, what) => { console.log(`${cond ? 'ok  ' : 'FAIL'} ${what}`); i
   ok((await diff("B.hitMark = { kind: 'head', t: 0.18, kill: true }; B.mouse.x = 640; B.mouse.y = 360;", 'hitMarkers', [600, 320, 80, 80])) > 0.5, 'video: hit markers draw (and stop drawing when off)');
   ok((await diff('B.killFlash = 0.16; B.wallFlash = 0;', 'flashes', [0, 0, 1280, 60])) > 0.3, 'video: screen flashes show (and stop when off)');
   ok((await diff('', 'threatRibbon', [0, 0, 1280, 40])) > 0.3, 'gameplay: threat ribbon shows (and hides when off)');
+  // key hints: drawn only while unpaused (paused shows the whole key sheet), so draw a frame by hand
+  const kh = await b(() => {
+    const B = window.__battle, g = B.canvas.getContext('2d'), H = B.canvas.height;
+    const shot = (on) => { globalThis.__settings.set('keyHints', on); B.paused = false; B.draw(); B.paused = true; return Array.from(g.getImageData(0, H - 30, 520, 30).data); };
+    B.paused = true;
+    const a = shot(true), c = shot(false), a2 = shot(true);
+    let d = 0, d0 = 0; for (let i = 0; i < a.length; i++) { d += Math.abs(a[i] - c[i]); d0 += Math.abs(a[i] - a2[i]); }
+    B.paused = false;
+    return { on: globalThis.__settings.get().keyHints, d: d / a.length, d0: d0 / a.length };
+  });
+  ok(kh.on === true && kh.d > 0.3 && kh.d > kh.d0 * 4, `gameplay: key hints at the wall show (and hide when off) ${JSON.stringify(kh)}`);
   // weakspot rings need a Turned on screen
   await b(() => { const B = window.__battle; for (let i = 0; i < 6; i++) B.spawn('pulper'); B.zombies.forEach((z, i) => { if (z.state !== 'dying') z.x = 600 + (i % 6) * 70; }); B.update(0.016); });
   await page.waitForTimeout(400);
