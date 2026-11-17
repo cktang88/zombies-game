@@ -40,12 +40,23 @@ interface RigSrc {
  * `len` × the head bone (neck → crown) from wrist to fingertip.
  */
 interface HandsSrc {
-  source: string;
-  refPose: string;
+  /** a shared hand library instead of a per-character sheet: tools/rigs/src/hands_<lib>.png, five
+   * hands wrist-left in a row (grip, support, open, fist, pinch), poses found automatically */
+  lib?: HandLib;
+  source?: string;
+  refPose?: string;
   /** open-hand length as a fraction of the head bone (default 0.42 ≈ half the chin-to-crown height) */
   len?: number;
-  poses: Record<string, HandPose>;
+  poses?: Record<string, HandPose>;
+  /** recolour toward this skin tone (multiply-ish blend) by `tintA` (0..1, default 0.35) */
+  tint?: string;
+  tintA?: number;
+  /** brightness multiplier for the library art (default 1) */
+  bright?: number;
 }
+/** Shared hand libraries (tools/sprites-parts-hands.json): one sheet per skin tone / glove. */
+type HandLib = 'light' | 'medium' | 'dark' | 'glove';
+const LIB_POSES = ['grip', 'support', 'open', 'fist', 'pinch'];
 interface HandPose {
   index: number; wrist: P; tip: P;
   /** palm point (what the hand holds); closed poses default to the centroid of the cut hand */
@@ -274,8 +285,14 @@ async function segment(rig: RigSrc) {
   // 4. alternate hand poses from a hands sheet (connected components, left to right)
   if (rig.hands) {
     const H = rig.hands;
-    const hs = await loadRaw(H.source);
+    const hs = await loadRaw(H.lib ? `hands_${H.lib}` : H.source!);
     const comps = components(hs);
+    if (H.lib) {
+      if (comps.length !== LIB_POSES.length) throw new Error(`hands_${H.lib}: ${comps.length} hands, want ${LIB_POSES.length}`);
+      H.refPose = 'open';
+      H.poses = libPoses(hs, comps);
+      recolour(hs, H);
+    }
     /** the pose's component, cut at the wrist line */
     const cutMask = (hp: HandPose): Uint8Array | null => {
       const m0 = comps[hp.index];
@@ -292,7 +309,7 @@ async function segment(rig: RigSrc) {
       return m;
     };
     // scale: the open reference hand, wrist → farthest fingertip, = len × the head bone
-    const ref = H.poses[H.refPose];
+    const ref = H.poses![H.refPose!];
     const refM = cutMask(ref)!;
     let refLen = 0;
     {
@@ -302,7 +319,7 @@ async function segment(rig: RigSrc) {
     // (a rig whose crown joint sits low, e.g. under a hood, still gets hands of a body its height)
     const headLen = Math.max(Math.hypot(J.headTop[0] - J.neck[0], J.headTop[1] - J.neck[1]) * s, rig.height * 0.19);
     const hsScale = ((H.len ?? 0.42) * headLen) / refLen;
-    for (const [pose, hp] of Object.entries(H.poses)) {
+    for (const [pose, hp] of Object.entries(H.poses!)) {
       const m = cutMask(hp);
       if (!m) { console.warn('no hand component', pose); continue; }
       let g: P = hp.grip ?? hp.wrist;
@@ -395,6 +412,60 @@ function inpaint(data: Buffer, w: number, hole: number[], region: Uint8Array) {
   // anything unreachable (no torso neighbour at all) takes the region's median tone
   const med = lum[lum.length >> 1] ?? 240;
   for (const i of hole) if (!filled[i]) { data[i * 4] = data[i * 4 + 1] = data[i * 4 + 2] = Math.round(med / 3); data[i * 4 + 3] = 255; }
+}
+
+/**
+ * Pose points of a library sheet (every hand wrist-left, fingers right): wrist = the middle of the
+ * leftmost columns, tip = the middle of the rightmost ones; grip (what the hand holds) per pose:
+ * the trigger hand's curled fingers (left two thirds), the support hand's cup (above the palm),
+ * the pinch's thumb-and-index point (where the art's cartridge was: erased, the rig draws its own).
+ */
+function libPoses(hs: { data: Buffer; w: number; h: number }, comps: Uint8Array[]): Record<string, HandPose> {
+  const out: Record<string, HandPose> = {};
+  comps.forEach((m, index) => {
+    const pose = LIB_POSES[index];
+    let x0 = 1e9, x1 = -1, y0 = 1e9, y1 = -1;
+    for (let i = 0; i < m.length; i++) if (m[i]) { const x = i % hs.w, y = (i / hs.w) | 0; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+    const W = x1 - x0, Hh = y1 - y0;
+    const band = (a: number, b: number): P => {
+      let sx = 0, sy = 0, n = 0;
+      for (let i = 0; i < m.length; i++) if (m[i]) { const x = i % hs.w; if (x >= x0 + W * a && x <= x0 + W * b) { sx += x; sy += (i / hs.w) | 0; n++; } }
+      return [sx / n, sy / n];
+    };
+    let grip: P | undefined;
+    if (pose === 'pinch') {
+      // the brass cartridge in the art: saturated yellow-orange pixels; remember where, then erase
+      let sx = 0, sy = 0, n = 0;
+      for (let i = 0; i < m.length; i++) if (m[i]) {
+        const r = hs.data[i * 4], g = hs.data[i * 4 + 1], b = hs.data[i * 4 + 2];
+        const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+        if (mx > 90 && (mx - mn) / mx > 0.42 && r >= g && g > b * 1.15) { sx += i % hs.w; sy += (i / hs.w) | 0; n++; m[i] = 0; hs.data[i * 4 + 3] = 0; }
+      }
+      keepLargest(m, hs.w, hs.h);
+      if (n > 20) grip = [sx / n, sy / n];
+    }
+    const wrist = band(0, 0.07), tip = band(0.93, 1);
+    if (pose === 'grip') grip = band(0.12, 0.6);
+    else if (pose === 'support') { const c = band(0.25, 0.75); grip = [c[0], c[1] - Hh * 0.18]; }
+    else if (!grip) grip = band(0.2, 0.8);
+    out[pose] = { index, wrist, tip, grip, cut: -0.02 };
+  });
+  return out;
+}
+/** Library hands toward a character's skin tone: brightness, then a blend toward `tint`'s hue. */
+function recolour(hs: { data: Buffer; w: number; h: number }, H: HandsSrc) {
+  const d = hs.data, k = H.bright ?? 1;
+  const t = H.tint ? [parseInt(H.tint.slice(1, 3), 16), parseInt(H.tint.slice(3, 5), 16), parseInt(H.tint.slice(5, 7), 16)] : null;
+  const a = H.tintA ?? 0.35;
+  for (let i = 0; i < d.length; i += 4) {
+    if (!d[i + 3]) continue;
+    for (let c = 0; c < 3; c++) {
+      let v = d[i + c] * k;
+      // multiply by the tint normalised to its own luminance keeps the shading, shifts the hue
+      if (t) { const L = (t[0] + t[1] + t[2]) / 3 || 1; v = v * (1 - a) + v * (t[c] / L) * a; }
+      d[i + c] = Math.max(0, Math.min(255, Math.round(v)));
+    }
+  }
 }
 
 /** Drop specks: keep only the largest 8-connected component of a mask. */

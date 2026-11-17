@@ -34,6 +34,8 @@ export interface GunAsset {
   full: CanvasImageSource; // the gun as drawn in the icon
   mag?: HTMLCanvasElement; // the magazine on its own
   w: number; h: number;
+  /** long guns: icon y of the top of the stock where the cheek rests (the comb), measured from the art */
+  combY?: number;
 }
 
 const base = (): string => {
@@ -196,6 +198,7 @@ export function loadGun(defId: string): Promise<GunAsset | null> {
         g.mag = mag;
         g.img = body;
       }
+      if (a.butt) g.combY = combOf(im, a);
       gunCache.set(defId, g);
       return g;
     })();
@@ -281,3 +284,22 @@ export function bakedIcon(id: string, src: CanvasImageSource, w: number, h: numb
 
 /** Load every gun with anchors (for a dev page / preloading). */
 export const loadAllGuns = () => Promise.all(Object.keys(WEAPON_ANCHORS).map(loadGun));
+
+/** The comb: the highest the stock's top edge gets in the middle half between the butt and the
+ * grip (the cheek rests on the stock's top line, not on the butt anchor's height). */
+function combOf(im: HTMLImageElement, a: WeaponAnchors): number | undefined {
+  try {
+    const c = document.createElement('canvas');
+    c.width = im.width; c.height = im.height;
+    const x = c.getContext('2d', { willReadFrequently: true })!;
+    x.drawImage(im, 0, 0);
+    const d = x.getImageData(0, 0, im.width, im.height).data;
+    const b = a.butt![0], gx = a.grip[0];
+    const lo = Math.round(Math.min(b + (gx - b) * 0.2, b + (gx - b) * 0.7)), hi = Math.round(Math.max(b + (gx - b) * 0.2, b + (gx - b) * 0.7));
+    let top = 1e9;
+    for (let cx = Math.max(0, lo); cx <= Math.min(im.width - 1, hi); cx++) {
+      for (let y = 0; y < im.height; y++) if (d[(y * im.width + cx) * 4 + 3] > 100) { top = Math.min(top, y); break; }
+    }
+    return top < 1e9 ? top : undefined;
+  } catch { return undefined; }
+}

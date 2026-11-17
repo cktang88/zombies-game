@@ -507,7 +507,7 @@ export class Rig {
       this.gx = lerp(gX, rX, rw) - Math.cos(this.ga) * this.recoil * 0.9;
       this.gy = lerp(gY, rY, rw) - Math.sin(this.ga) * this.recoil * 0.9;
       // cheek weld: the head drops onto the comb of the stock; what it can't reach, the gun comes up to
-      if (st.cheek && raise > 0.01 && a!.butt) this.cheekWeld(loc(a!.butt), muz, raise);
+      if (st.cheek && raise > 0.01 && a!.butt) this.cheekWeld(loc(a!.butt), muz, gun.combY !== undefined ? loc([a!.butt[0], gun.combY]) : null, raise);
       // default hand targets
       const gp = (p: [number, number], dx = 0, dy = 0) => this.gunPt(loc(p), dx, dy);
       if (a!.hold === 'bow') {
@@ -573,15 +573,15 @@ export class Rig {
    * raised by the comb height); if the chin can't drop that far, lift the gun the rest of the way.
    * butt / muz: gun-local points. w: blend (aim pose weight).
    */
-  private cheekWeld(butt: [number, number], muz: [number, number], w: number) {
+  private cheekWeld(butt: [number, number], muz: [number, number], combPt: [number, number] | null, w: number) {
     const g = this.geo!, A = this.ja;
     const nx = this.jx[HEAD], ny = this.jy[HEAD];
     const [bx, by] = this.gunPt(butt), [mx, my] = this.gunPt(muz);
     let dx = mx - bx, dy = my - by;
     const dl = Math.hypot(dx, dy) || 1; dx /= dl; dy /= dl;
     const upx = dy, upy = -dx; // the up-normal of the gun line (facing right)
-    const comb = 3.5;
-    const lx = bx + upx * comb, ly = by + upy * comb;
+    // the comb line: parallel to the bore through the stock's top edge (else a guess above the butt)
+    const [lx, ly] = combPt ? this.gunPt(combPt) : [bx + upx * 3.5, by + upy * 3.5];
     // cheek: a third up the head bone, forward of it (the face side)
     const ca = g.headLen * 0.22, cf = g.headLen * 0.3;
     const f = (th: number) => {

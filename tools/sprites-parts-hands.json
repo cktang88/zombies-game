@@ -1,0 +1,27 @@
+{
+  "model": "google/gemini-3.1-flash-lite-image",
+  "style": "Drawn exactly in the style of the reference image: mature graphic-novel cel-shading, thick confident black ink outlines, two-tone hard-edged shadows, gritty texture, muted desaturated palette, realistic adult proportions.",
+  "key": "Isolated on a perfectly flat solid pure magenta #FF00FF background, no cast shadow, no text, no labels, no numbers, no border, no objects.",
+  "parts": [
+    {
+      "id": "hands_light",
+      "ref": "surv_rifle",
+      "prompt": "A reference sheet of FIVE separate bare human hands with LIGHT pale skin, no sleeves, no cuffs, no gloves, each hand ending cleanly at the wrist, all five at the same life-size scale, laid out in ONE single horizontal row with wide magenta gaps between them, every hand drawn in strict side view with the WRIST ON THE LEFT and the fingers toward the RIGHT: 1 a right hand seen from the back of the hand, three fingers wrapped round an invisible vertical pistol grip, the index finger held straight forward along an invisible trigger guard; 2 a left hand seen from the thumb side, palm facing up, fingers curled upward as if cradling an invisible rifle fore-end from below; 3 a relaxed open hand, fingers together and slightly curved, seen from the back; 4 a closed fist seen from the side, knuckles to the right; 5 a hand pinching a small brass cartridge between thumb and index finger."
+    },
+    {
+      "id": "hands_medium",
+      "ref": "surv_rifle",
+      "prompt": "A reference sheet of FIVE separate bare human hands with MEDIUM TAN olive-brown skin, no sleeves, no cuffs, no gloves, each hand ending cleanly at the wrist, all five at the same life-size scale, laid out in ONE single horizontal row with wide magenta gaps between them, every hand drawn in strict side view with the WRIST ON THE LEFT and the fingers toward the RIGHT: 1 a right hand seen from the back of the hand, three fingers wrapped round an invisible vertical pistol grip, the index finger held straight forward along an invisible trigger guard; 2 a left hand seen from the thumb side, palm facing up, fingers curled upward as if cradling an invisible rifle fore-end from below; 3 a relaxed open hand, fingers together and slightly curved, seen from the back; 4 a closed fist seen from the side, knuckles to the right; 5 a hand pinching a small brass cartridge between thumb and index finger."
+    },
+    {
+      "id": "hands_dark",
+      "ref": "surv_rifle",
+      "prompt": "A reference sheet of FIVE separate bare human hands with DARK BROWN skin (a Black man's hands), no sleeves, no cuffs, no gloves, each hand ending cleanly at the wrist, all five at the same life-size scale, laid out in ONE single horizontal row with wide magenta gaps between them, every hand drawn in strict side view with the WRIST ON THE LEFT and the fingers toward the RIGHT: 1 a right hand seen from the back of the hand, three fingers wrapped round an invisible vertical pistol grip, the index finger held straight forward along an invisible trigger guard; 2 a left hand seen from the thumb side, palm facing up, fingers curled upward as if cradling an invisible rifle fore-end from below; 3 a relaxed open hand, fingers together and slightly curved, seen from the back; 4 a closed fist seen from the side, knuckles to the right; 5 a hand pinching a small brass cartridge between thumb and index finger."
+    },
+    {
+      "id": "hands_glove",
+      "ref": "surv_rifle",
+      "prompt": "A reference sheet of FIVE separate hands in worn dark brown leather work gloves, no sleeves, no cuffs, each glove ending cleanly at the wrist, all five at the same life-size scale, laid out in ONE single horizontal row with wide magenta gaps between them, every hand drawn in strict side view with the WRIST ON THE LEFT and the fingers toward the RIGHT: 1 a right gloved hand seen from the back of the hand, three fingers wrapped round an invisible vertical pistol grip, the index finger held straight forward along an invisible trigger guard; 2 a left gloved hand seen from the thumb side, palm facing up, fingers curled upward as if cradling an invisible rifle fore-end from below; 3 a relaxed open gloved hand, fingers together and slightly curved, seen from the back; 4 a closed gloved fist seen from the side, knuckles to the right; 5 a gloved hand pinching a small brass cartridge between thumb and index finger."
+    }
+  ]
+}
