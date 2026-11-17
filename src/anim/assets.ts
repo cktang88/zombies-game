@@ -26,7 +26,7 @@ export interface RigMeta {
   /** aim units (docs/research/14 §3, tools/cut-unit.ts): weapon id → unit_<name> drawing of the torso,
    * head, both arms, hands and gun in the firing pose, drawn instead of those parts while aiming */
   aimUnits?: Record<string, string>;
-  /** filled at load from `aimUnits`: weapon id → the drawing (an atlas part named unit_<weapon>) */
+  /** filled at load from `aimUnits` (+ AIM_UNIT_SHARES): weapon id → the drawing (an atlas part named after the unit) */
   units?: Record<string, UnitDraw>;
 }
 /** One aim unit: its pelvis, neck and muzzle inside the drawing (rig units, from its top-left) and
@@ -140,15 +140,38 @@ async function withKit(im: HTMLImageElement, meta: RigMeta): Promise<HTMLCanvasE
   meta.kitArms = arms;
   return c;
 }
-/** The atlas with the rig's aim unit drawings stacked under it, as parts unit_<weapon>. */
+/**
+ * Which other guns may borrow a rig's aim unit (weapon id → guns drawn with that unit when the rig has none of
+ * its own for them). Only where the side-view silhouette at game scale is close enough that the drawn gun reads
+ * as the held one (same length class, same stock / grip shape, scope or no scope):
+ *   ar15     → carbine            (the same 5.56 platform: black, pistol grip, mag, collapsible stock)
+ *   hunting  → scoped             (scoped bolt rifles with a wooden stock)
+ *   lever    → r22, muzzle        (long unscoped wooden rifles)
+ *   pump     → coach              (long wooden-stock shotguns; a unit only shows while aiming, never in a reload)
+ *   service9 ↔ m1911              (full-size semi-auto pistols)
+ * Not shared: revolver (the cylinder), smg (no other gun of that size and shape: mp93 is a machine pistol),
+ * snake410 (silver receiver, black synthetic stock: reads as another gun), autoshot (black, pistol grip), pipe,
+ * lmg, launchers, bows (different silhouettes or holds).
+ */
+export const AIM_UNIT_SHARES: Record<string, string[]> = {
+  ar15: ['carbine'], hunting: ['scoped'], lever: ['r22', 'muzzle'], pump: ['coach'], service9: ['m1911'], m1911: ['service9'],
+};
+/** A rig's `aimUnits` with the AIM_UNIT_SHARES borrowers added (a rig's own unit for a gun always wins). */
+export function aimUnitsWithShares(own: Record<string, string>): Record<string, string> {
+  const out = { ...own };
+  for (const [w, n] of Object.entries(own)) for (const s of AIM_UNIT_SHARES[w] ?? []) if (!(s in out)) out[s] = n;
+  return out;
+}
+/** The atlas with the rig's aim unit drawings stacked under it, one part per drawing (named after the unit);
+ * every gun that uses a drawing (its own and the AIM_UNIT_SHARES borrowers) points at the same part. */
 async function withUnits(im: CanvasImageSource & { width: number; height: number }, meta: RigMeta): Promise<HTMLCanvasElement | null> {
   const got: [string, UnitDraw & { im: HTMLImageElement }][] = [];
-  for (const [weapon, n] of Object.entries(meta.aimUnits!)) {
+  for (const n of new Set(Object.values(meta.aimUnits!))) {
     const r = await fetch(`${base()}sprites/parts/${n}.json`).catch(() => null);
     const uim = r?.ok ? await loadImage(`${base()}sprites/parts/${n}.png`) : null;
     if (!r?.ok || !uim) continue;
     const j = (await r.json()) as Omit<UnitDraw, 'part'>;
-    got.push([weapon, { ...j, part: `unit_${weapon}`, im: uim }]);
+    got.push([n, { ...j, part: n, im: uim }]);
   }
   if (!got.length) return null;
   const c = document.createElement('canvas');
@@ -158,12 +181,16 @@ async function withUnits(im: CanvasImageSource & { width: number; height: number
   x.drawImage(im, 0, 0);
   let y = im.height;
   meta.units = {};
-  for (const [weapon, u] of got) {
+  const byName = new Map(got);
+  for (const [, u] of got) {
     x.drawImage(u.im, 0, y);
     const len = Math.hypot(u.neck[0] - u.pelvis[0], u.neck[1] - u.pelvis[1]);
     meta.parts[u.part] = { x: 0, y, w: u.im.width, h: u.im.height, px: u.pelvis[0], py: u.pelvis[1], tx: u.neck[0], ty: u.neck[1], rest: Math.atan2(u.neck[1] - u.pelvis[1], u.neck[0] - u.pelvis[0]), len };
-    meta.units[weapon] = { part: u.part, pelvis: u.pelvis, neck: u.neck, muzzle: u.muzzle, bore: u.bore };
     y += u.im.height;
+  }
+  for (const [weapon, n] of Object.entries(aimUnitsWithShares(meta.aimUnits!))) {
+    const u = byName.get(n);
+    if (u) meta.units[weapon] = { part: u.part, pelvis: u.pelvis, neck: u.neck, muzzle: u.muzzle, bore: u.bore };
   }
   return c;
 }
