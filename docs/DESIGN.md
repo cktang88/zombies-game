@@ -19,6 +19,16 @@ The aim is not a perfect run. It is a run you remember: the nurse who took off a
 4. **Grief, not gore.** Every one of the Turned was somebody's coworker. Kin at kitchen tables. Burials. Mercy. (Research 03, tone pillars.)
 5. **Cold is the clock.** The calendar runs toward the ice. Days get colder, fuel matters more, and the Crossing is coming.
 
+### Realism rule: "real, not annoying"
+Gun realism exists only where it creates a *decision* or a *feeling*, never a chore:
+- **Smart defaults.** [R] does the right thing automatically: a tactical reload when a round is chambered, fullest magazine first, and a retention reload when nothing threatens the wall. Advanced players can choose deliberately: hold [R] for a speed reload, which drops the mag.
+- **Malfunctions are rare and quick.** Most clear with a single tap-rack press, and they are telegraphed by cause (worn gun, cold, handloads). A double-feed is the rare punishing one. A jam never happens on the first shot of a night.
+- **Guards self-manage.** Survivors handle their own reloads, jams and heat according to skill. The player gives orders, not maintenance.
+- **Maintenance is one click.** "Oil all guns" is a single day task. No per-gun upkeep screens.
+- **Feedback over bookkeeping.** Audio cues (last round, heat hiss, stovepipe clunk) carry information, so the HUD stays light.
+- **Short effects.** Tinnitus muffles the sound for seconds, not minutes. Barrel heat recovers quickly once you stop firing.
+- **One setting.** A Realism setting: *Standard* is the default; *Hardcore* hides exact ammo counts, makes double-feeds more common, and makes speed reloads lose the mag. Every realism mechanic is checked against "is this fun the 50th time?"
+
 ## 3. Core loop
 
 ```
