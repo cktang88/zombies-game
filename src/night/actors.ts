@@ -741,10 +741,18 @@ export class BattleActors implements BattleHook {
     if (!rigsOn()) return [];
     return this.corpses.map((cp) => ({ y: cp.y + 0.2, f: () => {
       const t0 = performance.now();
-      const look = LOOK[cp.lane];
+      // the falling body eases into exactly the look it is baked with (bake(): shade + the rig's
+      // bakeCorpse brightness 0.55 / saturate 0.7 at 92%; the 35% shade tint folded in: 0.55 x 0.65), both drawn over darkness pass A, so it
+      // neither pops darker nor lighter when it settles into the road (4 steps: shared atlases)
+      const k = Math.min(1, Math.round((cp.t / 0.9) * 4) / 4);
+      const L0 = LOOK[cp.lane];
+      const look = k > 0 ? { ...L0, b: +(L0.b * (1 - 0.64 * k)).toFixed(3), s: +(L0.s * (1 - 0.3 * k)).toFixed(3) } : L0;
       applyLook(cp.rig, { look, variant: 0, lit: false, shade: false, rimColor: COOL, rimA: 0, rimDx: 0, rimDy: 0 }, cp.scale, cp.facing);
       cp.rig.overlay = null;
+      const ga = c.globalAlpha;
+      c.globalAlpha = ga * (1 - 0.08 * k);
       cp.rig.draw(c, cp.x, cp.y, cp.scale, cp.facing, undefined, this.cam);
+      c.globalAlpha = ga;
       this.rigMs += performance.now() - t0;
     } }));
   }
