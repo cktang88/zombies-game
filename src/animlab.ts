@@ -613,7 +613,7 @@ else if (params.has('closeup')) (async () => {
   closeupSetup();
   closeupPose();
   closeupRender();
-  (window as unknown as { __cu: unknown }).__cu = { render: closeupRender, actors: CU, measure: () => CU.map((a) => ({ label: a.label, m: measureArms(a.rig) })) };
+  (window as unknown as { __cu: unknown }).__cu = { render: closeupRender, actors: CU, measure: () => CU.map((a) => ({ label: a.label, m: measureArms(a.rig), unit: a.rig.unit?.part ?? null })) };
   const tick = () => { closeupRender(true); requestAnimationFrame(tick); };
   if (!params.has('still')) requestAnimationFrame(tick);
 })();

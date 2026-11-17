@@ -40,7 +40,10 @@ if (!pistol) {
   gp = [pocket[0] + (A.grip[0] - butt[0]) * k * fl, pocket[1] + (A.grip[1] - butt[1]) * k];
 } else gp = [sh[0] + (ua + fa) * 0.93, sh[1] - 4];
 const gpt = (p: P): P => [gp[0] + (p[0] - A.grip[0]) * k * fl, gp[1] + (p[1] - A.grip[1]) * k];
-const muzzle = gpt(A.muzzle), butt = A.butt ? gpt(A.butt) : gpt(A.grip);
+// `butt` (as tools/cut-unit.ts reads it): a point back along the BORE, i.e. the icon's own x axis (the icon is
+// drawn level, so the barrel is level in the template). Not the stock's butt: a stock drops below the bore line,
+// and a butt-to-muzzle line would tilt the unit's gun frame 5-8 degrees off the drawn barrel.
+const muzzle = gpt(A.muzzle), butt = gpt([A.muzzle[0] - 100 * fl, A.muzzle[1]]);
 /** elbow-down 2-bone IK (rig units); target pulled in to reach */
 function ik(s: P, t: P): [P, P] {
   let dx = t[0] - s[0], dy = t[1] - s[1];

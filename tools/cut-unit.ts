@@ -5,7 +5,8 @@
 // Points (source px): tools/rigs/src/aimunit_<rig>_<weapon>.points.json when present, else the template's
 // own (tools/rigs/src/aimguide_<rig>_<weapon>.json, scaled to the source size: the model keeps the
 // template's layout, so the gun lands where the template put it):
-//   { pelvis, neck, muzzle, butt (any point back along the bore), ppu? (source px per rig unit), cutY? }
+//   { pelvis?, neck?, muzzle?, butt? (any point back along the bore), ppu? (source px per rig unit), cutY?, degrey? }
+//   (keys left out come from the template)
 // Output: public/sprites/parts/unit_<rig>_<weapon>.png/.json at 1 px per rig unit (the atlas scale),
 //   json { pelvis, neck, muzzle, bore } in output px; bore = the barrel's angle in the drawing (rad).
 // --match: per-channel gain so the unit's mid-tones match the rig's own torso part (the model drifts
@@ -25,10 +26,41 @@ const W = info.width, H = info.height;
 const guide = JSON.parse(fs.readFileSync(path.join(ROOT, `tools/rigs/src/aimguide_${name}.json`), 'utf8'));
 const pf = path.join(ROOT, `tools/rigs/src/aimunit_${name}.points.json`);
 const gs = W / guide.w;
-const pts: { pelvis: P; neck: P; muzzle: P; butt: P; ppu: number; cutY?: number } = fs.existsSync(pf)
-  ? { ppu: guide.k * gs, ...JSON.parse(fs.readFileSync(pf, 'utf8')) }
-  : { pelvis: guide.pelvis.map((v: number) => v * gs), neck: guide.neck.map((v: number) => v * gs), muzzle: guide.muzzle.map((v: number) => v * gs), butt: guide.butt.map((v: number) => v * gs), ppu: guide.k * gs };
+// a points file may give only some keys (e.g. just cutY / degrey); the rest come from the template
+const pts: { pelvis: P; neck: P; muzzle: P; butt: P; ppu: number; cutY?: number; degrey?: boolean } = {
+  pelvis: guide.pelvis.map((v: number) => v * gs), neck: guide.neck.map((v: number) => v * gs), muzzle: guide.muzzle.map((v: number) => v * gs), butt: guide.butt.map((v: number) => v * gs), ppu: guide.k * gs,
+  ...(fs.existsSync(pf) ? JSON.parse(fs.readFileSync(pf, 'utf8')) : {}),
+};
 if (pts.cutY !== undefined) for (let y = Math.round(pts.cutY); y < H; y++) for (let x = 0; x < W; x++) data[(y * W + x) * 4 + 3] = 0;
+// degrey: the model sometimes leaves a piece of the template (a flat neutral-grey arm, hip or shadow) unpainted
+// behind the figure. Drop large connected areas of flat grey (r = g = b, mid values: the template's greys are
+// 5a..bd), plus a 2 px fringe of near-grey round them. Opt-in per unit: a white or grey garment would match too.
+if (pts.degrey) {
+  const flat = (i: number) => { const r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2]; return data[i * 4 + 3] > 0 && Math.max(r, g, b) - Math.min(r, g, b) <= 8 && r >= 110 && r <= 225; };
+  const seen = new Uint8Array(W * H), kill = new Uint8Array(W * H);
+  for (let i = 0; i < W * H; i++) {
+    if (seen[i] || !flat(i)) continue;
+    const comp: number[] = [], st = [i]; seen[i] = 1;
+    while (st.length) {
+      const j = st.pop()!; comp.push(j);
+      const x = j % W;
+      for (const k of [x > 0 ? j - 1 : -1, x < W - 1 ? j + 1 : -1, j - W, j + W]) if (k >= 0 && k < W * H && !seen[k] && flat(k)) { seen[k] = 1; st.push(k); }
+    }
+    if (comp.length >= 400) for (const j of comp) kill[j] = 1;
+  }
+  for (let pass = 0; pass < 2; pass++) {
+    const add: number[] = [];
+    for (let i = 0; i < W * H; i++) if (!kill[i] && data[i * 4 + 3] > 0) {
+      const r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2], x = i % W;
+      if (Math.max(r, g, b) - Math.min(r, g, b) > 24) continue;
+      if ((x > 0 && kill[i - 1]) || (x < W - 1 && kill[i + 1]) || (i >= W && kill[i - W]) || (i + W < W * H && kill[i + W])) add.push(i);
+    }
+    for (const i of add) kill[i] = 1;
+  }
+  let n = 0;
+  for (let i = 0; i < W * H; i++) if (kill[i]) { data[i * 4 + 3] = 0; n++; }
+  console.log(`degrey: dropped ${n} px of template grey`);
+}
 
 // drop specks: keep connected components (alpha > 100) of at least 1% of the largest
 const lab = new Int32Array(W * H).fill(-1), sizes: number[] = [];

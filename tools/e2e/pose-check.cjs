@@ -2,6 +2,9 @@
 // against real arm proportions and real shooting stances (src/anim/armcheck.ts ARM_TARGETS):
 // bone lengths, elbow angles, shoulder-to-wrist reach, and the trigger hand's distance ahead of the
 // shoulder (a "scrunched" arm fails). Exits 1 on any problem.
+// Poses where the rig draws an aim unit (src/anim/assets.ts aimUnits / AIM_UNIT_SHARES: head, arms, hands and
+// gun as ONE drawing) are skipped: its arm bones are still solved but not drawn, so they say nothing about the
+// picture. They are counted and listed as "unit" instead.
 //   npx vite build && npx vite preview --port 4192 &
 //   node tools/e2e/pose-check.cjs [url]
 const path = require('node:path');
@@ -19,21 +22,24 @@ const GUNS = ['ar15', 'hunting', 'pump', 'coach', 'smg', 'lmg', 'service9', 'rev
   const errs = [];
   page.on('pageerror', (e) => errs.push(String(e)));
   let n = 0, bad = 0;
+  const units = [];
   for (const gun of GUNS) {
     await page.goto(`${URL}animlab.html?closeup&still&w=${gun}&act=aim&h=158`);
     await page.waitForFunction(() => window.__cu && window.__cu.actors.length > 0, null, { timeout: 30000 });
     const rows = await page.evaluate(() => window.__cu.measure());
     for (const r of rows) {
+      if (r.unit) { units.push(`${r.label} (${r.unit})`); continue; }
       n++;
       if (!r.m) { bad++; console.log(`FAIL ${r.label}: no rig`); continue; }
       if (r.m.problems.length) { bad++; console.log(`FAIL ${r.label} [${r.m.stance}]: ${r.m.problems.join('; ')}`); }
     }
-    const s = rows.filter((r) => r.m).map((r) => r.m);
+    const s = rows.filter((r) => r.m && !r.unit).map((r) => r.m);
     const avg = (f) => (s.reduce((a, m) => a + f(m), 0) / Math.max(1, s.length));
-    console.log(`${gun.padEnd(9)} ${s.length} rigs · trigger elbow ${avg((m) => m.trigger.elbow).toFixed(0)}° reach ${avg((m) => m.trigger.reach).toFixed(2)} ahead ${avg((m) => m.trigger.fwd).toFixed(2)} H · support elbow ${avg((m) => m.support.elbow).toFixed(0)}° reach ${avg((m) => m.support.reach).toFixed(2)}`);
+    console.log(`${gun.padEnd(9)} ${s.length} rigs (${rows.length - s.length} drawn as aim units, skipped) · trigger elbow ${avg((m) => m.trigger.elbow).toFixed(0)}° reach ${avg((m) => m.trigger.reach).toFixed(2)} ahead ${avg((m) => m.trigger.fwd).toFixed(2)} H · support elbow ${avg((m) => m.support.elbow).toFixed(0)}° reach ${avg((m) => m.support.reach).toFixed(2)}`);
   }
   await browser.close();
   if (errs.length) { console.log('page errors:', errs.join(' | ')); bad++; }
-  console.log(bad ? `pose-check: ${bad} of ${n} failed` : `pose-check: all ${n} rig × gun poses within the real-arm ranges`);
+  if (units.length) console.log(`skipped ${units.length} aim-unit poses (arms drawn, not rigged): ${units.join(', ')}`);
+  console.log(bad ? `pose-check: ${bad} of ${n} failed` : `pose-check: all ${n} rigged rig × gun poses within the real-arm ranges (${units.length} aim-unit poses skipped)`);
   process.exit(bad ? 1 : 0);
 })();
