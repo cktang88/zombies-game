@@ -293,3 +293,64 @@ Measured (headless Chromium, SwiftShader software raster, this container; avg fr
 night 1 rigged 19.1 ms vs Classic 17.0 ms; 150 Turned (day 23 + injected crowd) rigged 90.6 ms
 (rig work 42 ms: update 1.9, full rigs 19.6, flipbook blits 9.2) vs Classic 53.1 ms. On such a
 machine the Crossing trips the automatic fallback; with GPU raster the fill cost mostly vanishes.
+
+## Crowd audit
+
+Question: do the Turned read as a varied, believable crowd (sizes, speeds, gaits)? Measured, not
+eyeballed: `npx tsx tools/crowd-audit.ts` (headless; exits 1 if planted feet skate > 6%) and
+`animlab.html?crowd` (each type at battle scale walking at its real speed over world-fixed ground
+ticks: a glued foot stays on its tick) / `?crowd&lineup` (min / mid / max body beside a 1.75 m survivor).
+
+Scale: a survivor is `158 * depthScale` px; at lanes 0-3 that is 128 / 140 / 152 / 166 px for 1.75 m,
+i.e. 73 / 80 / 87 / 95 px per metre. Turned are `def.height * 1.3 * depthScale(y) * jit`, the same
+depth law, so lane scaling is consistent. Battle speeds are screen px/s in every lane (gameplay), so
+a far-lane body covers ~13% more metres per second than a near one; the rig takes its cadence from
+its own drawn scale, so feet stay planted in every lane. m/s below are at lane 2 (87 px/m).
+
+| type (sprites) | height m | speed m/s (px/s) | steps/min | step m | walk variants | knee° mid-stance (before) | foot skate (before) |
+|---|---|---|---|---|---|---|---|
+| Sleeper (6 bodies) | 1.72-1.74, ±7% per body | 0.41 (36, was 32) ±18% per body, stalls | 81-106 | 0.24-0.31 | limpDrag, stiffLurch, headLoll, dangle | 8-21 (13-53) | ≤0.3% (7-10%) |
+| Deer (2) | 1.69-1.72 | cruise 0.90 (78), bolt to 2.7 (234) out of the pant | 100-112 lope, 144-160 sprint | 0.5 / 1.0-1.1 | lope, lopeRagged → sprint | 20-24 | ≤0.6% (6-9%; and 55-72 steps/min: a slow-motion sprint) |
+| Drag (crawler) | 0.59 prone (standing-scale rig) | 0.23 (20) ±22%, rests | 61-64 hand pulls | 0.21 | crawl, crawlOneArm | - | 0% (29-35%: hands slid) |
+| Pulper (bloater) | 1.90, wide | 0.25 (22), stalls | 70-84 | 0.18-0.22 | waddle (stride 0.3→0.4), stiffLurch | 13-18 (18-33) | ≤0.7% (5-7%) |
+| Crier (shrieker) | 1.79 | 0.34 (30) | 82 | 0.25 | stalk (deliberate crouch, 35), headLoll | 18-35 (33-51) | ≤0.5% (7%) |
+| Deputy (riot) | 1.77 | 0.32 (28), rare stalls | 78-89 | 0.22-0.25 | trudge, stiffLurch, limpDrag (new) | 11-20 (34-46) | ≤0.3% (7%) |
+| Ferryman (brute) | 2.31, ±4% | 0.23 (20) | 66-71 | 0.19-0.21 | stomp, lumber (new) | 12-15 (8) | ≤1.2% (10-12%) |
+| Buck (leaper) | 1.62 (farm boy) | 0.67 (58) | 100-104 | 0.38-0.40 | lope, lopeRagged (was stalk at 145 steps/min) | 21-23 (30-53) | 0% (5-19%) |
+| Biler (spitter) | 1.79 | 0.30 (26) | 84-94 | 0.19-0.21 | headLoll, waddle | 15-17 (36-37) | ≤0.3% (7%) |
+| County man (raider rig) | 1.76 | 0.80 (70) | 105-112 | 0.43-0.46 | raider | 10 | 0.3% |
+| Bellwether | 2.89, ±2% | 0.14 (12) | 41 | 0.20 | stomp | 12 | ≤1.1% (9%) |
+
+Findings and fixes:
+- **Skating** (every Turned, 5-35%): `speedMul` jitter changed cadence without the stride; the limp
+  leg's stance was shorter in distance than in time; `lurch` warped the stance phase; crawl hands
+  pulled 0.6 arm-lengths per cycle while the cadence assumed 0.45; the crowd LOD flipbook drew the
+  un-jittered preset at the jittered cadence. Now `gait.ts cycleLen` is the one body-travel-per-cycle
+  the cadence and the feet both use, lurch only warps the swing and the upper body, and in LOD the
+  cadence follows the flipbook's own preset at a bucketed stride scale (`Rig.strideKey`, part of the
+  frame key). Worst measured skate now 1.8% (LOD), ≤0.6% on full rigs.
+- **Cadence vs speed**: gaits had one stride, so a Deer's sprint preset at 1.1 m/s ran 55 steps/min
+  and the Buck's stalk at 0.67 m/s scurried at 145. `strideScale`: each preset has a natural cadence
+  (`cad`); off its natural speed the stride scales by `sqrt(v / v0)` (clamped 0.55-1.15), as people
+  shorten their steps when slower. A style's `run` (Deer: sprint) takes over when the walk would
+  overstride (hysteresis 1.12 / 0.98).
+- **Deep crouch**: the Turned stood 30-53° into their knees on most rigs (gait heights are guesses
+  against each rig's bones). The survivors' closed-loop hip trim (`legTrim`) now also runs for the
+  Turned toward a per-gait `knee` (stiff 8°, shamblers 17-21°, runners 23°, the Crier's stalk 35° on
+  purpose); survivors keep their own target and limits.
+- **Real speeds vs the yard**: the yard is ~11 m wall to spawn. A 5 m/s sprinter would cross it in
+  2 s, so the Deer keep their balance pace and get readable bursts instead: cruise 0.82x, then a bolt
+  to 3x for 0.8 s out of every pant (`zombies.ts paceMul`, `battle.ts z.dash`); about +8% mean.
+  Sleepers 32 → 36 px/s (0.37 → 0.41 m/s; a stalled, hurt shamble, not a stroll).
+- **Lockstep**: per-body pace (±5-22% by type, seeded by id), stalls for Sleepers / Drags / Pulpers /
+  Deputies (ease to a stand 0.5-1.8 s every 4-20 s; the walk is paid back so the mean stays
+  `def.speed`), seeded start phase and per-body gait jitter (stride, lean, arms, cadence, knee).
+- **Sizes**: heights were sane (1.62-1.90 m, Ferryman 2.31, Bellwether 2.89) but the per-body spread
+  was ±4% (sd 2%); now ±7% (`sizeVar`, sd 4% ≈ adult height spread), ±4% Ferryman, ±2% bosses.
+- Not changed: attack / hit / death variety (sleeper claw, grabBite, pound; Deer lunge, claw;
+  Ferryman smash, grabDrag; authored deaths + ragdoll; hit reactions by zone, impact.ts tiers) —
+  already per type and seeded. Falling ragdolls now ease into the baked-corpse grade, so a body no
+  longer pops lighter/darker when it settles (the road layer is drawn over darkness pass A).
+
+Night balance sanity (`night-balance.cjs 6,13 2 decent`), main vs this: day 6 wall lost 0 / 135
+vs 90 / 135, held both; day 13 fell twice vs held once, fell once — within seed noise.
