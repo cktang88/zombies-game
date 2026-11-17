@@ -143,6 +143,78 @@
       "height": 80,
       "prompt": "two fat orange 12-gauge flare shells.",
       "kind": "icon"
+    },
+    {
+      "id": "icon_mod_scope",
+      "height": 72,
+      "prompt": "a black hunting riflescope with mounting rings, side view, lens pointing right.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_mod_reddot",
+      "height": 72,
+      "prompt": "a compact military red-dot reflex sight with a glowing red dot, side view.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_mod_suppressor",
+      "height": 72,
+      "prompt": "an improvised gun suppressor made from a car oil filter on a threaded metal adapter.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_mod_brake",
+      "height": 72,
+      "prompt": "a short steel muzzle brake with slotted side ports, side view.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_mod_sawedoff",
+      "height": 72,
+      "prompt": "a shotgun barrel cut short lying next to a hacksaw.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_mod_flashlight",
+      "height": 72,
+      "prompt": "a black metal flashlight wrapped in grey duct tape, beam end pointing right.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_mod_hatchet",
+      "height": 72,
+      "prompt": "a small hatchet head fastened with hose clamps to a short length of steel tube.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_mod_bipod",
+      "height": 72,
+      "prompt": "a folding rifle bipod with two extended legs, side view.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_mod_extmag",
+      "height": 72,
+      "prompt": "a long extended steel pistol magazine full of cartridges.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_mod_drum",
+      "height": 72,
+      "prompt": "a round black drum magazine for a submachine gun.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_mod_taped",
+      "height": 72,
+      "prompt": "two rifle magazines taped together side by side with black electrical tape.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_mod_sling",
+      "height": 72,
+      "prompt": "a coiled olive canvas rifle sling and a rubber recoil pad.",
+      "kind": "icon"
     }
   ]
 }

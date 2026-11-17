@@ -1,8 +1,8 @@
-import type { Survivor, JobId, Res, WeaponItem } from '../types';
+import type { Survivor, JobId, Res, WeaponItem, ModSlot } from '../types';
 import { G, dateLabel, ICE_DAY, has, pay, ordinal, docsFound, rep } from '../state';
 import { DOCS, FACTIONS } from '../data/lore';
 import { spriteUrl } from '../assets';
-import { WEAPONS, CALIBERS, AMMO_TYPES, fireProfile, ammoTypesFor, ammoLabel, selectedAmmo } from '../data/weapons';
+import { WEAPONS, CALIBERS, AMMO_TYPES, MODS, MOD_SLOTS, fireProfile, ammoTypesFor, ammoLabel, selectedAmmo, slotsFor, attachMod, detachMod, type FireProfile } from '../data/weapons';
 import { TRAITS } from '../data/traits';
 import { SKILL_NAMES } from '../data/names';
 import { SITES, BUILDINGS, RECIPES, RES_LABEL, RES_ICON } from '../data/world';
@@ -289,6 +289,51 @@ function ammoSelect(w: WeaponItem | undefined, compact = false) {
   }).join('')}</select>`;
 }
 
+// Attachment slots for one gun: icon box + attach/detach dropdown per slot.
+function modSlotsHtml(w: WeaponItem) {
+  const slots = slotsFor(w.def);
+  if (!slots.length) return '';
+  const stock = G.modStock ?? [];
+  return `<div class="stats" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">${slots.map((slot) => {
+    const cur = w.mods?.[slot];
+    const md = cur ? MODS[cur.def] : null;
+    const spare = stock.filter((m) => MODS[m.def]?.slot === slot && MODS[m.def].fits(w.def));
+    const name = MOD_SLOTS.find((x) => x.id === slot)!.name;
+    return `<span title="${esc(md ? `${md.name}: ${md.niche}` : `${name}: empty`)}" style="display:inline-flex;align-items:center;gap:4px;border:1px ${md ? 'solid #6a5d45' : 'dashed #4a4235'};padding:2px 4px;border-radius:3px">
+      ${md ? `<img src="${spriteUrl(md.icon)}" alt="" style="width:34px;height:20px;object-fit:contain">` : `<i style="width:34px;text-align:center;opacity:.5">${name}</i>`}
+      <select data-act="mod" data-w="${w.uid}" data-slot="${slot}" style="max-width:150px;font-size:12px">
+        <option value="">${md ? '— detach —' : '— empty —'}</option>
+        ${cur ? `<option value="${cur.uid}" selected>${esc(md!.name)}${cur.cond < 1 ? ` ${Math.round(cur.cond * 100)}%` : ''}</option>` : ''}
+        ${spare.map((m) => `<option value="${m.uid}">${esc(MODS[m.def].name)}${m.cond < 1 ? ` ${Math.round(m.cond * 100)}%` : ''}</option>`).join('')}
+      </select></span>`;
+  }).join('')}</div>`;
+}
+
+// What the attachments change, green when better and red when worse.
+function modDeltaHtml(w: WeaponItem) {
+  if (!w.mods || !Object.keys(w.mods).length) return '';
+  const a = fireProfile(w, { noMods: true }), b = fireProfile(w);
+  const rows: [keyof FireProfile, string, boolean][] = [
+    ['dmg', 'dmg', true], ['spread', 'spread', false], ['rof', 'rate', true], ['mag', 'mag', true], ['reload', 'reload', false],
+    ['noise', 'noise', false], ['knock', 'shove', true], ['bloomMul', 'bloom', false], ['recoilMul', 'kick', false],
+    ['braceBloomMul', 'bloom on the wall', false], ['switchTime', 'target switch', false], ['light', 'light', true], ['melee', 'melee', true], ['range', 'range', true],
+  ];
+  const out: string[] = [];
+  for (const [k, label, up] of rows) {
+    const x = a[k] as number, y = b[k] as number;
+    if (Math.abs(x - y) < 1e-6) continue;
+    const better = up ? y > x : y < x;
+    let txt: string;
+    if (k === 'switchTime') txt = `${y > x ? '+' : '−'}${Math.abs(y - x).toFixed(2)}s`;
+    else if (k === 'light' || k === 'melee') txt = `${Math.round(y)}`;
+    else if (k === 'range') txt = Number.isFinite(y) ? `${Math.round(y)}px` : '∞';
+    else if (k === 'mag') txt = `${x}→${y}`;
+    else txt = `${y > x ? '+' : '−'}${Math.round(Math.abs(y / x - 1) * 100)}%`;
+    out.push(`<span style="color:${better ? '#9db070' : '#c0604a'}">${label} ${txt}</span>`);
+  }
+  return out.length ? `<div class="stats">mods: ${out.join(' · ')}</div>` : '';
+}
+
 function armoryHtml() {
   const stock = Object.values(CALIBERS).map((c) => {
     const items = c.types.map((t) => {
@@ -302,6 +347,8 @@ function armoryHtml() {
   return `<div class="armory">
   <h3>Ammunition <span class="dim">by caliber · hover a type for what it does</span></h3>
   ${stock}
+  <h3>On the bench <span class="dim">spare attachments · fit them in a gun's slots below</span></h3>
+  <div class="stats">${(G.modStock ?? []).length ? (G.modStock ?? []).map((m) => `<span class="cost" title="${esc(MODS[m.def].niche)}"><img src="${spriteUrl(MODS[m.def].icon)}" alt="">${esc(MODS[m.def].name.toLowerCase())}${m.cond < 1 ? ` ${Math.round(m.cond * 100)}%` : ''}</span>`).join(' ') : 'Nothing spare. Craft attachments at the workbench and forge, or find them on runs.'}</div>
   <h3>Guns</h3>
   ${guns.map((w) => {
     const d = WEAPONS[w.def];
@@ -325,7 +372,8 @@ function armoryHtml() {
       ${d.niche ? `<div class="bd"><i>${esc(d.niche)}</i></div>` : ''}
       <div class="bd dim">${esc(d.desc)}</div>
       <div class="stats">dmg ${Math.round(p.dmg)}${p.pellets > 1 ? `×${p.pellets}` : ''} · ${p.rof}/s · mag ${p.mag} · reload ${p.reloadPerRound ? `${p.reload.toFixed(2)}s/round` : `${p.reload}s`}${p.pierce ? ` · pierce ${p.pierce}` : ''}${p.perShot !== 1 ? ` · ${p.perShot} ${ammoLabel(p.ammoRes).toLowerCase()}/shot` : ''}${tags.length ? ` · ${tags.join(' · ')}` : ''}</div>
-      <div class="stats">${types.length > 1 ? `loaded with ${ammoSelect(w)}` : `ammo: ${esc(ammoLabel(p.ammoRes).toLowerCase())} (${Math.floor(G.stores[p.ammoRes!] ?? 0)})`}${p.ammoRes && AMMO_TYPES[p.ammoRes] ? ` <span class="dim">— ${esc(AMMO_TYPES[p.ammoRes]!.desc)}</span>` : ''}</div></div></div>`;
+      <div class="stats">${types.length > 1 ? `loaded with ${ammoSelect(w)}` : `ammo: ${esc(ammoLabel(p.ammoRes).toLowerCase())} (${Math.floor(G.stores[p.ammoRes!] ?? 0)})`}${p.ammoRes && AMMO_TYPES[p.ammoRes] ? ` <span class="dim">— ${esc(AMMO_TYPES[p.ammoRes]!.desc)}</span>` : ''}</div>
+      ${modSlotsHtml(w)}${modDeltaHtml(w)}</div></div>`;
   }).join('')}
   <p class="dim">Weapons on the rack can be picked up on the wall at night with [Q] or number keys. Worn guns jam. On a daylight run, [T] switches bullet type.</p></div>`;
 }
@@ -406,6 +454,17 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
   root.onchange = (e) => {
     const t = e.target as HTMLSelectElement;
     if (t.dataset.act === 'runsite') return;
+    if (t.dataset.act === 'mod') {
+      const w = G.weapons.find((x) => x.uid === t.dataset.w);
+      G.modStock ??= [];
+      if (w) {
+        if (t.value) attachMod(G.modStock, w, t.value);
+        else detachMod(G.modStock, w, t.dataset.slot as ModSlot);
+      }
+      sfx.ui();
+      h.rerender();
+      return;
+    }
     if (t.dataset.act === 'ammo') {
       const w = G.weapons.find((x) => x.uid === t.dataset.w);
       if (w) w.ammoType = t.value as Res;
