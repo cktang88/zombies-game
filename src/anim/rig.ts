@@ -12,7 +12,7 @@
 //   5 solve        analytic 2-bone IK for arms (elbow down) and legs (knee forward)
 // Death hands the pose to a Verlet ragdoll (ragdoll.ts) seeded with the pose's velocities
 // plus the killing hit's impulse; once it settles the caller bakes it into the ground.
-import { bakedIcon, getGun, getRig, loadGun, loadRig, type BakedIcon, type GunAsset, type GunLook, type PartMeta, type RigAsset } from './assets';
+import { bakedIcon, getGun, getRig, loadGun, loadRig, type BakedIcon, type GunAsset, type GunLook, type KitDraw, type PartMeta, type RigAsset } from './assets';
 import { CLIPS, RELOADS, type Clip, type Key, type TKey } from './clips';
 import { GAITS, applyGait, jitterGait, strideScale, cycleLen, type Gait } from './gait';
 import { clamp, ease, ik2, lerp, lerpAngle, rng, wrapAngle } from './math';
@@ -1035,6 +1035,8 @@ export class Rig {
   }
 
   private part(ctx: CanvasRenderingContext2D, src: CanvasImageSource, i: number, name: string, mirror = false, ox = 0, oy = 0, grow = 0) {
+    const kit = this.asset!.meta.kitArms;
+    if (kit && this.geo && (i === N_UA || i === N_FA || i === F_UA || i === F_FA)) { this.kitPart(ctx, src, i, kit, ox, oy, grow); return; }
     const m: PartMeta | undefined = this.asset!.meta.parts[name];
     if (!m) return;
     const S = this.ds, F = this.df;
@@ -1063,6 +1065,52 @@ export class Rig {
     if (grow) ctx.drawImage(src, m.x - grow, m.y - grow, m.w + grow * 2, m.h + grow * 2, -m.px - grow, -m.py - grow, m.w + grow * 2, m.h + grow * 2);
     else ctx.drawImage(src, m.x, m.y, m.w, m.h, -m.px, -m.py, m.w, m.h);
     if (fa) ctx.restore();
+  }
+
+  /**
+   * Arm kit (assets.ts KitDraw): the whole-sleeve drawing whose elbow bend is nearest this arm's,
+   * drawn twice: in the upper arm's frame clipped to the shoulder side of the elbow's bisector, and
+   * in the forearm's frame clipped to the wrist side (the residual bend, at most half the gap between
+   * two drawings, turns about the elbow). Each half is stretched along its bone to the bone's length.
+   */
+  private kitPart(ctx: CanvasRenderingContext2D, src: CanvasImageSource, i: number, kit: { near: KitDraw[]; far: KitDraw[] }, ox: number, oy: number, grow: number) {
+    const far = i === F_UA || i === F_FA, upper = i === N_UA || i === F_UA;
+    const ua = far ? F_UA : N_UA, fa = far ? F_FA : N_FA;
+    const bend = (-wrapAngle(this.ja[fa] - this.ja[ua]) * 180) / Math.PI;
+    const list = far ? kit.far : kit.near;
+    let d = list[0];
+    for (const k of list) if (Math.abs(k.bend - bend) < Math.abs(d.bend - bend)) d = k;
+    const m = this.asset!.meta.parts[d.part];
+    if (!m) return;
+    const [sx, sy] = d.s, [ex, ey] = d.e, [wx, wy] = d.wr;
+    const a = upper ? Math.atan2(ey - sy, ex - sx) : Math.atan2(wy - ey, wx - ex);
+    const L = upper ? Math.hypot(ex - sx, ey - sy) : Math.hypot(wx - ex, wy - ey);
+    const bone = upper ? this.geo!.ua : this.geo!.fa;
+    const S = this.ds, F = this.df, r = this.ja[i], c = Math.cos(r), s = Math.sin(r);
+    this.xf(ctx, S * F * c, S * s, -S * F * s, S * c, this.dx + S * F * (this.jx[i] + ox), this.dy + S * (this.jy[i] + oy));
+    ctx.save();
+    ctx.scale(bone / L, 1);
+    ctx.rotate(-a);
+    ctx.translate(-(upper ? sx : ex), -(upper ? sy : ey));
+    // the split line through the elbow: the bisector of the bend (perpendicular to a straight arm)
+    const ux = sx - ex, uy = sy - ey, ul = Math.hypot(ux, uy) || 1, vx = wx - ex, vy = wy - ey, vl = Math.hypot(vx, vy) || 1;
+    let bx = ux / ul + vx / vl, by = uy / ul + vy / vl;
+    const bl = Math.hypot(bx, by);
+    if (bl < 0.2) { bx = -vy / vl; by = vx / vl; } else { bx /= bl; by /= bl; }
+    // normal toward this half's side, pushed 1.5 units past the line so the halves overlap
+    let nx = -by, ny = bx;
+    const side = upper ? nx * ux + ny * uy : nx * vx + ny * vy;
+    if (side < 0) { nx = -nx; ny = -ny; }
+    const o = -1.5, B = 400;
+    const px = ex + nx * o, py = ey + ny * o;
+    ctx.beginPath();
+    ctx.moveTo(px + bx * B, py + by * B); ctx.lineTo(px - bx * B, py - by * B);
+    ctx.lineTo(px - bx * B + nx * B, py - by * B + ny * B); ctx.lineTo(px + bx * B + nx * B, py + by * B + ny * B);
+    ctx.closePath();
+    ctx.clip();
+    if (grow) ctx.drawImage(src, m.x - grow, m.y - grow, m.w + grow * 2, m.h + grow * 2, -grow, -grow, m.w + grow * 2, m.h + grow * 2);
+    else ctx.drawImage(src, m.x, m.y, m.w, m.h, 0, 0, m.w, m.h);
+    ctx.restore();
   }
 
   private setGunXf(ctx: CanvasRenderingContext2D, x: number, y: number, a: number, k: number, flip?: boolean) {

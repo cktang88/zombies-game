@@ -71,5 +71,9 @@
     "lib": "light",
     "tint": "#c79a7c",
     "tintA": 0.3
+  },
+  "kit": {
+    "near": "arm_jacket_f",
+    "far": "arm_jacket_a"
   }
 }

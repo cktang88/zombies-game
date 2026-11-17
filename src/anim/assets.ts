@@ -18,7 +18,15 @@ export interface RigMeta {
   ground: number;
   joints: Record<string, [number, number]>;
   parts: Record<string, PartMeta>;
+  /** arm kit (docs/research/13 §6, tools/cut-sheet.ts): whole-arm sleeve drawings at several elbow
+   * bends replace the cut upperArm / forearm. A name (kit_<name> for both sides) or one per side. */
+  kit?: string | { near: string; far: string };
+  /** filled at load from `kit`: the drawings per side, as atlas parts named kitN<i> / kitF<i> */
+  kitArms?: { near: KitDraw[]; far: KitDraw[] };
 }
+/** One kit drawing: its elbow bend (deg, forearm turned up from a level upper arm) and its
+ * shoulder / elbow / wrist inside the drawing (rig units, from the drawing's top-left). */
+export interface KitDraw { part: string; bend: number; s: [number, number]; e: [number, number]; wr: [number, number] }
 export interface RigAsset {
   meta: RigMeta;
   atlas: CanvasImageSource;
@@ -89,7 +97,42 @@ function farCopy(src: CanvasImageSource, w: number, h: number): HTMLCanvasElemen
 
 /** Transparent gutter (atlas px) round every part after re-packing. */
 export const ATLAS_PAD = 7;
-function repack(im: HTMLImageElement, meta: RigMeta): HTMLCanvasElement {
+interface KitFile { near: (Omit<KitDraw, 'part'> & { x: number; y: number; w: number; h: number })[]; far: KitFile['near'] }
+/** The rig's atlas with its arm kit sheet(s) stacked under it; the drawings become parts kitN<i> / kitF<i>. */
+async function withKit(im: HTMLImageElement, meta: RigMeta): Promise<HTMLCanvasElement | null> {
+  const k = meta.kit!;
+  const names = typeof k === 'string' ? { near: k, far: k } : k;
+  const files: Record<string, { j: KitFile; im: HTMLImageElement }> = {};
+  for (const n of new Set([names.near, names.far])) {
+    const r = await fetch(`${base()}sprites/parts/kit_${n}.json`).catch(() => null);
+    const kim = r?.ok ? await loadImage(`${base()}sprites/parts/kit_${n}.png`) : null;
+    if (!r?.ok || !kim) return null;
+    files[n] = { j: (await r.json()) as KitFile, im: kim };
+  }
+  const list = [...new Set([names.near, names.far])];
+  const c = document.createElement('canvas');
+  c.width = Math.max(im.width, ...list.map((n) => files[n].im.width));
+  c.height = im.height + list.reduce((s, n) => s + files[n].im.height, 0);
+  const x = c.getContext('2d')!;
+  x.drawImage(im, 0, 0);
+  const oy: Record<string, number> = {};
+  let y = im.height;
+  for (const n of list) { oy[n] = y; x.drawImage(files[n].im, 0, y); y += files[n].im.height; }
+  const arms: { near: KitDraw[]; far: KitDraw[] } = { near: [], far: [] };
+  for (const side of ['near', 'far'] as const) {
+    const n = names[side];
+    files[n].j[side].forEach((d, i) => {
+      const part = `kit${side === 'near' ? 'N' : 'F'}${i}`;
+      const len = Math.hypot(d.e[0] - d.s[0], d.e[1] - d.s[1]);
+      meta.parts[part] = { x: d.x, y: d.y + oy[n], w: d.w, h: d.h, px: d.s[0], py: d.s[1], tx: d.e[0], ty: d.e[1], rest: Math.atan2(d.e[1] - d.s[1], d.e[0] - d.s[0]), len };
+      arms[side].push({ part, bend: d.bend, s: d.s, e: d.e, wr: d.wr });
+    });
+  }
+  if (!arms.near.length || !arms.far.length) return null;
+  meta.kitArms = arms;
+  return c;
+}
+function repack(im: CanvasImageSource, meta: RigMeta): HTMLCanvasElement {
   const names = Object.keys(meta.parts).sort((a, b) => meta.parts[b].h - meta.parts[a].h);
   const W = 640;
   let x = 0, y = 0, rowH = 0;
@@ -167,8 +210,9 @@ export function loadRig(id: string): Promise<RigAsset | null> {
         const r = await fetch(`${base()}sprites/parts/${id}.json`);
         if (!r.ok) throw new Error('no parts');
         const meta = (await r.json()) as RigMeta;
-        const raw = await loadImage(`${base()}sprites/parts/${id}.png`);
+        let raw: CanvasImageSource | null = await loadImage(`${base()}sprites/parts/${id}.png`);
         if (!raw) throw new Error('no atlas');
+        if (meta.kit) raw = (await withKit(raw as HTMLImageElement, meta)) ?? raw;
         // re-pack with a transparent gutter round every part, so the dilated (outline) and
         // offset (rim) silhouettes of a part never pick up its neighbour
         const im = repack(raw, meta);
