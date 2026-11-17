@@ -1,7 +1,7 @@
 import type { Survivor, WeaponItem, Res, NightPlan } from '../types';
 import { G, R, log, add } from '../state';
 import { ZOMBIES, type ZombieDef } from '../data/zombies';
-import { WEAPONS } from '../data/weapons';
+import { WEAPONS, fireProfile, armorDamage, roundsInStores, ammoLabel, AMMO_RES, AMMO_TYPES, BURN, FLARE_LIGHT, type FireProfile } from '../data/weapons';
 import { img, flashImg, shadeImg } from '../assets';
 import { sfx, wind } from '../audio';
 import {
@@ -71,6 +71,10 @@ interface Guard {
   wasDowned?: boolean;
   safe?: boolean; // dragged back behind the line
   mauledT: number; // seconds mauled while down
+  burstLeft: number; // rounds still to come from this trigger pull
+  burstT: number;
+  burstAng: number; // guards: where the burst is pointed
+  burstErr: number;
   dragging?: Guard; // the downed guard this one is hauling back
   dragT: number;
   moodle?: string;
@@ -150,6 +154,7 @@ export class Battle {
   drainOpen = 0;
   covers: { x: number; y: number; w: number; h: number; seed: number }[] = [];
   raidersDown = 0;
+  recover: Partial<Record<Res, number>> = {}; // arrows and bolts to pick up off the road at dawn
   keyUp = (e: KeyboardEvent) => { if (e.key === ' ') this.fast = false; };
 
   constructor(canvas: HTMLCanvasElement, plan: NightPlan, onEnd: (r: NightResult) => void) {
@@ -168,7 +173,8 @@ export class Battle {
     this.traps = G.fort.traps;
     this.duration = (plan.spawns[plan.spawns.length - 1]?.t ?? 30) + 5;
     this.wallStart = G.fort.hp;
-    this.ammoStart = { light: G.stores.light, shell: G.stores.shell, rifle: G.stores.rifle, scrap: G.stores.scrap, molotov: G.stores.molotov };
+    this.ammoStart = {};
+    for (const k of [...AMMO_RES, 'scrap', 'molotov'] as Res[]) this.ammoStart[k] = G.stores[k] ?? 0;
     this.res = { kills: 0, deaths: [], wallHeld: true, wallLost: 0, ammoUsed: {}, killsBy: {}, headshots: 0, lines: [], fell: false };
     this.setupGuards();
     if (G.flags.dog) this.dog = { x: 228, y: SURV_Y + 22, barkT: 0, cd: 0, name: typeof G.flags.dog === 'string' ? G.flags.dog : 'The dog' };
@@ -188,17 +194,14 @@ export class Battle {
     const slots = [262, 192, 124, 58, 0, 160];
     fighters.slice(0, 6).forEach((s, i) => {
       const w = G.weapons.find((x) => x.uid === s.weapon) ?? null;
-      this.guards.push({ s, w, x: slots[i], y: SURV_Y + (i % 2) * 8 - (i >= 4 ? 30 : 0), cd: R.range(0, 1), mag: w ? WEAPONS[w.def].mag : 0, reload: 0, kills: 0, flash: 0, fled: false, recoil: 0, homeX: slots[i], face: 1, mauledT: 0, dragT: 0, moodleC: '', moodleT: R.range(0, 1) });
+      this.guards.push({ s, w, x: slots[i], y: SURV_Y + (i % 2) * 8 - (i >= 4 ? 30 : 0), cd: R.range(0, 1), mag: 0, reload: 0, kills: 0, flash: 0, fled: false, recoil: 0, homeX: slots[i], face: 1, mauledT: 0, burstLeft: 0, burstT: 0, burstAng: 0, burstErr: 0, dragT: 0, moodleC: '', moodleT: R.range(0, 1) });
     });
     // magazines are loaded from the stores, not conjured
     for (const g of this.guards) {
       if (!g.w) continue;
-      const def = WEAPONS[g.w.def];
-      const per = this.ammoPer(def);
-      const got = def.ammo ? Math.min(def.mag, Math.floor(G.stores[def.ammo] / per + 1e-6)) : def.mag;
-      if (def.ammo) add(def.ammo, -got * per);
-      g.mag = got;
-      this.playerMag.set(g.w.uid, got);
+      const prof = this.prof(g.w);
+      g.mag = this.loadFromStores(prof, prof.mag);
+      this.playerMag.set(g.w.uid, g.mag);
     }
     // the frayed may come apart on the wall tonight
     for (const g of this.guards) {
@@ -472,69 +475,88 @@ export class Battle {
   // ---------- shooting ----------
   updatePlayer(dt: number) {
     const p = this.player;
+    if (p !== this.lastPlayer) {
+      // whoever takes the line keeps the rounds actually in their gun
+      const o = this.lastPlayer;
+      if (o?.w) o.mag = this.playerMag.get(o.w.uid) ?? 0;
+      if (p?.w) this.playerMag.set(p.w.uid, p.mag);
+      if (o) o.burstLeft = 0;
+      this.playerReload = 0;
+    }
     this.lastPlayer = p;
     if (!p || !p.w) return;
     this.playerCd -= dt;
-    const def = WEAPONS[p.w.def];
+    const prof = this.prof(p.w);
     if (this.playerReload > 0) {
       this.playerReload -= dt;
       if (this.playerReload <= 0) this.finishReload(p);
     }
     p.face = this.mouse.x < p.x - 12 ? -1 : 1;
-    if (this.mouse.down && def.auto) this.tryFire(false);
+    if (p.burstLeft > 0) {
+      p.burstT -= dt;
+      if (p.burstT <= 0) this.playerRound(p, prof);
+    } else if (this.mouse.down && prof.auto) this.tryFire(false);
     p.recoil = Math.max(0, p.recoil - dt * 8);
     p.flash = Math.max(0, p.flash - dt);
   }
 
-  ammoPer(def: { ammo: Res | null }) {
-    return def.ammo === 'scrap' ? 0.05 : 1;
+  // fireProfile is pure; cache it per gun until its condition or load changes
+  profCache = new Map<string, { cond: number; ammo: Res | undefined; p: FireProfile }>();
+  prof(w: WeaponItem): FireProfile {
+    const c = this.profCache.get(w.uid);
+    if (c && Math.abs(c.cond - w.cond) < 0.02 && c.ammo === w.ammoType) return c.p;
+    const p = fireProfile(w);
+    this.profCache.set(w.uid, { cond: w.cond, ammo: w.ammoType, p });
+    return p;
+  }
+
+  // take up to `want` rounds of this profile's ammunition out of the stores
+  loadFromStores(prof: FireProfile, want: number) {
+    if (!prof.ammoRes) return want;
+    const got = Math.max(0, Math.min(want, roundsInStores(prof, G.stores)));
+    add(prof.ammoRes, -got * prof.perShot);
+    return got;
   }
 
   startReload() {
     const p = this.player;
     if (!p || !p.w || this.playerReload > 0) return;
-    const def = WEAPONS[p.w.def];
+    const prof = this.prof(p.w);
     const mag = this.playerMag.get(p.w.uid) ?? 0;
-    if (mag >= def.mag) return;
-    if (def.ammo && G.stores[def.ammo] < this.ammoPer(def)) {
-      this.say(`No ${def.ammo === 'light' ? 'pistol rounds' : def.ammo === 'shell' ? 'shells' : def.ammo === 'rifle' ? 'rifle rounds' : 'scrap'} left. Switch weapons [Q].`, 2);
+    if (mag >= prof.mag) return;
+    if (roundsInStores(prof, G.stores) < 1) {
+      this.say(`No ${ammoLabel(prof.ammoRes).toLowerCase()} left. Switch weapons [Q].`, 2);
       sfx.click();
       return;
     }
     const armHurt = p.s.wounds.some((w) => w.part === 'larm' || w.part === 'rarm') ? 1.35 : 1;
     const lost = p.s.scars.some((s) => s.label.includes('arm')) ? 1.6 : 1;
-    this.playerReload = def.reload * armHurt * lost * (p.w.cond < 0.4 ? 1.3 : 1);
-    if (def.id === 'pump') this.playerReload = (def.reload / def.mag) * armHurt * lost; // one shell at a time
+    // shell-by-shell guns reload one round at a time, and firing interrupts it
+    this.playerReload = prof.reload * armHurt * lost * (!prof.reloadPerRound && p.w.cond < 0.4 ? 1.3 : 1);
     sfx.reload();
   }
 
   finishReload(g: Guard) {
     if (!g.w) return;
-    const def = WEAPONS[g.w.def];
+    const prof = this.prof(g.w);
     const mag = this.playerMag.get(g.w.uid) ?? 0;
-    const need = def.id === 'pump' && g === this.player ? 1 : def.mag - mag;
-    let got = need;
-    if (def.ammo) {
-      const per = this.ammoPer(def);
-      got = Math.min(need, Math.floor(G.stores[def.ammo] / per + 1e-6));
-      add(def.ammo, -got * per);
-    }
+    const got = this.loadFromStores(prof, prof.reloadPerRound ? 1 : prof.mag - mag);
     this.playerMag.set(g.w.uid, mag + got);
-    if (def.id === 'pump' && g === this.player) {
+    if (prof.reloadPerRound) {
       sfx.shell();
-      if (mag + got < def.mag && got > 0) this.startReload();
+      if (mag + got < prof.mag && got > 0) this.startReload();
     } else sfx.reload();
   }
 
   tryFire(click: boolean) {
     const p = this.player;
-    if (!p || !p.w || this.done || this.intro > 3.2) return;
-    const def = WEAPONS[p.w.def];
-    if (!click && !def.auto) return;
+    if (!p || !p.w || this.done || this.intro > 3.2 || p.burstLeft > 0) return;
+    const prof = this.prof(p.w);
+    if (!click && !prof.auto) return;
     if (this.playerCd > 0) return;
     if (this.playerReload > 0) {
       // firing interrupts a shell-by-shell reload
-      if (def.id === 'pump' && (this.playerMag.get(p.w.uid) ?? 0) > 0) this.playerReload = 0;
+      if (prof.reloadPerRound && (this.playerMag.get(p.w.uid) ?? 0) > 0) this.playerReload = 0;
       else return;
     }
     const mag = this.playerMag.get(p.w.uid) ?? 0;
@@ -544,34 +566,58 @@ export class Battle {
       this.playerCd = 0.25;
       return;
     }
-    // jam chance on worn guns
-    if (p.w.cond < 0.5 && R.chance((0.5 - p.w.cond) * 0.08)) {
-      this.say(`${p.w.name ?? def.name} jammed.`, 1.5);
+    // worn and improvised guns jam
+    if (R.chance(prof.jam)) {
+      this.say(`${p.w.name ?? WEAPONS[p.w.def].name} jammed.`, 1.5);
       sfx.click();
       this.playerCd = 0.9;
       return;
     }
-    this.playerMag.set(p.w.uid, mag - 1);
-    this.playerCd = 1 / def.rof;
-    const aim = aimFactor(p.s);
-    const mz = this.muzzle(p);
-    const base = Math.atan2(this.mouse.y - mz.y, this.mouse.x - mz.x);
-    const spreadA = def.spread * (1.75 - aim) + this.bloom;
-    for (let i = 0; i < def.pellets; i++) {
-      const a = base + (R.next() + R.next() - 1) * (def.pellets > 1 ? def.spread : spreadA);
-      this.castShot(p, mz.x, mz.y, a, def.dmg * (0.85 + p.w.cond * 0.15), def.pierce, def.knock, def.pellets > 1, true);
-    }
-    this.bloom = Math.min(0.12, this.bloom + def.spread * 0.35 + (def.auto ? 0.004 : 0.012));
-    p.recoil = 1;
-    p.flash = 0.06;
-    this.shake = Math.max(this.shake, def.knock / 6);
-    this.noise += def.noise;
-    G.stats.shots++;
-    p.w.cond = Math.max(0.05, p.w.cond - 0.0008);
-    this.lights.push({ x: mz.x + 10, y: mz.y, r: 220, life: 0.06, max: 0.06, color: '255,200,120' });
-    sfx.shot(def.id);
-    this.particles.push({ x: mz.x - 30, y: mz.y + 4, vx: R.range(-60, -20), vy: R.range(-160, -90), life: 1.2, max: 1.2, size: 2.4, color: '#c9a24a', kind: 'shell', ground: SURV_Y - 4 });
-    if ((this.playerMag.get(p.w.uid) ?? 0) === 0) this.startReload();
+    this.playerCd = 1 / prof.rof;
+    p.burstLeft = Math.min(prof.burst, mag);
+    p.burstT = 0;
+    this.playerRound(p, prof);
+  }
+
+  // one round of the leader's trigger pull (bursts call this again, burstGap apart)
+  playerRound(p: Guard, prof: FireProfile) {
+    if (!p.w) { p.burstLeft = 0; return; }
+    do {
+      const mag = this.playerMag.get(p.w.uid) ?? 0;
+      if (mag <= 0) { p.burstLeft = 0; break; }
+      this.playerMag.set(p.w.uid, mag - 1);
+      p.burstLeft--;
+      const aim = aimFactor(p.s);
+      const mz = this.muzzle(p);
+      const base = Math.atan2(this.mouse.y - mz.y, this.mouse.x - mz.x);
+      const spreadA = prof.spread * (1.75 - aim) + this.bloom;
+      for (let i = 0; i < prof.pellets; i++) {
+        const a = base + (R.next() + R.next() - 1) * (prof.pellets > 1 ? prof.spread : spreadA);
+        this.castShot(p, mz.x, mz.y, a, prof.dmg, prof.pierce, prof.knock, prof.pellets > 1, true, prof);
+      }
+      this.bloom = Math.min(0.12, this.bloom + prof.spread * 0.35 + (prof.auto ? 0.004 : 0.012));
+      this.roundFired(p, prof, mz, false);
+      this.shake = Math.max(this.shake, prof.knock / 6);
+      G.stats.shots++;
+      p.w.cond = Math.max(0.05, p.w.cond - 0.0008);
+    } while (p.burstLeft > 0 && prof.burstGap <= 0);
+    p.burstT = prof.burstGap;
+    if ((this.playerMag.get(p.w.uid) ?? 0) === 0 && p.burstLeft <= 0) this.startReload();
+  }
+
+  // what every round does besides the bullet: flash, noise, brass, smoke, arrows to pick up later
+  roundFired(g: Guard, prof: FireProfile, mz: { x: number; y: number }, far: boolean) {
+    g.recoil = 1;
+    g.flash = 0.06;
+    this.noise += prof.noise * (far ? 0.7 : 1);
+    if (prof.recoverable > 0 && prof.ammoRes) this.recover[prof.ammoRes] = (this.recover[prof.ammoRes] ?? 0) + prof.recoverable * prof.perShot;
+    const quiet = prof.noise < 0.5;
+    if (!quiet) this.lights.push({ x: mz.x + 10 * g.face, y: mz.y, r: far ? 180 : 220, life: 0.06, max: 0.06, color: '255,200,120' });
+    const def = WEAPONS[g.w!.def];
+    sfx.shot(quiet ? 'nailer' : prof.pellets > 1 ? 'pump' : def.caliber === 'rifle' ? 'hunting' : prof.auto ? 'smg' : def.id, far);
+    if (prof.smoke) for (let i = 0; i < 4; i++) this.particles.push({ x: mz.x + g.face * R.range(0, 30), y: mz.y + R.range(-6, 6), vx: g.face * R.range(10, 50), vy: R.range(-20, 5), life: 2.2, max: 2.2, size: R.range(8, 14), color: '#bbb', kind: 'smoke', ground: 0 });
+    const brass = !quiet && prof.recoverable <= 0 && def.caliber !== 'bolt';
+    if (!far && brass) this.particles.push({ x: mz.x - 30 * g.face, y: mz.y + 4, vx: -g.face * R.range(20, 60), vy: R.range(-160, -90), life: 1.2, max: 1.2, size: 2.4, color: '#c9a24a', kind: 'shell', ground: SURV_Y - 4 });
   }
 
   muzzle(g: Guard) {
@@ -579,7 +625,7 @@ export class Battle {
   }
 
   // Ray against all zombies; returns whether anything was hit.
-  castShot(g: Guard, ox: number, oy: number, ang: number, dmg: number, pierce: number, knock: number, pellet: boolean, isPlayer: boolean) {
+  castShot(g: Guard, ox: number, oy: number, ang: number, dmg: number, pierce: number, knock: number, pellet: boolean, isPlayer: boolean, fx?: FireProfile) {
     const dx = Math.cos(ang), dy = Math.sin(ang);
     const hits: { z: Zombie; t: number; head: boolean }[] = [];
     for (const z of this.zombies) {
@@ -607,7 +653,7 @@ export class Battle {
     let d = dmg;
     let n = 0;
     for (const h of hits) {
-      this.damage(h.z, d, h.head, knock, g, pellet, ox + dx * h.t, oy + dy * h.t, isPlayer);
+      this.damage(h.z, d, h.head, knock, g, pellet, ox + dx * h.t, oy + dy * h.t, isPlayer, fx);
       if (isPlayer) G.stats.hits++;
       n++;
       endT = h.t;
@@ -623,6 +669,8 @@ export class Battle {
       }
     }
     this.tracers.push({ x1: ox + dx * 20, y1: oy + dy * 20, x2: ox + dx * endT, y2: oy + dy * endT, life: pellet ? 0.05 : 0.07, w: pellet ? 1 : 1.6 });
+    // a flare lights the road where it comes down
+    if (fx?.flare && !pellet) this.lights.push({ x: ox + dx * endT, y: Math.min(LANE_BOT, oy + dy * endT), r: FLARE_LIGHT.r, life: FLARE_LIGHT.time, max: FLARE_LIGHT.time, color: '255,90,70' });
     return n > 0;
   }
 
@@ -641,10 +689,11 @@ export class Battle {
     };
   }
 
-  damage(z: Zombie, dmg: number, head: boolean, knock: number, g: Guard | null, pellet: boolean, px: number, py: number, isPlayer: boolean) {
+  damage(z: Zombie, dmg: number, head: boolean, knock: number, g: Guard | null, pellet: boolean, px: number, py: number, isPlayer: boolean, fx?: FireProfile) {
     let d = dmg;
     if (head) d *= pellet ? 2 : 3;
-    else if (z.def.armor) d = Math.max(d * 0.15, d - z.def.armor);
+    else if (z.def.armor) d = armorDamage(d, z.def.armor, fx?.armorPen ?? 0);
+    if (fx?.incendiary) z.burn = Math.max(z.burn, BURN.time);
     z.hp -= d;
     z.flash = 0.08;
     const heavy = z.def.id === 'ferryman' || z.def.boss || z.state === 'cover';
@@ -762,15 +811,16 @@ export class Battle {
       this.say(`${first(g.s)} is panicking — firing at shadows.`, 3);
       log('break', `${displayName(g.s)} panicked on the wall on night ${G.day}, burning through ammunition.`);
     }
-    const def = WEAPONS[g.w.def];
+    const prof = this.prof(g.w);
     if (g.reload > 0) {
       g.reload -= dt;
-      if (g.reload <= 0) {
-        const per = this.ammoPer(def);
-        const got = def.ammo ? Math.min(def.mag, Math.floor(G.stores[def.ammo] / per + 1e-6)) : def.mag;
-        if (def.ammo) add(def.ammo, -got * per);
-        g.mag = got;
-      }
+      if (g.reload <= 0) g.mag += this.loadFromStores(prof, prof.mag - g.mag);
+      return;
+    }
+    // the rest of a burst, pointed where the first round went
+    if (g.burstLeft > 0) {
+      g.burstT -= dt;
+      if (g.burstT <= 0) this.guardRound(g, prof, g.burstAng, g.burstErr);
       return;
     }
     g.cd -= dt;
@@ -799,7 +849,7 @@ export class Battle {
       return;
     }
     if (g.mag <= 0) {
-      if (def.ammo && G.stores[def.ammo] < this.ammoPer(def)) {
+      if (roundsInStores(prof, G.stores) < 1) {
         // out of ammunition: hatchets and fence pickets at the wall
         const reach = this.zombies.find((z) => z.state !== 'dying' && (z.state === 'wall' && g.x > 200 || ((z.state === 'over' || z.state === 'maul') && Math.abs(z.x - g.x) < 70)));
         if (reach) {
@@ -815,10 +865,10 @@ export class Battle {
         }
         return;
       }
-      g.reload = def.reload * 1.15;
+      g.reload = (prof.reloadPerRound ? prof.reload * prof.mag * 0.75 : prof.reload) * 1.15;
       return;
     }
-    g.mag--;
+    if (R.chance(prof.jam)) { g.cd = 1.2; this.text(g.x + 20, g.y - 150, 'jammed', '#c8a070', 10); return; }
     let aim = aimFactor(g.s);
     if (g.mode === 'panic') aim *= 0.4;
     if (g.mode === 'rage') aim = Math.min(1.3, aim + 0.3);
@@ -831,19 +881,30 @@ export class Battle {
     const goHead = R.chance((0.2 + aim * 0.25) * (tgt.def.ranged ? 0.5 : 1));
     const ty = goHead ? hb.hy : (hb.y1 + hb.y2) / 2;
     const tx = goHead ? hb.hx : tgt.x;
-    const err = (def.spread * 1.2 + (1.15 - aim - lightBonus) * 0.07 + (fog ? 0.04 : 0)) * (1 + dist / 900) * (tgt.def.ranged ? 1.8 : 1);
+    const err = (prof.spread * 1.2 + (1.15 - aim - lightBonus) * 0.07 + (fog ? 0.04 : 0)) * (1 + dist / 900) * (tgt.def.ranged ? 1.8 : 1);
     const base = Math.atan2(ty - mz.y, tx - mz.x);
-    for (let i = 0; i < def.pellets; i++) {
-      const a = base + R.gauss(0, def.pellets > 1 ? def.spread * 0.7 : err * 0.6);
-      this.castShot(g, mz.x, mz.y, a, def.dmg * (0.85 + g.w.cond * 0.15), def.pierce, def.knock, def.pellets > 1, false);
-    }
-    g.cd = (1 / def.rof) * (def.auto ? 1.3 : 1.6) * R.range(0.9, 1.25) * (g.mode === 'panic' ? 0.55 : g.mode === 'rage' ? 0.7 : 1);
-    g.recoil = 1;
-    g.flash = 0.06;
-    this.noise += def.noise * 0.7;
-    g.w.cond = Math.max(0.05, g.w.cond - 0.0006);
-    this.lights.push({ x: mz.x + 10, y: mz.y, r: 180, life: 0.06, max: 0.06, color: '255,200,120' });
-    sfx.shot(def.id, true);
+    g.cd = (1 / prof.rof) * (prof.auto ? 1.3 : 1.6) * R.range(0.9, 1.25) * (g.mode === 'panic' ? 0.55 : g.mode === 'rage' ? 0.7 : 1);
+    g.burstLeft = Math.min(prof.burst, g.mag);
+    this.guardRound(g, prof, base, err);
+  }
+
+  guardRound(g: Guard, prof: FireProfile, base: number, err: number) {
+    if (!g.w) { g.burstLeft = 0; return; }
+    const mz = this.muzzle(g);
+    do {
+      if (g.mag <= 0) { g.burstLeft = 0; break; }
+      g.mag--;
+      g.burstLeft--;
+      for (let i = 0; i < prof.pellets; i++) {
+        const a = base + R.gauss(0, prof.pellets > 1 ? prof.spread * 0.7 : err * 0.6);
+        this.castShot(g, mz.x, mz.y, a, prof.dmg, prof.pierce, prof.knock, prof.pellets > 1, false, prof);
+      }
+      this.roundFired(g, prof, mz, true);
+      g.w.cond = Math.max(0.05, g.w.cond - 0.0006);
+    } while (g.burstLeft > 0 && prof.burstGap <= 0);
+    g.burstAng = base;
+    g.burstErr = err;
+    g.burstT = prof.burstGap;
   }
 
   updateTurret(tu: { x: number; y: number; cd: number; flash: number; ang: number }, dt: number) {
@@ -1851,6 +1912,7 @@ export class Battle {
     const p = this.player;
     if (p && p.w) {
       const def = WEAPONS[p.w.def];
+      const prof = this.prof(p.w);
       const icon = img(def.icon);
       c.fillStyle = 'rgba(10,9,8,0.7)';
       c.fillRect(W - 330, H - 92, 310, 74);
@@ -1865,16 +1927,20 @@ export class Battle {
       const mag = this.playerMag.get(p.w.uid) ?? 0;
       c.font = '26px "Special Elite", monospace';
       c.fillStyle = mag === 0 ? '#c04030' : '#efe2c2';
-      const reserve = def.ammo ? (def.ammo === 'scrap' ? Math.floor(G.stores.scrap * 20) : G.stores[def.ammo]) : '∞';
+      const reserve = prof.ammoRes ? roundsInStores(prof, G.stores) : '∞';
       c.fillText(`${mag}`, W - 110, H - 30);
       c.font = '14px "Special Elite", monospace';
       c.fillStyle = '#a89c84';
       c.fillText(`/ ${reserve}`, W - 30, H - 30);
-      if (p.w.cond < 0.4) { c.fillStyle = '#c08040'; c.fillText('worn', W - 200, H - 30); }
+      // what is in the gun tonight
+      c.font = '11px "Special Elite", monospace';
+      c.fillStyle = prof.incendiary ? '#d08040' : '#8f846e';
+      c.fillText(prof.ammoRes ? (AMMO_TYPES[prof.ammoRes]?.short ?? ammoLabel(prof.ammoRes)) : '', W - 30, H - 52);
+      if (p.w.cond < 0.4) { c.font = '14px "Special Elite", monospace'; c.fillStyle = '#c08040'; c.fillText('worn', W - 200, H - 30); }
       // reload bar
       if (this.playerReload > 0) {
         c.fillStyle = '#d9c9a0';
-        c.fillRect(W - 320, H - 24, 290 * (1 - this.playerReload / Math.max(0.01, def.reload)), 3);
+        c.fillRect(W - 320, H - 24, 290 * Math.max(0, 1 - this.playerReload / Math.max(0.01, prof.reload)), 3);
       }
     }
     c.textAlign = 'left';
@@ -1890,10 +1956,10 @@ export class Battle {
     });
     // crosshair: circle sized by real spread
     if (p && p.w && !this.done) {
-      const def = WEAPONS[p.w.def];
+      const prof = this.prof(p.w);
       const mz = this.muzzle(p);
       const dist = Math.hypot(this.mouse.x - mz.x, this.mouse.y - mz.y);
-      const spreadA = (def.pellets > 1 ? def.spread : def.spread * (1.75 - aimFactor(p.s))) + this.bloom;
+      const spreadA = (prof.pellets > 1 ? prof.spread : prof.spread * (1.75 - aimFactor(p.s))) + this.bloom;
       const r = Math.max(5, Math.tan(spreadA) * dist);
       c.strokeStyle = this.playerReload > 0 ? 'rgba(200,120,80,0.8)' : 'rgba(235,225,200,0.85)';
       c.lineWidth = 1.5;
@@ -1938,14 +2004,29 @@ export class Battle {
     const r = this.res;
     r.wallLost = Math.round(this.wallStart - G.fort.hp);
     // put ammo still in magazines back in the stores
+    const held = new Set<string>();
+    const pl = this.lastPlayer;
     for (const g of this.guards) {
       if (!g.w) continue;
-      const def = WEAPONS[g.w.def];
-      const m = g === this.player ? this.playerMag.get(g.w.uid) ?? 0 : g.mag;
-      if (def.ammo) add(def.ammo, m * this.ammoPer(def));
+      held.add(g.w.uid);
+      const prof = this.prof(g.w);
+      const m = g === pl ? this.playerMag.get(g.w.uid) ?? 0 : g.mag;
+      if (prof.ammoRes) add(prof.ammoRes, m * prof.perShot);
     }
-    for (const k of ['light', 'shell', 'rifle', 'scrap', 'molotov'] as Res[]) {
-      const used = (this.ammoStart[k] ?? 0) - G.stores[k];
+    // guns the leader picked up and put down again
+    for (const [uid, m] of this.playerMag) {
+      const w = held.has(uid) ? undefined : G.weapons.find((x) => x.uid === uid);
+      if (!w || m <= 0) continue;
+      const prof = fireProfile(w);
+      if (prof.ammoRes) add(prof.ammoRes, m * prof.perShot);
+    }
+    // arrows and bolts off the road
+    for (const [k, v] of Object.entries(this.recover) as [Res, number][]) {
+      const n = Math.floor(v);
+      if (n > 0) { add(k, n); r.lines.push(`Picked ${n} ${ammoLabel(k).toLowerCase()} back out of the road at first light.`); }
+    }
+    for (const k of Object.keys(this.ammoStart) as Res[]) {
+      const used = (this.ammoStart[k] ?? 0) - (G.stores[k] ?? 0);
       if (used > 0.5) r.ammoUsed[k] = Math.round(used);
     }
     // tales from the night
