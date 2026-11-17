@@ -1,0 +1,26 @@
+{
+  "id": "z_riot",
+  "source": "z_riot__riga",
+  "height": 240,
+  "joints": {
+    "headTop": [290, 10],
+    "neck": [300, 300],
+    "shoulder": [255, 395],
+    "elbow": [400, 470],
+    "wrist": [580, 440],
+    "handTip": [710, 510],
+    "pelvis": [290, 760],
+    "hip": [340, 800],
+    "knee": [500, 1050],
+    "ankle": [520, 1330],
+    "toe": [690, 1340],
+    "bHip": [240, 800],
+    "bKnee": [220, 1120],
+    "bAnkle": [90, 1310],
+    "bToe": [150, 1415]
+  },
+  "radius": {
+    "torso": 0.15,
+    "head": 0.1
+  }
+}

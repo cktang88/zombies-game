@@ -1,0 +1,92 @@
+{
+  "model": "google/gemini-3.1-flash-lite-image",
+  "style": "Match the reference image exactly: same person, same clothes, same colours, same mature graphic-novel cel-shaded style with thick confident black ink outlines, two-tone hard-edged shadows, gritty texture, muted desaturated palette, grounded realistic proportions.",
+  "key": "Isolated on a perfectly flat solid pure magenta #FF00FF background, no ground, no cast shadow, no scenery, no text, no labels, no border.",
+  "parts": [
+    {
+      "id": "z_shambler2__riga",
+      "ref": "z_shambler2",
+      "prompt": "The same zombie woman with long matted dark hair, torn blouse and stained apron skirt, dark torn stockings from the reference image in a rigging pose for 2D skeletal animation: strict side profile facing right, torso upright, both arms held straight out forward at shoulder height (the far arm hidden exactly behind the near arm), grey clawed hands, legs in a wide walking stride so the two legs are clearly separated with a gap between them, full body head to bare feet."
+    },
+    {
+      "id": "z_mill__riga",
+      "ref": "z_mill",
+      "prompt": "The same zombie mill worker in a yellow hard hat with ear defenders and oil-stained work coveralls from the reference image in a rigging pose for 2D skeletal animation: strict side profile facing right, torso upright, both arms held straight out forward at shoulder height (the far arm hidden exactly behind the near arm), grey clawed hands, legs in a wide walking stride so the two legs are clearly separated with a gap between them, full body head to work boots."
+    },
+    {
+      "id": "z_hunter__riga",
+      "ref": "z_hunter",
+      "prompt": "The same zombie hunter in a torn blaze-orange hunting vest over a flannel shirt and olive trousers from the reference image in a rigging pose for 2D skeletal animation: strict side profile facing right, torso upright, both arms held straight out forward at shoulder height (the far arm hidden exactly behind the near arm), grey clawed hands, legs in a wide walking stride so the two legs are clearly separated with a gap between them, full body head to boots."
+    },
+    {
+      "id": "z_manor__riga",
+      "ref": "z_manor",
+      "prompt": "The same gaunt old bald zombie in a long ragged green coat over striped pajamas from the reference image in a rigging pose for 2D skeletal animation: strict side profile facing right, torso upright, both arms held straight out forward at shoulder height (the far arm hidden exactly behind the near arm), grey clawed hands, legs in a wide walking stride so the two legs are clearly separated with a gap between them, full body head to bare feet."
+    },
+    {
+      "id": "z_church__riga",
+      "ref": "z_church",
+      "prompt": "The same old zombie woman in a red cardigan and a torn olive dress from the reference image in a rigging pose for 2D skeletal animation: strict side profile facing right, torso upright, both arms held straight out forward at shoulder height (the far arm hidden exactly behind the near arm), grey clawed hands, legs in a wide walking stride so the two legs are clearly separated with a gap between them, full body head to shoes."
+    },
+    {
+      "id": "z_runner2__riga",
+      "ref": "z_runner2",
+      "prompt": "The same gaunt young zombie in a torn varsity letterman jacket and dark jeans from the reference image in a rigging pose for 2D skeletal animation: strict side profile facing right, torso upright, both arms held straight out forward at shoulder height (the far arm hidden exactly behind the near arm), grey clawed hands, legs in a wide walking stride so the two legs are clearly separated with a gap between them, full body head to sneakers."
+    },
+    {
+      "id": "z_bloater__riga",
+      "ref": "z_bloater",
+      "prompt": "The same grossly bloated zombie with a huge swollen belly, grey-green skin, wearing overalls over a red shirt from the reference image in a rigging pose for 2D skeletal animation: strict side profile facing right, torso upright, both arms held straight out forward at shoulder height (the far arm hidden exactly behind the near arm), swollen grey hands, legs in a wide walking stride so the two legs are clearly separated with a gap between them, full body head to rubber boots."
+    },
+    {
+      "id": "z_shrieker__riga",
+      "ref": "z_shrieker",
+      "prompt": "The same thin emaciated zombie woman with long grey hair, mouth gaping open, in a torn green dress from the reference image in a rigging pose for 2D skeletal animation: strict side profile facing right, torso upright, both arms held straight out forward at shoulder height (the far arm hidden exactly behind the near arm), grey clawed hands, legs in a wide walking stride so the two legs are clearly separated with a gap between them, full body head to bare feet."
+    },
+    {
+      "id": "z_riot__riga",
+      "ref": "z_riot",
+      "prompt": "The same zombie riot policeman in black body armour, a riot helmet with a cracked visor, knee pads from the reference image in a rigging pose for 2D skeletal animation: strict side profile facing right, torso upright, both arms held straight out forward at shoulder height (the far arm hidden exactly behind the near arm), gloved hands, legs in a wide walking stride so the two legs are clearly separated with a gap between them, full body head to boots."
+    },
+    {
+      "id": "z_leaper__riga",
+      "ref": "z_leaper",
+      "prompt": "The same lean zombie farm boy in a quilted olive vest and rust-brown trousers, with glowing ochre eyes from the reference image in a rigging pose for 2D skeletal animation: strict side profile facing right, torso upright, both arms held straight out forward at shoulder height (the far arm hidden exactly behind the near arm), long clawed grey hands, legs in a wide walking stride so the two legs are clearly separated with a gap between them, full body head to boots. Stand upright, not hunched."
+    },
+    {
+      "id": "z_spitter__riga",
+      "ref": "z_spitter",
+      "prompt": "The same heavy zombie with a grotesquely swollen bulging throat and jaw, in stained olive coveralls with rolled sleeves from the reference image in a rigging pose for 2D skeletal animation: strict side profile facing right, torso upright, both arms held straight out forward at shoulder height (the far arm hidden exactly behind the near arm), grey hands, legs in a wide walking stride so the two legs are clearly separated with a gap between them, full body head to boots."
+    },
+    {
+      "id": "z_bellwether__riga",
+      "ref": "z_bellwether",
+      "prompt": "The same very tall skeletal zombie bell-ringer in a tattered black robe with a rope belt, bony grey limbs from the reference image in a rigging pose for 2D skeletal animation: strict side profile facing right, torso upright, both arms held straight out forward at shoulder height (the far arm hidden exactly behind the near arm), long bony clawed hands, legs in a wide walking stride so the two legs are clearly separated with a gap between them, full body head to bare bony feet. The heavy bronze church bell from the reference hangs on a short rope from the front of its rope belt, in front of its thighs."
+    },
+    {
+      "id": "z_crawler__riga",
+      "ref": "z_crawler",
+      "prompt": "The same legless zombie from the reference image (body torn off at the waist, ragged trouser rags and bones trailing behind) in a rigging pose for 2D skeletal animation: strict side profile facing right, lying prone low on its belly with the torso horizontal, head raised looking forward, both arms stretched straight out forward ahead of the head along the ground (the far arm hidden exactly behind the near arm), grey clawed hands, the torn rags and bones trailing straight back behind the waist."
+    },
+    {
+      "id": "z_raider__riga",
+      "ref": "z_raider",
+      "prompt": "The same man from the reference image in a rigging pose for 2D skeletal animation, WITHOUT any weapon: strict side profile facing right, torso upright, both arms held straight out forward at shoulder height (the far arm hidden exactly behind the near arm), hands open and empty, legs in a wide walking stride so the two legs are clearly separated with a gap between them, full body head to boots."
+    },
+    {
+      "id": "z_raider2__riga",
+      "ref": "z_raider2",
+      "prompt": "The same bearded man from the reference image in a rigging pose for 2D skeletal animation, WITHOUT any weapon: strict side profile facing right, torso upright, both arms held straight out forward at shoulder height (the far arm hidden exactly behind the near arm), hands open and empty, legs in a wide walking stride so the two legs are clearly separated with a gap between them, full body head to boots."
+    },
+    {
+      "id": "z_raider__hands",
+      "ref": "z_raider",
+      "prompt": "A sheet of six separate bare hands of the man in the reference image, side view, laid out apart in a row with wide magenta gaps: 1 right hand closed around an invisible pistol grip, 2 left hand cupped as if supporting a rifle fore-end from below, 3 open relaxed hand, 4 closed fist, 5 hand pinching a small object between thumb and fingers, 6 open hand palm forward. Each hand ends at the wrist with a short bit of jacket cuff. No weapons, no objects."
+    },
+    {
+      "id": "z_raider2__hands",
+      "ref": "z_raider2",
+      "prompt": "A sheet of six separate bare hands of the man in the reference image, side view, laid out apart in a row with wide magenta gaps: 1 right hand closed around an invisible pistol grip, 2 left hand cupped as if supporting a rifle fore-end from below, 3 open relaxed hand, 4 closed fist, 5 hand pinching a small object between thumb and fingers, 6 open hand palm forward. Each hand ends at the wrist with a short bit of jacket cuff. No weapons, no objects."
+    }
+  ]
+}

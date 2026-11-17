@@ -1,0 +1,25 @@
+{
+  "id": "z_spitter",
+  "source": "z_spitter__riga",
+  "height": 240,
+  "joints": {
+    "headTop": [410, 10],
+    "neck": [380, 290],
+    "shoulder": [310, 365],
+    "elbow": [450, 405],
+    "wrist": [640, 390],
+    "handTip": [770, 440],
+    "pelvis": [330, 760],
+    "hip": [380, 790],
+    "knee": [470, 1040],
+    "ankle": [530, 1270],
+    "toe": [700, 1310],
+    "bHip": [280, 790],
+    "bKnee": [220, 1050],
+    "bAnkle": [110, 1270],
+    "bToe": [220, 1350]
+  },
+  "radius": {
+    "torso": 0.15
+  }
+}

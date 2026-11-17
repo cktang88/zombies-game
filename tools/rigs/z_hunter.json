@@ -1,0 +1,22 @@
+{
+  "id": "z_hunter",
+  "source": "z_hunter__riga",
+  "height": 240,
+  "joints": {
+    "headTop": [330, 10],
+    "neck": [330, 190],
+    "shoulder": [300, 260],
+    "elbow": [460, 270],
+    "wrist": [700, 280],
+    "handTip": [890, 290],
+    "pelvis": [310, 610],
+    "hip": [360, 640],
+    "knee": [500, 850],
+    "ankle": [530, 1060],
+    "toe": [690, 1100],
+    "bHip": [260, 640],
+    "bKnee": [210, 870],
+    "bAnkle": [80, 1060],
+    "bToe": [160, 1150]
+  }
+}

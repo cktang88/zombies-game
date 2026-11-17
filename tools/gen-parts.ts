@@ -5,8 +5,8 @@
 // tools/segment.ts from the joints placed in tools/rigs/<sprite>.json. Copy the raw you pick
 // into tools/rigs/src/ (committed) so the cut is reproducible.
 //
-// Usage: npx tsx tools/gen-parts.ts [--force] [id ...]
-// Manifest: tools/sprites-parts.json  { model, style, parts: [{ id, ref, prompt }] }
+// Usage: npx tsx tools/gen-parts.ts [--force] [--manifest=tools/other.json] [id ...]
+// Manifest (default tools/sprites-parts.json): { model, style, key, parts: [{ id, ref, prompt }] }
 import fs from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
@@ -20,12 +20,13 @@ interface ORResponse {
   usage?: { cost?: number };
 }
 
-const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'tools/sprites-parts.json'), 'utf8')) as PartManifest;
 const RAW = path.join(ROOT, 'tools/.cache/parts-raw');
 const KEYED = path.join(ROOT, 'tools/.cache/parts-keyed');
 fs.mkdirSync(RAW, { recursive: true });
 fs.mkdirSync(KEYED, { recursive: true });
 const args = process.argv.slice(2);
+const manifestArg = args.find((a) => a.startsWith('--manifest='))?.slice('--manifest='.length);
+const manifest = JSON.parse(fs.readFileSync(path.resolve(ROOT, manifestArg ?? 'tools/sprites-parts.json'), 'utf8')) as PartManifest;
 const force = args.includes('--force');
 const only = args.filter((a) => !a.startsWith('--'));
 const MODEL = process.env.SPRITE_MODEL || manifest.model;

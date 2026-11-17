@@ -21,6 +21,7 @@ interface RigSrc {
   id: string;
   source: string;
   height: number; // output character height (top of head to sole), px
+  standHeight?: number; // source px of a standing body (prone rigs); default: the opaque bbox height
   joints: Record<string, P>;
   radius?: Record<string, number>; // per-part thickness as a fraction of source char height
   force?: { part: string; poly: P[] }[]; // pixels inside poly go to `part` ("none" = discard)
@@ -104,7 +105,9 @@ async function segment(rig: RigSrc) {
   let top = 1e9, bot = -1;
   for (let i = 0; i < src.w * src.h; i++) if (src.data[i * 4 + 3] > 40) { const y = (i / src.w) | 0; if (y < top) top = y; if (y > bot) bot = y; }
   const charH = bot - top;
-  const s = rig.height / charH;
+  // standHeight: for a lying/prone source the bbox is not the body height; give the source px
+  // a standing body would measure so the parts come out at the same scale as upright rigs
+  const s = rig.height / (rig.standHeight ?? charH);
   const R = (p: string) => (rig.radius?.[p] ?? DEF_R[p]) * charH;
 
   // 1. nearest-bone ownership

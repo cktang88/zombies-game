@@ -1,0 +1,36 @@
+{
+  "id": "z_crawler",
+  "source": "z_crawler__riga",
+  "height": 240,
+  "standHeight": 1105,
+  "joints": {
+    "headTop": [1350, 110],
+    "neck": [1255, 255],
+    "shoulder": [1240, 300],
+    "elbow": [1400, 370],
+    "wrist": [1560, 420],
+    "handTip": [1740, 445],
+    "pelvis": [850, 340],
+    "hip": [800, 360],
+    "knee": [520, 400],
+    "ankle": [150, 430],
+    "toe": [40, 442],
+    "bHip": [800, 350],
+    "bKnee": [520, 390],
+    "bAnkle": [150, 420],
+    "bToe": [40, 432]
+  },
+  "radius": {
+    "torso": 0.23,
+    "head": 0.2,
+    "upperArm": 0.11,
+    "forearm": 0.1,
+    "hand": 0.1,
+    "thigh": 0.16,
+    "shin": 0.13,
+    "foot": 0.1,
+    "x1": 0.001,
+    "x2": 0.001,
+    "x3": 0.001
+  }
+}

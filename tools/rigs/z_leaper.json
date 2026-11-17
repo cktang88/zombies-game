@@ -1,0 +1,22 @@
+{
+  "id": "z_leaper",
+  "source": "z_leaper__riga",
+  "height": 240,
+  "joints": {
+    "headTop": [520, 30],
+    "neck": [500, 200],
+    "shoulder": [445, 262],
+    "elbow": [560, 300],
+    "wrist": [790, 300],
+    "handTip": [900, 350],
+    "pelvis": [440, 550],
+    "hip": [480, 580],
+    "knee": [570, 800],
+    "ankle": [590, 1040],
+    "toe": [730, 1080],
+    "bHip": [400, 580],
+    "bKnee": [330, 830],
+    "bAnkle": [190, 990],
+    "bToe": [260, 1090]
+  }
+}

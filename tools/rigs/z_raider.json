@@ -1,0 +1,25 @@
+{
+  "id": "z_raider",
+  "source": "z_raider__riga",
+  "height": 240,
+  "joints": {
+    "headTop": [580, 15],
+    "neck": [560, 160],
+    "shoulder": [530, 220],
+    "elbow": [670, 240],
+    "wrist": [820, 240],
+    "handTip": [940, 240],
+    "pelvis": [530, 480],
+    "hip": [570, 500],
+    "knee": [610, 700],
+    "ankle": [650, 890],
+    "toe": [760, 920],
+    "bHip": [490, 500],
+    "bKnee": [440, 700],
+    "bAnkle": [360, 880],
+    "bToe": [460, 930]
+  },
+  "radius": {
+    "torso": 0.14
+  }
+}
