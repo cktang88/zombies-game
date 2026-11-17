@@ -581,7 +581,7 @@ export class Rig {
           defN = { x: fx, y: fy, rho: this.ga, pose: 'support' };
         }
         // pistol: the support hand cups the trigger hand from below / in front of the grip
-        else if (!this.oneHand) { const [px, py] = this.gunPt([0, 0], 2, 7); defN = { x: px, y: py, rho: this.ga + 0.35, pose: 'support' }; }
+        else if (!this.oneHand) { const [px, py] = this.gunPt([0, 0], -1, 3); defN = { x: px, y: py, rho: this.ga + 0.15, pose: 'support' }; }
       }
     } else if (ch.handIK > 0) {
       defN = { x: ch.nHx, y: ch.nHy, rho: NaN, pose: 'open' };
