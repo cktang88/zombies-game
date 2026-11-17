@@ -1,6 +1,7 @@
 // Public surface of the animation system. See docs/research/09-animation.md.
 export { createRig, Rig, type RigKind, type PlayOpts, type CreateOpts } from './rig';
-export { loadRig, loadGun, loadAllGuns, getRig, getGun } from './assets';
+export { loadRig, loadGun, loadAllGuns, getRig, getGun, gradedAtlas, silAtlas, outlineAtlas, type RigAsset } from './assets';
+export { flipbookStats, setFlipBudget } from './flipbook';
 export { CLIPS, RELOADS, type Clip } from './clips';
 export { GAITS, type Gait } from './gait';
 export { STYLES, SPRITE_RIGS, type Style, type SpriteRig } from './styles';

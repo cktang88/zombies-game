@@ -123,6 +123,25 @@ export class Rig {
   lod = false;
   /** idle behaviours scheduled automatically when standing still (Turned) */
   autoIdle = false;
+  /** the head is gone (blown off): never drawn */
+  hideHead = false;
+  /** per-look atlases set by the game each frame (lane grade, variant tint, light): null = plain */
+  skin: { atlas: CanvasImageSource; dark: CanvasImageSource } | null = null;
+  /** ink outline stamped under the body: a dilated silhouette atlas grown by `grow` atlas px */
+  outline: { src: CanvasImageSource; grow: number } | null = null;
+  /** rim band: a silhouette atlas offset by (dx, dy) display px, drawn between outline and body */
+  rim: { src: CanvasImageSource; dx: number; dy: number; alpha: number } | null = null;
+  /** extra flat overlays after the body (burning, a crosshair edge…): atlas + alpha */
+  overlay: { src: CanvasImageSource; alpha: number } | null = null;
+  /** key of the look above, for the shared crowd flipbook frames */
+  lookKey = '';
+  /** set by the game once the rig has been drawn (bone positions are in world space) */
+  hasDrawn = false;
+  /** flipbook frames are baked at this scale (the lane's), then drawn at the body's own */
+  lodScale = 0;
+  /** camera transform of the last draw (shake / hitstop offsets) */
+  private cam: DOMMatrix2DInit | null = null;
+  private baseAlpha = 1;
   private idleIn = 3;
   private r: () => number;
 
@@ -228,7 +247,7 @@ export class Rig {
    * and hand over to the ragdoll on their 'ragdoll' event; otherwise straight to ragdoll.
    * impulse is in DISPLAY px/s and world axes (x right) - it is converted to rig space.
    */
-  die(o: DieOpts & { authored?: boolean; worldImpulse?: { x: number; y: number }; wallWorldX?: number } = {}) {
+  die(o: DieOpts & { authored?: boolean; authoredDur?: number; worldImpulse?: { x: number; y: number }; wallWorldX?: number } = {}) {
     if (this.dead) return;
     const opts: DieOpts = { ...o };
     if (o.worldImpulse) opts.impulse = { x: (o.worldImpulse.x * this.df) / this.ds, y: o.worldImpulse.y / this.ds };
@@ -237,7 +256,7 @@ export class Rig {
     if (o.authored !== false && authored.length && (o.authored || this.r() < authored.length / this.style.deaths.length)) {
       const id = authored[Math.floor(this.r() * authored.length)];
       this.actions = this.actions.filter((a) => a.clip.add);
-      this.play(id, { onEvent: (n) => { if (n === 'ragdoll' || n === 'burst') this.startRagdoll(opts); } });
+      this.play(id, { duration: o.authoredDur, onEvent: (n) => { if (n === 'ragdoll' || n === 'burst') this.startRagdoll(opts); } });
       this.dead = true;
       return;
     }
@@ -607,6 +626,9 @@ export class Rig {
     rd.init(this.pts, prev, 1 / 60, g.restHeadRel);
     if (o.wallX !== undefined) rd.wallX = o.wallX;
     rd.hit(o);
+    // a low-impulse death would otherwise settle kneeling or sitting upright (the muscles
+    // hold the standing pose while the legs fold): tip the trunk past the feet
+    if (!o.noCollapse) rd.collapse(o.impulse?.x ?? 0, o.impulse?.y ?? 0, this.crawling);
     this.ragdoll = rd;
     this.actions = [];
     // the gun falls free
@@ -651,65 +673,137 @@ export class Rig {
    * (display height / 240), facing +1 right / -1 left. Falls back to the single
    * full-body sprite (procedural bob) when the part atlas is missing.
    */
-  draw(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number, facing: 1 | -1, fallback?: CanvasImageSource) {
+  draw(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number, facing: 1 | -1, fallback?: CanvasImageSource, cam?: DOMMatrix2DInit | null) {
     if (this.baked) return;
     this.dx = x; this.dy = y; this.ds = scale; this.df = facing;
+    this.cam = cam && !(cam.a === 1 && cam.b === 0 && cam.c === 0 && cam.d === 1 && cam.e === 0 && cam.f === 0) ? cam : null;
+    this.baseAlpha = ctx.globalAlpha;
     const as = this.asset;
     if (!as || !this.geo) { this.drawFallback(ctx, x, y, scale, facing, fallback); return; }
-    if (this.lod && !this.ragdoll && !this.weaponId && this.flashT <= 0 && this.actions.length === 0) {
+    if (this.lod && !this.ragdoll && !this.weaponId && this.flashT <= 0 && this.actions.length === 0 && !this.overlay && !this.hideHead) {
       const fr = flipFrame(this, scale);
       if (fr) {
-        ctx.setTransform(facing, 0, 0, 1, x, y);
+        const k = scale / fr.s;
+        this.xf(ctx, facing * k, 0, 0, k, x, y);
         ctx.drawImage(fr.c, -fr.ox, -fr.oy);
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        this.resetXf(ctx);
         return;
       }
     }
     if (this.ragdoll) this.poseFromRagdoll();
-    const flash = this.flashT > 0;
-    const atlas = as.atlas;
+    // under the body: the ink outline, then the rim band peeking out past it
+    if (this.outline) this.drawSil(ctx, this.outline.src, 0, 0, this.outline.grow);
+    if (this.rim && this.rim.alpha > 0) {
+      ctx.globalAlpha = this.baseAlpha * this.rim.alpha;
+      this.drawSil(ctx, this.rim.src, this.rim.dx * this.df / this.ds, this.rim.dy / this.ds, 0);
+      ctx.globalAlpha = this.baseAlpha;
+    }
+    this.drawBody(ctx, as);
+    if (this.overlay && this.overlay.alpha > 0) {
+      ctx.globalAlpha = this.baseAlpha * Math.min(1, this.overlay.alpha);
+      this.drawSil(ctx, this.overlay.src, 0, 0, 0);
+      ctx.globalAlpha = this.baseAlpha;
+    }
+    if (this.flashT > 0) {
+      ctx.globalAlpha = this.baseAlpha * 0.65;
+      this.drawSil(ctx, as.flash, 0, 0, 0);
+      ctx.globalAlpha = this.baseAlpha;
+    }
+    this.drawProps(ctx);
+    this.resetXf(ctx);
+  }
+
+  private drawBody(ctx: CanvasRenderingContext2D, as: RigAsset) {
+    const atlas = this.skin?.atlas ?? as.atlas, dark = this.skin?.dark ?? as.dark;
     // far side
-    this.part(ctx, as.dark, F_TH, 'thigh');
-    this.part(ctx, as.dark, F_SN, 'shin');
-    this.part(ctx, as.dark, F_FT, 'foot');
-    this.part(ctx, as.dark, F_UA, 'upperArm');
-    this.part(ctx, as.dark, F_FA, 'forearm');
+    this.part(ctx, dark, F_TH, 'thigh');
+    this.part(ctx, dark, F_SN, 'shin');
+    this.part(ctx, dark, F_FT, 'foot');
+    this.part(ctx, dark, F_UA, 'upperArm');
+    this.part(ctx, dark, F_FA, 'forearm');
     if (this.gunState === 'slung' && this.gun && this.weaponId && this.anchors?.hold !== 'melee') this.drawSlung(ctx);
     // trunk
     this.part(ctx, atlas, TORSO, 'torso');
-    this.part(ctx, atlas, HEAD, 'head', this.headFlip > 0.5);
+    if (!this.hideHead) this.part(ctx, atlas, HEAD, 'head', this.headFlip > 0.5);
     this.part(ctx, atlas, N_TH, 'thigh');
     this.part(ctx, atlas, N_SN, 'shin');
     this.part(ctx, atlas, N_FT, 'foot');
     if (this.gunVisible && this.anchors?.hold !== 'melee') this.drawGun(ctx);
     // far (trigger) hand wraps the grip: in front of the gun
-    this.part(ctx, this.weaponId && this.kind === 'survivor' && this.gunState === 'held' ? atlas : as.dark, F_H, this.handF);
+    this.part(ctx, this.weaponId && this.kind === 'survivor' && this.gunState === 'held' ? atlas : dark, F_H, this.handF);
     if (this.fprop) this.drawProp(ctx, this.fprop, this.palmFX, this.palmFY, this.rhoF);
     if (this.anchors?.hold === 'bow' && this.gunVisible) this.drawString(ctx);
-    // contact shadow of the near arm, then the arm
-    ctx.globalAlpha = 0.28;
-    this.part(ctx, as.shadow, N_UA, 'upperArm', false, 2.5, 3);
-    this.part(ctx, as.shadow, N_FA, 'forearm', false, 2.5, 3);
-    ctx.globalAlpha = 1;
+    // contact shadow of the near arm (skipped on small bodies: invisible there), then the arm
+    if (this.ds > 0.42) {
+      ctx.globalAlpha = this.baseAlpha * 0.28;
+      this.part(ctx, as.shadow, N_UA, 'upperArm', false, 2.5, 3);
+      this.part(ctx, as.shadow, N_FA, 'forearm', false, 2.5, 3);
+      ctx.globalAlpha = this.baseAlpha;
+    }
     this.part(ctx, atlas, N_UA, 'upperArm');
     this.part(ctx, atlas, N_FA, 'forearm');
     if (this.magState === 'hand' && this.gun?.mag) this.drawMagInHand(ctx);
     if (this.prop) this.drawProp(ctx, this.prop, this.palmNX, this.palmNY, this.rhoN);
     this.part(ctx, atlas, N_H, this.handN);
     if (this.gunVisible && this.anchors?.hold === 'melee') this.drawGun(ctx);
-    if (flash) {
-      ctx.globalAlpha = 0.65;
-      for (let i = 0; i < PART_COUNT; i++) this.part(ctx, as.flash, i, i === N_H ? this.handN : i === F_H ? this.handF : PART_NAMES[i]);
-      ctx.globalAlpha = 1;
-    }
-    this.drawProps(ctx);
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
+
+  /** Every body part from one flat atlas (outline, rim, flash), offset by (ox, oy) rig units. */
+  private drawSil(ctx: CanvasRenderingContext2D, src: CanvasImageSource, ox: number, oy: number, grow: number) {
+    for (let i = 0; i < PART_COUNT; i++) {
+      if (i === HEAD && this.hideHead) continue;
+      this.part(ctx, src, i, i === N_H ? this.handN : i === F_H ? this.handF : PART_NAMES[i], i === HEAD && this.headFlip > 0.5, ox, oy, grow);
+    }
+  }
+
+  /** setTransform composed with the camera transform of this draw. */
+  private xf(ctx: CanvasRenderingContext2D, a: number, b: number, c: number, d: number, e: number, f: number) {
+    const m = this.cam;
+    if (!m) { ctx.setTransform(a, b, c, d, e, f); return; }
+    const ma = m.a ?? 1, mb = m.b ?? 0, mc = m.c ?? 0, md = m.d ?? 1, me = m.e ?? 0, mf = m.f ?? 0;
+    ctx.setTransform(ma * a + mc * b, mb * a + md * b, ma * c + mc * d, mb * c + md * d, ma * e + mc * f + me, mb * e + md * f + mf);
+  }
+  private resetXf(ctx: CanvasRenderingContext2D) {
+    const m = this.cam;
+    if (m) ctx.setTransform(m.a ?? 1, m.b ?? 0, m.c ?? 0, m.d ?? 1, m.e ?? 0, m.f ?? 0);
+    else ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = this.baseAlpha;
+  }
+
+  // ---- bone positions in world (display) space, for hit tests and weakspot rings
+  /** A ragdoll/skeleton point (ragdoll.ts P_* index) in world coordinates. */
+  pointWorld(i: number): [number, number] {
+    let x: number, y: number;
+    if (this.ragdoll) { x = this.ragdoll.x[i]; y = this.ragdoll.y[i]; } else { x = this.pts[i * 2]; y = this.pts[i * 2 + 1]; }
+    return [this.dx + this.ds * this.df * x, this.dy + this.ds * y];
+  }
+  /** Centre of the skull in world coordinates (between the head base and the crown). */
+  headWorld(): [number, number] {
+    const [ax, ay] = this.pointWorld(19), [bx, by] = this.pointWorld(2);
+    return [ax + (bx - ax) * 0.55, ay + (by - ay) * 0.55];
+  }
+  /** A point `along` (0..1) a body part (skeleton.ts index), plus `perp` rig units across it. */
+  partWorld(i: number, along: number, perp = 0): [number, number] {
+    const m = this.asset?.meta.parts[PART_NAMES[i]];
+    const len = m?.len ?? 0;
+    const a = this.ja[i];
+    const x = this.jx[i] + Math.cos(a) * len * along - Math.sin(a) * perp, y = this.jy[i] + Math.sin(a) * len * along + Math.cos(a) * perp;
+    return [this.dx + this.ds * this.df * x, this.dy + this.ds * y];
+  }
+  /** The held gun's muzzle in world coordinates (null when no gun is in the hands). */
+  muzzleWorld(): [number, number] | null {
+    const a = this.anchors;
+    if (!a || !this.gunVisible || a.hold === 'melee') return null;
+    const [x, y] = this.gunPt([(a.muzzle[0] - a.grip[0]) * this.gk * (a.flip ? -1 : 1), (a.muzzle[1] - a.grip[1]) * this.gk]);
+    return [this.dx + this.ds * this.df * x, this.dy + this.ds * y];
+  }
+  /** World angle of the gun barrel (for muzzle flashes). */
+  gunAngleWorld(): number { return this.df > 0 ? this.ga : Math.PI - this.ga; }
 
   /** Debug overlay: bones as lines, joints as dots, the gun grip as a cross. */
   drawSkeleton(ctx: CanvasRenderingContext2D) {
     const p = this.pts, S = this.ds, F = this.df;
-    ctx.setTransform(S * F, 0, 0, S, this.dx, this.dy);
+    this.xf(ctx, S * F, 0, 0, S, this.dx, this.dy);
     ctx.lineWidth = 1.5 / S;
     ctx.strokeStyle = '#0ff';
     ctx.beginPath();
@@ -719,7 +813,7 @@ export class Rig {
     for (let i = 0; i < RAGDOLL_POINTS; i++) { ctx.beginPath(); ctx.arc(p[i * 2], p[i * 2 + 1], 2 / S, 0, Math.PI * 2); ctx.fill(); }
     ctx.strokeStyle = '#f0f';
     ctx.beginPath(); ctx.moveTo(this.gx - 4, this.gy); ctx.lineTo(this.gx + 4, this.gy); ctx.moveTo(this.gx, this.gy - 4); ctx.lineTo(this.gx, this.gy + 4); ctx.stroke();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.resetXf(ctx);
   }
 
   /** Draw the settled body darkened, e.g. into a ground-decal canvas, then free the sim. */
@@ -753,20 +847,21 @@ export class Rig {
     this.prop = null; this.fprop = null;
   }
 
-  private part(ctx: CanvasRenderingContext2D, src: CanvasImageSource, i: number, name: string, mirror = false, ox = 0, oy = 0) {
+  private part(ctx: CanvasRenderingContext2D, src: CanvasImageSource, i: number, name: string, mirror = false, ox = 0, oy = 0, grow = 0) {
     const m: PartMeta | undefined = this.asset!.meta.parts[name];
     if (!m) return;
     const S = this.ds, F = this.df;
     const r = this.ja[i] - m.rest;
     const c = Math.cos(r), s = Math.sin(r);
     const mx = mirror ? -1 : 1;
-    ctx.setTransform(S * F * c * mx, S * s, -S * F * s * mx, S * c, this.dx + S * F * (this.jx[i] + ox), this.dy + S * (this.jy[i] + oy));
-    ctx.drawImage(src, m.x, m.y, m.w, m.h, -m.px, -m.py, m.w, m.h);
+    this.xf(ctx, S * F * c * mx, S * s, -S * F * s * mx, S * c, this.dx + S * F * (this.jx[i] + ox), this.dy + S * (this.jy[i] + oy));
+    if (grow) ctx.drawImage(src, m.x - grow, m.y - grow, m.w + grow * 2, m.h + grow * 2, -m.px - grow, -m.py - grow, m.w + grow * 2, m.h + grow * 2);
+    else ctx.drawImage(src, m.x, m.y, m.w, m.h, -m.px, -m.py, m.w, m.h);
   }
 
   private setGunXf(ctx: CanvasRenderingContext2D, x: number, y: number, a: number, k: number, flip?: boolean) {
     const S = this.ds, F = this.df, c = Math.cos(a), s = Math.sin(a), fl = flip ? -1 : 1;
-    ctx.setTransform(S * F * c * k * fl, S * s * k * fl, -S * F * s * k, S * c * k, this.dx + S * F * x, this.dy + S * y);
+    this.xf(ctx, S * F * c * k * fl, S * s * k * fl, -S * F * s * k, S * c * k, this.dx + S * F * x, this.dy + S * y);
   }
 
   private drawGun(ctx: CanvasRenderingContext2D) {
@@ -814,7 +909,7 @@ export class Rig {
     const g = this.gun!, a = this.anchors!;
     const top = this.gunPt([(4 - a.grip[0]) * this.gk, (20 - a.grip[1]) * this.gk]);
     const bot = this.gunPt([(g.w - 4 - a.grip[0]) * this.gk, (20 - a.grip[1]) * this.gk]);
-    ctx.setTransform(this.ds * this.df, 0, 0, this.ds, this.dx, this.dy);
+    this.xf(ctx, this.ds * this.df, 0, 0, this.ds, this.dx, this.dy);
     ctx.strokeStyle = 'rgba(225,215,190,0.85)'; ctx.lineWidth = 0.8;
     ctx.beginPath(); ctx.moveTo(top[0], top[1]); ctx.lineTo(this.palmFX, this.palmFY); ctx.lineTo(bot[0], bot[1]); ctx.stroke();
     if (this.ch.draw > 0.3) {
@@ -838,7 +933,7 @@ export class Rig {
   }
   private drawProps(ctx: CanvasRenderingContext2D) {
     for (const p of this.props) {
-      ctx.globalAlpha = clamp(p.life / 0.5, 0, 1);
+      ctx.globalAlpha = this.baseAlpha * clamp(p.life / 0.5, 0, 1);
       if (p.src && (p.kind === 'mag' || p.kind === 'gun')) {
         this.setGunXf(ctx, p.x, p.y, p.a, p.k, p.flip);
         const im = p.src as HTMLCanvasElement;
@@ -850,7 +945,7 @@ export class Rig {
         else { ctx.fillStyle = '#1d1c1e'; ctx.fillRect(-3.5, -1.5, 7, 3); }
       }
     }
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = this.baseAlpha;
   }
 
   private drawFallback(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number, facing: 1 | -1, im?: CanvasImageSource) {
@@ -860,9 +955,9 @@ export class Rig {
     const bob = Math.abs(Math.sin(this.phase * Math.PI * 2)) * 2 * this.moving;
     // single sprites face right for survivors and left for the Turned
     const native = this.kind === 'turned' ? -1 : 1;
-    ctx.setTransform(facing * native, 0, 0, 1, x, y - bob);
+    this.xf(ctx, facing * native, 0, 0, 1, x, y - bob);
     ctx.drawImage(im, -ww / 2, -hh, ww, hh);
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.resetXf(ctx);
   }
 }
 

@@ -21,6 +21,7 @@ import { installModules } from './modules';
 import { meleeGuard } from './melee';
 // ---- end night modules ----
 import { depthScale, bakeSprite, bakeComposite, bakeEdge, bakeLayer, bakeGround, fgStrip, shadowEllipse, type Look } from './render';
+import { BattleActors } from './actors'; // rigged bodies (src/anim): drawing, deaths, corpses
 
 export const W = 1280, H = 720;
 export const WALL_X = 372; // front face of the barricade (near lane)
@@ -48,7 +49,7 @@ export const nearestLane = (y: number) => {
 /** The wall seen slightly from the side: the far lane's face sits ~10px further right. */
 export const wallX = (lane: number) => WALL_X + (LANES[3] - LANES[lane]) * 0.12;
 /** Per-lane atmosphere: far zombies dimmer, cooler, flatter and thinner-edged. */
-const LOOK: Look[] = [
+export const LOOK: Look[] = [
   { b: 0.7, s: 0.65, fog: 0.22, outline: 1, rim: 0.25 },
   { b: 0.8, s: 0.75, fog: 0.14, outline: 1, rim: 0.35 },
   { b: 0.9, s: 0.88, fog: 0.06, outline: 1.5, rim: 0.5 },
@@ -291,6 +292,7 @@ export class Battle {
     } else if (k === 's' || k === 'Control') this.ducking = false;
   };
   hooks: BattleHook[] = []; // night modules (traps, melee, emplacements): night/hook.ts
+  actors!: BattleActors; // rigged bodies (night/actors.ts), the last hook
   // ---- the leader's gun ----
   bloomShot = 0; // bloom at the last shot (decays from there: bloomNow())
   lastShotT = -9;
@@ -379,6 +381,8 @@ export class Battle {
     try { const pc = G.flags.pileCarry ? JSON.parse(G.flags.pileCarry as string) as number[] : null; if (Array.isArray(pc)) this.piles = [0, 1, 2, 3].map((i) => Math.max(0, +pc[i] || 0)); } catch { /* none */ }
     if (G.flags.dog) this.dog = { x: 172, y: 699, barkT: 0, cd: 0, name: typeof G.flags.dog === 'string' ? G.flags.dog : 'The dog' };
     this.hooks = installModules(this); // night modules (the nail turrets moved to night/emplacements.ts)
+    this.actors = new BattleActors(this);
+    this.hooks.push(this.actors);
     this.queueBakes();
     const turning = G.flags.turningTonight as string | undefined;
     if (turning && byId(turning) && !byId(turning)!.dead) this.turnAt = this.duration * R.range(0.25, 0.6);
@@ -1093,7 +1097,10 @@ export class Battle {
     this.playerReload = t;
     this.reloadTotal = t;
     this.reloadSfx?.cancel();
-    if (prof0.reloadPerRound) sfx.reload(gunSoundFor(p.w.def).reload, 'shell');
+    // the rig plays the reload over t and its events voice each stage (Classic: scheduled sfx)
+    const anim = this.actors.reload(p, t, { empty: mag <= keep, perRound: prof0.reloadPerRound, rounds: prof0.mag });
+    if (anim) this.reloadSfx = anim;
+    else if (prof0.reloadPerRound) sfx.reload(gunSoundFor(p.w.def).reload, 'shell');
     else this.reloadSfx = sfx.reloadFor(p.w.def, t);
     void kind;
   }
@@ -1339,6 +1346,7 @@ export class Battle {
     const fe = gunFeel(prof);
     const w = g.w!;
     const def = WEAPONS[w.def];
+    this.actors.onFire(g, prof, fe.kick);
     g.recoil = 1;
     g.kick = fe.kick;
     g.flash = fe.light > 0 ? 0.06 : 0;
@@ -1364,6 +1372,8 @@ export class Battle {
   }
 
   muzzle(g: Guard) {
+    const rm = this.actors?.muzzle(g);
+    if (rm) return rm;
     return { x: g.x + g.face * (SH * g.sc * 0.45 - g.recoil * 4), y: g.y - SH * g.sc * 0.68 };
   }
 
@@ -1501,7 +1511,14 @@ export class Battle {
   /** How far up the corpse pile a climber has come (px). */
   climbLift(z: Zombie) { return z.state === 'climb' && z.climb !== undefined ? (1 - z.climb / 1.4) * this.zh(z) * 0.5 : 0; }
 
+  /** The body's box; the skull (hx, hy) rides the rig's head bone where a rig is drawn. */
   hitbox(z: Zombie) {
+    const hb = this.hitboxClassic(z);
+    const rh = this.actors?.head(z);
+    if (rh && hb.hr > 0) { hb.hx = rh.x; hb.hy = rh.y; }
+    return hb;
+  }
+  hitboxClassic(z: Zombie) {
     const h = z.def.height * z.scale * ZS;
     const w = z.def.width * z.scale * ZS;
     const lift = this.climbLift(z);
@@ -1526,6 +1543,16 @@ export class Battle {
 
   /** Weakspot circles in world space (none on a crawler, none while it is over the wall). They ride the drawn pose. */
   weakPts(z: Zombie): { kind: WeakKind; x: number; y: number; r: number }[] {
+    const pts = this.weakPtsClassic(z);
+    if (!pts.length || !this.actors) return pts;
+    // on a rig they ride its bones (neck, throat, shoulder, knees, the sac)
+    const n: Record<string, number> = {};
+    return pts.map((p) => {
+      const q = this.actors.weak(z, p.kind, (n[p.kind] = (n[p.kind] ?? -1) + 1));
+      return q ? { ...p, x: q.x, y: q.y } : p;
+    });
+  }
+  weakPtsClassic(z: Zombie): { kind: WeakKind; x: number; y: number; r: number }[] {
     const spots = WEAKSPOTS[z.sprite];
     if (!spots || z.state === 'dying' || (z.crippled && z.def.id !== 'ferryman')) return [];
     const h = this.zh(z);
@@ -1603,6 +1630,7 @@ export class Battle {
 
   damage(z: Zombie, dmg: number, head: boolean, knock: number, g: Guard | null, pellet: boolean, px: number, py: number, isPlayer: boolean, fx?: FireProfile, zone: Zone = head ? 'head' : 'torso', weak?: WeakKind) {
     if (z.state === 'dying') return;
+    this.actors.noteHit(z, head ? 'head' : zone, knock, dmg, pellet, px, py, g ? this.muzzle(g) : null, !fx);
     let d = dmg;
     let mark = head ? 'head' : zone === 'leg' ? 'leg' : zone === 'arm' ? 'arm' : 'body';
     const limb = fx?.limbMul ?? 1;
@@ -1751,7 +1779,7 @@ export class Battle {
 
   kill(z: Zombie, g: Guard | null) {
     if (z.state === 'dying') return;
-    this.addPile(z);
+    if (!this.actors.deferPile(z)) this.addPile(z); // rigged: added where the body comes to rest
     z.state = 'dying';
     z.dieT = 0;
     z.climb = undefined;
@@ -2332,6 +2360,8 @@ export class Battle {
   }
 
   raiderMuzzle(z: Zombie) {
+    const rm = this.actors?.raiderMuzzle(z);
+    if (rm) return rm;
     const h = z.def.height * z.scale * ZS;
     const im = img(z.sprite);
     const w = im ? (im.width / im.height) * h : h * 0.6;
@@ -2597,6 +2627,7 @@ export class Battle {
       z.flash = 0.1;
       const heavy = z.def.id === 'ferryman' || z.def.boss || z.state === 'cover';
       const push = Math.sign(z.x - x || 1) * knock * (dmg / ex.dmg) * (heavy ? 0.2 : 1);
+      this.actors.noteBlast(z, x, y, knock * (dmg / ex.dmg));
       z.x = Math.min(W + 150, z.x + push);
       if (z.state === 'wall' && Math.abs(push) > 15) z.state = 'walk';
       if (z.hp <= 0) this.kill(z, g);
@@ -2633,6 +2664,7 @@ export class Battle {
   }
 
   stampCorpse(z: Zombie) {
+    if (this.actors.ownsCorpse(z)) return; // its ragdoll bakes itself into the road when it settles
     // a body left in the road, darkened and laid flat (a baked dark copy; no per-kill filter)
     const h = this.zh(z);
     const bk = bakeSprite(z.sprite, this.laneH(z), CORPSE, 0, { outline: false, pad: 0 });
@@ -3235,7 +3267,8 @@ export class Battle {
       c.beginPath(); c.ellipse(g.x, g.y + 1, 30 * g.sc, 7 * g.sc, 0, 0, 7); c.stroke();
     }
     const crouch = (isP && this.ducking) || g.duck > 0;
-    if (im && body) {
+    if (this.actors.drawGuard(c, g)) { /* rigged body (night/actors.ts) */ }
+    else if (im && body) {
       const k = h / bh;
       const w = (body.cv.width - PAD * 2) * k;
       const lean = g.dragging && g.dragT < 3 ? 0.18 : 0; // hauling backward
@@ -3297,6 +3330,7 @@ export class Battle {
     c.beginPath();
     c.ellipse(g.x, g.y - 2, 60, 7, 0, 0, Math.PI * 2);
     c.fill();
+    if (this.actors.drawGuard(c, g)) return; // lying in the road on the rig
     if (im) {
       const w = (im.width / im.height) * h;
       c.save();
@@ -3375,6 +3409,13 @@ export class Battle {
   }
 
   drawZombie(c: CanvasRenderingContext2D, z: Zombie, env: ReturnType<Battle['lightEnv']>) {
+    if (this.actors.drawZombie(c, z, env)) {
+      if (z.state !== 'dying') {
+        this.drawTells(c, z, Math.max(0, Math.min(1, (this.lightAt(z.x, z.y - this.zh(z) * 0.6, env)[0] - 0.12) / 0.2)));
+        if (z.name) { c.font = '12px "Special Elite", monospace'; c.fillStyle = '#c9a95a'; c.textAlign = 'center'; c.fillText(z.name, z.x, z.y - this.zh(z) - 8); }
+      }
+      return;
+    }
     const lane = nearestLane(z.y);
     const bh = this.laneH(z);
     const h = this.zh(z);

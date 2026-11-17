@@ -73,6 +73,16 @@ export const WEAPON_ANCHORS: Record<string, WeaponAnchors> = {
   pipemortar: { icon: 'icon_pipemortar', len: 118, hold: 'long', reload: 'break', grip: [114, 64], fore: [200, 40], butt: [4, 60], muzzle: [322, 25], port: [152, 26], rack: [140, 36] },
   // ---- melee
   hatchet: { icon: 'icon_mod_hatchet', flip: true, len: 62, hold: 'melee', reload: 'none', grip: [160, 26], muzzle: [10, 26] },
+  // the hand weapons of data/weapons.ts MELEE (icons 72 px tall, handle on the left)
+  fellingaxe: { icon: 'icon_m_fellingaxe', len: 80, hold: 'melee', reload: 'none', grip: [30, 40], muzzle: [250, 30] },
+  crowbar: { icon: 'icon_m_crowbar', len: 70, hold: 'melee', reload: 'none', grip: [40, 38], muzzle: [368, 36] },
+  bat: { icon: 'icon_m_bat', len: 78, hold: 'melee', reload: 'none', grip: [60, 40], muzzle: [450, 30] },
+  machete: { icon: 'icon_m_machete', len: 66, hold: 'melee', reload: 'none', grip: [80, 38], muzzle: [650, 40] },
+  fireaxe: { icon: 'icon_m_fireaxe', len: 74, hold: 'melee', reload: 'none', grip: [24, 44], muzzle: [165, 30] },
+  sledge: { icon: 'icon_m_sledge', len: 80, hold: 'melee', reload: 'none', grip: [22, 40], muzzle: [190, 36] },
+  boathook: { icon: 'icon_m_boathook', len: 120, hold: 'melee', reload: 'none', grip: [60, 38], muzzle: [422, 30] },
+  knife: { icon: 'icon_m_knife', len: 34, hold: 'melee', reload: 'none', grip: [110, 38], muzzle: [582, 20] },
+  chainsaw: { icon: 'icon_m_chainsaw', len: 70, hold: 'melee', reload: 'none', grip: [44, 22], muzzle: [200, 40] },
 };
 
 /** Fallback by weapon class for guns added later without hand-placed anchors. */

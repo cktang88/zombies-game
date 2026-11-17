@@ -20,10 +20,12 @@ export interface Settings {
   reduceGore: boolean;
   /** Gun handling: 'standard' (default) or 'hardcore' (hidden ammo count, more double-feeds, speed reloads lose the mag). */
   realism: 'standard' | 'hardcore';
+  /** Character animation: 'rigged' (cutout bone rigs, default) or 'classic' (single images). */
+  animation: 'rigged' | 'classic';
 }
 
 export const SETTINGS_KEY = 'vessey-settings-v1';
-const DEFAULTS: Settings = { master: 0.7, music: 0.55, sfx: 0.8, reduceShake: false, reduceGore: false, realism: 'standard' };
+const DEFAULTS: Settings = { master: 0.7, music: 0.55, sfx: 0.8, reduceShake: false, reduceGore: false, realism: 'standard', animation: 'rigged' };
 
 let cache: Settings | null = null;
 
@@ -44,6 +46,7 @@ export function getSettings(): Settings {
     reduceShake: s.reduceShake === true,
     reduceGore: s.reduceGore === true,
     realism: s.realism === 'hardcore' ? 'hardcore' : 'standard',
+    animation: s.animation === 'classic' ? 'classic' : 'rigged',
   };
   return cache;
 }
@@ -67,6 +70,9 @@ export const reduceGore = () => getSettings().reduceGore;
 export const shakeScale = () => (getSettings().reduceShake ? 0.2 : 1);
 /** Gun-handling realism: 'standard' (default) or 'hardcore'. */
 export const realism = (): 'standard' | 'hardcore' => getSettings().realism;
+/** Character animation the player chose: 'rigged' (bone rigs) or 'classic' (single images).
+ * The night code asks night/actors.ts rigsOn(), which also honours the automatic fallback. */
+export const animationSetting = (): 'rigged' | 'classic' => getSettings().animation;
 
 export function applyAudio() {
   const s = getSettings();
@@ -103,6 +109,8 @@ export function openSettings(host: HTMLElement = document.body, onClose?: () => 
     ${toggle('reduceGore', 'Reduce gore', 'Less blood on the road. The dead still fall.')}
     <h3>Gun handling</h3>
     <label class="set-row check"><input type="checkbox" data-k="realism" ${s.realism === 'hardcore' ? 'checked' : ''}><span>Hardcore realism<small>No exact round count, double-feeds are commoner, and a speed reload leaves the magazine in the snow.</small></span></label>
+    <h3>Graphics</h3>
+    <label class="set-row check"><input type="checkbox" data-k="animation" ${s.animation === 'classic' ? '' : 'checked'}><span>Animation: rigged<small>Bodies move on bone rigs: aiming, reloads, gaits and falls. Off = Classic single images (lighter; used automatically if the rigs can't load or run too slowly).</small></span></label>
     <p class="dim small">Saved on this device.</p>
     <button class="go" data-s="close">Done</button>
   </div>`;
@@ -127,6 +135,8 @@ export function openSettings(host: HTMLElement = document.body, onClose?: () => 
       if (o) o.textContent = t.value;
     } else if (k === 'realism') {
       setSetting('realism', t.checked ? 'hardcore' : 'standard');
+    } else if (k === 'animation') {
+      setSetting('animation', t.checked ? 'rigged' : 'classic');
     } else {
       setSetting(k as 'reduceShake' | 'reduceGore', t.checked);
     }

@@ -21,7 +21,7 @@ export const PART_POINTS: [number, number][] = [
 
 interface Dist { a: number; b: number; d: number; stiff: number }
 /** Angle limit at joint j between bone (a→j) and bone (j→c), rel = angle(j→c) - angle(a→j) - off. */
-interface Limit { a: number; j: number; c: number; lo: number; hi: number; off: number; target: number }
+interface Limit { a: number; j: number; c: number; lo: number; hi: number; off: number; target: number; relax?: boolean }
 
 export type DeathKind = 'shot' | 'headshot' | 'shotgun' | 'explosion' | 'melee' | 'generic';
 export interface DieOpts {
@@ -36,6 +36,8 @@ export interface DieOpts {
   dismember?: 'head' | 'armN' | null;
   /** reduce-gore: calmer impulses, no dismemberment */
   calm?: boolean;
+  /** skip the fall-flat bias (collapse()) */
+  noCollapse?: boolean;
 }
 
 export class Ragdoll {
@@ -50,6 +52,9 @@ export class Ragdoll {
   settled = false;
   wallX = Infinity;
   detached = new Set<string>();
+  /** fall-flat bias (collapse()): ±1 = the side the trunk is tipped toward, 0 = none */
+  tip = 0;
+  private torsoL = 1;
 
   constructor(public mass: number, public stiffT: number, public friction: number, public gravity = 1350) {}
 
@@ -121,6 +126,31 @@ export class Ragdoll {
     if (o.dismember && !o.calm) this.detach(o.dismember);
   }
 
+  /**
+   * Fall flat, not to the knees: the less the killing hit throws the body, the more its trunk
+   * is tipped past the feet (backward unless the hit drives it forward), the knees are
+   * buckled the other way, and the muscles let go of the standing hip/knee pose sooner.
+   */
+  collapse(ix: number, iy: number, crawling: boolean) {
+    if (crawling) return;
+    const mag = Math.hypot(ix, iy) / this.mass;
+    const k = clamp(1 - mag / 520, 0.25, 1);
+    const dir = Math.abs(ix) > 40 ? Math.sign(ix) : -1;
+    const s = 1 / 120;
+    this.tip = dir;
+    this.torsoL = Math.max(1, Math.hypot(this.x[P_NECK] - this.x[P_PELVIS], this.y[P_NECK] - this.y[P_PELVIS]));
+    for (const i of [P_HEAD, P_HEADBASE, P_NECK, P_SH, P_FSH]) this.ox[i] -= dir * 240 * k * s;
+    // backward: the knees give first (buckle forward); forward: stiff-legged, onto the face
+    if (dir < 0) for (const i of [P_NKNEE, P_FKNEE]) this.ox[i] -= 70 * k * s;
+    this.oy[P_PELVIS] -= 40 * k * s; // the seat drops
+    // the death pose's hips and knees are a stand: let the muscles aim at a straight, lying body
+    for (const l of this.limits) {
+      if (l.j === P_NKNEE || l.j === P_FKNEE) { l.target = 0.15; l.relax = true; }
+      if (l.j === P_NHIP || l.j === P_FHIP) { l.target = 0.05; l.relax = true; }
+    }
+    this.stiffT *= 0.6 + 0.4 * (1 - k);
+  }
+
   detach(what: 'head' | 'armN') {
     if (this.detached.has(what)) return;
     this.detached.add(what);
@@ -141,17 +171,51 @@ export class Ragdoll {
         this.ox[i] = this.x[i]; this.oy[i] = this.y[i];
         this.x[i] += vx; this.y[i] += vy + this.gravity * h * h;
       }
+      if (this.tip) this.tipOver(h);
       // muscles: stiffness decays linearly over stiffT
       const musc = this.stiffT > 0 ? clamp(1 - this.t / this.stiffT, 0, 1) : 0;
       for (let it = 0; it < 4; it++) {
         for (const d of this.dists) this.solveDist(d);
-        for (const l of this.limits) this.solveLimit(l, musc);
+        // a body that has gone down lets its legs go long (no folded-knee kneeling)
+        const relax = this.tip ? 0.25 * clamp((this.t - 0.25) / 0.4, 0, 1) * clamp((1.8 - this.t) / 0.6, 0, 1) : 0;
+        for (const l of this.limits) this.solveLimit(l, l.relax ? Math.max(musc, relax) : musc);
         this.collide();
       }
       for (let i = 0; i < RAGDOLL_POINTS; i++) maxMove = Math.max(maxMove, Math.abs(this.x[i] - this.ox[i]) + Math.abs(this.y[i] - this.oy[i]));
     }
-    this.still = maxMove < 0.25 ? this.still + dt : 0;
+    this.still = maxMove < 0.6 ? this.still + dt : 0;
     if ((this.still > 0.3 && this.t > 0.6) || this.t > 2.6) this.settled = true;
+  }
+
+  /** A body can balance sitting upright (the rigid trunk on its hips) or kneeling face-down
+   * (pelvis propped on folded knees). Real ones don't: nudge the trunk over until it lies. */
+  private tipOver(h: number) {
+    const up = (this.y[P_PELVIS] - this.y[P_NECK]) / this.torsoL;
+    // follow the way it is actually going over
+    const lx = (this.x[P_NECK] - this.x[P_PELVIS]) / this.torsoL;
+    if (Math.abs(lx) > 0.35) this.tip = Math.sign(lx);
+    else if (up > 0.3) {
+      // sitting up: go over away from the knees
+      const kx = (this.x[P_NKNEE] + this.x[P_FKNEE]) / 2 - this.x[P_PELVIS];
+      if (Math.abs(kx) > 0.2 * this.torsoL) this.tip = -Math.sign(kx);
+    }
+    const seat = -this.y[P_PELVIS] / this.torsoL;
+    const a = h * h;
+    if (up > 0.2) {
+      // a pure torque on the trunk (top one way, hips the other) so the body doesn't slide
+      const f = 2000 * (up - 0.1) * this.tip * a;
+      for (const i of [P_NECK, P_HEADBASE, P_HEAD, P_SH, P_FSH]) this.x[i] += f;
+      for (const i of [P_PELVIS, P_NHIP, P_FHIP]) this.x[i] -= f * 5 / 3;
+    }
+    if (seat > 0.3) {
+      // propped up on the knees (or sitting on the heels): the hips sink, the legs straighten out
+      const k = Math.min(3, seat * 2);
+      for (const i of [P_PELVIS, P_NHIP, P_FHIP]) this.y[i] += 1400 * k * a;
+      for (const i of [P_NKNEE, P_FKNEE]) this.y[i] += 400 * k * a;
+      // thighs swing out in line with the trunk (away from the head)
+      for (const i of [P_NKNEE, P_FKNEE]) this.x[i] -= 400 * this.tip * k * a;
+      for (const i of [P_NECK, P_SH, P_FSH]) this.x[i] += 260 * this.tip * k * a;
+    }
   }
 
   private solveDist(c: Dist) {
@@ -170,6 +234,9 @@ export class Ragdoll {
     if (Math.abs(delta) < 1e-4) return;
     // rotate the child about the joint (and the parent a little the other way)
     this.rotate(l.c, l.j, delta * 0.5);
+    // muscles alone don't brake the fall (bleeding every joint they drive made bodies topple
+    // in slow motion and settle on their knees)
+    if (r >= l.lo && r <= l.hi) return;
     // a limit fighting contact otherwise pumps energy: bleed the child's velocity
     const c = l.c;
     this.ox[c] += (this.x[c] - this.ox[c]) * 0.35; this.oy[c] += (this.y[c] - this.oy[c]) * 0.35;
