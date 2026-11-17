@@ -1,10 +1,13 @@
 // Headless soak test of the sim layer: runs N days with a crude night model.
 import { G, setState, addRep } from '../src/state';
 import { newGame } from '../src/sim/newgame';
-import { resolveDayWork, dawnTick, nextWeather, queueRecipe } from '../src/sim/day';
+import { resolveDayWork, dawnTick, nextWeather, queueRecipe, setJobHours, travelHours, heatNeed } from '../src/sim/day';
+import { Rng } from '../src/rng';
+import { SITES } from '../src/data/world';
+import { fireProfile } from '../src/data/weapons';
 import { planNight, afterNight } from '../src/sim/director';
 import { rollIncident, resolveEvent, returnsTick, INCIDENTS } from '../src/sim/events';
-import { living, wound, killSurvivor, makeSurvivor, setBond } from '../src/sim/survivors';
+import { living, wound, killSurvivor, makeSurvivor, setBond, canFight } from '../src/sim/survivors';
 import { fateLine, morningSummary } from '../src/sim/chronicle';
 import type { GameState } from '../src/types';
 import { activeThreads, threadTick, threadsWon, evacuees } from '../src/sim/threads';
@@ -12,6 +15,7 @@ import { calendar, noiseOfHouse, omenTick } from '../src/sim/calendar';
 import { ICE_DAY } from '../src/state';
 import { inscribe, recordRun, setBoon, applyBoons, scoreCard } from '../src/sim/legacy';
 
+const rnd = new Rng(424242);
 const fired = new Map<string, number>();
 const errors: string[] = [];
 let failed = false;
@@ -29,7 +33,7 @@ function coverage() {
     try {
       const ev = inc.make();
       if (!ev) continue;
-      const c = Math.floor(Math.random() * ev.choices.length);
+      const c = Math.floor(rnd.next() * ev.choices.length);
       const out = inc.resolve?.(c, ev.data ?? {}) ?? '';
       if (typeof out !== 'string' || /undefined|NaN|\[object/.test(out + ev.text)) errors.push(`${inc.id}: suspicious text: ${(ev.text + ' / ' + out).slice(0, 160)}`);
       fired.set(inc.id, (fired.get(inc.id) ?? 0) + 1);
@@ -47,7 +51,7 @@ for (let r = 0; r < runs; r++) {
   for (let d = 0; d < 30 && living().length; d++) {
     if (G.pendingEvent) {
       const ev = G.pendingEvent; G.pendingEvent = null;
-      resolveEvent(ev, Math.floor(Math.random() * ev.choices.length));
+      resolveEvent(ev, Math.floor(rnd.next() * ev.choices.length));
     }
     const jobs = ['repair', 'scavenge', 'craft', 'farm', 'doctor', 'rest'] as const;
     living().forEach((s, i) => (s.job = jobs[i % jobs.length]));
@@ -56,12 +60,12 @@ for (let r = 0; r < runs; r++) {
     const plan = planNight();
     pts.push(plan.points);
     // crude night: wall takes damage proportional to threat; a breach wounds someone
-    G.fort.hp = Math.max(0, G.fort.hp - plan.points * (1 + Math.random()));
+    G.fort.hp = Math.max(0, G.fort.hp - plan.points * (1 + rnd.next()));
     let deaths = 0;
     if (G.fort.hp <= 0) {
-      const s = living()[Math.floor(Math.random() * living().length)];
-      wound(s, Math.random() < 0.35 ? 'bite' : 'laceration', 0.5);
-      if (Math.random() < 0.2) { killSurvivor(s, 'test'); deaths++; }
+      const s = living()[Math.floor(rnd.next() * living().length)];
+      wound(s, rnd.next() < 0.35 ? 'bite' : 'laceration', 0.5);
+      if (rnd.next() < 0.2) { killSurvivor(s, 'test'); deaths++; }
     }
     if (G.flags.turningTonight) { const s = living().find((x) => x.id === G.flags.turningTonight); if (s) killSurvivor(s, 'turned'); delete G.flags.turningTonight; }
     afterNight(deaths, G.fort.hp > 0);
@@ -83,6 +87,88 @@ for (let r = 0; r < runs; r++) {
   console.log(`run ${r} (${G.director.mode}): reached day ${lastDay}, living ${living().length}, graves ${G.graves.length}, chronicle ${G.chronicle.length}, food ${G.stores.food}, threat ${pts.join(',')}\n    mood ${moods.join(',')}`);
   console.log('   ', G.chronicle.slice(-4).map((c) => c.text).join(' | '));
 }
+
+// ---------- economy: does an average, competent house drown in ammo and food by day 15? ----------
+// A simple player: repair when the wall is down, one on food, the rest scavenge the best-stocked near site,
+// ammo queued at the bench when affordable, 8-hour days with a rest day when worn out. Nights spend rounds
+// in proportion to threat (about one round per threat point, split across the guns on the wall); a shortfall
+// hits the wall harder. Targets (06 doc #9): ammo and food should not trivially pile up.
+function economy(n: number) {
+  const at10: { ammoNights: number; foodDays: number }[] = [];
+  const at15: { ammoNights: number; foodDays: number }[] = [];
+  let tightNights = 0, lateNights = 0, fuelShort = 0, fuelDays = 0;
+  for (let r = 0; r < n; r++) {
+    newGame(['siege', 'quiet', 'coin'][r % 3], 5000 + r);
+    const rng = new Rng(9000 + r);
+    for (let d = 0; d < 16 && living().length; d++) {
+      if (G.pendingEvent) { const ev = G.pendingEvent; G.pendingEvent = null; resolveEvent(ev, 0); }
+      const ppl = living();
+      const near = SITES.filter((x) => x.minDay <= G.day && travelHours(x.id) <= 2)
+        .sort((a, b) => ((G.flags[`stock_${b.id}`] as number) ?? b.stock) - ((G.flags[`stock_${a.id}`] as number) ?? a.stock));
+      ppl.forEach((s, i) => {
+        if (s.rest < 0.3) { s.job = 'rest'; return; }
+        setJobHours(s, 8);
+        if (i === 0 && G.fort.hp < G.fort.maxHp * 0.8) s.job = 'repair';
+        else if (i === 1) s.job = 'farm';
+        else if (i === 2 && G.craftQueue.length) s.job = 'craft';
+        else { s.job = 'scavenge'; G.flags[`site_${s.id}`] = near[i % Math.max(1, near.length)]?.id ?? 'route9'; }
+      });
+      if (G.craftQueue.length < 1 && G.stores.scrap >= 3 && G.stores.fuel >= 2) queueRecipe('ammo_light');
+      const fuelBefore = G.stores.fuel;
+      resolveDayWork();
+      if (G.day >= 12) { fuelDays++; if (G.stores.fuel <= 0 || fuelBefore - G.stores.fuel < heatNeed()) fuelShort++; }
+      const plan = planNight();
+      // night: spend rounds from each fighter's gun
+      const wall = living().filter(canFight);
+      const need = plan.points * 1.0;
+      let short = 0;
+      for (const s of wall) {
+        const w = G.weapons.find((x) => x.uid === s.weapon);
+        const p = w ? fireProfile(w) : null;
+        const want = (need / Math.max(1, wall.length)) * (p?.perShot ?? 1);
+        if (!p?.ammoRes) { short += want; continue; }
+        const have = G.stores[p.ammoRes] ?? 0;
+        G.stores[p.ammoRes] = Math.max(0, have - want);
+        short += Math.max(0, want - have);
+      }
+      const shortFrac = need ? short / need : 0;
+      G.fort.hp = Math.max(0, G.fort.hp - plan.points * (0.5 + rng.next() * 0.6) * (1 + shortFrac * 2));
+      let deaths = 0;
+      if (G.fort.hp <= 0 && living().length) {
+        const s = rng.pick(living());
+        wound(s, rng.chance(0.3) ? 'bite' : 'laceration', 0.5);
+        if (rng.chance(0.15)) { killSurvivor(s, 'test'); deaths++; }
+      }
+      if (G.flags.turningTonight) { const s = living().find((x) => x.id === G.flags.turningTonight); if (s) killSurvivor(s, 'turned'); delete G.flags.turningTonight; }
+      afterNight(deaths, G.fort.hp > 0);
+      G.day++;
+      nextWeather();
+      returnsTick();
+      dawnTick();
+      G.pendingEvent = rollIncident();
+      // reserve, in nights of tonight's spend, for the guns on the wall
+      const reserve = wall.reduce((a, s) => {
+        const w = G.weapons.find((x) => x.uid === s.weapon);
+        const p = w ? fireProfile(w) : null;
+        return a + (p?.ammoRes ? (G.stores[p.ammoRes] ?? 0) / (p.perShot || 1) : 0);
+      }, 0);
+      const ammoNights = need ? reserve / need : 99;
+      const foodDays = living().length ? G.stores.food / living().length : 0;
+      if (G.day >= 10) { lateNights++; if (ammoNights < 1) tightNights++; }
+      if (G.day === 10) at10.push({ ammoNights, foodDays });
+      if (G.day === 15) at15.push({ ammoNights, foodDays });
+    }
+  }
+  const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN);
+  const f = (x: number) => x.toFixed(1);
+  const a10 = avg(at10.map((x) => x.ammoNights)), f10 = avg(at10.map((x) => x.foodDays));
+  const a15 = avg(at15.map((x) => x.ammoNights)), f15 = avg(at15.map((x) => x.foodDays));
+  console.log(`\neconomy (${n} houses): day 10 ammo ${f(a10)} nights, food ${f(f10)} days/person · day 15 ammo ${f(a15)} nights, food ${f(f15)} days/person (${at15.length} houses alive)`);
+  console.log(`    nights from day 10 ending with <1 night of ammo: ${Math.round((tightNights / Math.max(1, lateNights)) * 100)}% (target >= 40%) · days 12+ where the stove went short: ${Math.round((fuelShort / Math.max(1, fuelDays)) * 100)}%`);
+  check(!(a15 > 6), `economy: ammo piles up (${f(a15)} nights in reserve at day 15; want <= 6)`);
+  check(!(f15 > 12), `economy: food piles up (${f(f15)} days per person at day 15; want <= 12)`);
+}
+economy(+(process.argv[3] ?? 9));
 
 // ---------- endings ----------
 function scenario(name: string, day: number, reps: Record<string, number>, want: string, extra?: () => void) {

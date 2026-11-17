@@ -54,6 +54,8 @@ export function drillPlan(s: Survivor) {
 const FREE_HOUR_REST = 0.04; // rest regained per unworked daylight hour
 const NIGHT_SLEEP = 0.22; // rest regained overnight (dawnTick)
 const SEARCH_NORM = 6; // search hours that give the site table ×1 (8h at a 2h site)
+// Scarcity tuning for the scavenge JOB (runs are tuned in expedition.ts): food and fuel come home thinner.
+const SCAV_TUNE: Partial<Record<string, number>> = { food: 0.7, fuel: 0.8 };
 
 export function travelHours(siteId: string) {
   return SITE_TRAVEL[siteId] ?? 2;
@@ -154,7 +156,7 @@ export function resolveDayWork(): string[] {
         G.fort.hp = Math.min(G.fort.maxHp, G.fort.hp + amt);
         const wood = Math.min(G.stores.wood, Math.ceil((G.fort.hp - before) / 25));
         add('wood', -wood);
-        out.push(`${first(s)} patched the wall for ${hours}h (+${G.fort.hp - before}).`);
+        out.push(G.fort.hp > before ? `${first(s)} patched the wall for ${hours}h (+${G.fort.hp - before}).` : `${first(s)} walked the wall for ${hours}h and found nothing to patch.`);
         break;
       }
       case 'craft': {
@@ -297,7 +299,7 @@ function scavenge(siteId: string, team: Survivor[]): string[] {
   const names = team.map(first).join(' and ');
   const got: string[] = [];
   for (const [k, v] of Object.entries(site.loot)) {
-    const n = Math.round((v ?? 0) * mult * R.range(0.5, 1.4));
+    const n = Math.round((v ?? 0) * mult * (SCAV_TUNE[k] ?? 1) * R.range(0.5, 1.4));
     if (n > 0) {
       add(k as Res, n);
       got.push(`${n} ${RES_LABEL[k as Res].toLowerCase()}`);
@@ -677,10 +679,10 @@ export function houseNoise() {
   const part = Math.min(35, Math.sqrt(campWealth()) * 0.7);
   const base = 10 + 6 * Math.pow(G.day, 1.02) + living().filter(canFight).length * 3;
   const pct = Math.round((part / base) * 100);
-  const level = part / 35;
-  const words = level > 0.85 ? 'Woodsmoke, cooking, gun oil and generator hum. Everything for a mile knows we are here.'
-    : level > 0.6 ? 'The house smells of woodsmoke and cooking. It carries down the road.'
-      : level > 0.35 ? 'A thread of smoke from the chimney. Some noise at the bench.'
+  const level = Math.min(1, pct / 80); // the meter is full at +80% threat
+  const words = pct > 60 ? 'Woodsmoke, cooking, gun oil and generator hum. Everything for a mile knows we are here.'
+    : pct > 35 ? 'The house smells of woodsmoke and cooking. It carries down the road.'
+      : pct > 15 ? 'A thread of smoke from the chimney. Some noise at the bench.'
         : 'Quiet. Cold stove, nothing worth smelling.';
   return { part, pct, level, words };
 }

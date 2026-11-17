@@ -69,6 +69,7 @@ export function showDawnReport(app: HTMLElement, d: DawnData, onClose: () => voi
   let done = false;
 
   const reveal = (el: HTMLElement, instant: boolean) => {
+    if (instant) el.style.transition = 'none';
     el.classList.add('in');
     for (const b of Array.from(el.querySelectorAll<HTMLElement>('[data-count]'))) {
       stops.push(countUp(b, 0, +b.dataset.count!, instant ? 0 : 800));
