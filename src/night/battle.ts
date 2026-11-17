@@ -3233,7 +3233,7 @@ export class Battle {
     pool(150, 684, 230, 34, '255,184,100', 0.1); // the lantern behind the line
     // sodium floodlight pools: a saturated orange skirt, a hot pale core (warm against the cold road)
     for (let i = 0; i < Math.min(3, G.fort.lights); i++) {
-      pool(520 + i * 190, 652, 300, 52, '255,150,50', 0.13);
+      pool(520 + i * 190, 652, 300, 52, '255,150,50', 0.1);
       pool(520 + i * 190, 654, 120, 22, '255,226,170', 0.12);
     }
     for (const f of this.fires) pool(f.x, f.y, f.w * 1.1, 40, '255,150,60', 0.3 * Math.min(1, f.life));
@@ -4142,8 +4142,7 @@ export class Battle {
    * The final grade (docs/research/04 §8), Effects quality High only (Medium / Low keep the blue
    * darkness, the pools and the cached vignette + top falloff, which cost nothing new):
    *  · split toning: a cold blue soft-light wash (shadows go blue, the lit warm stays warm);
-   *  · an S-curve: the frame soft-lit onto itself, which pushes the lights up and the darks
-   *    down (one blit, no blur).
+   *  · exposure / highlight push: the frame added onto itself at 30% (one blit, no blur).
    */
   gradeTone?: CanvasGradient;
   /** the grade's own cost (ms, smoothed): on a software-rastered canvas the two full-frame blends cost
@@ -4161,8 +4160,12 @@ export class Battle {
     c.globalAlpha = 0.32;
     c.fillStyle = this.gradeTone;
     c.fillRect(-40, -40, W + 80, H + 80);
+    // exposure: the frame added onto itself (×1.3), so the gap between the deep darks and the lit
+    // grows by 30% and lamp heads, flash cores and sodium rims clip toward white; done after the
+    // blue soft-light so the cold shadows keep their tint
     c.setTransform(1, 0, 0, 1, 0, 0);
-    c.globalAlpha = 0.5;
+    c.globalCompositeOperation = 'lighter';
+    c.globalAlpha = 0.3;
     c.drawImage(this.canvas, 0, 0);
     c.restore();
     const dt = performance.now() - t0;
