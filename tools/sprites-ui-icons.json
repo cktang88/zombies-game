@@ -1,0 +1,65 @@
+{
+  "iconPrefix": "Single small game UI icon of one object (no people, no faces, no hands), centered, bold readable silhouette, mature graphic-novel cel-shaded style, thick black ink outlines, two-tone hard shadows, gritty worn texture, muted desaturated palette with a sparing accent colour, realistic not cartoony.",
+  "sheetPrefix": "Small game UI icons (no people, no faces, no hands, no characters), each a single bold readable object with a strong silhouette, mature graphic-novel cel-shaded style, thick black ink outlines, two-tone hard shadows, gritty worn texture, muted desaturated palette of olive, rust, bone and slate with a sparing accent colour, realistic not cartoony.",
+  "sprites": [],
+  "sheets": [
+    { "id": "sheet_ui_skills_a", "prompt": "All objects share one consistent style and roughly the same size.", "items": [
+      { "id": "icon_skill_shooting", "height": 80, "prompt": "a round iron rifle-scope crosshair reticle ring with crosshairs." },
+      { "id": "icon_skill_building", "height": 80, "prompt": "a claw hammer with a worn wooden handle, diagonal." },
+      { "id": "icon_skill_crafting", "height": 80, "prompt": "an adjustable steel wrench, diagonal." },
+      { "id": "icon_skill_medicine", "height": 80, "prompt": "a white rolled bandage with a small red cross stitched on it." }
+    ]},
+    { "id": "sheet_ui_skills_b", "prompt": "All objects share one consistent style and roughly the same size.", "items": [
+      { "id": "icon_skill_scavenging", "height": 80, "prompt": "a battered olive canvas backpack, flap open." },
+      { "id": "icon_skill_farming", "height": 80, "prompt": "a green leafy seedling sprouting from a small mound of dark soil." },
+      { "id": "icon_skill_social", "height": 80, "prompt": "two old tin cups clinking together." },
+      { "id": "icon_skill_psych", "height": 80, "prompt": "a lit candle in a small brass holder, warm flame." }
+    ]},
+    { "id": "sheet_ui_jobs_a", "prompt": "All objects share one consistent style and roughly the same size.", "items": [
+      { "id": "icon_job_guard", "height": 80, "prompt": "a dented steel army helmet." },
+      { "id": "icon_job_repair", "height": 80, "prompt": "a wooden plank with a few bent nails driven in, crossed by a hammer." },
+      { "id": "icon_job_scavenge", "height": 80, "prompt": "a heavy steel crowbar, diagonal." },
+      { "id": "icon_job_craft", "height": 80, "prompt": "a small iron bench vise." },
+      { "id": "icon_job_farm", "height": 80, "prompt": "a garden spade shovel stuck upright, wooden D-handle." },
+      { "id": "icon_job_doctor", "height": 80, "prompt": "a scuffed white first-aid tin box with a red cross." }
+    ]},
+    { "id": "sheet_ui_jobs_b", "prompt": "All objects share one consistent style and roughly the same size.", "items": [
+      { "id": "icon_job_rest", "height": 80, "prompt": "a rolled-up olive army sleeping bag tied with straps." },
+      { "id": "icon_job_radio", "height": 80, "prompt": "a boxy olive military field radio with a whip antenna." },
+      { "id": "icon_job_cook", "height": 80, "prompt": "a dented steel cooking pot with a little rising steam." },
+      { "id": "icon_job_drill", "height": 80, "prompt": "a paper shooting target with a black silhouette bullseye, a few bullet holes." },
+      { "id": "icon_job_counsel", "height": 80, "prompt": "two wooden chairs facing each other, empty." }
+    ]},
+    { "id": "sheet_ui_status_a", "prompt": "All objects share one consistent style and roughly the same size.", "items": [
+      { "id": "icon_st_wound", "height": 80, "prompt": "a blood-soaked gauze pad, dark red stain." },
+      { "id": "icon_st_bite", "height": 80, "prompt": "a crescent of ragged bite marks on a patch of pale torn cloth, dark blood, sickly green tinge." },
+      { "id": "icon_st_sick", "height": 80, "prompt": "a glass mercury thermometer with the red line high." },
+      { "id": "icon_st_tired", "height": 80, "prompt": "an old brass twin-bell alarm clock, dented." },
+      { "id": "icon_st_hungry", "height": 80, "prompt": "an empty open tin can, nothing inside, a fork lying beside it." },
+      { "id": "icon_st_cold", "height": 80, "prompt": "a single large icy blue snowflake crystal." }
+    ]},
+    { "id": "sheet_ui_status_b", "prompt": "All objects share one consistent style and roughly the same size.", "items": [
+      { "id": "icon_st_break", "height": 80, "prompt": "a cracked shattered hand mirror with a dark frame." },
+      { "id": "icon_st_courage", "height": 80, "prompt": "a battered steel heater shield with an iron rim." },
+      { "id": "icon_st_grit", "height": 80, "prompt": "a rough grey granite stone, chipped." },
+      { "id": "icon_st_mood_up", "height": 80, "prompt": "a thick bold green arrow pointing straight up." },
+      { "id": "icon_st_mood_down", "height": 80, "prompt": "a thick bold red arrow pointing straight down." },
+      { "id": "icon_st_love", "height": 80, "prompt": "a red heart carved into a weathered piece of wood bark." }
+    ]},
+    { "id": "sheet_ui_status_c", "prompt": "All objects share one consistent style and roughly the same size.", "items": [
+      { "id": "icon_st_hate", "height": 80, "prompt": "a black-handled kitchen knife stabbed into a cracked red heart." },
+      { "id": "icon_st_dead", "height": 80, "prompt": "a bone-white human skull." },
+      { "id": "icon_st_perk", "height": 80, "prompt": "a tarnished brass five-pointed star badge." },
+      { "id": "icon_st_xp", "height": 80, "prompt": "three bold gold chevron stripes stacked, like a sergeant's rank insignia." },
+      { "id": "icon_st_danger", "height": 80, "prompt": "a yellow triangular warning road sign with a black exclamation mark, rusty." },
+      { "id": "icon_st_noise", "height": 80, "prompt": "a dented red megaphone bullhorn." }
+    ]},
+    { "id": "sheet_ui_status_d", "prompt": "All objects share one consistent style and roughly the same size.", "items": [
+      { "id": "icon_st_time", "height": 80, "prompt": "a brass sand hourglass with wooden ends." },
+      { "id": "icon_st_wall", "height": 80, "prompt": "a short section of wooden plank barricade wall with crossed boards." },
+      { "id": "icon_st_radio", "height": 80, "prompt": "a tall steel radio antenna mast with signal waves." },
+      { "id": "icon_st_faction", "height": 80, "prompt": "a tattered rust-red cloth flag on a short pole." },
+      { "id": "icon_st_trait", "height": 80, "prompt": "a single fingerprint on a scrap of bone-white paper." }
+    ]}
+  ]
+}
