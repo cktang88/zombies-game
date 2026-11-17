@@ -119,6 +119,8 @@ export class Battle {
   slowmo = 0;
   intro = 4;
   oldFaceBy?: string;
+  fast = false;
+  keyUp = (e: KeyboardEvent) => { if (e.key === ' ') this.fast = false; };
 
   constructor(canvas: HTMLCanvasElement, plan: NightPlan, onEnd: (r: NightResult) => void) {
     this.canvas = canvas;
@@ -214,6 +216,7 @@ export class Battle {
     };
     c.ontouchend = () => (this.mouse.down = false);
     window.addEventListener('keydown', this.keyHandler);
+    window.addEventListener('keyup', this.keyUp);
   }
 
   onKey(e: KeyboardEvent) {
@@ -222,6 +225,7 @@ export class Battle {
     else if (e.key === 'Escape' || e.key === 'p') this.paused = !this.paused;
     else if (/^[1-9]$/.test(e.key)) this.switchWeapon(+e.key - 1);
     else if (e.key === 'q' || e.key === 'Q') this.cycleWeapon();
+    else if (e.key === ' ') { this.fast = true; e.preventDefault(); }
   }
 
   // weapons the leader may pick up: their own and any unassigned
@@ -260,7 +264,11 @@ export class Battle {
     const loop = (now: number) => {
       const dt = Math.min(0.05, (now - this.last) / 1000);
       this.last = now;
-      if (!this.paused) this.update(this.slowmo > 0 ? dt * 0.35 : dt);
+      const quiet = !this.zombies.some((z) => z.state !== 'dying' && z.x < 1000);
+      if (!this.paused) {
+        const steps = this.fast && quiet && !this.done ? 4 : 1;
+        for (let i = 0; i < steps; i++) this.update(this.slowmo > 0 ? dt * 0.35 : dt);
+      }
       this.draw();
       if (!this.ended) this.raf = requestAnimationFrame(loop);
     };
@@ -271,6 +279,7 @@ export class Battle {
   destroy() {
     cancelAnimationFrame(this.raf);
     window.removeEventListener('keydown', this.keyHandler);
+    window.removeEventListener('keyup', this.keyUp);
     const c = this.canvas;
     c.onmousemove = c.onmousedown = c.onmouseup = null;
     c.ontouchstart = c.ontouchmove = c.ontouchend = null;
@@ -1291,7 +1300,7 @@ export class Battle {
     c.textAlign = 'left';
     c.font = '12px "Special Elite", monospace';
     c.fillStyle = '#a89c84';
-    c.fillText(`firebombs ${G.stores.molotov} [F]   ·   [R] reload   [Q]/[1-9] weapon   [P] pause`, 20, H - 22);
+    c.fillText(`firebombs ${G.stores.molotov} [F]   ·   [R] reload   [Q]/[1-9] weapon   [hold Space] hurry   [P] pause`, 20, H - 22);
     // messages
     c.textAlign = 'center';
     this.messages.forEach((m, i) => {
