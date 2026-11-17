@@ -2,6 +2,7 @@
   "id": "z_raider",
   "source": "z_raider__riga",
   "height": 240,
+  "aimUnits": { "lever": "unit_z_raider_lever" },
   "joints": {
     "headTop": [
       580,

@@ -2,6 +2,7 @@
   "id": "surv_shotgun",
   "source": "surv_shotgun__riga",
   "height": 240,
+  "aimUnits": { "pump": "unit_surv_shotgun_pump" },
   "joints": {
     "headTop": [
       690,

@@ -2,6 +2,7 @@
   "id": "surv_m_young",
   "source": "surv_m_young__riga",
   "height": 240,
+  "aimUnits": { "lever": "unit_surv_m_young_lever" },
   "joints": {
     "headTop": [
       633,

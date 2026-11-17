@@ -2,6 +2,7 @@
   "id": "surv_f_mid",
   "source": "surv_f_mid__riga",
   "height": 240,
+  "aimUnits": { "pump": "unit_surv_f_mid_pump" },
   "joints": {
     "headTop": [
       643,

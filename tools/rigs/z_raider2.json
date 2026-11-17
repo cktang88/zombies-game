@@ -2,6 +2,7 @@
   "id": "z_raider2",
   "source": "z_raider2__riga",
   "height": 240,
+  "aimUnits": { "pump": "unit_z_raider2_pump" },
   "joints": {
     "headTop": [
       350,
