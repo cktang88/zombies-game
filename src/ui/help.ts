@@ -2,7 +2,7 @@
 // and how moods and breaks work. Written as a page from the house ledger.
 
 import { ZOMBIES } from '../data/zombies';
-import { spriteUrl } from '../assets';
+import { portraitImg } from './portrait';
 import { sfx } from '../audio';
 import { ACTIONS, FIXED, keyLabel, keyOf, type KeyCtx } from './keys';
 
@@ -47,7 +47,7 @@ const PAGES: Record<Page, { label: string; html: () => string }> = {
   turned: {
     label: 'The Turned',
     html: () => `<div class="turned">${Object.values(ZOMBIES).map((z) => `
-      <div class="tz"><img src="${spriteUrl(z.sprites[0])}" alt="" loading="lazy">
+      <div class="tz">${portraitImg(z.sprites[0], 'tzport')}
         <div><b>${esc(z.name)}</b> <span class="dim">${z.minDay >= 100 ? 'special nights' : `from day ${z.minDay}`}${z.armor && z.armor > 10 ? ' · armoured' : ''}${z.burst ? ' · bursts' : ''}${z.scream ? ' · calls others' : ''}${z.lunge ? ' · sprints' : ''}</span>
         <p>${esc(z.lore)}</p></div></div>`).join('')}</div>
       <p class="dim">They were all somebody. The town gave them these names.</p>`,

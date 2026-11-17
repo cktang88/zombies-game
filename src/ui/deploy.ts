@@ -5,7 +5,28 @@
 // Consumption by the battle is specified in docs/research/08-traps.md §Integration.
 import './deploy.css';
 import { TRAPS, type Placement, type TrapDef, placementProblem, combos, trapHalfWidth } from '../data/traps';
-import { spriteUrl, spriteExists } from '../assets';
+import { spriteUrl, spriteExists, img } from '../assets';
+
+/** The road's asphalt: the bottom band of the night backdrop (bg_mid), tiled down with every other
+ *  copy mirrored so it never seams, as a data URL (cached). null until the backdrop has loaded. */
+let roadUrl: string | null = null;
+function roadTexture(): string | null {
+  if (roadUrl) return roadUrl;
+  const im = img('bg_mid');
+  if (!im || !im.width) return null;
+  const sx = im.width / 1600, band = 96, top = 612, src = 84; // the asphalt rows, clear of the dark bottom edge
+  const cv = document.createElement('canvas');
+  cv.width = 1600; cv.height = band * 4;
+  const g = cv.getContext('2d')!;
+  for (let i = 0; i < 4; i++) {
+    g.save();
+    if (i % 2) { g.translate(0, (i + 1) * band); g.scale(1, -1); g.translate(0, -i * band); }
+    g.drawImage(im, 0, top * sx, 1600 * sx, src * sx, 0, i * band, 1600, band);
+    g.restore();
+  }
+  roadUrl = cv.toDataURL('image/jpeg', 0.82);
+  return roadUrl;
+}
 
 export type { Placement };
 
@@ -89,6 +110,12 @@ export function renderDeploy(root: HTMLElement, opts: DeployOpts): DeployHandle 
     scene.style.backgroundSize = `auto, ${1600 * k}px ${740 * k}px`;
     // battle draws bg_mid at (-160, -20) 1600×740; line battle y=616 (lane top) up with the scene's bottom
     scene.style.backgroundPosition = `0 0, ${(-160 - viewMin) * k}px ${SCENE_H - (616 + 20) * k}px`;
+    // the road itself is the night's asphalt from the same painting, carried on below the scene
+    // (darkened so the lanes, pegs and tokens read on it), not a flat gradient
+    const tex = roadTexture();
+    road.style.backgroundImage = `linear-gradient(rgba(10,10,12,.40), rgba(10,10,12,.6)), url("${tex ?? spriteUrl('bg_mid')}")`;
+    road.style.backgroundSize = tex ? `auto, ${1600 * k}px ${384 * k}px` : `auto, ${1600 * k}px ${740 * k}px`;
+    road.style.backgroundPosition = tex ? `0 0, ${(-160 - viewMin) * k}px 0` : `0 0, ${(-160 - viewMin) * k}px ${-(616 + 20) * k}px`;
     const wi = $('.dep-wallimg');
     wi.style.left = `${left(wallX) - 64}px`;
     let h = '';

@@ -518,8 +518,7 @@ function endScreen(o: { title: string; cls?: string; intro: string; cards: Card[
     <div class="plate p-${esc(plate)}" aria-hidden="true"><i style="background-image:url(${spriteUrl(plate === 'fell' ? 'bg_mid' : 'bg_far')})"></i><i style="background-image:url(${artUrl(`end_${plate}`)})"></i></div>
     <h1>${esc(o.title)}</h1>
     <p class="sub">${dateLabel(1)} – ${dateLabel()} · ${G.day} days · ${G.stats.kills} of the Turned put down · ${G.stats.headshots} headshots · seed ${G.seed}</p>
-    ${o.intro ? `<p class="epi">${esc(o.intro)}</p>` : ''}
-    ${scoreHtml(o.fresh)}
+    <div class="endtop${o.intro ? '' : ' solo'}">${o.intro ? `<p class="epi">${esc(o.intro)}</p>` : ''}<div class="endscore">${scoreHtml(o.fresh)}</div></div>
     <h2>What became of them</h2>
     <p class="dim inscribe-note">Inscribe up to two names in the Ledger. Their people may come to the gate in another November.</p>
     <div class="graves">${o.cards.map((c) => cardHtml(c, o.ending)).join('')}</div>

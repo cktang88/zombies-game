@@ -17,7 +17,7 @@
 .dep-scene { position: relative; background-repeat: no-repeat; border-bottom: 1px solid #000; overflow: hidden; }
 .dep-wallimg { position: absolute; bottom: -6px; height: 96px; width: 70px; object-fit: cover; object-position: right bottom; pointer-events: none; filter: brightness(.8); }
 .dep-pegs span { position: absolute; bottom: 3px; transform: translateX(-50%); font-family: var(--type, monospace); font-size: 11px; color: #cfc4ad; text-shadow: 0 1px 2px #000; }
-.dep-road { position: relative; background: linear-gradient(#24242a, #121215); touch-action: pan-x; user-select: none; -webkit-user-select: none; }
+.dep-road { position: relative; background-color: #141417; background-repeat: no-repeat, repeat; touch-action: pan-x; user-select: none; -webkit-user-select: none; }
 .dep-lane { position: absolute; left: 0; right: 0; border-top: 1px dashed rgba(230, 220, 198, .12); }
 .dep-lane span { position: absolute; right: 6px; top: 2px; font-family: var(--type, monospace); font-size: 10px; color: rgba(230, 220, 198, .35); text-transform: uppercase; letter-spacing: .1em; }
 .dep-behind { position: absolute; left: 0; top: 0; bottom: 0; background: repeating-linear-gradient(135deg, rgba(0, 0, 0, .55) 0 6px, rgba(40, 34, 26, .55) 6px 12px); border-right: 3px solid #6b5a42; }
@@ -71,8 +71,12 @@
 @media (max-width: 560px) {
   .dep { padding: 10px 10px 12px; border-left: none; border-right: none; }
   .dep-h h2 { font-size: 17px; }
-  .dep-kit span { display: none; }
-  .dep-kit { padding: 3px 6px 3px 3px; }
+  /* phones: icon over a short name, the count in the corner (never icon-only) */
+  .dep-kits { gap: 4px; }
+  .dep-kit { position: relative; flex-direction: column; gap: 1px; width: calc(25% - 3px); min-width: 0; padding: 3px 2px 2px; }
+  .dep-kit img { width: 30px; height: 26px; }
+  .dep-kit span { display: block; max-width: 100%; font-size: 9.5px; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dep-kit b { position: absolute; top: 1px; right: 4px; font-size: 11px; }
   .dep-info { font-size: 13px; }
   .dep-info > img { width: 40px; height: 40px; }
   .dep-f button { flex: 1; }

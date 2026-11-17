@@ -66,6 +66,28 @@ function tinted(src: CanvasImageSource, w: number, h: number, color: string, alp
   return c;
 }
 
+/**
+ * The far-side limbs: one arm/leg art serves both sides, so the far copy is pushed back hard enough
+ * that a distinctive mark on the near sleeve (a patch, a stripe, blood) does not read mirrored on
+ * the far arm: desaturated, softened a touch and lowered in contrast, then darkened.
+ */
+function farCopy(src: CanvasImageSource, w: number, h: number): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const x = c.getContext('2d')!;
+  x.filter = 'saturate(0.3) contrast(0.78) blur(0.6px)';
+  x.drawImage(src, 0, 0);
+  x.filter = 'none';
+  // the blur lifts the alpha edge: clip back to the original silhouette
+  x.globalCompositeOperation = 'destination-in';
+  x.drawImage(src, 0, 0);
+  x.globalCompositeOperation = 'source-atop';
+  x.globalAlpha = 0.46;
+  x.fillStyle = '#14110f';
+  x.fillRect(0, 0, w, h);
+  return c;
+}
+
 /** Transparent gutter (atlas px) round every part after re-packing. */
 export const ATLAS_PAD = 7;
 function repack(im: HTMLImageElement, meta: RigMeta): HTMLCanvasElement {
@@ -155,7 +177,7 @@ export function loadRig(id: string): Promise<RigAsset | null> {
         const asset: RigAsset = {
           meta,
           atlas: im,
-          dark: tinted(im, w, h, '#14110f', 0.42),
+          dark: farCopy(im, w, h),
           shadow: tinted(im, w, h, '#000', 1),
           flash: tinted(im, w, h, '#fff4e0', 1),
           skins: new Map(),

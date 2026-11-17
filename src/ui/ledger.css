@@ -241,6 +241,12 @@ img.portrait.big { width: 128px; height: 160px; border-width: 4px; border-bottom
 .over .epi { max-width: 44em; margin: 1.2em 0 1.6em; font-size: 18px; line-height: 1.6; color: #ddd2b8; }
 .over .epi::first-letter { font-family: var(--type); font-size: 3.4em; float: left; line-height: .82; margin: .1em .12em 0 0; color: var(--brass); }
 .over > h2 { margin-top: 26px; border-bottom: 3px double #4a4235; padding-bottom: 6px; }
+/* the story and the score card side by side on a wide screen (no empty half beside the card) */
+@media (min-width: 1100px) {
+  .over .endtop { display: grid; grid-template-columns: minmax(0, 1fr) minmax(22em, 30em); gap: 0 2.4em; align-items: start; }
+  .over .endtop.solo { grid-template-columns: minmax(22em, 34em); }
+  .over .endtop .epi { margin-top: 2.4em; }
+}
 .over .score { max-width: 34em; border: 1px solid #5a4f3c; padding: 10px 18px 12px; margin: 8px 0 14px; background-color: #15130f; box-shadow: 0 8px 26px rgba(0, 0, 0, .5); }
 .over .score .srow { display: flex; align-items: baseline; justify-content: space-between; gap: 1em; border-bottom: 1px dotted rgba(230, 220, 198, .14); padding: 4px 0; }
 .over .score .srow b { text-align: right; font-family: var(--type); font-weight: normal; color: #efe4cc; }

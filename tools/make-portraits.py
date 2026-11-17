@@ -4,7 +4,9 @@ Cut from the full-resolution survivor generations (tools/.cache/raw/surv_*.png, 
 magenta; falls back to public/sprites/surv_*.png), keyed, cropped head-and-shoulders and set on a
 dark painted ground with a vignette and paper grain, like a photograph pinned in the ledger.
     python3 tools/make-portraits.py            -> public/art/port_<sprite>.jpg (240x300)
+    python3 tools/make-portraits.py turned     -> the Turned as well (port_z_*.jpg, the help ledger)
 """
+import sys
 import glob
 import os
 import random
@@ -58,7 +60,12 @@ def portrait(src, out):
     ch = fh * 0.40
     cw = ch * W / H
     x0 = hx - cw * 0.5
-    y0 = top - fh * 0.045
+    if (xs.max() - xs.min()) > fh * 1.5:
+        # a crawler: lying long and low, head first (sprites face left): the front of the body
+        ch = fh * 1.05
+        cw = ch * W / H
+        x0 = xs.min() - cw * 0.08
+    y0 = top - fh * 0.045 if ch < fh else top - (ch - fh) * 0.6
     crop = fig.crop((int(x0), int(y0), int(x0 + cw), int(y0 + ch))).resize((W, H), Image.LANCZOS)
     rng = np.random.default_rng(abs(hash(os.path.basename(src))) % 2**32)
     bg = ground(rng)
@@ -79,7 +86,8 @@ def portrait(src, out):
 
 
 random.seed(7)
-ids = sorted({os.path.basename(p)[:-4] for p in glob.glob(os.path.join(ROOT, 'public/sprites/surv_*.png'))})
+pat = 'z_*.png' if 'turned' in sys.argv[1:] else 'surv_*.png'
+ids = sorted({os.path.basename(p)[:-4] for p in glob.glob(os.path.join(ROOT, 'public/sprites', pat))})
 for i in ids:
     raw = os.path.join(ROOT, 'tools/.cache/raw', f'{i}.png')
     portrait(raw if os.path.exists(raw) else os.path.join(ROOT, 'public/sprites', f'{i}.png'), os.path.join(OUT, f'port_{i}.jpg'))
