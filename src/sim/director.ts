@@ -51,13 +51,26 @@ export function threatPoints(day = G.day) {
 
 export function planNight(): NightPlan {
   const day = G.day;
-  const pts = threatPoints(day);
+  let pts = threatPoints(day);
   const { peak } = cyclePos(day);
+  // an incident may have promised something for tonight; consume it
+  const forced = G.flags.forceSpecial as string | undefined;
+  delete G.flags.forceSpecial;
   let special: string | undefined;
   let label = 'They will come tonight, like every night.';
   if (day === ICE_DAY) {
     special = 'crossing';
-    label = 'The river is white from bank to bank. Tonight they walk across.';
+    label = 'The river is white from bank to bank. Tonight they walk across. Somewhere over there, a bell.';
+  } else if (forced === 'raiders') {
+    special = 'raiders';
+    label = 'Headlights on Route 9 at dusk, then no headlights. The County is coming for what we have.';
+  } else if (forced === 'horde') {
+    special = 'horde';
+    label = 'The whole east bank is moving. Not a tide. A flood.';
+    pts = Math.round(pts * 1.45);
+  } else if (forced === 'tunnel' || (day > 10 && R.chance(0.06))) {
+    special = 'tunnel';
+    label = 'Scraping in the storm drain under Ferry Road. Under the wall.';
   } else if (peak && day >= 5) {
     special = 'tide';
     label = 'A tide night. The radio says the whole east bank is moving.';
@@ -83,7 +96,8 @@ export function planNight(): NightPlan {
       const z = R.weighted(types, (t) => {
         let w = t.id === 'sleeper' ? 6 : t.id === 'deer' ? 2.2 : t.id === 'drag' ? 1.2 : 1;
         if (special === 'criers' && t.id === 'crier') w *= 4;
-        if (special === 'tide' && t.id === 'deer') w *= 2;
+        if ((special === 'tide' || special === 'horde') && t.id === 'deer') w *= 2;
+        if (special === 'horde' && t.id === 'sleeper') w *= 1.5;
         if (t.cost > sb + 1) w = 0;
         if (t.cost > pts * 0.25) w *= 0.2;
         return w;
@@ -96,6 +110,23 @@ export function planNight(): NightPlan {
   }
   if (special === 'crossing') {
     for (let i = 0; i < 3; i++) spawns.push({ type: 'ferryman', t: duration * (0.5 + i * 0.15) });
+    // the one who rang the bell, walking across the ice
+    spawns.push({ type: 'bellwether', t: duration * 0.42 });
+  } else if (special === 'raiders') {
+    // living men come in with the second surge, while the guns are busy with the dead
+    const n = Math.min(6, 2 + Math.floor(day / 6));
+    for (let i = 0; i < n; i++) spawns.push({ type: 'raider', t: duration * (0.3 + (i % 3) * 0.05) + R.range(0, 6) + (i >= 3 ? duration * 0.3 : 0) });
+    // drop some of the dead to pay for them
+    trim(spawns, n * ZOMBIES.raider.cost * 0.7);
+  } else if (special === 'tunnel') {
+    const groups = day > 16 ? 3 : 2;
+    let n = 0;
+    for (let gi = 0; gi < groups; gi++) {
+      const t0 = duration * R.range(0.2, 0.85);
+      const k = R.int(2, 3 + Math.floor(day / 10));
+      for (let i = 0; i < k; i++, n++) spawns.push({ type: 'tunneler', t: t0 + i * R.range(1.2, 2.4) });
+    }
+    trim(spawns, n * ZOMBIES.tunneler.cost);
   }
   // someone from a survivor's past walks up the road tonight
   if (G.flags.oldFace) {
@@ -104,6 +135,17 @@ export function planNight(): NightPlan {
   }
   spawns.sort((a, b) => a.t - b.t);
   return { points: pts, label, special, spawns };
+}
+
+// Remove ordinary Sleepers/Drags from the plan worth about `cost` points.
+function trim(spawns: NightPlan['spawns'], cost: number) {
+  for (let i = spawns.length - 1; i >= 0 && cost > 0; i--) {
+    const z = ZOMBIES[spawns[i].type];
+    if (!z.special && (z.id === 'sleeper' || z.id === 'drag') && !spawns[i].name) {
+      cost -= z.cost;
+      spawns.splice(i, 1);
+    }
+  }
 }
 
 // Called at dawn with the night's outcome to adjust the director's "adaptation".

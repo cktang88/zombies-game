@@ -16,6 +16,12 @@ export interface ZombieDef {
   burst?: boolean; // bursts on death (pulper)
   scream?: boolean; // summons others
   lunge?: boolean; // sprint bursts
+  crawl?: boolean; // low crawler hitbox (Drags)
+  special?: boolean; // never drawn by the random budget; only placed by a night special
+  ranged?: boolean; // the living: stops short and shoots back
+  tunnel?: boolean; // comes up behind the wall
+  boss?: boolean; // knockback immune, big HP bar
+  toll?: boolean; // the bell: periodically drives the others on
 }
 
 export const ZOMBIES: Record<string, ZombieDef> = {
@@ -31,7 +37,7 @@ export const ZOMBIES: Record<string, ZombieDef> = {
   },
   drag: {
     id: 'drag', name: 'Drag', sprites: ['z_crawler'], hp: 40, speed: 20, dps: 4, cost: 0.6, minDay: 2,
-    head: 0.45, width: 90, height: 42,
+    head: 0.45, width: 90, height: 42, crawl: true,
     lore: 'What\'s left after the river or the train. Watch your ankles at the wall.',
   },
   pulper: {
@@ -53,5 +59,21 @@ export const ZOMBIES: Record<string, ZombieDef> = {
     id: 'ferryman', name: 'Ferryman', sprites: ['z_brute'], hp: 520, speed: 20, dps: 24, cost: 9, minDay: 9,
     head: 0.13, width: 92, height: 160, armor: 6,
     lore: 'The big ones from the docks and the kill floor. Slow. They do not stop.',
+  },
+  // ---- night specials: never in the random pool ----
+  tunneler: {
+    id: 'tunneler', name: 'Drag', sprites: ['z_crawler'], hp: 40, speed: 26, dps: 0, cost: 0.8, minDay: 999,
+    head: 0.45, width: 90, height: 42, crawl: true, tunnel: true, special: true,
+    lore: 'The storm drains run under Ferry Road to the river. Some of them came up the pipe.',
+  },
+  raider: {
+    id: 'raider', name: 'County man', sprites: ['z_raider', 'z_raider2'], hp: 75, speed: 70, dps: 0, cost: 3, minDay: 999,
+    head: 0.16, width: 46, height: 122, ranged: true, special: true,
+    lore: 'Deputy jackets off the dead, and the habit of taking. The County wants what you have.',
+  },
+  bellwether: {
+    id: 'bellwether', name: 'The Bellwether', sprites: ['z_bellwether'], hp: 1500, speed: 12, dps: 30, cost: 0, minDay: 999,
+    head: 0.11, width: 84, height: 200, armor: 5, boss: true, toll: true, special: true,
+    lore: 'Somebody rang the All Saints\' bell for forty minutes the night it began. Nobody would say who. Now you know.',
   },
 };

@@ -6,6 +6,7 @@ import { img, flashImg, shadeImg } from '../assets';
 import { sfx, wind } from '../audio';
 import {
   living, canFight, aimFactor, first, displayName, wound, pain, killSurvivor, tale, addThought, hasTrait, changeOpinion, leader, byId, isBitten, breakThresholds,
+  moodBreakdown, their, them, grantTitle,
 } from '../sim/survivors';
 
 export const W = 1280, H = 720;
@@ -14,6 +15,9 @@ const LANE_TOP = 616, LANE_BOT = 690;
 const SURV_Y = 664;
 const ZS = 1.3; // global actor scale for the Turned
 const SH = 158; // survivor display height
+const DRAIN_X = 26; // storm drain grate behind the line
+const SAFE_X = 34; // where the downed are dragged to
+const DOWN_PAIN = 1.45; // pain at which a mauled guard goes down
 
 interface Zombie {
   id: number;
@@ -23,7 +27,7 @@ interface Zombie {
   y: number;
   hp: number;
   maxHp: number;
-  state: 'walk' | 'wall' | 'over' | 'maul' | 'dying';
+  state: 'walk' | 'wall' | 'over' | 'maul' | 'dying' | 'cover' | 'flee';
   phase: number;
   flash: number;
   slow: number;
@@ -37,6 +41,12 @@ interface Zombie {
   name?: string;
   headless?: boolean;
   wallHit: number;
+  flip?: boolean; // faces right (came up behind the line)
+  stopX?: number; // raiders: where they take cover
+  coverT?: number; // raiders: time left in the current up/down phase
+  ducked?: boolean;
+  seen?: number; // raiders: lit by their own muzzle flash
+  emerge?: number; // tunnelers: climbing out of the drain
 }
 
 interface Guard {
@@ -54,6 +64,18 @@ interface Guard {
   recoil: number;
   mode?: 'panic' | 'rage';
   panicAt?: number;
+  homeX: number;
+  face: 1 | -1;
+  downCause?: string;
+  downed?: boolean; // lying in the road, out of the fight
+  wasDowned?: boolean;
+  safe?: boolean; // dragged back behind the line
+  mauledT: number; // seconds mauled while down
+  dragging?: Guard; // the downed guard this one is hauling back
+  dragT: number;
+  moodle?: string;
+  moodleC: string;
+  moodleT: number;
 }
 
 interface Particle { x: number; y: number; vx: number; vy: number; life: number; max: number; size: number; color: string; kind: 'blood' | 'spark' | 'smoke' | 'fire' | 'spore' | 'shell' | 'chunk'; ground: number }
@@ -121,6 +143,13 @@ export class Battle {
   oldFaceBy?: string;
   fast = false;
   turrets: { x: number; y: number; cd: number; flash: number; ang: number }[] = [];
+  surge = 0; // the bell: the Turned move faster while it rings
+  boss?: Zombie;
+  dog?: { x: number; y: number; barkT: number; cd: number; name: string };
+  sharp = 0; // the dog's warning: guards aim better for a moment
+  drainOpen = 0;
+  covers: { x: number; y: number; w: number; h: number; seed: number }[] = [];
+  raidersDown = 0;
   keyUp = (e: KeyboardEvent) => { if (e.key === ' ') this.fast = false; };
 
   constructor(canvas: HTMLCanvasElement, plan: NightPlan, onEnd: (r: NightResult) => void) {
@@ -142,6 +171,7 @@ export class Battle {
     this.ammoStart = { light: G.stores.light, shell: G.stores.shell, rifle: G.stores.rifle, scrap: G.stores.scrap, molotov: G.stores.molotov };
     this.res = { kills: 0, deaths: [], wallHeld: true, wallLost: 0, ammoUsed: {}, killsBy: {}, headshots: 0, lines: [], fell: false };
     this.setupGuards();
+    if (G.flags.dog) this.dog = { x: 300, y: SURV_Y + 14, barkT: 0, cd: 0, name: typeof G.flags.dog === 'string' ? G.flags.dog : 'The dog' };
     for (let i = 0; i < Math.min(2, G.fort.turrets ?? 0); i++) this.turrets.push({ x: WALL_X - 20 - i * 46, y: 560 - i * 14, cd: 1, flash: 0, ang: 0 });
     const turning = G.flags.turningTonight as string | undefined;
     if (turning && byId(turning) && !byId(turning)!.dead) this.turnAt = this.duration * R.range(0.25, 0.6);
@@ -158,7 +188,7 @@ export class Battle {
     const slots = [262, 192, 124, 58, 0, 160];
     fighters.slice(0, 6).forEach((s, i) => {
       const w = G.weapons.find((x) => x.uid === s.weapon) ?? null;
-      this.guards.push({ s, w, x: slots[i], y: SURV_Y + (i % 2) * 8 - (i >= 4 ? 30 : 0), cd: R.range(0, 1), mag: w ? WEAPONS[w.def].mag : 0, reload: 0, kills: 0, flash: 0, fled: false, recoil: 0 });
+      this.guards.push({ s, w, x: slots[i], y: SURV_Y + (i % 2) * 8 - (i >= 4 ? 30 : 0), cd: R.range(0, 1), mag: w ? WEAPONS[w.def].mag : 0, reload: 0, kills: 0, flash: 0, fled: false, recoil: 0, homeX: slots[i], face: 1, mauledT: 0, dragT: 0, moodleC: '', moodleT: R.range(0, 1) });
     });
     // magazines are loaded from the stores, not conjured
     for (const g of this.guards) {
@@ -179,7 +209,11 @@ export class Battle {
   }
 
   get player(): Guard | undefined {
-    return this.guards.find((g) => g.s.isLeader && !g.s.dead && !g.fled) ?? this.guards.find((g) => !g.s.dead && !g.fled);
+    return this.guards.find((g) => g.s.isLeader && this.standing(g)) ?? this.guards.find((g) => this.standing(g));
+  }
+
+  standing(g: Guard) {
+    return !g.s.dead && !g.fled && !g.downed;
   }
 
   bindInput() {
@@ -296,6 +330,9 @@ export class Battle {
     this.slowmo = Math.max(0, this.slowmo - dt);
     this.shake = Math.max(0, this.shake - dt * 18);
     this.bloom = Math.max(0, this.bloom - dt * 0.12);
+    this.surge = Math.max(0, this.surge - dt);
+    this.sharp = Math.max(0, this.sharp - dt);
+    this.drainOpen = Math.max(0, this.drainOpen - dt);
     // spawns
     while (this.spawnIdx < this.plan.spawns.length && this.plan.spawns[this.spawnIdx].t <= this.t) {
       this.spawn(this.plan.spawns[this.spawnIdx].type, false, this.plan.spawns[this.spawnIdx].name);
@@ -313,9 +350,11 @@ export class Battle {
     }
     this.updatePlayer(dt);
     for (const g of this.guards) this.updateGuard(g, dt);
+    this.updateDowned(dt);
+    if (this.dog) this.updateDog(dt);
     for (const tu of this.turrets) this.updateTurret(tu, dt);
     for (const z of this.zombies) this.updateZombie(z, dt);
-    this.zombies = this.zombies.filter((z) => !(z.state === 'dying' && z.dieT > 0.6));
+    this.zombies = this.zombies.filter((z) => !(z.state === 'dying' && z.dieT > 0.6) && !(z.state === 'flee' && z.x > W + 140));
     this.updateParticles(dt);
     for (const f of this.fires) {
       f.life -= dt;
@@ -339,7 +378,7 @@ export class Battle {
     }
     // end
     const alive = this.zombies.filter((z) => z.state !== 'dying').length;
-    const anyone = this.guards.some((g) => !g.s.dead && !g.fled);
+    const anyone = this.guards.some((g) => this.standing(g));
     if (!anyone && !this.done) {
       this.done = true;
       this.res.fell = true;
@@ -362,11 +401,42 @@ export class Battle {
     if (!def) return;
     const y = R.range(LANE_TOP, LANE_BOT);
     const scale = 0.92 + ((y - LANE_TOP) / (LANE_BOT - LANE_TOP)) * 0.16;
-    const hpMul = 1 + Math.max(0, G.day - 8) * 0.03;
-    this.zombies.push({
+    const hpMul = def.ranged || def.boss ? 1 : 1 + Math.max(0, G.day - 8) * 0.03;
+    const z: Zombie = {
       id: this.nextId++, def, sprite: R.pick(def.sprites), x: W + R.range(30, 120), y, hp: def.hp * hpMul, maxHp: def.hp * hpMul, state: 'walk',
       phase: R.range(0, 10), flash: 0, slow: 0, burn: 0, dieT: 0, maulT: 0, lungeT: R.range(1, 3), screamT: R.range(3, 6), scale, wallHit: 0, name,
-    });
+    };
+    if (def.tunnel) {
+      // up out of the storm drain, behind the wall
+      z.x = DRAIN_X;
+      z.y = SURV_Y + R.range(4, 18);
+      z.scale = 1;
+      z.state = 'over';
+      z.flip = true;
+      z.emerge = 0.9;
+      this.drainOpen = 6;
+      if (!this.zombies.some((o) => o.def.tunnel && o.state !== 'dying')) {
+        this.say('The drain grate behind us lifts. Something is coming up the pipe.', 4);
+        this.shake = Math.max(this.shake, 4);
+        this.dogBark('the drain');
+      }
+      sfx.thud();
+    } else if (def.ranged) {
+      z.stopX = R.range(800, 1000);
+      z.seen = 0;
+      if (!this.zombies.some((o) => o.def.ranged && o.state !== 'dying')) this.say('Men on the road. Living men, with rifles.', 4);
+    } else if (def.boss) {
+      z.x = W + 60;
+      z.y = LANE_TOP + (LANE_BOT - LANE_TOP) * 0.55;
+      z.scale = 1;
+      z.screamT = 5;
+      this.boss = z;
+      this.say('Out on the ice, something tall. It is carrying the bell.', 6);
+      sfx.bell();
+    } else if (def.lunge) {
+      this.dogBark('a runner');
+    }
+    this.zombies.push(z);
     if (name) {
       const of = G.flags.oldFace ? JSON.parse(G.flags.oldFace as string) as { name: string; by: string } : null;
       const by = of ? byId(of.by) : undefined;
@@ -408,6 +478,7 @@ export class Battle {
       this.playerReload -= dt;
       if (this.playerReload <= 0) this.finishReload(p);
     }
+    p.face = this.mouse.x < p.x - 12 ? -1 : 1;
     if (this.mouse.down && def.auto) this.tryFire(false);
     p.recoil = Math.max(0, p.recoil - dt * 8);
     p.flash = Math.max(0, p.flash - dt);
@@ -502,7 +573,7 @@ export class Battle {
   }
 
   muzzle(g: Guard) {
-    return { x: g.x + SH * 0.45 - g.recoil * 4, y: g.y - SH * 0.68 };
+    return { x: g.x + g.face * (SH * 0.45 - g.recoil * 4), y: g.y - SH * 0.68 };
   }
 
   // Ray against all zombies; returns whether anything was hit.
@@ -554,13 +625,15 @@ export class Battle {
   hitbox(z: Zombie) {
     const h = z.def.height * z.scale * ZS;
     const w = z.def.width * z.scale * ZS;
-    const lift = z.state === 'over' || z.state === 'maul' ? 0 : 0;
-    const top = z.y - h - lift;
+    // raiders crouch behind a heap of junk; the lower body is behind it, and ducking drops the rest
+    const cover = z.def.ranged && z.state === 'cover';
+    const top = z.y - h + (cover && z.ducked ? h * 0.32 : 0) + (z.emerge ? h * Math.min(1, z.emerge) : 0);
     const headH = h * z.def.head;
-    const crawl = z.def.id === 'drag';
+    const crawl = z.def.crawl;
+    const f = z.flip ? -1 : 1;
     return {
-      x1: z.x - w / 2, x2: z.x + w / 2, y1: top + (z.headless ? 0 : headH * 0.8), y2: z.y,
-      hx: crawl ? z.x - w * 0.36 : z.x - w * 0.12, hy: crawl ? z.y - h * 0.62 : top + headH * 0.5, hr: z.headless ? 0 : (crawl ? h * 0.3 : headH * 0.62),
+      x1: z.x - w / 2, x2: z.x + w / 2, y1: top + (z.headless ? 0 : headH * 0.8), y2: cover ? z.y - h * 0.42 : z.y,
+      hx: z.x - f * w * (crawl ? 0.36 : 0.12), hy: crawl ? z.y - h * 0.62 : top + headH * 0.5, hr: z.headless ? 0 : (crawl ? h * 0.3 : headH * 0.62),
     };
   }
 
@@ -570,16 +643,17 @@ export class Battle {
     else if (z.def.armor) d = Math.max(d * 0.15, d - z.def.armor);
     z.hp -= d;
     z.flash = 0.08;
-    if (z.def.id !== 'ferryman') z.x += knock * (pellet ? 0.25 : 1) * (head ? 1.4 : 1) * (z.state === 'wall' ? 0.5 : 1);
+    const heavy = z.def.id === 'ferryman' || z.def.boss || z.state === 'cover';
+    if (!heavy) z.x += (z.flip ? -1 : 1) * knock * (pellet ? 0.25 : 1) * (head ? 1.4 : 1) * (z.state === 'wall' ? 0.5 : 1);
     z.x = Math.min(z.x, W + 150);
-    if (z.state === 'wall' && knock > 15 && z.def.id !== 'ferryman') z.state = 'walk';
+    if (z.state === 'wall' && knock > 15 && !heavy) z.state = 'walk';
     // blood
     const nb = head ? 10 : 4;
     for (let i = 0; i < nb; i++) {
       this.particles.push({ x: px, y: py, vx: R.range(20, 220) * (R.chance(0.8) ? 1 : -0.5), vy: R.range(-200, 40), life: 1.6, max: 1.6, size: R.range(1.5, head ? 4.5 : 3), color: R.pick(['#4a0d0b', '#5e1410', '#3a0a08', '#6b2a12']), kind: 'blood', ground: z.y + R.range(-6, 6) });
     }
     if (z.hp <= 0) {
-      if (head && !z.headless && R.chance(isPlayer ? 0.8 : 0.5) && z.def.id !== 'drag') {
+      if (head && !z.headless && R.chance(isPlayer ? 0.8 : 0.5) && !z.def.crawl && !z.def.ranged) {
         z.headless = true;
         sfx.headpop();
         for (let i = 0; i < 14; i++) this.particles.push({ x: px, y: py, vx: R.range(-60, 260), vy: R.range(-260, -40), life: 2, max: 2, size: R.range(2, 5), color: R.pick(['#4a0d0b', '#2a1a14', '#5e1410', '#8b7d6b']), kind: R.chance(0.3) ? 'chunk' : 'blood', ground: z.y + R.range(-6, 6) });
@@ -596,8 +670,18 @@ export class Battle {
     if (z.state === 'dying') return;
     z.state = 'dying';
     z.dieT = 0;
-    this.res.kills++;
-    G.stats.kills++;
+    if (z.def.ranged) this.raidersDown++;
+    else {
+      this.res.kills++;
+      G.stats.kills++;
+    }
+    if (z.def.boss) this.bossDown(z, g);
+    if (g && z.def.ranged) {
+      g.s.kills++;
+      this.res.killsBy[g.s.id] = (this.res.killsBy[g.s.id] ?? 0) + 1;
+      if (!hasTrait(g.s, 'bloodlust')) addThought(g.s, { id: 'shot_living', label: 'Shot a living man', mood: hasTrait(g.s, 'gentle') ? -8 : -4, days: 4 }, 2);
+      return;
+    }
     if (g) {
       g.kills++;
       g.s.kills++;
@@ -635,10 +719,32 @@ export class Battle {
     }
   }
 
+  bossDown(z: Zombie, g: Guard | null) {
+    sfx.boom();
+    this.slowmo = 2;
+    this.shake = 12;
+    this.surge = 0;
+    G.flags.bellwetherDown = G.day;
+    this.say('The bell hits the ice and splits. It does not ring again.', 7);
+    this.text(z.x, z.y - 300, 'THE BELL IS SILENT', '#e0c070', 18);
+    for (let i = 0; i < 20; i++) this.particles.push({ x: z.x + R.range(-30, 30), y: z.y - R.range(40, 200), vx: R.range(-160, 160), vy: R.range(-240, -40), life: 2, max: 2, size: R.range(2, 5), color: R.pick(['#8a6a2a', '#b08a3a', '#4a0d0b']), kind: 'chunk', ground: z.y + R.range(-6, 6) });
+    if (g) {
+      const how = g.w ? ` with ${g.w.name ? `"${g.w.name}"` : `the ${WEAPONS[g.w.def].name.toLowerCase()}`}` : '';
+      tale(g.s, `Silenced the Bellwether on the night the river froze.`);
+      grantTitle(g.s, 'Bell-Breaker');
+      log('tale', `${displayName(g.s)} put down the Bellwether on the ice${how}. Somebody rang the All Saints' bell for forty minutes the night it began. It will not ring again.`);
+      this.res.lines.push(`${first(g.s)} silenced the Bellwether.`);
+    } else {
+      log('tale', `The Bellwether went down on the ice on night ${G.day}. Nobody on the wall can say whose shot it was. The bell cracked in two.`);
+      this.res.lines.push('The Bellwether fell. The bell cracked in two.');
+    }
+    for (const o of this.guards) if (!o.s.dead && !o.fled) addThought(o.s, { id: 'bell_silent', label: 'The bell stopped', mood: 8, days: 5 }, 1);
+  }
+
   updateGuard(g: Guard, dt: number) {
     g.flash = Math.max(0, g.flash - dt);
     g.recoil = Math.max(0, g.recoil - dt * 8);
-    if (g.s.dead || g.fled || g === this.player || !g.w) return;
+    if (g.s.dead || g.fled || g.downed || g.dragging || g.x !== g.homeX || g === this.player || !g.w) return;
     // cowards and the fragile may leave the wall when it's breaking
     if (!this.res.wallHeld && (hasTrait(g.s, 'coward') || g.s.mood < 20) && R.chance(dt * 0.3)) {
       g.fled = true;
@@ -668,13 +774,19 @@ export class Battle {
     const fog = this.plan.special === 'fog';
     // guards only engage what they can make out in the dark
     const range = (fog ? 640 : 820) + Math.min(3, G.fort.lights) * 130 + (hasTrait(g.s, 'nightowl') ? 120 : 0);
-    const targets = this.zombies.filter((z) => z.state !== 'dying' && z.x < range && z.x > g.x + 30);
-    if (!targets.length) return;
-    const tgt = targets.reduce((best, z) => {
-      const pri = (z.def.scream ? -400 : 0) + (z.state === 'over' || z.state === 'maul' ? -800 : 0) + z.x + (z.def.burst && z.x < WALL_X + 140 ? 300 : 0);
-      const bp = (best.def.scream ? -400 : 0) + (best.state === 'over' || best.state === 'maul' ? -800 : 0) + best.x + (best.def.burst && best.x < WALL_X + 140 ? 300 : 0);
-      return pri < bp ? z : best;
-    });
+    // the road ahead, anything already behind the line, and any rifleman who just showed himself
+    let tgt: Zombie | undefined;
+    let bp = 1e9;
+    for (const z of this.zombies) {
+      if (z.state === 'dying') continue;
+      const inside = z.state === 'over' || z.state === 'maul';
+      const ahead = z.x > g.x + 30 && (z.x < range || (z.seen ?? 0) > 0 || (z.def.boss && z.x < W - 30));
+      if (!ahead && !(inside && Math.abs(z.x - g.x) < 280)) continue;
+      const pri = (z.def.scream ? -400 : 0) + (inside ? -800 : 0) + (z.def.ranged ? -250 : 0) + Math.abs(z.x - g.x) + (z.def.burst && z.x < WALL_X + 140 ? 300 : 0);
+      if (pri < bp) { bp = pri; tgt = z; }
+    }
+    if (!tgt) { g.face = 1; return; }
+    g.face = tgt.x < g.x + 30 ? -1 : 1;
     if (g.mag <= 0) {
       if (def.ammo && G.stores[def.ammo] < this.ammoPer(def)) {
         // out of ammunition: hatchets and fence pickets at the wall
@@ -699,6 +811,7 @@ export class Battle {
     let aim = aimFactor(g.s);
     if (g.mode === 'panic') aim *= 0.4;
     if (g.mode === 'rage') aim = Math.min(1.3, aim + 0.3);
+    if (this.sharp > 0) aim = Math.min(1.3, aim + 0.15);
     const lightBonus = Math.min(0.2, G.fort.lights * 0.07);
     const mz = this.muzzle(g);
     const hb = this.hitbox(tgt);
@@ -773,8 +886,17 @@ export class Battle {
         for (let i = 0; i < 2; i++) this.spawn(R.chance(0.5) ? 'sleeper' : 'deer');
       }
     }
+    // the bell
+    if (z.def.toll && z.x < W - 40) {
+      z.screamT -= dt;
+      if (z.screamT <= 0) {
+        z.screamT = R.range(10, 14);
+        this.toll(z);
+      }
+    }
     const wire = z.x > WALL_X + 60 && z.x < WALL_X + 60 + 90 * Math.min(3, G.fort.wire) ? 0.55 : 1;
     let speed = z.def.speed * cold * wire;
+    if (this.surge > 0 && !z.def.boss && !z.def.ranged) speed *= 1.7;
     if (z.def.lunge) {
       z.lungeT -= dt;
       if (z.lungeT < 0) {
@@ -782,8 +904,22 @@ export class Battle {
         if (z.lungeT < -0.8) z.lungeT = R.range(1.2, 2.6);
       }
     }
+    if (z.state === 'cover') return this.updateRaider(z, dt);
+    if (z.state === 'flee') {
+      z.x += speed * 1.3 * dt;
+      z.flip = true;
+      return;
+    }
     if (z.state === 'walk') {
       z.x -= speed * dt;
+      if (z.def.ranged && z.x <= (z.stopX ?? 900)) {
+        const h = z.def.height * z.scale * ZS;
+        this.covers.push({ x: z.x - h * 0.2, y: z.y + 3, w: h * 0.55, h: h * 0.44, seed: z.id * 7.3 });
+        z.state = 'cover';
+        z.ducked = true;
+        z.coverT = R.range(0.4, 1.2);
+        return;
+      }
       if (z.x - (z.def.width * z.scale * ZS) / 2 <= WALL_X) {
         z.x = WALL_X + (z.def.width * z.scale * ZS) / 2;
         z.state = G.fort.hp > 0 ? 'wall' : 'over';
@@ -806,25 +942,104 @@ export class Battle {
         if (z.hp <= 0) this.kill(z, null);
       }
     } else if (z.state === 'over') {
-      // over the rubble toward the nearest defender
-      const live = this.guards.filter((g) => !g.s.dead && !g.fled);
-      if (!live.length) { z.x -= speed * dt; if (z.x < -80) z.hp = 0; return; }
-      const tgt = live.reduce((a, b) => (Math.abs(b.x - z.x) < Math.abs(a.x - z.x) ? b : a));
-      if (z.x > tgt.x + 34) z.x -= speed * 0.8 * dt;
-      else {
+      if (z.emerge !== undefined && z.emerge > 0) { z.emerge -= dt; return; }
+      // over the rubble (or up out of the drain) toward the nearest defender
+      let tgt: Guard | undefined;
+      let best = 1e9;
+      for (const g of this.guards) {
+        if (g.s.dead || g.fled || g.safe) continue;
+        const d = Math.abs(g.x - z.x);
+        if (d < best) { best = d; tgt = g; }
+      }
+      if (!tgt) { z.x += (z.flip ? speed : -speed) * dt; if (z.x < -80 || z.x > W + 80) z.hp = 0; return; }
+      const dx = tgt.x - z.x;
+      if (Math.abs(dx) > 34) {
+        z.x += Math.sign(dx) * speed * 0.8 * dt;
+        z.flip = dx > 0;
+      } else {
         z.state = 'maul';
         z.target = tgt.s.id;
         z.maulT = 0.6;
       }
     } else if (z.state === 'maul') {
       const g = this.guards.find((x) => x.s.id === z.target);
-      if (!g || g.s.dead || g.fled) { z.state = 'over'; return; }
+      if (!g || g.s.dead || g.fled || g.safe || Math.abs(g.x - z.x) > 60) { z.state = 'over'; return; }
       z.maulT -= dt;
       if (z.maulT <= 0) {
         z.maulT = R.range(0.9, 1.6) * (z.def.id === 'ferryman' ? 0.7 : 1);
         this.maul(g, z);
       }
     }
+  }
+
+  // ---------- raiders ----------
+  updateRaider(z: Zombie, dt: number) {
+    if (!z.ducked && z.coverT !== undefined && z.coverT > 0 && R.chance(dt * 0.4)) z.seen = Math.max(z.seen ?? 0, 0.5);
+    z.seen = Math.max(0, (z.seen ?? 0) - dt);
+    z.coverT = (z.coverT ?? 0) - dt;
+    if (z.coverT > 0) return;
+    if (z.ducked) {
+      // up over the cover, aiming
+      z.ducked = false;
+      z.coverT = R.range(0.9, 1.5);
+    } else {
+      this.raiderFire(z);
+      z.ducked = true;
+      z.coverT = R.range(1.8, 3.4);
+      // when most of them are down, the rest lose their nerve
+      const left = this.zombies.filter((o) => o.def.ranged && o.state !== 'dying' && o.state !== 'flee').length;
+      if (this.raidersDown >= 2 && left <= 1 && z.hp < z.maxHp * 0.7) {
+        z.state = 'flee';
+        this.say('The last of the County men is running.', 3);
+      }
+    }
+  }
+
+  raiderMuzzle(z: Zombie) {
+    const h = z.def.height * z.scale * ZS;
+    const im = img(z.sprite);
+    const w = im ? (im.width / im.height) * h : h * 0.6;
+    return { x: z.x - w * 0.48, y: z.y - h * (z.sprite === 'z_raider' ? 0.6 : 0.56) };
+  }
+
+  raiderFire(z: Zombie) {
+    let tgt: Guard | undefined;
+    let n = 0;
+    for (const g of this.guards) if (this.standing(g) && R.chance(1 / ++n)) tgt = g; // reservoir pick
+    if (!tgt) return;
+    const mz = this.raiderMuzzle(z);
+    const hit = R.chance(0.3 - (this.plan.special === 'fog' ? 0.1 : 0) - (G.fort.hp > 0 ? 0.05 : 0));
+    const tx = tgt.x + R.range(-10, 14), ty = tgt.y - SH * R.range(0.45, 0.75);
+    z.seen = 2.5;
+    this.noise += 1;
+    sfx.shot(z.sprite === 'z_raider2' ? 'pump' : 'hunting', true);
+    this.lights.push({ x: mz.x, y: mz.y, r: 200, life: 0.08, max: 0.08, color: '255,200,120' });
+    if (hit) {
+      this.tracers.push({ x1: mz.x, y1: mz.y, x2: tx, y2: ty, life: 0.08, w: 1.4 });
+      const s = tgt.s;
+      wound(s, 'gunshot', R.range(0.18, 0.38));
+      sfx.hurt();
+      this.text(tgt.x + 10, tgt.y - 150, 'SHOT', '#e07050', 13);
+      for (let i = 0; i < 6; i++) this.particles.push({ x: tx, y: ty, vx: R.range(-140, 20), vy: R.range(-140, 20), life: 1.2, max: 1.2, size: R.range(1.5, 3.5), color: '#5e1410', kind: 'blood', ground: tgt.y });
+      if (!s.tales.some((t) => t.startsWith('Took a County bullet'))) tale(s, `Took a County bullet on the wall, night ${G.day}.`);
+      this.checkDown(tgt, 'shot on the wall by a County man');
+    } else {
+      // into the barricade, or over everyone's heads
+      const ex = R.chance(0.5) ? WALL_X - 6 : tx + R.range(-60, 30);
+      const ey = R.chance(0.5) ? R.range(590, 660) : ty - R.range(40, 120);
+      this.tracers.push({ x1: mz.x, y1: mz.y, x2: ex, y2: ey, life: 0.08, w: 1.2 });
+      for (let i = 0; i < 3; i++) this.particles.push({ x: ex, y: ey, vx: R.range(-80, 40), vy: R.range(-90, 0), life: 0.4, max: 0.4, size: 2, color: '#8a7a5a', kind: 'spark', ground: 0 });
+    }
+  }
+
+  // ---------- the bell ----------
+  toll(z: Zombie) {
+    sfx.bell();
+    this.surge = 4.5;
+    this.shake = Math.max(this.shake, 5);
+    this.text(z.x, z.y - z.def.height * ZS - 20, '— the bell —', '#d8b25a', 15);
+    this.lights.push({ x: z.x, y: z.y - 160, r: 360, life: 0.9, max: 0.9, color: '200,160,70' });
+    if (R.chance(0.5)) this.say(R.pick(['The bell. They all turn toward it, then toward us.', 'The bell again. The road surges.', 'Every one of them moves faster when it rings.']), 3);
   }
 
   maul(g: Guard, z: Zombie) {
@@ -839,26 +1054,179 @@ export class Battle {
       this.say(`${first(s)} is bitten!`, 3);
     }
     for (let i = 0; i < 8; i++) this.particles.push({ x: g.x + 20, y: g.y - 80, vx: R.range(-120, 120), vy: R.range(-160, 0), life: 1.4, max: 1.4, size: R.range(2, 4), color: '#5e1410', kind: 'blood', ground: g.y });
-    if (pain(s) > 1.45) {
-      const by = z.name ? `by what had been ${z.name}` : `by a ${z.def.name}`;
-      killSurvivor(s, `pulled down behind the wall ${by}, night ${G.day}`);
-      this.res.deaths.push(first(s));
-      this.say(`${first(s).toUpperCase()} IS DOWN.`, 6);
-      for (const o of this.guards) {
-        if (o.s.dead || o.fled || o === g) continue;
-        const r = o.s.rel[s.id];
-        if (r && (r.bond === 'lover' || r.bond === 'spouse' || r.bond === 'parent' || r.bond === 'child' || r.bond === 'sibling' || r.opinion > 50)) {
-          o.mode = 'rage';
-          this.say(`${first(o.s)} screams ${first(s)}'s name and keeps firing.`, 5);
-          tale(o.s, `Kept firing after ${first(s)} fell, night ${G.day}.`);
-        }
-      }
-      this.slowmo = 1.5;
-      G.flags.lastDeathDay = G.day;
-      if (s.isLeader === false && this.player?.s === s) { /* control passes */ }
-      const nl = leader();
-      if (nl && this.player?.s !== nl) this.say(`${first(nl)} takes up the line.`, 4);
+    const by = z.name ? `by what had been ${z.name}` : `by a ${z.def.name}`;
+    if (g.downed) return; // the clock in updateDowned decides
+    this.checkDown(g, `pulled down behind the wall ${by}, night ${G.day}`);
+  }
+
+  // ---------- down, dragged, or dead ----------
+  checkDown(g: Guard, cause: string) {
+    if (g.s.dead || g.downed || pain(g.s) <= DOWN_PAIN) return;
+    if (g.wasDowned) return this.killGuard(g, cause);
+    const s = g.s;
+    g.downed = true;
+    g.wasDowned = true;
+    g.mauledT = 0;
+    g.downCause = cause;
+    g.mode = undefined;
+    // whoever was hauling someone else drops them
+    if (g.dragging) { g.dragging = undefined; }
+    this.say(`${first(s).toUpperCase()} IS DOWN. Somebody get to ${them(s)}.`, 5);
+    this.slowmo = Math.max(this.slowmo, 0.8);
+    this.shake = Math.max(this.shake, 6);
+    const wasPlayer = this.guards.find((x) => x.s.isLeader && !x.s.dead && !x.fled) === g;
+    if (wasPlayer) {
+      const np = this.player;
+      if (np) this.say(`${first(np.s)} takes up the line.`, 4);
     }
+  }
+
+  killGuard(g: Guard, cause: string) {
+    const s = g.s;
+    if (s.dead) return;
+    for (const o of this.guards) if (o.dragging === g) o.dragging = undefined;
+    killSurvivor(s, cause);
+    this.res.deaths.push(first(s));
+    this.say(g.downed ? `They got to ${first(s)}. ${first(s)} is gone.` : `${first(s).toUpperCase()} IS DOWN.`, 6);
+    for (const o of this.guards) {
+      if (o.s.dead || o.fled || o === g || o.downed) continue;
+      const r = o.s.rel[s.id];
+      if (r && (r.bond === 'lover' || r.bond === 'spouse' || r.bond === 'parent' || r.bond === 'child' || r.bond === 'sibling' || r.opinion > 50)) {
+        o.mode = 'rage';
+        this.say(`${first(o.s)} screams ${first(s)}'s name and keeps firing.`, 5);
+        tale(o.s, `Kept firing after ${first(s)} fell, night ${G.day}.`);
+      }
+    }
+    this.slowmo = 1.5;
+    G.flags.lastDeathDay = G.day;
+    const nl = leader();
+    if (nl && this.player?.s !== nl) this.say(`${first(nl)} takes up the line.`, 4);
+  }
+
+  updateDowned(dt: number) {
+    for (const g of this.guards) {
+      if (g.s.dead || g.fled) continue;
+      // moodles refresh slowly; they do not change much in a night
+      g.moodleT -= dt;
+      if (g.moodleT <= 0) { g.moodleT = 2.5; this.moodle(g); }
+      if (g.dragging) this.updateDrag(g, dt);
+      else if (!g.downed && g.x !== g.homeX) {
+        // back to the slot after hauling someone out
+        const d = g.homeX - g.x;
+        g.x += Math.sign(d) * Math.min(Math.abs(d), 110 * dt);
+        g.face = d < 0 ? -1 : 1;
+        if (g.x === g.homeX) g.face = 1;
+      }
+      if (!g.downed || g.safe) continue;
+      // something is on them
+      let mauled = false;
+      for (const z of this.zombies) if (z.state === 'maul' && z.target === g.s.id) { mauled = true; break; }
+      if (mauled) {
+        g.mauledT += dt;
+        if (g.mauledT >= 2.5) { this.killGuard(g, g.downCause ?? `pulled down behind the wall, night ${G.day}`); continue; }
+      }
+      if (this.guards.some((o) => o.dragging === g)) continue;
+      // nearest standing guard who isn't holding the player's gun goes for them
+      let best: Guard | undefined;
+      let bd = 170;
+      for (const o of this.guards) {
+        if (o === g || !this.standing(o) || o.dragging || o === this.player) continue;
+        if (hasTrait(o.s, 'coward') || o.mode === 'panic') continue;
+        const d = Math.abs(o.x - g.x);
+        if (d < bd) { bd = d; best = o; }
+      }
+      if (best) {
+        best.dragging = g;
+        best.dragT = 3;
+        this.say(`${first(best.s)} goes for ${first(g.s)}.`, 3);
+      }
+    }
+  }
+
+  updateDrag(r: Guard, dt: number) {
+    const d = r.dragging!;
+    if (d.s.dead || !d.downed || d.safe || r.downed) { r.dragging = undefined; return; }
+    // reach them first
+    const reachX = d.x + 26;
+    if (Math.abs(r.x - reachX) > 4) {
+      const k = reachX - r.x;
+      r.x += Math.sign(k) * Math.min(Math.abs(k), 160 * dt);
+      r.face = k < 0 ? -1 : 1;
+      return;
+    }
+    r.dragT -= dt;
+    r.face = -1;
+    const left = Math.max(0.05, r.dragT);
+    const step = Math.max(0, d.x - SAFE_X) * Math.min(1, dt / left);
+    d.x -= step;
+    r.x = d.x + 26;
+    if (R.chance(dt * 6)) {
+      this.gctx.fillStyle = '#3a0a08';
+      this.gctx.fillRect(d.x + R.range(-20, 20), d.y - 2, R.range(3, 8), 2);
+    }
+    if (r.dragT > 0) return;
+    // out from under them
+    d.safe = true;
+    d.x = SAFE_X;
+    r.dragging = undefined;
+    const rs = r.s, ds = d.s;
+    tale(rs, `Dragged ${first(ds)} out from under them, night ${G.day}.`);
+    tale(ds, `Was dragged back behind the line by ${first(rs)}, night ${G.day}.`);
+    addThought(ds, { id: 'saved_life', label: `${first(rs)} saved my life`, mood: 10, days: 10, about: rs.id }, 1);
+    addThought(rs, { id: 'saved_other', label: `Got ${first(ds)} out`, mood: 5, days: 4, about: ds.id }, 1);
+    changeOpinion(ds, rs, 35);
+    changeOpinion(rs, ds, 8);
+    this.say(`${first(rs)} drags ${first(ds)} back behind the line.`, 4);
+    log('tale', `${displayName(rs)} dragged ${displayName(ds)} out from under the Turned on night ${G.day}, by ${their(ds)} collar.`);
+  }
+
+  // the most pressing thing on a guard's mind, in a word or three
+  moodle(g: Guard) {
+    let worst = -5, label = '';
+    for (const p of moodBreakdown(g.s)) if (p.v < worst) { worst = p.v; label = p.label; }
+    if (!label) { g.moodle = undefined; return; }
+    const th = g.s.thoughts.find((t) => t.label === label);
+    let word: string;
+    if (th) {
+      const id = th.id;
+      word = /lost_love|lost_family|friend_died|ally_died/.test(id) ? 'grieving'
+        : /mercy|shot_friend|oldface|killed_patient/.test(id) ? 'haunted'
+        : /breach|close_call|saw_kin/.test(id) ? 'shaken'
+        : /insulted|screamed_at|deserted/.test(id) ? 'bitter'
+        : /rations/.test(id) ? 'hungry'
+        : /kin_|gentle/.test(id) ? 'heartsick'
+        : 'troubled';
+    } else if (label === 'Starving') word = 'starving';
+    else if (label === 'Hungry') word = 'hungry';
+    else if (label === 'Exhausted') word = 'exhausted';
+    else if (label === 'Tired') word = 'tired';
+    else if (label.startsWith('Agonizing')) word = 'in agony';
+    else if (label.endsWith('pain') || label === 'Pain') word = 'in pain';
+    else if (label.startsWith('Fever')) word = 'feverish';
+    else if (label === 'Needs a drink') word = 'needs a drink';
+    else if (label.startsWith('Freezing')) word = 'freezing';
+    else word = 'low';
+    g.moodle = word;
+    g.moodleC = worst <= -20 ? '#d65a44' : worst <= -11 ? '#d39a48' : '#a8a08a';
+  }
+
+  // ---------- the dog ----------
+  dogBark(what: string) {
+    const d = this.dog;
+    if (!d || d.cd > 0 || this.intro > 2) return;
+    d.cd = 9;
+    d.barkT = 1.6;
+    this.sharp = 5;
+    this.text(d.x + 10, d.y - 70, 'barking', '#d9c9a0', 12);
+    if (what === 'the drain') this.say(`${d.name} is going mad at the drain.`, 3);
+    else if (R.chance(0.4)) this.say(`${d.name} hears ${what} before anyone sees it.`, 3);
+  }
+
+  updateDog(dt: number) {
+    const d = this.dog!;
+    d.cd -= dt;
+    d.barkT = Math.max(0, d.barkT - dt);
+    if (d.barkT > 0 && R.chance(dt * 3)) this.text(d.x + 18, d.y - 64, R.pick(['bark', 'bark bark', 'growl']), '#bfb39a', 10);
   }
 
   explode(x: number, r: number, dmg: number) {
@@ -979,6 +1347,7 @@ export class Battle {
     c.drawImage(this.ground, 0, 0);
     // wire belt
     if (G.fort.wire > 0) this.drawWire(c);
+    if (this.plan.special === 'tunnel') this.drawDrain(c);
     // trap marker
     if (this.traps > 0) {
       c.fillStyle = '#3b3a33';
@@ -1001,6 +1370,8 @@ export class Battle {
     for (const z of this.zombies) list.push({ y: z.y, f: () => this.drawZombie(c, z) });
     for (const gd of this.guards) if (!gd.s.dead && !gd.fled) list.push({ y: gd.y - 40, f: () => this.drawGuard(c, gd) });
     list.push({ y: 668, f: () => this.drawWall(c) });
+    for (const cv of this.covers) list.push({ y: cv.y, f: () => this.drawCover(c, cv) });
+    if (this.dog) list.push({ y: this.dog.y, f: () => this.drawDog(c) });
     for (const tu of this.turrets) list.push({ y: 669, f: () => {
       c.save();
       c.fillStyle = '#2a2622';
@@ -1065,6 +1436,72 @@ export class Battle {
     this.drawHud(c);
   }
 
+  // a heap of whatever was in the road: a door, tires, a shopping cart on its side
+  drawCover(c: CanvasRenderingContext2D, cv: { x: number; y: number; w: number; h: number; seed: number }) {
+    const r = (k: number) => (Math.sin(cv.seed * 12.9898 + k * 78.233) * 43758.5453) % 1;
+    const x0 = cv.x - cv.w / 2, x1 = cv.x + cv.w / 2, top = cv.y - cv.h;
+    c.fillStyle = '#1a1816';
+    c.beginPath();
+    c.moveTo(x0 - 8, cv.y);
+    for (let i = 0; i <= 6; i++) {
+      const x = x0 + (cv.w * i) / 6;
+      c.lineTo(x, top + Math.abs(r(i)) * cv.h * 0.35 + (i === 0 || i === 6 ? cv.h * 0.4 : 0));
+    }
+    c.lineTo(x1 + 8, cv.y);
+    c.closePath();
+    c.fill();
+    c.strokeStyle = 'rgba(150,160,175,0.35)';
+    c.lineWidth = 1.5;
+    c.stroke();
+    // a plank across it and a tire leaning on it
+    c.strokeStyle = '#3d3226';
+    c.lineWidth = 6;
+    c.beginPath();
+    c.moveTo(x0 + 4, top + cv.h * 0.45);
+    c.lineTo(x1 - 2, top + cv.h * (0.2 + Math.abs(r(9)) * 0.2));
+    c.stroke();
+    c.fillStyle = '#121110';
+    c.beginPath();
+    c.ellipse(x0 + cv.w * 0.28, cv.y - cv.h * 0.3, cv.h * 0.3, cv.h * 0.32, 0, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = '#26221e';
+    c.beginPath();
+    c.ellipse(x0 + cv.w * 0.28, cv.y - cv.h * 0.3, cv.h * 0.13, cv.h * 0.14, 0, 0, Math.PI * 2);
+    c.fill();
+  }
+
+  drawDog(c: CanvasRenderingContext2D) {
+    const d = this.dog!;
+    const im = img('dog');
+    if (!im) return;
+    const h = 62;
+    const w = (im.width / im.height) * h;
+    const hop = d.barkT > 0 ? -Math.abs(Math.sin(this.t * 14)) * 4 : Math.sin(this.t * 2) * 0.6;
+    c.drawImage(im, d.x - w / 2, d.y - h + hop, w, h);
+    c.globalAlpha = 0.4;
+    const sh = shadeImg('dog', '#0a0b10');
+    if (sh) c.drawImage(sh, d.x - w / 2, d.y - h + hop, w, h);
+    c.globalAlpha = 1;
+  }
+
+  drawDrain(c: CanvasRenderingContext2D) {
+    const open = this.drainOpen > 0;
+    c.fillStyle = '#0b0b0c';
+    c.beginPath();
+    c.ellipse(DRAIN_X, SURV_Y + 14, 40, 8, 0, 0, Math.PI * 2);
+    c.fill();
+    c.strokeStyle = open ? '#3a3632' : '#4a4540';
+    c.lineWidth = 2;
+    // the grate, shoved aside when something comes up
+    const gx = open ? DRAIN_X + 34 : DRAIN_X;
+    for (let i = -3; i <= 3; i++) {
+      c.beginPath();
+      c.moveTo(gx + i * 10, SURV_Y + 8);
+      c.lineTo(gx + i * 10, SURV_Y + 20);
+      c.stroke();
+    }
+  }
+
   drawWire(c: CanvasRenderingContext2D) {
     c.strokeStyle = 'rgba(90,85,80,0.9)';
     c.lineWidth = 1;
@@ -1123,21 +1560,25 @@ export class Battle {
     const im = img(g.s.sprite);
     const h = SH;
     const isP = g === this.player;
-    const bob = Math.sin(this.t * 1.6 + g.x) * 1.2;
+    if (g.downed) return this.drawDowned(c, g, im);
+    const walking = g.x !== g.homeX || !!g.dragging;
+    const bob = walking ? -Math.abs(Math.sin(this.t * 9)) * 3 : Math.sin(this.t * 1.6 + g.homeX) * 1.2;
     if (im) {
       const w = (im.width / im.height) * h;
-      const x = g.x - w / 2 - g.recoil * 3;
-      const y = g.y - h + bob;
+      const lean = g.dragging && g.dragT < 3 ? 0.18 : 0; // hauling backward
+      c.save();
+      c.translate(g.x - g.face * g.recoil * 3, g.y + bob);
+      if (g.face < 0) c.scale(-1, 1);
+      if (lean) c.rotate(-lean);
       // survivors are read as silhouettes against the dark, lit by their own fire
       const lit = g.flash > 0 || isP || G.fort.lights > 0;
-      if (lit) c.drawImage(im, x, y, w, h);
-      else {
-        c.drawImage(im, x, y, w, h);
+      c.drawImage(im, -w / 2, -h, w, h);
+      if (!lit) {
         c.globalAlpha = 0.45;
         const sh = shadeImg(g.s.sprite, '#0a0b10');
-        if (sh) c.drawImage(sh, x, y, w, h);
-        c.globalAlpha = 1;
+        if (sh) c.drawImage(sh, -w / 2, -h, w, h);
       }
+      c.restore();
     }
     // muzzle flash
     if (g.flash > 0) {
@@ -1145,32 +1586,71 @@ export class Battle {
       c.fillStyle = 'rgba(255,230,160,0.95)';
       c.beginPath();
       c.moveTo(mz.x, mz.y - 5);
-      c.lineTo(mz.x + 34, mz.y);
+      c.lineTo(mz.x + 34 * g.face, mz.y);
       c.lineTo(mz.x, mz.y + 5);
       c.fill();
     }
     // label
+    const top = g.y - h;
     c.font = '11px "Special Elite", monospace';
     c.textAlign = 'center';
     c.fillStyle = isP ? '#f0d890' : '#cfc6b0';
-    c.fillText(first(g.s) + (isP ? ' ◆' : ''), g.x, g.y - h - 14);
-    const hp = Math.max(0, 1 - pain(g.s) / 1.45);
+    c.fillText(first(g.s) + (isP ? ' ◆' : ''), g.x, top - 14);
+    const hp = Math.max(0, 1 - pain(g.s) / DOWN_PAIN);
     c.fillStyle = 'rgba(0,0,0,0.6)';
-    c.fillRect(g.x - 20, g.y - h - 9, 40, 4);
+    c.fillRect(g.x - 20, top - 9, 40, 4);
     c.fillStyle = hp > 0.5 ? '#9db070' : hp > 0.25 ? '#d0a040' : '#c04030';
-    c.fillRect(g.x - 20, g.y - h - 9, 40 * hp, 4);
-    if (g.reload > 0 || (isP && this.playerReload > 0)) {
-      c.fillStyle = '#d9c9a0';
-      c.fillText('reloading', g.x, g.y - h - 26);
-    }
-    if (g.mode) {
-      c.fillStyle = g.mode === 'panic' ? '#d0a040' : '#e05040';
-      c.fillText(g.mode === 'panic' ? 'panicking' : 'enraged', g.x, g.y - h - 26);
-    }
+    c.fillRect(g.x - 20, top - 9, 40 * hp, 4);
+    // one status line at most, then the moodle above it
+    let line = top - 26;
+    let status = '', sc = '#d9c9a0';
+    if (g.dragging) { status = `hauling ${first(g.dragging.s)}`; sc = '#e0c080'; }
+    else if (g.mode) { status = g.mode === 'panic' ? 'panicking' : 'enraged'; sc = g.mode === 'panic' ? '#d0a040' : '#e05040'; }
+    else if (g.reload > 0 || (isP && this.playerReload > 0)) status = 'reloading';
+    if (status) { c.fillStyle = sc; c.fillText(status, g.x, line); line -= 12; }
     if (isBitten(g.s) && !g.s.wounds.some((w) => w.hidden)) {
       c.fillStyle = '#b8862f';
-      c.fillText('bitten', g.x, g.y - h - (g.reload > 0 ? 38 : 26));
+      c.fillText('bitten', g.x, line);
+      line -= 12;
     }
+    if (g.moodle && !g.mode) {
+      c.font = 'italic 10px "Crimson Text", Georgia, serif';
+      const tw = c.measureText(g.moodle).width;
+      c.fillStyle = 'rgba(8,8,10,0.55)';
+      c.fillRect(g.x - tw / 2 - 4, line - 9, tw + 8, 12);
+      c.fillStyle = g.moodleC;
+      c.fillText(g.moodle, g.x, line);
+    }
+  }
+
+  drawDowned(c: CanvasRenderingContext2D, g: Guard, im: HTMLImageElement | undefined) {
+    const h = SH;
+    // blood under them
+    c.fillStyle = 'rgba(70,10,8,0.55)';
+    c.beginPath();
+    c.ellipse(g.x, g.y - 2, 60, 7, 0, 0, Math.PI * 2);
+    c.fill();
+    if (im) {
+      const w = (im.width / im.height) * h;
+      c.save();
+      // flat on their back, head toward the house
+      c.translate(g.x, g.y - w * 0.5 + 6);
+      c.rotate(-Math.PI / 2);
+      c.drawImage(im, -w / 2, -h / 2, w, h);
+      c.globalAlpha = 0.35;
+      const sh = shadeImg(g.s.sprite, '#0a0b10');
+      if (sh) c.drawImage(sh, -w / 2, -h / 2, w, h);
+      c.restore();
+    }
+    c.font = '11px "Special Elite", monospace';
+    c.textAlign = 'center';
+    c.fillStyle = '#cfc6b0';
+    const lh = im ? (im.width / im.height) * h : 60;
+    c.fillText(first(g.s), g.x, g.y - lh - 8);
+    let st = g.safe ? 'down · behind the line' : 'DOWN';
+    if (!g.safe && g.mauledT > 0) st = 'DOWN · they are on ' + them(g.s);
+    c.fillStyle = g.safe ? '#a8a08a' : '#e05040';
+    c.fillText(st, g.x, g.y - lh - 22);
   }
 
   drawZombie(c: CanvasRenderingContext2D, z: Zombie) {
@@ -1181,7 +1661,7 @@ export class Battle {
     c.save();
     let rot = 0, dy = 0;
     const gait = z.def.speed > 60 ? 9 : 3.2;
-    if (z.state === 'walk' || z.state === 'over') {
+    if (z.state === 'walk' || z.state === 'over' || z.state === 'flee') {
       rot = Math.sin(z.phase * gait) * (z.def.speed > 60 ? 0.05 : 0.04);
       dy = -Math.abs(Math.sin(z.phase * gait)) * (z.def.speed > 60 ? 5 : 2.5);
     } else if (z.state === 'wall' || z.state === 'maul') {
@@ -1193,7 +1673,16 @@ export class Battle {
       c.globalAlpha = 1 - Math.max(0, z.dieT - 0.4) * 5;
     }
     c.translate(z.x, z.y + dy);
+    if (z.flip) c.scale(-1, 1);
     c.rotate(rot);
+    // up out of the drain, or down behind cover: only what is above the line shows
+    const sink = (z.emerge && z.emerge > 0 ? h * Math.min(1, z.emerge / 0.9) : 0) + (z.state === 'cover' && z.ducked ? h * 0.32 : 0);
+    if (sink > 0 || z.emerge !== undefined) {
+      c.beginPath();
+      c.rect(-w, -h * 2, w * 2, h * 2 - dy + 2);
+      c.clip();
+      c.translate(0, sink);
+    }
     // the far ones fade into the dark
     const farFade = this.plan.special === 'fog' ? Math.max(0.15, 1 - Math.max(0, z.x - 620) / 400) : 1;
     c.globalAlpha *= farFade;
@@ -1321,6 +1810,27 @@ export class Battle {
     c.fillStyle = '#a89c84';
     const left = this.plan.spawns.length - this.spawnIdx + this.zombies.filter((z) => z.state !== 'dying').length;
     c.fillText(`night ${G.day}   ·   ${this.res.kills} down   ·   ${left} still out there`, W / 2, 54);
+    // the Bellwether
+    const b = this.boss;
+    if (b && b.state !== 'dying' && b.x < W + 20) {
+      const f = Math.max(0, b.hp / b.maxHp);
+      c.fillStyle = 'rgba(10,9,8,0.75)';
+      c.fillRect(W / 2 - 210, 64, 420, 22);
+      c.fillStyle = this.surge > 0 ? '#c99a3a' : '#8a6a2a';
+      c.fillRect(W / 2 - 205, 76, 410 * f, 6);
+      c.font = '11px "Special Elite", monospace';
+      c.fillStyle = '#d8c08a';
+      c.fillText('THE BELLWETHER', W / 2, 74);
+    }
+    // the bell's pull: an ochre pressure at the edges while it rings
+    if (this.surge > 0) {
+      const a = Math.min(1, this.surge / 1.5) * 0.22;
+      const v = c.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.9);
+      v.addColorStop(0, 'rgba(160,120,40,0)');
+      v.addColorStop(1, `rgba(160,120,40,${a})`);
+      c.fillStyle = v;
+      c.fillRect(0, 0, W, H);
+    }
     // weapon
     const p = this.player;
     if (p && p.w) {
@@ -1432,7 +1942,18 @@ export class Battle {
         log('battle', `${displayName(top.s)} put down ${top.kills} of the Turned on night ${G.day}.`);
       }
     }
-    const alone = fighters.filter((g) => !g.fled);
+    if (this.raidersDown > 0) {
+      r.lines.push(`${this.raidersDown} of the County men lie in the road. Somebody will come asking after them.`);
+      log('battle', `Night ${G.day}: ${this.raidersDown} County raiders shot dead in the road off Ferry Road.`);
+      G.flags.raidersKilled = ((G.flags.raidersKilled as number) ?? 0) + this.raidersDown;
+    }
+    for (const g of fighters) {
+      if (g.downed && !g.safe && !g.fled) {
+        tale(g.s, `Lay where ${g.s.sex === 'm' ? 'he' : 'she'} fell until the grey light, night ${G.day}.`);
+        r.lines.push(`${first(g.s)} lay in the road till dawn, and lived.`);
+      }
+    }
+    const alone = fighters.filter((g) => !g.fled && !g.downed);
     if (alone.length === 1 && this.guards.length > 2 && !r.fell) {
       tale(alone[0].s, `Held the line alone on night ${G.day}.`);
       log('tale', `${displayName(alone[0].s)} was the last one standing on the wall on night ${G.day}, and held it.`);
