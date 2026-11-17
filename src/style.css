@@ -295,3 +295,53 @@ dl.keys dd, dl.gloss dd { margin: 0; }
 .calendar .smell .bar { flex: 1; height: 7px; background: rgba(255,255,255,.12); }
 .calendar .smell .bar div { height: 100%; }
 @media (max-width: 700px) { .calendar .calday .cd { font-size: 11px; } .calendar .calday .cg { font-size: 17px; } }
+
+/* ---------- settings page: tabs, segmented choices, key bindings, data ---------- */
+.overlay.settings .modal { max-width: 600px; max-height: 92vh; overflow: auto; }
+.overlay.settings { z-index: 30; } /* above the pause menu */
+.overlay.settings .htabs button { flex: 1 1 auto; }
+.sbody { min-height: 260px; }
+.set-row.choice { grid-template-columns: 1fr auto; align-items: start; }
+.set-row.choice small, .keyrow small { display: block; font-family: var(--serif); font-size: 14px; color: var(--dim); }
+.seg { display: inline-flex; flex-wrap: wrap; gap: 0; }
+.seg button { padding: 4px 10px; font-size: 12px; }
+.seg button + button { border-left: none; }
+.seg button.on { background: #4a3f2e; border-color: #a08a5c; color: #f2e6c8; }
+.keylist { display: grid; grid-template-columns: 1fr; gap: 2px; }
+.keyrow { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; padding: 3px 0; border-bottom: 1px dotted var(--line); font-size: 15px; }
+.keyrow .kbd, .keyrow kbd { min-width: 64px; text-align: center; font-family: var(--type); font-size: 12px; padding: 3px 8px; }
+.keyrow kbd { border: 1px dashed #4a4235; color: var(--dim); }
+.keyrow .kbd.wait { background: #5e3326; border-color: var(--ochre); }
+.keyrow.clash span, .keyrow.clash .kbd { color: #e09070; }
+.keyrow.clash .kbd { border-color: #a8462a; }
+.keyrow.fixed { opacity: .8; }
+.setnote { color: #e0cc90; font-family: var(--type); font-size: 13px; }
+.datarow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 0; border-bottom: 1px dotted var(--line); }
+.datarow .warn { color: #e09070; font-size: 14px; }
+.datarow button.danger { background: #5e2a20; border-color: #a8462a; }
+.filebtn { font-family: var(--type); background: #2d2921; border: 1px solid #554b3b; padding: 6px 12px; cursor: pointer; font-size: 13px; }
+.filebtn:hover { background: #3d372c; }
+.filebtn input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.filebtn:focus-within { outline: 2px solid var(--ochre); }
+
+/* ---------- pause menu ---------- */
+.overlay.pause { z-index: 20; }
+.pausebox { max-width: 360px; text-align: center; }
+.pausebtns { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.pausebtns button { padding: 10px; font-size: 15px; margin: 0; }
+.pconfirm { margin-top: 12px; color: #e0cc90; font-size: 14px; }
+
+/* ---------- frame counter ---------- */
+.fps { position: fixed; top: 4px; right: 6px; z-index: 50; font: 11px/1 var(--type); color: #c8e0a0; background: rgba(0,0,0,.55); padding: 3px 6px; pointer-events: none; }
+
+/* ---------- text size (settings): scales the ledger pages, not the canvases ---------- */
+:root { --ui-scale: 1; }
+.day, .modal, .title .tbox, .dep { zoom: var(--ui-scale); }
+
+/* ---------- high contrast (settings) ---------- */
+:root.hc { --ink: #fffaf0; --dim: #d6ccb6; --paper: #0d0c0a; --paper2: #15130f; --line: #7a6e58; }
+:root.hc .modal.ledger { background-image: none; border-color: #a08a5c; }
+:root.hc .overlay { background: rgba(0,0,0,.92); }
+:root.hc button { border-color: #a08a5c; color: #fffaf0; }
+:root.hc .tag, :root.hc .aim, :root.hc .stores span em { color: #e6dcc6; }
+:root.hc h3 { color: #f2e6c8; }

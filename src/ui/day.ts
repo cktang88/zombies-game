@@ -20,6 +20,7 @@ import { calendar } from '../sim/calendar';
 import { persona, forecast, threatPoints } from '../sim/director';
 import { sfx, music, stinger, distant } from '../audio';
 import { openSettings } from './settings';
+import { is } from './keys';
 import { openHelp } from './help';
 import { hintHtml, markHintTarget, nextHint, skipHints } from './onboarding';
 import { threadsHtml } from '../sim/threads';
@@ -823,12 +824,12 @@ function installKeys() {
     if (!document.querySelector('.day') || document.querySelector('.overlay') || G.pendingEvent) return;
     const t = e.target as HTMLElement | null;
     if (t && /^(SELECT|INPUT|TEXTAREA|BUTTON|A)$/.test(t.tagName)) return;
-    if (e.key === 'Enter') {
+    if (is(e, 'day.dusk')) {
       e.preventDefault();
       const f = duskKey;
       duskKey = null;
       f();
-    } else if (e.key === '?') {
+    } else if (is(e, 'day.help')) {
       openHelp((document.getElementById('app') as HTMLElement | null) ?? document.body);
     }
   });

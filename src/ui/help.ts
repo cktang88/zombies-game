@@ -4,7 +4,12 @@
 import { ZOMBIES } from '../data/zombies';
 import { spriteUrl } from '../assets';
 import { sfx } from '../audio';
+import { ACTIONS, FIXED, keyLabel, keyOf, type KeyCtx } from './keys';
 
+/** The bindings for a context, as the ledger's key list (live: rebinding shows here). */
+function keyList(ctx: KeyCtx): string {
+  return `<dl class="keys">${FIXED[ctx].map(([k, l]) => `<dt>${esc(k)}</dt><dd>${esc(l)}</dd>`).join('')}${ACTIONS.filter((a) => a.ctx === ctx).map((a) => `<dt><kbd>${esc(keyLabel(keyOf(a.id)))}</kbd></dt><dd>${esc(a.label)}</dd>`).join('')}</dl>`;
+}
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 type Page = 'day' | 'night' | 'runs' | 'turned' | 'moods';
@@ -25,32 +30,18 @@ const PAGES: Record<Page, { label: string; html: () => string }> = {
         <dt>Rest</dt><dd>Recovers rest and lifts the mood a little.</dd>
       </dl>
       <p>The leader can also <b>lead a run</b> instead of working: a daylight walk down one street, played by you.</p>
-      <p><kbd>Enter</kbd> goes to the wall at dusk when nothing else is open.</p>`,
+      <p><kbd>${esc(keyLabel(keyOf('day.dusk')))}</kbd> goes to the wall at dusk when nothing else is open; <kbd>${esc(keyLabel(keyOf('day.help')))}</kbd> opens this ledger.</p>`,
   },
   night: {
     label: 'The wall',
     html: () => `
-      <dl class="keys">
-        <dt>Mouse</dt><dd>Aim. The circle is your real spread; it grows while you fire.</dd>
-        <dt>Click</dt><dd>Fire. Hold for automatic weapons. Heads take triple damage.</dd>
-        <dt><kbd>R</kbd></dt><dd>Reload. Shotguns load one shell at a time; firing interrupts.</dd>
-        <dt><kbd>Q</kbd> / <kbd>1</kbd>–<kbd>9</kbd></dt><dd>Swap to another gun from the rack.</dd>
-        <dt><kbd>F</kbd> / right-click</dt><dd>Throw a firebomb.</dd>
-        <dt>Hold <kbd>Space</kbd></dt><dd>Hurry the night along.</dd>
-        <dt><kbd>P</kbd> / <kbd>Esc</kbd></dt><dd>Pause.</dd>
-      </dl>
-      <p>Everyone else who can fight stands the wall and shoots on their own. The barricade is the health bar; if it falls, they climb over and the defenders get hurt. Noise draws stragglers. Worn guns jam.</p>`,
+      ${keyList('night')}
+      <p>Everyone else who can fight stands the wall and shoots on their own. The barricade is the health bar; if it falls, they climb over and the defenders get hurt. Noise draws stragglers. Worn guns jam. Every key can be changed in Settings › Controls.</p>`,
   },
   runs: {
     label: 'Runs',
     html: () => `
-      <dl class="keys">
-        <dt><kbd>A</kbd> <kbd>D</kbd> / arrows</dt><dd>Walk.</dd>
-        <dt>Hold <kbd>E</kbd></dt><dd>Search a door, car, shed or body. Searching makes noise.</dd>
-        <dt>Mouse, click</dt><dd>Aim and fire.</dd>
-        <dt><kbd>R</kbd></dt><dd>Reload.</dd>
-        <dt><kbd>Space</kbd></dt><dd>Shove. For when you are out of rounds, or close.</dd>
-      </dl>
+      ${keyList('run')}
       <p>Sleepers stand still until you get near or loud. The light lasts about two and a half minutes; after that the dead wake everywhere. Walk back off the <b>left edge</b> to go home. Die out there and what you carried stays in the road.</p>`,
   },
   turned: {

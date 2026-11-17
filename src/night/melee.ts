@@ -9,6 +9,7 @@
 //   crit:  an overhead blow (crosshair above the head line, or on a climber) × crit.
 //   knock / stagger (a stagger stops it, and breaks a grab) / bleed (BLEED_TIME s) /
 //   finisher (crawlers die outright) / wear (breaks at 0) / chainsaw: fuel per swing, noise.
+import { is, keyCap } from '../ui/keys';
 import type { Battle } from './battle';
 import { LANES } from './battle';
 import type { BattleHook, Zed, Guardian, SortedDraw } from './hook';
@@ -172,7 +173,7 @@ export class Melee implements BattleHook {
 
   // ---------------- the leader: [V] ----------------
   onKey(e: KeyboardEvent) {
-    if (e.key !== 'v' && e.key !== 'V') return false;
+    if (!is(e, 'night.melee')) return false;
     if (this.b.done || this.b.paused || this.b.intro > 3.2) return true;
     const p = this.b.player;
     if (!p || this.swing || this.cd > 0) return true;
@@ -287,7 +288,7 @@ export class Melee implements BattleHook {
     c.textAlign = 'left';
     c.fillStyle = '#d9cdb0';
     const name = item ? MELEE[item.def].name.toLowerCase() : 'fists';
-    c.fillText(`[V] ${name}${item && item.cond < 0.35 ? ' (worn)' : ''}${prof.fuel ? ` · fuel ${Math.floor(G.stores.fuel ?? 0)}` : ''}`, x, y - 4);
+    c.fillText(`${keyCap('night.melee')} ${name}${item && item.cond < 0.35 ? ' (worn)' : ''}${prof.fuel ? ` · fuel ${Math.floor(G.stores.fuel ?? 0)}` : ''}`, x, y - 4);
     c.restore();
     void depthScale;
   }

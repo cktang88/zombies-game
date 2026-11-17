@@ -7,6 +7,7 @@
 //
 // Keys: [L] pull a lure (tin cans / radio), [G] drop the deadfall or fire the pipe mine.
 // Propane is shot: onShot tests the leader's rays against the tank before the crowd.
+import { is, keyCap } from '../ui/keys';
 import type { Battle } from './battle';
 import { LANES, W } from './battle';
 import type { BattleHook, Zed, Guardian, SortedDraw } from './hook';
@@ -324,9 +325,8 @@ export class Traps implements BattleHook {
   // ---------------- hook: input ----------------
   onKey(e: KeyboardEvent) {
     if (this.b.done || this.b.paused) return false;
-    const k = e.key.toLowerCase();
-    if (k === 'l' && this.list.some((t) => t.def.fx.lure)) { if (!e.repeat) this.pullBest(); return true; }
-    if (k === 'g' && this.list.some((t) => t.def.id === 'deadfall' || t.def.id === 'pipemine')) { if (!e.repeat) this.pressG(); return true; }
+    if (is(e, 'night.lure') && this.list.some((t) => t.def.fx.lure)) { if (!e.repeat) this.pullBest(); return true; }
+    if (is(e, 'night.trap') && this.list.some((t) => t.def.id === 'deadfall' || t.def.id === 'pipemine')) { if (!e.repeat) this.pressG(); return true; }
     return false;
   }
 
@@ -923,9 +923,9 @@ export class Traps implements BattleHook {
     if (!this.list.length || this.b.intro > 0) return;
     const parts: string[] = [];
     const lures = this.list.filter((t) => t.def.fx.lure && t.uses > 0 && !t.spent && !t.on).length;
-    if (this.list.some((t) => t.def.fx.lure)) parts.push(`[L] lure${lures ? ` ×${lures}` : ' —'}`);
+    if (this.list.some((t) => t.def.fx.lure)) parts.push(`${keyCap('night.lure')} lure${lures ? ` ×${lures}` : ' —'}`);
     const g = this.list.filter((t) => (t.def.id === 'deadfall' || t.def.id === 'pipemine') && t.armed);
-    if (this.list.some((t) => t.def.id === 'deadfall' || t.def.id === 'pipemine')) parts.push(`[G] ${g.map((t) => (t.def.id === 'deadfall' ? 'deadfall' : 'pipe mine')).join(', ') || '—'}`);
+    if (this.list.some((t) => t.def.id === 'deadfall' || t.def.id === 'pipemine')) parts.push(`${keyCap('night.trap')} ${g.map((t) => (t.def.id === 'deadfall' ? 'deadfall' : 'pipe mine')).join(', ') || '—'}`);
     if (this.list.some((t) => t.def.id === 'propane' && t.armed)) parts.push('shoot the propane');
     if (!parts.length) return;
     c.save();

@@ -171,7 +171,7 @@ let reverb: ConvolverNode | null = null;
 let noiseBuf: AudioBuffer | null = null;
 export let muted = false;
 
-const vol = { master: 0.7, music: 0.55, sfx: 0.8 };
+const vol = { master: 0.7, music: 0.55, sfx: 0.8, amb: 0.8 };
 
 function ac() {
   if (!ctx) {
@@ -180,6 +180,7 @@ function ac() {
     E.master.gain.value = muted ? 0 : vol.master;
     E.sfxVol.gain.value = vol.sfx;
     E.musicVol.gain.value = vol.music;
+    E.ambVol.gain.value = vol.amb;
     sfxBus = E.sfxVol;
     musicBus = E.musicIn;
     noiseBuf = bankFor(ctx).white;
@@ -248,6 +249,12 @@ export function setMusicVolume(v: number) {
   vol.music = clamp01(v);
   ramp(E?.musicVol.gain, vol.music);
 }
+export function setAmbienceVolume(v: number) {
+  vol.amb = clamp01(v);
+  ramp(E?.ambVol.gain, vol.amb);
+}
+/** Current player volumes (tests, the settings page). */
+export const volumes = () => ({ ...vol, muted });
 export function setSfxVolume(v: number) {
   vol.sfx = clamp01(v);
   ramp(E?.sfxVol.gain, vol.sfx);

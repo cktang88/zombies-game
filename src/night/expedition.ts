@@ -1,4 +1,6 @@
 import type { Survivor, Res, WeaponItem } from '../types';
+import { keyOf, normKey, keyCap, keyLabel } from '../ui/keys';
+import { openPause } from '../ui/pause';
 import { G, R, log, add, newWeapon, findDoc, uid } from '../state';
 import { ZOMBIES, type ZombieDef } from '../data/zombies';
 import { WEAPONS, fireProfile, ammoTypesFor, ammoLabel, AMMO_TYPES, armorDamage, roundsInStores, shotSound, BURN, FLARE_LIGHT, MODS, wearMods, blastDamage, MELEE, meleeProfile, FISTS, BLEED_TIME, type FireProfile, type MeleeProfile } from '../data/weapons';
@@ -6,7 +8,7 @@ import { SITES, RES_LABEL, type Site } from '../data/world';
 import { img, flashImg, shadeImg } from '../assets';
 import { depthScale, canvas, bakeSprite, bakeLayer, bakeGround, fgStrip, type Look, type Baked } from './render';
 import { sfx, wind, gunSoundFor, type Surface } from '../audio';
-import { reduceGore, shakeScale } from '../ui/settings';
+import { reduceGore, shakeScale, autoReload, hitMarkers, screenFx } from '../ui/settings';
 import { flashKind, gunFeel, drawFlash, casingLook, voiceOf, panOf, isSuppressed, type FlashKind } from './gunfx';
 import { RunActors } from './actors'; // rigged bodies (src/anim)
 
@@ -229,7 +231,7 @@ export class Expedition {
     (globalThis as unknown as { __EX: Expedition }).__EX = this; // debug handle (tests)
     wind(true);
     this.say(`${this.site.name}. ${this.site.desc}`, 6);
-    this.say(`[A/D] walk · [E] search · [Space] shove${this.w && ammoTypesFor(this.w.def).length > 1 ? ' · [T] ammo' : ''} · [Tab]/[G] pick & drop from the pack · [V]/right-click ${this.kn ? MELEE[this.kn.def].name.toLowerCase() : 'fists'} · home is the left edge.`, 8);
+    this.say(`[${keyLabel(keyOf('run.left'))}/${keyLabel(keyOf('run.right'))}] walk · ${keyCap('run.search')} search · ${keyCap('run.shove')} shove${this.w && ammoTypesFor(this.w.def).length > 1 ? ` · ${keyCap('run.ammo')} ammo` : ''} · ${keyCap('run.pack')}/${keyCap('run.drop')} pick & drop from the pack · ${keyCap('run.swing')}/right-click ${this.kn ? MELEE[this.kn.def].name.toLowerCase() : 'fists'} · home is the left edge.`, 8);
     if (this.mate) this.say(`${first(this.mate)} comes along. ${first(this.mate)} carries ${MATE_CAP} more and watches your back.`, 6);
   }
 
@@ -335,15 +337,28 @@ export class Expedition {
   }
 
   key(e: KeyboardEvent, down: boolean) {
-    const k = e.key.toLowerCase();
+    const k = normKey(e);
+    if (this.paused) return; // the pause menu has the keyboard
     if (down) this.keys.add(k); else this.keys.delete(k);
     if (!down) return;
-    if (k === 'r') this.startReload();
-    if (k === 't') this.cycleAmmo();
-    if (k === 'tab') { this.sel = this.pack.length ? (this.sel + 1) % this.pack.length : 0; e.preventDefault(); }
-    if (k === 'g') this.dropSelected();
-    if (k === 'v') this.swing();
-    if (k === ' ') { this.shove(); e.preventDefault(); }
+    if (k === 'Escape' || k === keyOf('run.pause')) { e.preventDefault(); this.pause(); return; }
+    if (k === keyOf('run.reload')) this.startReload();
+    if (k === keyOf('run.ammo')) this.cycleAmmo();
+    if (k === keyOf('run.pack')) { this.sel = this.pack.length ? (this.sel + 1) % this.pack.length : 0; e.preventDefault(); }
+    if (k === keyOf('run.drop')) this.dropSelected();
+    if (k === keyOf('run.swing')) this.swing();
+    if (k === keyOf('run.shove')) { this.shove(); e.preventDefault(); }
+  }
+  /** Held: an action's key, or (for walking) the arrow keys too. */
+  held(id: string) { return this.keys.has(keyOf(id)) || (id === 'run.left' && this.keys.has('ArrowLeft')) || (id === 'run.right' && this.keys.has('ArrowRight')); }
+  paused = false;
+  pause() {
+    if (this.paused || this.ended) return;
+    this.paused = true;
+    this.keys.clear();
+    this.mouse.down = false;
+    this.rdown = false;
+    openPause(this.canvas.parentElement ?? document.body, { where: 'run', resume: () => { this.paused = false; this.last = performance.now(); }, quit: () => { this.ended = true; this.destroy(); } });
   }
 
   say(text: string, life = 4) {
@@ -359,9 +374,11 @@ export class Expedition {
       this.flash = Math.max(0, this.flash - dt);
       this.recoil = Math.max(0, this.recoil - dt * 8);
       this.ammoPunch = Math.max(0, this.ammoPunch - dt * 6);
-      if (this.hitMark) { this.hitMark.t -= dt; if (this.hitMark.t <= 0) this.hitMark = null; }
-      if (this.hitstop > 0) this.hitstop -= dt;
+      if (!screenFx()) this.hitstop = 0; // Settings: no hitstop
+      if (this.paused) { /* frozen under the pause menu */ }
+      else if (this.hitstop > 0) this.hitstop -= dt;
       else this.update(dt);
+      if (!this.paused && this.hitMark) { this.hitMark.t -= dt; if (this.hitMark.t <= 0) this.hitMark = null; }
       this.draw();
       if (!this.ended) this.raf = requestAnimationFrame(loop);
     };
@@ -393,8 +410,8 @@ export class Expedition {
     if (this.downed > 0 || this.dragging) this.updDowned(dt);
     else if (!grabbed && !this.searching) {
       const x0 = this.px;
-      if (this.keys.has('a') || this.keys.has('arrowleft')) { this.px -= speed * dt; this.face = -1; }
-      if (this.keys.has('d') || this.keys.has('arrowright')) { this.px += speed * dt; this.face = 1; }
+      if (this.held('run.left')) { this.px -= speed * dt; this.face = -1; }
+      if (this.held('run.right')) { this.px += speed * dt; this.face = 1; }
       // footfalls: one per ~62 px of road (≈ 0.42 s at a walk; slower when hurt or overloaded)
       this.stepT += Math.abs(this.px - x0);
       if (this.stepT > 62) { this.stepT = 0; sfx.footstep(this.surface, { volume: over > 0 ? 0.85 : 0.7, pan: panOf(this.px - this.cam) * 0.4 }); }
@@ -405,13 +422,13 @@ export class Expedition {
     this.cam = Math.max(0, Math.min(this.len - W, this.cam));
     // revive a downed companion: hold [E] beside them
     const mateNear = this.mate && this.mateDown > 0 && Math.abs(this.mateX - this.px) < 70;
-    if (mateNear && this.keys.has('e') && !this.downed) {
+    if (mateNear && this.held('run.search') && !this.downed) {
       this.reviveT += dt;
       if (this.reviveT >= 2.5) this.reviveMate();
     } else this.reviveT = 0;
     // search
     const near = mateNear ? undefined : this.spots.find((s) => !s.searched && Math.abs(s.x - this.px) < 60);
-    if (this.keys.has('e') && near && !this.searching && !this.downed) {
+    if (this.held('run.search') && near && !this.searching && !this.downed) {
       if (near.kind === 'truck' && (G.stores.fuel < 2 || G.stores.parts < 1)) this.say('It would take 2 fuel and a part to start it. The house does not have them.', 2.5);
       else {
         this.searching = near; this.searchT = 0; this.rummageT = 0.7;
@@ -419,7 +436,7 @@ export class Expedition {
       }
     }
     if (this.searching) {
-      if (!this.keys.has('e') || Math.abs(this.searching.x - this.px) > 70 || grabbed || this.downed) this.searching = null;
+      if (!this.held('run.search') || Math.abs(this.searching.x - this.px) > 70 || grabbed || this.downed) this.searching = null;
       else {
         const helper = this.mate && !this.mateDown && Math.abs(this.mateX - this.searching.x) < 140 ? skillOf(this.mate, 'scavenging') * 0.05 : 0;
         const pry = ['door', 'car', 'shed', 'cache'].includes(this.searching.kind) ? this.mprof().pry : 1;
@@ -454,7 +471,7 @@ export class Expedition {
     this.swingCd -= dt;
     if (this.swingT > 0) { this.swingT -= dt; if (this.swingT <= 0) this.resolveSwing(); }
     else if (this.swingCd <= 0) this.stamina = Math.min(100, this.stamina + 18 * dt * Math.max(0.5, 1 - pain(this.s) * 0.3));
-    if (this.kn && MELEE[this.kn.def].fuel && (this.keys.has('v') || this.rdown)) this.swing();
+    if (this.kn && MELEE[this.kn.def].fuel && (this.held('run.swing') || this.rdown)) this.swing();
     if (this.burstLeft > 0) {
       this.burstT -= dt;
       if (this.burstT <= 0) this.shootRound();
@@ -510,7 +527,7 @@ export class Expedition {
     this.tracers = this.tracers.filter((t) => t.life > 0);
     for (const m of this.msgs) m.life -= dt;
     this.msgs = this.msgs.filter((m) => m.life > 0);
-    if (this.px <= 22 && this.t > 2 && !this.downed && (this.dragging || this.keys.has('a') || this.keys.has('arrowleft'))) this.finish(false);
+    if (this.px <= 22 && this.t > 2 && !this.downed && (this.dragging || this.held('run.left'))) this.finish(false);
   }
 
   updZ(z: EZ, dt: number) {
@@ -622,7 +639,7 @@ export class Expedition {
     if (pain(m) > 1.45) {
       this.mateDown = 15;
       z.state = 'walk';
-      this.say(`${first(m)} is DOWN. Get to ${first(m)} and hold [E].`, 4);
+      this.say(`${first(m)} is DOWN. Get to ${first(m)} and hold ${keyCap('run.search')}.`, 4);
     }
   }
 
@@ -761,7 +778,7 @@ export class Expedition {
     const p = this.prof()!;
     if (this.magRes !== p.ammoRes) this.unload();
     if (this.mag >= p.mag) return;
-    if (roundsInStores(p, G.stores) < 1) { this.say(`No ${ammoLabel(p.ammoRes).toLowerCase()}. ${ammoTypesFor(this.w.def).length > 1 ? '[T] switch ammo, or shove' : 'Shove [Space]'} and run.`, 2); sfx.dry(); return; }
+    if (roundsInStores(p, G.stores) < 1) { this.say(`No ${ammoLabel(p.ammoRes).toLowerCase()}. ${ammoTypesFor(this.w.def).length > 1 ? `${keyCap('run.ammo')} switch ammo, or shove` : `Shove ${keyCap('run.shove')}`} and run.`, 2); sfx.dry(); return; }
     const armHurt = this.s.wounds.some((w) => w.part === 'larm' || w.part === 'rarm') ? 1.35 : 1;
     this.reload = p.reload * armHurt;
     this.reloadSfx?.cancel();
@@ -801,7 +818,7 @@ export class Expedition {
       if (p.reloadPerRound && this.mag > 0) { this.reload = 0; this.reloadSfx?.cancel(); }
       else return;
     }
-    if (this.mag <= 0) { sfx.dry(); this.startReload(); this.cd = 0.25; return; }
+    if (this.mag <= 0) { sfx.dry(); if (autoReload()) this.startReload(); this.cd = 0.25; return; }
     this.cd = 1 / p.rof;
     if (R.chance(p.jam)) {
       this.say(`${this.w.name ?? WEAPONS[this.w.def].name} jammed.`, 1.5);
@@ -862,7 +879,7 @@ export class Expedition {
       sfx.shoot(this.w.def, { suppressed: isSuppressed(this.w), incendiary: p.incendiary, pan: panOf(mz.x) * 0.4 });
     } while (this.burstLeft > 0 && p.burstGap <= 0);
     if (this.burstLeft > 0) this.burstT = p.burstGap;
-    if (this.mag === 0 && this.burstLeft === 0) this.startReload();
+    if (this.mag === 0 && this.burstLeft === 0 && autoReload()) this.startReload();
   }
 
   // Ground-space blast (contract: blastDamage ellipse); armour ignored, knocks outward.
@@ -1139,7 +1156,7 @@ export class Expedition {
       this.toPack({ kind: 'gun', def: wd, cond: R.range(0.5, 1) });
       got.push(`a ${WEAPONS[wd].name.toLowerCase()}`);
     }
-    if (this.slots() > this.cap()) got.push('— the pack is overfull, you are slowed ([Tab]/[G] to leave something)');
+    if (this.slots() > this.cap()) got.push(`— the pack is overfull, you are slowed (${keyCap('run.pack')}/${keyCap('run.drop')} to leave something)`);
     this.say(got.length ? `${sp.label[0].toUpperCase() + sp.label.slice(1)}: ${got.join(', ')}.` : `${sp.label[0].toUpperCase() + sp.label.slice(1)}: nothing. Somebody got here first.`, 3.5);
   }
 
@@ -1269,7 +1286,7 @@ export class Expedition {
         c.fillStyle = '#4a3a26';
         c.beginPath(); c.ellipse(x, GROUND - 10, 18, 12, 0, 0, 7); c.fill();
         c.fillStyle = '#2a2016'; c.fillRect(x - 3, GROUND - 26, 6, 8);
-        if (Math.abs(sp.x - this.px) < 60) { c.font = '13px "Special Elite", monospace'; c.fillStyle = '#efe2c2'; c.textAlign = 'center'; c.fillText(`[E] pick up: ${(sp.items ?? []).map(itemLabel).join(', ')}`, x, GROUND - 40); c.textAlign = 'left'; }
+        if (Math.abs(sp.x - this.px) < 60) { c.font = '13px "Special Elite", monospace'; c.fillStyle = '#efe2c2'; c.textAlign = 'center'; c.fillText(`${keyCap('run.search')} pick up: ${(sp.items ?? []).map(itemLabel).join(', ')}`, x, GROUND - 40); c.textAlign = 'left'; }
         continue;
       }
       const cv = bakeSpot(id, h, sp.searched);
@@ -1278,7 +1295,7 @@ export class Expedition {
         c.font = '13px "Special Elite", monospace';
         c.fillStyle = '#efe2c2';
         c.textAlign = 'center';
-        c.fillText(sp.kind === 'truck' ? '[E] hotwire the pickup and drive home (2 fuel, 1 part; loud)' : `[E] search ${sp.label}${sp.kind === 'cache' ? ' (slow, loud)' : ''}`, x, GROUND - h - 14);
+        c.fillText(sp.kind === 'truck' ? `${keyCap('run.search')} hotwire the pickup and drive home (2 fuel, 1 part; loud)` : `${keyCap('run.search')} search ${sp.label}${sp.kind === 'cache' ? ' (slow, loud)' : ''}`, x, GROUND - h - 14);
         c.textAlign = 'left';
       } else if (!sp.searched) {
         c.fillStyle = 'rgba(232,200,120,0.7)';
@@ -1398,7 +1415,7 @@ export class Expedition {
     if (!im) return;
     const h = SH, w = (im.width / im.height) * h;
     const x = this.px - this.cam;
-    const moving = this.keys.has('a') || this.keys.has('d') || this.keys.has('arrowleft') || this.keys.has('arrowright');
+    const moving = this.held('run.left') || this.held('run.right');
     const bob = moving ? -Math.abs(Math.sin(this.t * 9)) * 4 : 0;
     if (!this.actors.drawBody(c, 'p', x, GROUND, h, this.face < 0 ? -1 : 1, LANE_LOOK[2])) {
       c.save();
@@ -1450,7 +1467,7 @@ export class Expedition {
     c.font = '11px "Special Elite", monospace';
     c.textAlign = 'center';
     c.fillStyle = this.mateDown > 0 ? '#c04030' : '#c9b27a';
-    c.fillText(this.mateDown > 0 ? `${first(m)} — DOWN ${Math.ceil(this.mateDown)}s · hold [E]` : first(m), x, LANES[0] - h * k - 8);
+    c.fillText(this.mateDown > 0 ? `${first(m)} — DOWN ${Math.ceil(this.mateDown)}s · hold ${keyCap('run.search')}` : first(m), x, LANES[0] - h * k - 8);
     if (this.reviveT > 0) { c.fillStyle = '#d9c9a0'; c.fillRect(x - 30, LANES[0] - h * k - 4, 60 * Math.min(1, this.reviveT / 2.5), 4); }
     c.textAlign = 'left';
   }
@@ -1542,7 +1559,7 @@ export class Expedition {
     c.fillRect(20, 63, 2 * this.stamina, 3);
     c.textAlign = 'right';
     c.fillStyle = '#a89c84';
-    c.fillText(`${this.kn ? `${MELEE[this.kn.def].name} ${Math.round(this.kn.cond * 100)}%` : 'fists'} [V]`, W - 20, H - 64);
+    c.fillText(`${this.kn ? `${MELEE[this.kn.def].name} ${Math.round(this.kn.cond * 100)}%` : 'fists'} ${keyCap('run.swing')}`, W - 20, H - 64);
     c.textAlign = 'left';
     // heat & zone
     c.fillStyle = 'rgba(0,0,0,0.6)';
@@ -1563,7 +1580,7 @@ export class Expedition {
     const used = this.slots(), cap = this.cap();
     c.font = '12px "Special Elite", monospace';
     c.fillStyle = used > cap ? '#c04030' : '#c9b27a';
-    c.fillText(`pack ${used}/${cap}${used > cap ? ' — OVERLOADED, slowed' : ''}${this.pack.length ? '  [Tab] pick · [G] leave it' : ''}`, 20, H - 40);
+    c.fillText(`pack ${used}/${cap}${used > cap ? ' — OVERLOADED, slowed' : ''}${this.pack.length ? `  ${keyCap('run.pack')} pick · ${keyCap('run.drop')} leave it` : ''}`, 20, H - 40);
     let px = 20;
     this.pack.forEach((it, i) => {
       const t = `${itemLabel(it)} (${itemSlots(it)})`;
@@ -1584,7 +1601,7 @@ export class Expedition {
       c.font = '12px "Special Elite", monospace';
       c.fillStyle = '#a89c84';
       const multi = ammoTypesFor(this.w.def).length > 1;
-      c.fillText(this.reload > 0 ? 'reloading…' : `${def.name} · ${ammoLabel(p.ammoRes).toLowerCase()}${multi ? ' [T]' : ''}`, W - 20, H - 46);
+      c.fillText(this.reload > 0 ? 'reloading…' : `${def.name} · ${ammoLabel(p.ammoRes).toLowerCase()}${multi ? ` ${keyCap('run.ammo')}` : ''}`, W - 20, H - 46);
     }
     c.textAlign = 'center';
     this.msgs.forEach((m, i) => {
@@ -1602,7 +1619,7 @@ export class Expedition {
       c.lineWidth = 1.5;
       c.beginPath(); c.arc(this.mouse.x, this.mouse.y, r, 0, 7); c.stroke();
       // hit marker: a kill reads bigger and warmer
-      const hm = this.hitMark;
+      const hm = hitMarkers() ? this.hitMark : null;
       if (hm) {
         const q = (hm.kill ? 8 : 6) + ((hm.kill ? 0.24 : 0.18) - hm.t) * (hm.kill ? 30 : 20);
         c.strokeStyle = hm.kill ? (hm.head ? '#ffe6c0' : '#e8a080') : hm.head ? '#f4ecd8' : '#d8c8b0';

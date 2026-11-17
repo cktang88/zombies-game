@@ -5,6 +5,7 @@
 // barrel or the belt. Handling follows heavy-weapons training (crewHandling): untrained crews
 // spray, cook the barrel and jam; trained crews fire short bursts and keep it cool. Heavy XP
 // goes to whoever worked it.
+import { is, keyCap } from '../ui/keys';
 import type { Battle } from './battle';
 import type { BattleHook, Zed, Guardian, SortedDraw } from './hook';
 import type { Traps } from './traps';
@@ -161,9 +162,8 @@ export class Emplacements implements BattleHook {
 
   // ---------------- input ----------------
   onKey(e: KeyboardEvent) {
-    const k = e.key.toLowerCase();
     const b = this.b;
-    if (k === 'h') {
+    if (is(e, 'night.nest')) {
       if (e.repeat || b.done) return true;
       const p = b.player;
       if (!p) return true;
@@ -176,12 +176,12 @@ export class Emplacements implements BattleHook {
         const o = m.crew;
         this.unseat(m);
         b.say(`${first(p.s)} takes the ${lc(m.def.name)} from ${first(o.s)}.`, 3);
-      } else b.say(`${first(p.s)} takes the ${lc(m.def.name)}. [H] to leave it.`, 3);
+      } else b.say(`${first(p.s)} takes the ${lc(m.def.name)}. ${keyCap('night.nest')} to leave it.`, 3);
       this.seat(m, p, true);
       sfx.reload('lmg', 'close');
       return true;
     }
-    if ((k === 'r') && this.playerMount()) {
+    if (is(e, 'night.reload') && this.playerMount()) {
       const m = this.playerMount()!;
       if (m.def.heat && m.heat > 0.35 && m.swap <= 0) this.startSwap(m);
       else this.startReload(m);
@@ -526,7 +526,7 @@ export class Emplacements implements BattleHook {
     }
     const pm = this.playerMount();
     c.fillStyle = '#a89c84';
-    c.fillText(pm ? `[H] leave the ${pm.def.short}   [R] ${pm.def.heat ? 'swap barrel / ' : ''}reload` : '[H] man the nearest gun nest', 26, y);
+    c.fillText(pm ? `${keyCap('night.nest')} leave the ${pm.def.short}   ${keyCap('night.reload')} ${pm.def.heat ? 'swap barrel / ' : ''}reload` : `${keyCap('night.nest')} man the nearest gun nest`, 26, y);
     c.restore();
   }
 

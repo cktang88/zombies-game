@@ -5,7 +5,9 @@ import { WEAPONS, fireProfile, armorDamage, roundsInStores, ammoLabel, ammoTypes
 import { img, flashImg, shadeImg } from '../assets';
 import { sfx, wind, gunSoundFor, muffle, ambienceLayer } from '../audio';
 import { flashKind, gunFeel, drawFlash, casingLook, voiceOf, panOf, isSuppressed, type FlashKind } from './gunfx';
-import { reduceGore, shakeScale, realism } from '../ui/settings';
+import { reduceGore, shakeScale, realism, screenFx, hitMarkers, zoneMarkers, autoReload, focusToggle, threatRibbon } from '../ui/settings';
+import { keyOf, normKey, keyCap } from '../ui/keys';
+import { openPause } from '../ui/pause';
 import {
   living, canFight, aimFactor, first, displayName, wound, pain, killSurvivor, tale, addThought, hasTrait, changeOpinion, byId, isBitten, breakThresholds,
   moodBreakdown, their, them, grantTitle, prof, attr,
@@ -283,13 +285,14 @@ export class Battle {
   prebake: (() => void)[] = []; // sprite bakes worked off during the intro
   hover?: Zombie; // the body under the crosshair
   keyUp = (e: KeyboardEvent) => {
-    const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-    if (k === ' ') this.fast = false;
-    else if (k === 'r') {
+    const k = normKey(e);
+    if (k === keyOf('night.hurry')) this.fast = false;
+    if (k === keyOf('night.reload')) {
       // a tap is the smart reload (or tap-rack); a hold already did a speed reload
-      if (this.rDown >= 0 && !this.rDone) this.startReload('smart');
+      if (this.rDown >= 0 && !this.rDone && !this.paused) this.startReload('smart');
       this.rDown = -1;
-    } else if (k === 's' || k === 'Control') this.ducking = false;
+    }
+    if (k === keyOf('night.duck') || k === 'Control') this.ducking = false;
   };
   hooks: BattleHook[] = []; // night modules (traps, melee, emplacements): night/hook.ts
   actors!: BattleActors; // rigged bodies (night/actors.ts), the last hook
@@ -503,14 +506,14 @@ export class Battle {
     c.onmousemove = pos;
     c.onmousedown = (e) => {
       pos(e);
-      if (e.button === 2) this.setFocus(true);
+      if (e.button === 2) this.setFocus(focusToggle() ? !this.focusing : true);
       else if (e.button === 1) { this.throwMolotov(); e.preventDefault(); }
       else {
         this.mouse.down = true;
         this.tryFire(true);
       }
     };
-    c.onmouseup = (e) => { if (e.button === 2) this.setFocus(false); else if (e.button === 0) this.mouse.down = false; };
+    c.onmouseup = (e) => { if (e.button === 2) { if (!focusToggle()) this.setFocus(false); } else if (e.button === 0) this.mouse.down = false; };
     c.onwheel = (e) => { e.preventDefault(); this.cycleWeapon(e.deltaY < 0 ? -1 : 1); };
     c.oncontextmenu = (e) => e.preventDefault();
     c.ontouchstart = (e) => {
@@ -547,27 +550,42 @@ export class Battle {
   //   [B] fire selector · [Q]/wheel weapon · [S]/[Ctrl] (hold) duck · [E] rally · [M] mark target
   //   [1-9]/[Tab] select guard · [Z]/[X]/[C]/[K] order (Shift = everyone; V is melee, L lures, G deadfall/pipe mine, H gun nest) · [Y] guard's post · Space hurry · [P]/Esc pause
   onKey(e: KeyboardEvent) {
+    const k = normKey(e);
+    // paused: the pause menu has the keyboard (night/pause overlay); nothing reaches the wall
+    if (this.paused) return;
+    if (k === 'Escape' || k === keyOf('night.pause')) { e.preventDefault(); this.pause(); return; }
     for (const h of this.hooks) if (h.onKey?.(e)) return; // night modules
-    const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-    if (k === 'r') {
+    if (k === keyOf('night.reload')) {
       if (e.repeat) return;
       if (this.jam || this.playerReload > 0) { this.startReload(); return; }
       this.rDown = performance.now();
       this.rDone = false;
     }
-    else if (k === 'f') this.throwMolotov();
-    else if (k === 'Escape' || k === 'p') this.paused = !this.paused;
+    else if (k === keyOf('night.firebomb')) this.throwMolotov();
     else if (/^[1-9]$/.test(k)) this.selectGuard(+k - 1);
     else if (k === 'Tab') { e.preventDefault(); this.selectGuard(this.sel + 1, true); }
-    else if (k === 'q') this.cycleWeapon(1);
-    else if (k === 't') this.cycleAmmo();
-    else if (k === 'b') this.cycleMode();
-    else if (k === 'e') this.useRally();
-    else if (k === 'm') this.markTarget();
-    else if (k === 'y') this.cyclePost();
-    else if (k === 's' || k === 'Control') this.ducking = true;
-    else if (k === 'z' || k === 'x' || k === 'c' || k === 'k') this.giveOrder(({ z: 'free', x: 'hold', c: 'heads', k: 'wall' } as const)[k], e.shiftKey);
-    else if (k === ' ') { this.fast = true; e.preventDefault(); }
+    else if (k === keyOf('night.weapon')) this.cycleWeapon(1);
+    else if (k === keyOf('night.ammo')) this.cycleAmmo();
+    else if (k === keyOf('night.selector')) this.cycleMode();
+    else if (k === keyOf('night.rally')) this.useRally();
+    else if (k === keyOf('night.mark')) this.markTarget();
+    else if (k === keyOf('night.post')) this.cyclePost();
+    else if (k === keyOf('night.duck') || k === 'Control') this.ducking = true;
+    else if (k === keyOf('night.free')) this.giveOrder('free', e.shiftKey);
+    else if (k === keyOf('night.hold')) this.giveOrder('hold', e.shiftKey);
+    else if (k === keyOf('night.heads')) this.giveOrder('heads', e.shiftKey);
+    else if (k === keyOf('night.wall')) this.giveOrder('wall', e.shiftKey);
+    else if (k === keyOf('night.hurry')) { this.fast = true; e.preventDefault(); }
+  }
+
+  /** P / Esc: freeze the night and open the pause menu (resume, settings, help, quit). */
+  pause() {
+    if (this.paused || this.ended) return;
+    this.paused = true;
+    this.blurHandler();
+    this.fast = false;
+    const host = this.canvas.parentElement ?? document.body;
+    openPause(host, { where: 'night', resume: () => { this.paused = false; this.last = performance.now(); }, quit: () => { this.ended = true; this.destroy(); } });
   }
 
   // weapons the leader may pick up: their own and any unassigned
@@ -670,6 +688,7 @@ export class Battle {
       const dt = Math.min(0.05, (now - this.last) / 1000);
       this.last = now;
       const quiet = !this.zombies.some((z) => z.state !== 'dying' && z.x < 1000);
+      if (!screenFx()) { this.hitstop = 0; this.killFlash = 0; this.wallFlash = 0; this.nerveFlash = 0; } // Settings: no flashes / hitstop
       if (!this.paused) {
         // slow-mo, the HUD tweens and the ringing ears run on real time
         this.slowmo = Math.max(0, this.slowmo - dt);
@@ -869,7 +888,7 @@ export class Battle {
     } else if (def.spit) {
       z.stopX = R.range(820, 1000); // out past where the guards can make it out without floodlights
       z.spitT = R.range(0.9, 1.4);
-      if (!this.hints.has('biler')) { this.hints.add('biler'); this.say('A Biler. It spits over the wall — hold [S] to duck, or shoot the glob.', 5); }
+      if (!this.hints.has('biler')) { this.hints.add('biler'); this.say(`A Biler. It spits over the wall — hold ${keyCap('night.duck')} to duck, or shoot the glob.`, 5); }
     } else if (def.leap) {
       if (!this.hints.has('buck')) { this.hints.add('buck'); this.say('A Buck. When it crouches and its eyes catch the light, it jumps. Shoot it in the crouch.', 5); }
     }
@@ -1069,7 +1088,7 @@ export class Battle {
     const pouchKey = `${p.w.uid}|${prof0.ammoRes}`;
     const pouch = this.pouch.get(pouchKey) ?? [];
     if (roundsInStores(prof0, G.stores) < 1 && !pouch.length) {
-      this.say(`No ${ammoLabel(prof0.ammoRes).toLowerCase()} left. Switch weapons [Q].`, 2);
+      this.say(`No ${ammoLabel(prof0.ammoRes).toLowerCase()} left. Switch weapons ${keyCap('night.weapon')}.`, 2);
       sfx.dry();
       return;
     }
@@ -1190,7 +1209,7 @@ export class Battle {
     if (this.playerCd > 0) return;
     if (this.ducking) return;
     if (this.jam) {
-      if (click && this.jam.clearing <= 0) { sfx.dry(); this.text(this.mouse.x, this.mouse.y - 24, this.jam.kind === 'barrel' ? 'BARREL — [R]' : 'JAMMED — [R]', '#e0a060', 11); }
+      if (click && this.jam.clearing <= 0) { sfx.dry(); this.text(this.mouse.x, this.mouse.y - 24, this.jam.kind === 'barrel' ? `BARREL — ${keyCap('night.reload')}` : `JAMMED — ${keyCap('night.reload')}`, '#e0a060', 11); }
       this.playerCd = 0.2;
       return;
     }
@@ -1202,14 +1221,15 @@ export class Battle {
     const mag = this.playerMag.get(p.w.uid) ?? 0;
     if (mag <= 0) {
       sfx.dry();
-      this.startReload('auto');
+      if (autoReload()) this.startReload('auto');
+      else this.text(this.mouse.x, this.mouse.y - 24, `empty — ${keyCap('night.reload')}`, '#e0a060', 11);
       this.playerCd = 0.25;
       return;
     }
     // an LMG run too hot has to have its barrel changed
     if (swapsBarrel(p.w) && (this.heat.get(p.w.uid) ?? 0) >= heatLimit(prof) * 1.7) {
       this.jam = { kind: 'barrel', clearing: 0 };
-      this.say('The barrel is glowing. [R] to swap it.', 2.5);
+      this.say(`The barrel is glowing. ${keyCap('night.reload')} to swap it.`, 2.5);
       sfx.overheat();
       return;
     }
@@ -1221,7 +1241,7 @@ export class Battle {
         const kind: Malfunction = R.chance(realism() === 'hardcore' ? 0.3 : 0.1) ? 'double' : 'tap';
         this.jam = { kind, clearing: 0 };
         p.burstLeft = 0;
-        this.say(kind === 'double' ? `${p.w.name ?? WEAPONS[p.w.def].name}: double-feed. [R]` : `${p.w.name ?? WEAPONS[p.w.def].name} jammed. Tap [R].`, 1.8);
+        this.say(kind === 'double' ? `${p.w.name ?? WEAPONS[p.w.def].name}: double-feed. ${keyCap('night.reload')}` : `${p.w.name ?? WEAPONS[p.w.def].name} jammed. Tap ${keyCap('night.reload')}.`, 1.8);
         sfx.jam();
         this.playerCd = 0.15;
         return;
@@ -1335,11 +1355,11 @@ export class Battle {
       if (left > 0 && manualAction(p.w, prof) && this.nerve < this.nerveMax * 0.25 && R.chance(0.1)) {
         this.jam = { kind: 'short', clearing: 0 };
         p.burstLeft = 0;
-        this.text(p.x + 40, p.y - 120, 'short-stroked — [R]', '#e0a060', 10);
+        this.text(p.x + 40, p.y - 120, `short-stroked — ${keyCap('night.reload')}`, '#e0a060', 10);
       }
     } while (p.burstLeft > 0 && prof0.burstGap <= 0);
     p.burstT = prof0.burstGap;
-    if ((this.playerMag.get(p.w.uid) ?? 0) === 0 && p.burstLeft <= 0) this.startReload('auto');
+    if ((this.playerMag.get(p.w.uid) ?? 0) === 0 && p.burstLeft <= 0 && autoReload()) this.startReload('auto');
   }
 
   // what every round does besides the bullet: flash, noise, brass, smoke, arrows to pick up later
@@ -1720,7 +1740,7 @@ export class Battle {
           this.nerveGain(6);
           if (++this.streak >= 5) {
             this.streak = 0;
-            if (this.rally < 2) { this.rally++; this.say('Rally ready — [E] to call the line together.', 3); }
+            if (this.rally < 2) { this.rally++; this.say(`Rally ready — ${keyCap('night.rally')} to call the line together.`, 3); }
           }
         } else this.nerveGain(2);
         sfx.impact(head ? 'head' : mark === 'plate' ? 'armor' : 'flesh');
@@ -3533,7 +3553,7 @@ export class Battle {
   drawTells(c: CanvasRenderingContext2D, z: Zombie, lit: number) {
     const h = this.zh(z);
     const fog = this.fogAlpha(z);
-    if (z.x < W + 10) {
+    if (z.x < W + 10 && zoneMarkers()) {
       const pulse = 0.5 + 0.5 * Math.sin(this.t * 4 + z.id);
       const a = Math.min(1, (0.24 + 0.16 * pulse) * (this.focusing ? 2.4 : 1) * (0.6 + 0.4 * lit) * fog);
       for (const w of this.weakPts(z)) {
@@ -3915,7 +3935,7 @@ export class Battle {
       c.fillRect(0, 0, W, H);
     }
     if (p && p.blind > 0) { c.fillStyle = `rgba(150,140,40,${Math.min(0.3, p.blind * 0.08)})`; c.fillRect(0, 0, W, H); }
-    if (!this.intro) this.drawThreatRibbon(c);
+    if (!this.intro && threatRibbon()) this.drawThreatRibbon(c);
     // weapon
     if (p && p.w) {
       const def = WEAPONS[p.w.def];
@@ -3969,7 +3989,7 @@ export class Battle {
       if (this.jam) {
         c.font = '13px "Special Elite", monospace';
         c.fillStyle = '#e0a060';
-        c.fillText(this.jam.clearing > 0 ? 'clearing…' : this.jam.kind === 'barrel' ? 'BARREL HOT — [R] swap' : this.jam.kind === 'double' ? 'DOUBLE-FEED — [R]' : 'JAMMED — tap [R]', W - 30, H - 98);
+        c.fillText(this.jam.clearing > 0 ? 'clearing…' : this.jam.kind === 'barrel' ? `BARREL HOT — ${keyCap('night.reload')} swap` : this.jam.kind === 'double' ? `DOUBLE-FEED — ${keyCap('night.reload')}` : `JAMMED — tap ${keyCap('night.reload')}`, W - 30, H - 98);
       }
     }
     // nerve and rally, bottom left above the key line
@@ -3993,7 +4013,7 @@ export class Battle {
       // the headshot streak as tally marks, then banked rallies
       c.fillStyle = '#d9c9a0';
       for (let i = 0; i < this.streak; i++) c.fillRect(x + 160 + i * 4, y - 6, 2, 10);
-      if (this.rally > 0) { c.fillStyle = '#e0c070'; c.fillText(`RALLY ×${this.rally} [E]`, x + 160 + this.streak * 4 + 4, y + 3); }
+      if (this.rally > 0) { c.fillStyle = '#e0c070'; c.fillText(`RALLY ×${this.rally} ${keyCap('night.rally')}`, x + 160 + this.streak * 4 + 4, y + 3); }
       if (this.rallyT > 0) { c.fillStyle = '#e0c070'; c.fillText('RALLY', x + 160, y + 3); }
     }
     c.textAlign = 'left';
@@ -4002,9 +4022,9 @@ export class Battle {
     const multiAmmo = !!(p?.w && ammoTypesFor(p.w.def).length > 1);
     // the full key list early in the night (and when paused); afterwards one short line
     if (this.t < 30 || this.paused) {
-      c.fillText(`[R] reload (hold: speed) · [Q]/wheel gun${multiAmmo ? ' · [T] ammo' : ''} · [B] selector · RMB focus · [S] duck · [F]/MMB firebomb ${G.stores.molotov}`, 20, H - 24);
-      c.fillText('[1-9]/[Tab] guard · [Z] free [X] hold [C] heads [K] wall (Shift: all) · [Y] post · [M] mark · [E] rally · Space hurry · [P] pause', 20, H - 10);
-    } else c.fillText(`firebombs ${G.stores.molotov} [F]   ·   [R] reload   [S] duck   RMB focus   [P] keys`, 20, H - 12);
+      c.fillText(`${keyCap('night.reload')} reload (hold: speed) · ${keyCap('night.weapon')}/wheel gun${multiAmmo ? ` · ${keyCap('night.ammo')} ammo` : ''} · ${keyCap('night.selector')} selector · RMB focus · ${keyCap('night.duck')} duck · ${keyCap('night.firebomb')}/MMB firebomb ${G.stores.molotov}`, 20, H - 24);
+      c.fillText(`[1-9]/[Tab] guard · ${keyCap('night.free')} free ${keyCap('night.hold')} hold ${keyCap('night.heads')} heads ${keyCap('night.wall')} wall (Shift: all) · ${keyCap('night.post')} post · ${keyCap('night.mark')} mark · ${keyCap('night.rally')} rally · ${keyCap('night.hurry')} hurry · ${keyCap('night.pause')} pause`, 20, H - 10);
+    } else c.fillText(`firebombs ${G.stores.molotov} ${keyCap('night.firebomb')}   ·   ${keyCap('night.reload')} reload   ${keyCap('night.duck')} duck   RMB focus   ${keyCap('night.pause')} keys`, 20, H - 12);
     // messages
     c.textAlign = 'center';
     this.messages.forEach((m, i) => {
@@ -4052,7 +4072,7 @@ export class Battle {
       c.lineWidth = 2;
       c.beginPath(); c.arc(ap.x, ap.y, r + 6, Math.PI * 0.6, Math.PI * 0.6 + Math.PI * 0.8 * (this.nerve / Math.max(1, this.nerveMax))); c.stroke();
       // hit marker, coloured by zone
-      if (this.hitMark && this.hitMark.t > 0) {
+      if (this.hitMark && this.hitMark.t > 0 && hitMarkers()) {
         const col: Record<string, string> = { head: '#f4ecd8', leg: '#d0a050', arm: '#a8a8a0', plate: '#a8c8f0', body: '#d8c8b0', weak: '#f0c060', glob: '#c8c050' };
         const kill = !!this.hitMark.kill;
         c.strokeStyle = kill ? (this.hitMark.kind === 'head' ? '#ffe6c0' : '#e8a080') : col[this.hitMark.kind] ?? '#ddd';

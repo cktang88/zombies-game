@@ -229,6 +229,8 @@ export class Engine {
   readonly farIn: GainNode;
   /** Ambience beds (recorded loops): straight to the sfx volume, past the glue compressor. */
   readonly ambIn: GainNode;
+  /** The player's ambience volume (after the ducking stage). */
+  readonly ambVol: GainNode;
   maxVoices = 40;
   voices: Voice[] = [];
   private lastAt = new Map<string, number>();
@@ -255,7 +257,8 @@ export class Engine {
     this.sfxIn.connect(glue);
 
     this.ambIn = gain(c, 1);
-    this.ambIn.connect(this.sfxVol);
+    this.ambVol = gain(c, 1);
+    this.ambIn.connect(this.ambVol).connect(this.sfxVol);
 
     this.musicVol = gain(c, 1);
     this.musicVol.connect(this.master);
