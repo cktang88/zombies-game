@@ -14,6 +14,7 @@ import {
   WEAPON_CLASSES, CLASS_SHORT, progressName, choosePerk, type ProgressKey,
 } from '../sim/survivors';
 import { PERKS } from '../data/perks';
+import { TRAPS } from '../data/traps';
 import {
   buildingLevel, queueRecipe, WEATHER_LABEL, DAY_HOURS, DEFAULT_HOURS, jobHours, setJobHours, hoursAvailable, travelHours, survivorSite,
   searchHours, searchFactor, planConfirmed, confirmPlan, ranToday, onRunToday, runDaylightFor, prepareRun, clockLabel, heatNeed,
@@ -449,10 +450,29 @@ function recipeIcon(r: (typeof RECIPES)[number]): string {
   if (r.weapon && WEAPONS[r.weapon]) return WEAPONS[r.weapon].icon;
   if (r.melee && MELEE[r.melee]) return MELEE[r.melee].icon;
   if (r.mod && MODS[r.mod]) return MODS[r.mod].icon;
-  if (r.trap) return `icon_trap_${r.trap}`;
+  if (r.trap) return TRAPS[r.trap]?.icon ?? 'icon_trap_bear';
   const g = r.gives && (Object.keys(r.gives)[0] as Res | undefined);
   if (g) return RES_ICON[g];
   return SPECIAL_ICON[r.special ?? ''] ?? 'icon_parts';
+}
+// The make list's groups, in this order.
+type MakeGroup = 'ammo' | 'traps' | 'weapons' | 'mods' | 'defence' | 'gear';
+const MAKE_GROUPS: { id: MakeGroup; label: string; icon: string }[] = [
+  { id: 'ammo', label: 'Ammunition', icon: 'icon_ammo' },
+  { id: 'traps', label: 'Trap kits', icon: 'icon_trap_bear' },
+  { id: 'weapons', label: 'Weapons', icon: 'icon_pipegun' },
+  { id: 'mods', label: 'Attachments', icon: 'icon_mod_scope' },
+  { id: 'defence', label: 'The wall', icon: 'icon_st_wall' },
+  { id: 'gear', label: 'Gear & supplies', icon: 'icon_parts' },
+];
+function makeGroup(r: (typeof RECIPES)[number]): MakeGroup {
+  if (r.trap) return 'traps';
+  if (r.mod) return 'mods';
+  if (r.weapon || r.melee) return 'weapons';
+  if (r.emplacement || r.empRepair || ['spikes', 'wire', 'light', 'turret', 'fortify', 'roofnest', 'trap'].includes(r.special ?? '')) return 'defence';
+  const g = Object.keys(r.gives ?? {}) as Res[];
+  if (g.length && g.every((k) => AMMO_TYPES[k] || k === 'molotov')) return 'ammo';
+  return 'gear';
 }
 const BUILD_ICON: Record<string, string> = { workbench: 'icon_job_craft', forge: 'icon_scrap', garden: 'icon_job_farm', infirmary: 'icon_job_doctor', still: 'icon_molotov', generator: 'icon_fuel', radio: 'icon_job_radio' };
 const pic = (sprite: string, cls = '') => `<img class="pic ${cls}" src="${spriteUrl(sprite)}" alt="" onerror="this.style.visibility='hidden'">`;
@@ -479,10 +499,18 @@ function workshopHtml() {
       ${pic(recipeIcon(r))}
       <div class="cbody"><div class="cname">${r.name}</div><div class="ccost">${costHtml(r.cost)}</div></div>
       <button class="mini" data-act="queue" data-id="${r.id}" ${has(r.cost) ? '' : 'disabled'} aria-label="Queue ${esc(r.name)}">+</button></div>`;
+  // the make list in collapsible groups, each headed by a picture and "ready / total"; affordable first
+  const groups = MAKE_GROUPS.map((g) => ({ ...g, rs: recipes.filter((r) => makeGroup(r) === g.id) })).filter((g) => g.rs.length);
+  const groupHtml = groups.map((g) => {
+    const ready = g.rs.filter((r) => has(r.cost));
+    const peek = ready.slice(0, 5).map((r) => pic(recipeIcon(r), 'sm')).join('');
+    return fold(`${pic(g.icon, 'sm')}<span class="mk-name">${g.label}</span> <span class="t-xs mk-n"${tip(`${ready.length} of ${g.rs.length} you can afford now`)}>${ready.length}/${g.rs.length}</span><span class="mk-peek">${peek}</span>`,
+      `<div class="cards">${g.rs.map(card).join('')}</div>`, { id: `ws-make-${g.id}`, open: g.id === 'ammo', cls: `mk${ready.length ? '' : ' none'}` });
+  }).join('');
   return `<div class="ws">
     <div class="wsq"><span class="t-l">Queue</span> ${crafters.length ? chip('job_craft', crafters.map(first).join(', '), 'At the bench today') : chip('st_danger', 'nobody', 'Nobody on the Workshop job', 'warn')}
       ${queue}</div>
-    ${fold(`<span class="t-l">Make</span> <span class="t-xs">${recipes.length}</span>`, `<div class="cards">${recipes.map(card).join('')}</div>
+    ${fold(`<span class="t-l">Make</span> <span class="t-xs">${recipes.filter((r) => has(r.cost)).length}/${recipes.length}</span>`, `<div class="mkgroups">${groupHtml}</div>
       ${locked.length ? `<div class="t-xs"${tip(`Needs more machinery: ${esc(locked.map((r) => r.name).join(', '))}.`)}>+${locked.length} locked</div>` : ''}`, { id: 'ws-make', open: true })}
     ${fold(`<span class="t-l">Machinery</span> <span class="t-xs">${G.buildings.length}/${Object.keys(BUILDINGS).length}</span>`, `<div class="cards">${builds}</div>`, { id: 'ws-mach', open: true })}
   </div>`;

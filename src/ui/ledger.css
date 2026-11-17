@@ -429,3 +429,15 @@ button.mini.urgent { border-color: #c0603c; color: #f0b090; }
 }
 .thread .tico { color: #d8b060; font-size: 11px; }
 .wcard.recipe button { font-size: 16px; line-height: 1; padding: 3px 0; }
+/* the workshop's make list: collapsible groups, a picture and "ready / total" on each head */
+.mkgroups .fold.mk { border-top: 1px dotted rgba(90, 79, 60, .55); }
+.mkgroups .fold.mk:first-child { border-top: 0; }
+.fold.mk > summary { padding: 5px 0; font-size: var(--fs-s); }
+.fold.mk > summary .pic.sm { width: 22px; height: 22px; }
+.fold.mk .mk-name { font-family: var(--type); }
+.fold.mk .mk-n { cursor: help; }
+.fold.mk.none .mk-n, .fold.mk.none .mk-name { opacity: .6; }
+.fold.mk .mk-peek { display: inline-flex; gap: 2px; margin-left: auto; overflow: hidden; }
+.fold.mk .mk-peek .pic.sm { width: 18px; height: 18px; }
+.fold.mk[open] .mk-peek { visibility: hidden; }
+.fold.mk > .fold-body { padding: 2px 0 8px; }
