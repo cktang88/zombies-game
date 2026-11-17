@@ -8,8 +8,9 @@ import { SITES, RES_LABEL, type Site } from '../data/world';
 import { img, flashImg, shadeImg } from '../assets';
 import { depthScale, canvas, bakeSprite, bakeLayer, bakeGround, fgStrip, type Look, type Baked } from './render';
 import { sfx, wind, gunSoundFor, type Surface } from '../audio';
-import { reduceGore, shakeScale, autoReload, hitMarkers, screenFx } from '../ui/settings';
-import { flashKind, gunFeel, drawFlash, casingLook, voiceOf, panOf, isSuppressed, type FlashKind } from './gunfx';
+import { reduceGore, shakeScale, autoReload, hitMarkers, screenFx, fxQuality } from '../ui/settings';
+import { flashKind, gunFeel, voiceOf, panOf, isSuppressed, type FlashKind } from './gunfx';
+import { Vfx } from './vfx'; // gunfire & effects (docs/research/10-vfx.md)
 import { RunActors } from './actors'; // rigged bodies (src/anim)
 
 /** What underfoot sounds like at each site (footsteps). */
@@ -199,6 +200,7 @@ export class Expedition {
   decals: { x: number; y: number; w: number; h: number; rot: number; color: string }[] = [];
   actors = new RunActors(); // rigged bodies: night/actors.ts
 
+  vfx = new Vfx({ ground: null, light: () => {}, gore: reduceGore, flashes: screenFx }, fxQuality());
   constructor(canvas: HTMLCanvasElement, s: Survivor, siteId: string, onEnd: (r: ExpeditionResult) => void) {
     this.canvas = canvas;
     this.c = canvas.getContext('2d')!;
@@ -399,6 +401,7 @@ export class Expedition {
   update(dt: number) {
     if (this.ended) return;
     this.t += dt;
+    this.vfx.update(dt);
     this.shake = Math.max(0, this.shake - dt * 18);
     this.bloom = Math.max(0, this.bloom - dt * 0.12);
     this.cd -= dt;
@@ -868,14 +871,13 @@ export class Expedition {
       this.flashAng = base;
       this.flashSize = fe.size;
       this.ammoPunch = 1;
-      const cl = casingLook(this.w.def);
-      if (cl && (!p.auto || R.chance(0.7))) this.parts.push({ x: mz.x + this.cam - 30 * this.face, y: mz.y + 6, vx: -this.face * R.range(30, 90), vy: R.range(-190, -110), life: 2.5, color: cl.color, size: cl.w, w: cl.w, h: cl.h, rot: R.range(0, 6), bounces: 2, kind: 'shell', g: GROUND - R.range(-4, 6) });
+      this.vfx.muzzle({ x: mz.x + this.cam, y: mz.y, ang: base, defId: this.w.def, prof: p, suppressed: isSuppressed(this.w), key: this,
+        eject: !p.auto || Math.random() < 0.7 ? { x: mz.x + this.cam - 30 * this.face, y: mz.y + 6, ground: GROUND - 4 + Math.random() * 10, face: this.face } : undefined });
       this.roundsFired++;
       this.heat = Math.min(6, this.heat + p.noise * 0.12);
       this.noise = Math.min(4, this.noise + p.noise);
       G.stats.shots++;
       this.w.cond = Math.max(0.05, this.w.cond - 0.0008);
-      if (p.smoke) for (let i = 0; i < 14; i++) this.parts.push({ x: mz.x + this.cam + this.face * R.range(0, 60), y: mz.y + R.range(-14, 14), vx: this.face * R.range(20, 110), vy: R.range(-240, -120), life: R.range(0.5, 0.9), color: R.pick(['rgba(200,196,186,0.35)', 'rgba(160,156,150,0.3)']), size: R.range(8, 18), g: mz.y + 40 });
       sfx.shoot(this.w.def, { suppressed: isSuppressed(this.w), incendiary: p.incendiary, pan: panOf(mz.x) * 0.4 });
     } while (this.burstLeft > 0 && p.burstGap <= 0);
     if (this.burstLeft > 0) this.burstT = p.burstGap;
@@ -915,6 +917,8 @@ export class Expedition {
     const { pierce, knock, armorPen } = p;
     const dmg = p.dmg;
     const dx = Math.cos(a), dy = Math.sin(a);
+    const wdef = this.shooter === 'p' ? this.w?.def : undefined;
+    this.vfx.shotStart(ox, oy, wdef, p);
     const hits: { z: EZ; t: number; head: boolean }[] = [];
     for (const z of this.zs) {
       if (z.state === 'dying' || Math.abs(z.y - laneY) > LANE_TOL) continue;
@@ -952,12 +956,9 @@ export class Expedition {
       const plate = !h.head && !!z.def.armor && dd < dr * 0.6;
       const mine = this.shooter === 'p';
       if (plate) {
-        for (let i = 0; i < 5; i++) this.parts.push({ x: px, y: py, vx: -Math.sign(dx) * R.range(40, 200), vy: R.range(-180, 30), life: 0.3, color: R.pick(['#ffe8b0', '#ffd080']), size: 2, g: z.y });
+        this.vfx.impact('armor', px, py, a, { ground: z.y, pellet });
       } else {
-        const big = Math.min(1.6, 0.6 + dd / 60);
-        const n = Math.round((h.head ? 8 : 3) * big * (reduceGore() ? 0.4 : 1)) + 1;
-        for (let i = 0; i < n; i++) this.parts.push({ x: px, y: py, vx: Math.sign(dx) * R.range(20, 200), vy: R.range(-200, 30), life: 1.4, color: reduceGore() ? '#2c0a08' : R.pick(['#4a0d0b', '#5e1410', '#3a0a08']), size: R.range(1.5, 4) * (reduceGore() ? 0.6 : 1), g: z.y });
-        if (!pellet || R.chance(0.3)) this.parts.push({ x: px, y: py, vx: Math.sign(dx) * R.range(10, 40), vy: R.range(-20, 0), life: 0.35, max: 0.35, color: reduceGore() ? '40,10,8' : '110,18,14', size: (reduceGore() ? 3 : 5) * big * (h.head ? 1.4 : 1), g: 9999, kind: 'puff' });
+        this.vfx.impact(h.head ? 'head' : 'flesh', px, py, a, { ground: z.y, power: Math.min(1.6, 0.6 + dd / 60), pellet });
       }
       const imp = h.head ? 'head' : plate ? 'armor' : 'flesh';
       const v = voiceOf(z.def.id);
@@ -984,11 +985,10 @@ export class Expedition {
     }
     if (n === 0 && dy > 0.01 && end < 1500) {
       // a miss kicks up the road
-      this.parts.push({ x: ox + dx * end, y: oy + dy * end - 2, vx: R.range(-15, 15), vy: R.range(-40, -20), life: 0.7, max: 0.7, color: '#8a7c66', size: R.range(4, 7) * (pellet ? 0.6 : 1), g: 9999, kind: 'dust' });
-      for (let i = 0; i < (pellet ? 1 : 3); i++) this.parts.push({ x: ox + dx * end, y: oy + dy * end, vx: R.range(-50, 50), vy: R.range(-120, -40), life: 0.45, color: '#6b5d4a', size: 2, g: laneY + 1 });
       if (!pellet && this.shooter === 'p') sfx.impact('ground', { volume: 0.3 });
     }
-    this.tracers.push({ x1: ox + dx * 20, y1: oy + dy * 20, x2: ox + dx * end, y2: oy + dy * end, life: 0.07 });
+    const ve = Math.min(end, 1500);
+    this.vfx.bullet({ x0: ox, y0: oy, x1: ox + dx * ve, y1: oy + dy * ve, defId: wdef, prof: p, pellet, end: n > 0 ? 'body' : dy > 0.01 && end < 1500 ? 'ground' : 'air', laneY, key: this.shooter });
     if (p.flare && (!pellet || R.chance(0.2))) this.glows.push({ x: ox + dx * Math.min(end, 1100), y: Math.min(GROUND, oy + dy * Math.min(end, 1100)), life: pellet ? 1.5 : FLARE_LIGHT.time, max: pellet ? 1.5 : FLARE_LIGHT.time });
     return { x: ox + dx * end, y: oy + dy * end };
   }
@@ -1360,7 +1360,8 @@ export class Expedition {
       } else { c.fillStyle = p.color; c.fillRect(x, p.y, p.size, p.size); }
     }
     // the muzzle flash, shaped by the gun
-    if (this.flash > 0 && this.w) { const mz = this.muzzle(); drawFlash(c, mz.x, mz.y, this.flashAng, this.flashK, this.flash / 0.06, this.flashSize, this.roundsFired); }
+    // gunfire & effects (night/vfx), in world space
+    c.save(); c.translate(-this.cam, 0); this.vfx.drawNormal(c); this.vfx.drawAdd(c); c.restore();
     for (const l of this.lobs) {
       const k = l.t / l.dur;
       const x = l.x0 + (l.x1 - l.x0) * k - this.cam;

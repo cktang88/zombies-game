@@ -34,6 +34,8 @@ export interface Settings {
   textSize: TextSize;
   highContrast: boolean;
   showFps: boolean;
+  /** Gunfire & effects detail (docs/research/10-vfx.md): particle budget, smoke, shock rings, the scene wash. */
+  fxQuality: 'high' | 'medium' | 'low';
   // ---- gameplay
   /** Gun handling: 'standard' (default) or 'hardcore' (hidden ammo count, more double-feeds, speed reloads lose the mag). */
   realism: 'standard' | 'hardcore';
@@ -48,7 +50,7 @@ export interface Settings {
 export const SETTINGS_KEY = 'vessey-settings-v1';
 const DEFAULTS: Settings = {
   master: 0.7, music: 0.55, sfx: 0.8, ambience: 0.8, muted: false,
-  animation: 'rigged', reduceShake: false, reduceGore: false, flashes: true, hitMarkers: true, zoneMarkers: true, textSize: 'M', highContrast: false, showFps: false,
+  animation: 'rigged', reduceShake: false, reduceGore: false, flashes: true, hitMarkers: true, zoneMarkers: true, textSize: 'M', highContrast: false, showFps: false, fxQuality: 'high',
   realism: 'standard', autoReload: true, focusMode: 'hold', threatRibbon: true,
 };
 
@@ -80,6 +82,7 @@ export function getSettings(): Settings {
     textSize: s.textSize === 'S' || s.textSize === 'L' ? s.textSize : 'M',
     highContrast: bool(s.highContrast, false),
     showFps: bool(s.showFps, false),
+    fxQuality: s.fxQuality === 'medium' || s.fxQuality === 'low' ? s.fxQuality : 'high',
     realism: s.realism === 'hardcore' ? 'hardcore' : 'standard',
     autoReload: bool(s.autoReload, true),
     focusMode: s.focusMode === 'toggle' ? 'toggle' : 'hold',
@@ -108,6 +111,8 @@ export const reduceGore = () => getSettings().reduceGore;
 export const shakeScale = () => (getSettings().reduceShake ? 0.2 : 1);
 /** Gun-handling realism: 'standard' (default) or 'hardcore'. */
 export const realism = (): 'standard' | 'hardcore' => getSettings().realism;
+/** Effects quality: 'high' (default), 'medium' or 'low'. */
+export const fxQuality = (): 'high' | 'medium' | 'low' => getSettings().fxQuality;
 /** Character animation the player chose: 'rigged' (bone rigs) or 'classic' (single images).
  * The night code asks night/actors.ts rigsOn(), which also honours the automatic fallback. */
 export const animationSetting = (): 'rigged' | 'classic' => getSettings().animation;
@@ -248,6 +253,7 @@ export function openSettings(host: HTMLElement = document.body, onClose?: () => 
         ${check('muted', 'Mute everything', 'The same as the title screen\'s "sound off".', s.muted)}`;
       case 'video': return `
         ${choice('animation', 'Animation', [['rigged', 'Rigged'], ['classic', 'Classic']], s.animation, 'Rigged: bone rigs that aim, reload, walk and fall. Classic: single images, lighter (used by itself if the rigs can\'t load or run too slowly).')}
+        ${choice('fxQuality', 'Effects quality', [['high', 'High'], ['medium', 'Medium'], ['low', 'Low']], s.fxQuality, 'Muzzle flashes, tracers, smoke, fire and blasts. Lower it if the night stutters.')}
         ${check('reduceShake', 'Reduce screen shake', 'Gunfire and the wall falling barely move the camera.', s.reduceShake)}
         ${check('reduceGore', 'Reduce gore', 'Less blood on the road, no heads coming off. The dead still fall.', s.reduceGore)}
         ${check('flashes', 'Screen flashes and hitstop', 'The screen edge warms on a kill, the wall bar flashes, heavy hits hold the world still for a few frames.', s.flashes)}

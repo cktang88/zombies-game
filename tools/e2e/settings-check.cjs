@@ -154,6 +154,9 @@ const ok = (cond, what) => { console.log(`${cond ? 'ok  ' : 'FAIL'} ${what}`); i
   await page.waitForTimeout(400);
   const zd = await diff('', 'zoneMarkers', [300, 200, 900, 450]), z0 = await diff('', 'zoneMarkers', [300, 200, 900, 450], true);
   ok(zd > 0.002 && zd > z0 * 4, 'video: damage-zone rings show (and hide when off)');
+  // effects quality: the night's effects system takes it on its next update (particle budget)
+  const fxq = await b(() => { const B = window.__battle, out = {}; for (const q of ['low', 'medium', 'high']) { globalThis.__settings.set('fxQuality', q); B.update(0.016); out[q] = B.vfx.P.limit; } return out; });
+  ok(fxq.low < fxq.medium && fxq.medium < fxq.high, `video: Effects quality sets the particle budget (${JSON.stringify(fxq)})`);
   // animation: Classic turns the rigs off
   await b(() => globalThis.__settings.set('animation', 'classic'));
   ok(!(await b(() => globalThis.__anim.state().on)), 'video: Classic animation turns the rigs off');
