@@ -17,3 +17,22 @@
 .qi { display: inline-block; width: 15px; height: 15px; line-height: 15px; margin-left: 6px; border-radius: 50%; border: 1px solid #6a5c46; color: var(--dim); font: 10px var(--type); text-align: center; vertical-align: 1px; cursor: help; }
 .sbody .fold > summary { font-size: var(--fs-s); text-transform: uppercase; letter-spacing: .1em; color: var(--dim); }
 .sbody .fold > .fold-body { padding-left: 4px; }
+
+/* the ending: the score as icon tiles, tales and the chronicle folded */
+.over .score .srow.total { border-top: 0; margin-top: 0; }
+.stiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 10px 0 4px; }
+.stile { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; border: 1px solid var(--line); background: rgba(0,0,0,.18); cursor: help; text-align: center; }
+.stile .ico { width: 28px; height: 28px; }
+.stile > b { font-family: var(--type); font-weight: normal; font-size: 20px; color: #e6dcc6; }
+.stile .t-xs { font-size: 9px; line-height: 1.2; }
+.over .unlock { cursor: help; }
+.grave .gd .ico.sm { width: 14px; height: 14px; margin: 0 2px 0 6px; }
+.grave .fold { border-top-color: rgba(90,79,60,.4); margin-top: 6px; }
+.grave .fold > summary { padding: 3px 0; }
+.grave .fold > .fold-body { padding: 0; }
+.chronfold > summary h2 { margin: 0; }
+.chronfold > summary { padding: 10px 0; }
+@media (max-width: 600px) { .stiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* the title: one line, two chips; the rest on hover */
+.title .how .howchip { display: inline-flex; align-items: center; gap: 4px; margin: 6px 6px 0; padding: 2px 8px; border: 1px solid rgba(232,220,196,.2); cursor: help; }
