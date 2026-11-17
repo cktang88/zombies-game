@@ -5,7 +5,7 @@
 // Consumption by the battle is specified in docs/research/08-traps.md §Integration.
 import './deploy.css';
 import { TRAPS, type Placement, type TrapDef, placementProblem, combos, trapHalfWidth } from '../data/traps';
-import { spriteUrl } from '../assets';
+import { spriteUrl, spriteExists } from '../assets';
 
 export type { Placement };
 
@@ -120,7 +120,9 @@ export function renderDeploy(root: HTMLElement, opts: DeployOpts): DeployHandle 
     const h = t.area.allLanes ? lanes * LANE_H : LANE_H;
     const w = Math.max(30, hw * 2);
     const band = t.area.length ? `<i class="dep-band ${t.layer}" style="width:${hw * 2}px"></i>` : '';
-    return `<div class="dep-tok ${t.layer}${t.area.allLanes ? ' all' : ''}${i === sel ? ' sel' : ''} ${cls}" data-i="${i}" style="left:${left(p.x) - w / 2}px;top:${top}px;width:${w}px;height:${h}px" title="${esc(t.name)}">${band}<img src="${spriteUrl(t.icon)}" alt="${esc(t.name)}" draggable="false"></div>`;
+    // the road shows the thing as it will stand in the road (its world sprite); the icon if that is missing
+    const im = t.world && spriteExists(t.world) ? `<img class="world" src="${spriteUrl(t.world)}" data-icon="${spriteUrl(t.icon)}" alt="${esc(t.name)}" draggable="false">` : `<img src="${spriteUrl(t.icon)}" alt="${esc(t.name)}" draggable="false">`;
+    return `<div class="dep-tok ${t.layer}${t.area.allLanes ? ' all' : ''}${i === sel ? ' sel' : ''} ${cls}" data-i="${i}" style="left:${left(p.x) - w / 2}px;top:${top}px;width:${w}px;height:${h}px" title="${esc(t.name)}">${band}${im}</div>`;
   }
 
   function zoneHtml(trap: string): string {
@@ -148,6 +150,7 @@ export function renderDeploy(root: HTMLElement, opts: DeployOpts): DeployHandle 
     if (sel >= 0 && placed[sel]) h += reachHtml(placed[sel]);
     placed.forEach((p, i) => { if (!(drag?.kind === 'move' && drag.idx === i && drag.moved)) h += tokenHtml(p, i); });
     road.innerHTML = h;
+    road.querySelectorAll<HTMLImageElement>('img[data-icon]').forEach((im) => { im.onerror = () => { im.onerror = null; im.classList.remove('world'); im.src = im.dataset.icon!; }; });
     // palette
     const ids = Object.keys(TRAPS).filter((id) => (opts.stock[id] ?? 0) > 0);
     kitsEl.innerHTML = ids.length

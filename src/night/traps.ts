@@ -14,8 +14,10 @@ import type { BattleHook, Zed, Guardian, SortedDraw } from './hook';
 import { TRAPS, type TrapDef, type Placement } from '../data/traps';
 import { G, R } from '../state';
 import { sfx } from '../audio';
-import { spriteUrl } from '../assets';
+import { spriteUrl, spriteExists } from '../assets';
 import { depthScale } from './render';
+import { drawProp, has } from './props';
+import { LOOK } from './battle';
 import { blastDamage } from '../data/weapons';
 
 const WALL_X = 372;
@@ -87,7 +89,7 @@ export class Traps implements BattleHook {
       if (def.id === 'barrels') { tr.on = true; tr.t = def.uses; }
       if (def.id === 'electric' && !G.buildings.some((x) => x.id === 'generator')) tr.armed = false;
       this.list.push(tr);
-      if (def.world) sprite(def.world);
+      if (def.world && spriteExists(def.world)) sprite(def.world);
     });
     if (this.list.some((t) => t.def.id === 'radio')) sprite('icon_trap_radio');
     for (const z of b.zombies) this.maxId = Math.max(this.maxId, z.id);
@@ -747,7 +749,16 @@ export class Traps implements BattleHook {
     for (const tr of this.list) {
       const id = tr.def.id;
       const hw = (tr.def.area.length ?? 40) / 2;
-      if (id === 'oil' && (tr.armed || tr.on)) {
+      if (id === 'oil' && (tr.armed || tr.on) && has('trap_oil')) {
+        // the generated puddle across every lane; burning, it reads scorched; a moon sheen on top
+        for (let l = 0; l < 4; l++) {
+          const y = LANES[l] + 2, s = depthScale(y);
+          drawProp(c, 'trap_oil', tr.x + (l - 1.5) * 4, y + 6 * s, 16 * s, LOOK[l], { w: hw * 2 * (0.92 + l * 0.03), b: tr.on ? 0.6 : 1, flip: l % 2 === 1 });
+          c.strokeStyle = `rgba(160,180,215,${0.2 + 0.1 * Math.sin(tr.tick * 1.3 + l)})`;
+          c.lineWidth = 1.2;
+          c.beginPath(); c.ellipse(tr.x - hw * 0.25, y - 1, hw * 0.4, 3 * s, 0, Math.PI * 1.1, Math.PI * 1.9); c.stroke();
+        }
+      } else if (id === 'oil' && (tr.armed || tr.on)) {
         c.save();
         // a dark glossy smear across every lane, with a moon sheen
         for (let l = 0; l < 4; l++) {
@@ -763,6 +774,13 @@ export class Traps implements BattleHook {
         c.fillStyle = 'rgba(78,64,26,0.42)';
         for (let l = 0; l < 4; l++) { const y = LANES[l] + 2; c.beginPath(); c.ellipse(tr.x + Math.sin(l * 2.1) * 10, y, hw * 0.9, 8 * depthScale(y), 0.04 * l, 0, Math.PI * 2); c.fill(); }
       } else if ((id === 'roofnails' || id === 'glass') && tr.armed) {
+        const spr = id === 'glass' ? 'trap_glass' : 'trap_roofnails';
+        // the strip itself (generated), thinned as it is used up; the glints stay procedural
+        const left = tr.uses / tr.def.uses;
+        if (has(spr)) {
+          const s = depthScale(tr.y);
+          drawProp(c, spr, tr.x, tr.y + 4 * s, 12 * s, LOOK[tr.lane], { w: hw * 2, alpha: 0.45 + 0.55 * left });
+        }
         // glints scattered in the band
         const y0 = tr.y;
         const n = Math.round(10 + 22 * (tr.uses / tr.def.uses));
@@ -788,7 +806,13 @@ export class Traps implements BattleHook {
     for (const tr of this.list) {
       const id = tr.def.id;
       const s = depthScale(tr.y);
-      if (id === 'beartrap' && !tr.spent) out.push({ y: tr.y - 0.5, f: () => {
+      const look = LOOK[tr.lane];
+      if (id === 'nailbomb' && tr.armed && has('trap_nailbomb')) out.push({ y: tr.y - 0.3, f: () => { drawProp(c, 'trap_nailbomb', tr.x, tr.y + 2, 16 * s, look); } });
+      else if (id === 'sludge' && (tr.armed || tr.on) && has('trap_sludge')) out.push({ y: tr.y - 0.2, f: () => {
+        // the jar, tipped over once it has been opened
+        drawProp(c, 'trap_sludge', tr.x, tr.y + 1, 22 * s, look, tr.on ? { rot: 1.35, ay: 0.85 } : {});
+      } });
+      else if (id === 'beartrap' && !tr.spent) out.push({ y: tr.y - 0.5, f: () => {
         const im = sprite('trap_bear');
         const w = 54 * s, shut = tr.hold !== undefined;
         const h = (w * 40) / 92 * (shut ? 0.55 : 1);
@@ -831,6 +855,12 @@ export class Traps implements BattleHook {
         if (im) c.drawImage(im, -w / 2 + load * 6, -h, w, h);
         c.restore();
       } });
+      else if (id === 'tincan' && !tr.spent && has('trap_tincan')) out.push({ y: tr.y - 0.2, f: () => {
+        // the post shakes when the cord is pulled
+        const sw = tr.on ? Math.sin(tr.tick * 18) * 0.07 : 0;
+        drawProp(c, 'trap_tincan', tr.x, tr.y + 1, 52 * s, look, { rot: sw });
+        if (tr.on) this.ring(c, tr);
+      } });
       else if (id === 'tincan' && !tr.spent) out.push({ y: tr.y - 0.2, f: () => {
         c.fillStyle = '#2a241e'; c.fillRect(tr.x - 2, tr.y - 48 * s, 4 * s, 48 * s);
         for (let k = 0; k < 4; k++) {
@@ -841,6 +871,7 @@ export class Traps implements BattleHook {
         if (tr.on) this.ring(c, tr);
       } });
       else if (id === 'radio' && (tr.armed || tr.on)) out.push({ y: tr.y - 0.2, f: () => {
+        if (drawProp(c, 'trap_radio', tr.x, tr.y + 1, 34 * s, look)) { if (tr.on) this.ring(c, tr); return; }
         const im = sprite('icon_trap_radio');
         const w = 34 * s, h = (w * 96) / 112;
         if (im) c.drawImage(im, tr.x - w / 2, tr.y - h, w, h);
@@ -848,13 +879,14 @@ export class Traps implements BattleHook {
         if (tr.on) this.ring(c, tr);
       } });
       else if (id === 'pipemine' && tr.armed) out.push({ y: tr.y - 0.2, f: () => {
+        if (drawProp(c, 'trap_pipemine', tr.x, tr.y + 1, 22 * s, look)) return;
         c.strokeStyle = '#2a2622'; c.lineWidth = 1.5;
         c.beginPath(); c.moveTo(tr.x - 6, tr.y); c.lineTo(tr.x - 2, tr.y - 12 * s); c.lineTo(tr.x + 4, tr.y); c.stroke();
         c.fillStyle = '#4a463e'; c.fillRect(tr.x - 2, tr.y - 22 * s, 7 * s, 14 * s);
         c.fillStyle = 'rgba(200,190,150,0.6)'; c.fillRect(tr.x + 4 * s, tr.y - 20 * s, 1.5, 10 * s);
       } });
       else if (id === 'flare' && (tr.armed || tr.t > 0)) out.push({ y: tr.y - 0.2, f: () => {
-        c.fillStyle = '#3a342c'; c.fillRect(tr.x - 4 * s, tr.y - 10 * s, 8 * s, 10 * s);
+        if (!drawProp(c, 'trap_flare', tr.x, tr.y + 1, 24 * s, look, { b: tr.on || !tr.armed ? 0.7 : 1 })) { c.fillStyle = '#3a342c'; c.fillRect(tr.x - 4 * s, tr.y - 10 * s, 8 * s, 10 * s); }
         if (tr.on && tr.t > 0) {
           c.save(); c.globalCompositeOperation = 'lighter';
           c.fillStyle = `rgba(255,80,60,${0.6 + 0.3 * Math.sin(tr.tick * 30)})`;
@@ -867,8 +899,13 @@ export class Traps implements BattleHook {
         // posts at each lane, a strand per lane (shin height for the snare)
         for (let l = 0; l < 4; l++) out.push({ y: LANES[l] + 0.8, f: () => {
           const y = LANES[l], sl = depthScale(y), x = tr.x + (l - 1.5) * 3;
-          c.fillStyle = '#1e1b18';
-          c.fillRect(x - 1.5, y - (id === 'snare' ? 22 : 52) * sl, 3 * sl, (id === 'snare' ? 22 : 52) * sl);
+          const post = id === 'snare' ? 'trap_snarepost' : 'trap_fencepost';
+          if (!drawProp(c, post, x, y + 1, (id === 'snare' ? 26 : 56) * sl, LOOK[l])) {
+            c.fillStyle = '#1e1b18';
+            c.fillRect(x - 1.5, y - (id === 'snare' ? 22 : 52) * sl, 3 * sl, (id === 'snare' ? 22 : 52) * sl);
+          }
+          // the fence's charger, on the near post, with its lead to the generator
+          if (id === 'electric' && l === 3) drawProp(c, 'trap_fencegen', x - 16 * sl, y + 3, 26 * sl, LOOK[3], { b: tr.armed && tr.short <= 0 ? 1 : 0.6 });
           if (l === 3) return;
           const y2 = LANES[l + 1], x2 = tr.x + (l - 0.5) * 3, s2 = depthScale(y2);
           const strands = id === 'snare' ? [14] : [16, 30, 44];
@@ -903,6 +940,15 @@ export class Traps implements BattleHook {
     const s = depthScale(y);
     const top = y - 150 * s;
     const fall = tr.drop * 100 * s;
+    if (has('trap_gallows') && has('trap_door')) {
+      // the gallows arm reaches over the lane; the door hangs off its pulley, then drops and tips
+      const gh = 190 * s;
+      drawProp(c, 'trap_gallows', wx - 6, y + 2, gh, LOOK[tr.lane], { ax: 0.25 });
+      const pulleyX = wx + 16, pulleyY = top - 30 * s;
+      if (tr.drop <= 0) { c.strokeStyle = '#2a241d'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(pulleyX, pulleyY); c.lineTo(pulleyX, top + 2); c.stroke(); }
+      drawProp(c, 'trap_door', pulleyX, top + fall, 40 * s, LOOK[tr.lane], { ay: 0, rot: tr.drop * 0.5 });
+      return;
+    }
     // a rope over a pole, a Buick door on the end of it
     c.strokeStyle = '#3a3128'; c.lineWidth = 3;
     c.beginPath(); c.moveTo(wx - 30, top - 30 * s); c.lineTo(wx + 18, top - 30 * s); c.stroke();

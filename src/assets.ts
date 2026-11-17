@@ -1,4 +1,8 @@
 import { ARSENAL_ICONS } from './data/weapons';
+import { PROP_IDS } from './data/props';
+
+declare const __SPRITE_FILES__: string[]; // vite.config.ts: sprite ids present in public/sprites
+const SPRITE_FILES = new Set(typeof __SPRITE_FILES__ === 'undefined' ? PROP_IDS : __SPRITE_FILES__);
 
 const imgs = new Map<string, HTMLImageElement>();
 
@@ -10,8 +14,15 @@ const IDS = [...new Set([
   'icon_pistol', 'icon_revolver', 'icon_shotgun', 'icon_rifle', 'icon_smg', 'icon_carbine', 'icon_nailgun', 'icon_molotov',
   'icon_scrap', 'icon_food', 'icon_meds', 'icon_ammo', 'icon_fuel', 'icon_wood', 'icon_parts', 'icon_cloth',
   ...ARSENAL_ICONS,
+  // world props: emplacements, fortifications, trap objects, run landmarks (those generated so far)
+  ...PROP_IDS.filter((id) => SPRITE_FILES.has(id)),
 ])];
 const JPG = ['bg_sky', 'bg_far', 'bg_mid'];
+
+/** Whether a world-prop sprite has been generated (other ids: assumed present). */
+export function spriteExists(id: string) {
+  return !(PROP_IDS as string[]).includes(id) || SPRITE_FILES.has(id);
+}
 
 export function spriteUrl(id: string) {
   return `${import.meta.env.BASE_URL}sprites/${id}.${JPG.includes(id) ? 'jpg' : 'png'}`;

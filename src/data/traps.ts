@@ -53,7 +53,7 @@ export interface TrapDef {
   /** in-voice description for the ledger */
   desc: string;
   icon: string; // sprite id (public/sprites/<icon>.png)
-  world?: string; // in-world sprite id drawn on the road; absent = drawn procedurally (see 08-traps.md)
+  world?: string; // in-world sprite id (tools/sprites-traps.json, sprites-world.json); also the planner's road token
   recipe: { needs: 'workbench' | 'forge' | 'still' | 'generator'; level?: number; cost: Partial<Record<Res, number>>; work: number; makes?: number };
   /** kits used by one placement */
   trigger: TrapTrigger;
@@ -85,7 +85,7 @@ export interface TrapDef {
 
 export const TRAPS: Record<string, TrapDef> = {
   nailbomb: {
-    id: 'nailbomb', name: 'Nail bomb', icon: 'icon_pipebomb',
+    id: 'nailbomb', name: 'Nail bomb', icon: 'icon_pipebomb', world: 'trap_nailbomb',
     niche: 'Burst AoE on a pack. Loud.',
     desc: 'Pipe, roofing nails, a clothespin tripwire. It goes off once, and everyone on Ferry Road hears it.',
     recipe: { needs: 'workbench', cost: { scrap: 4, fuel: 2, parts: 1 }, work: 4 },
@@ -107,7 +107,7 @@ export const TRAPS: Record<string, TrapDef> = {
     counter: 'One jaw, one leg. A Ferryman pulls free in 4 s, not 6. Drags crawl over the pan.',
   },
   roofnails: {
-    id: 'roofnails', name: 'Roofing-nail spread', icon: 'icon_trap_nails',
+    id: 'roofnails', name: 'Roofing-nail spread', icon: 'icon_trap_nails', world: 'trap_roofnails',
     niche: 'Slows a lane and cripples legs: walkers become Drags.',
     desc: 'Two pounds of galvanized roofing nails, bent into jacks with the vise. Points up whichever way they land.',
     recipe: { needs: 'workbench', cost: { scrap: 3 }, work: 2 },
@@ -118,7 +118,7 @@ export const TRAPS: Record<string, TrapDef> = {
     counter: 'Boots go through (Deputies, Ferrymen). Drags only drag themselves across. Thirty footfalls and the nails are pressed flat.',
   },
   flare: {
-    id: 'flare', name: 'Tripwire flare', icon: 'icon_trap_flare',
+    id: 'flare', name: 'Tripwire flare', icon: 'icon_trap_flare', world: 'trap_flare',
     niche: 'Lights the road and burns off fog where they come.',
     desc: 'A road flare in a coffee can with a fishing-line pull. Red light for half a minute, and a shadow for every one of them.',
     recipe: { needs: 'still', cost: { fuel: 1, scrap: 1 }, work: 2, makes: 2 },
@@ -129,7 +129,7 @@ export const TRAPS: Record<string, TrapDef> = {
     counter: 'Light is not damage. On a clear moonlit night with floodlights up it is a wasted slot.',
   },
   oil: {
-    id: 'oil', name: 'Oil slick', icon: 'icon_trap_oil',
+    id: 'oil', name: 'Oil slick', icon: 'icon_trap_oil', world: 'trap_oil',
     niche: 'Slows a band of road; light it and it burns.',
     desc: 'Drained crankcase oil and still dregs, mopped across the asphalt. They slip. Then you throw the bottle.',
     recipe: { needs: 'still', cost: { fuel: 2 }, work: 1 },
@@ -162,7 +162,7 @@ export const TRAPS: Record<string, TrapDef> = {
     counter: 'The Turned balk and step into the next lane, which is the point. Ferrymen walk through and knock a drum over. Burns 150 s from dusk.',
   },
   tincan: {
-    id: 'tincan', name: 'Tin-can lure post', icon: 'icon_trap_tincan',
+    id: 'tincan', name: 'Tin-can lure post', icon: 'icon_trap_tincan', world: 'trap_tincan',
     niche: 'Pulls a crowd to one spot, on your key, for the combo.',
     desc: 'A fence post hung with tin cans and a cowbell, and a pull-cord back to the wall. They turn toward it like cattle at feeding.',
     recipe: { needs: 'workbench', cost: { scrap: 1, parts: 1 }, work: 1 },
@@ -174,7 +174,7 @@ export const TRAPS: Record<string, TrapDef> = {
     counter: 'Eight seconds, then they remember you. Ferrymen do not turn their heads. The noise brings stragglers.',
   },
   radio: {
-    id: 'radio', name: 'Radio lure', icon: 'icon_trap_radio',
+    id: 'radio', name: 'Radio lure', icon: 'icon_trap_radio', world: 'trap_radio',
     niche: 'A long, loud lure that drowns out a Crier\'s call.',
     desc: 'A Panasonic boombox on a car battery, playing WVSY\'s last tape: the hog report, then twenty minutes of polka. They stand and listen.',
     recipe: { needs: 'generator', cost: { parts: 3, scrap: 2 }, work: 4 },
@@ -186,7 +186,7 @@ export const TRAPS: Record<string, TrapDef> = {
     counter: 'While it plays, a Crier\'s summons walk to the radio, not the wall. Then something smashes it: half the time it does not come back.',
   },
   snare: {
-    id: 'snare', name: 'Clothesline snare', icon: 'icon_trap_snare',
+    id: 'snare', name: 'Clothesline snare', icon: 'icon_trap_snare', world: 'trap_snarepost',
     niche: 'Trips anything running: Deer and Bucks go down.',
     desc: 'Galvanized clothesline strung shin-high between two porch posts. The fast ones never see it.',
     recipe: { needs: 'workbench', cost: { cloth: 1, scrap: 2 }, work: 2 },
@@ -208,7 +208,7 @@ export const TRAPS: Record<string, TrapDef> = {
     counter: 'Four bodies fill it and the rest walk across them. Deer and Bucks jump it. A Ferryman climbs out.',
   },
   electric: {
-    id: 'electric', name: 'Electrified fence', icon: 'icon_trap_electric',
+    id: 'electric', name: 'Electrified fence', icon: 'icon_trap_electric', world: 'trap_fencepost',
     niche: 'All-night stuns at the kill zone. Needs the generator and fuel.',
     desc: 'Chain-link on fence posts, wired to the diesel through a cattle-fence charger from the farm store. Do not lean on it.',
     recipe: { needs: 'generator', cost: { scrap: 8, parts: 4 }, work: 6 },
@@ -220,7 +220,7 @@ export const TRAPS: Record<string, TrapDef> = {
     counter: 'A Pulper bursting on it shorts it for 15 s. Ferrymen are not stunned. Thirty shocks and the charger trips. 1 fuel a night.',
   },
   deadfall: {
-    id: 'deadfall', name: 'Car-door deadfall', icon: 'icon_trap_deadfall',
+    id: 'deadfall', name: 'Car-door deadfall', icon: 'icon_trap_deadfall', world: 'trap_door',
     niche: 'One crushing hit on whatever is climbing the wall.',
     desc: 'A Buick door and a cinder block on a rope over the barricade. Cut the rope. Reset it at dawn.',
     recipe: { needs: 'forge', cost: { scrap: 6, wood: 2 }, work: 3 },
@@ -243,7 +243,7 @@ export const TRAPS: Record<string, TrapDef> = {
     counter: 'They tear at it with their wall strength: a Ferryman is through in a second. Bucks jump it. The heap is a gift for a nail bomb.',
   },
   sludge: {
-    id: 'sludge', name: 'Pond-sludge decoy', icon: 'icon_trap_sludge',
+    id: 'sludge', name: 'Pond-sludge decoy', icon: 'icon_trap_sludge', world: 'trap_sludge',
     niche: 'The Quiet\'s jar: inside the smear, the Turned lose interest.',
     desc: 'Settling-pond sludge from Pond 2, smeared on the road the way the man from the Quiet showed you. It smells like bread gone off. They stop, and they listen to something.',
     recipe: { needs: 'still', cost: { food: 2, fuel: 1 }, work: 3 },
@@ -255,7 +255,7 @@ export const TRAPS: Record<string, TrapDef> = {
     counter: 'Forty seconds of Turned standing in it, then it is trodden thin. Criers inside cannot keen. The bell overrides it. The living do not care.',
   },
   pipemine: {
-    id: 'pipemine', name: 'Pipe mine', icon: 'icon_trap_pipemine',
+    id: 'pipemine', name: 'Pipe mine', icon: 'icon_trap_pipemine', world: 'trap_pipemine',
     niche: 'A directional cone of nails down the road. Clears a lane-front.',
     desc: 'A steel plate, a C4-shaped pack of black powder, and four hundred roofing nails in epoxy. FRONT TOWARD RIVER, in Marla\'s marker.',
     recipe: { needs: 'workbench', level: 2, cost: { scrap: 6, fuel: 3, parts: 2 }, work: 5 },
@@ -267,7 +267,7 @@ export const TRAPS: Record<string, TrapDef> = {
     counter: 'The nails go one way. Anything already past it, or low under the cone (Drags), is safe. Fire too early and the road is empty.',
   },
   glass: {
-    id: 'glass', name: 'Glass-shard strip', icon: 'icon_trap_glass',
+    id: 'glass', name: 'Glass-shard strip', icon: 'icon_trap_glass', world: 'trap_glass',
     niche: 'Cheap, quiet attrition. Wears out.',
     desc: 'Every bottle from the Legion hall, broken into a feed sack and raked across the shoulder. They walk barefoot now, most of them.',
     recipe: { needs: 'workbench', cost: { cloth: 1 }, work: 1, makes: 2 },

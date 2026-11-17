@@ -1257,7 +1257,11 @@ export class Expedition {
       c.save(); c.translate(x, d.y); c.rotate(d.rot); c.globalAlpha = 0.85; c.fillStyle = d.color; c.fillRect(-d.w / 2, -d.h / 2, d.w, d.h); c.restore();
     }
     // contact shadows: one path, one fill (spots, zombies, player, follower)
-    const SPR: Record<Spot['kind'], [string, number]> = { door: ['obj_door', 200], car: ['obj_car', 120], shed: ['obj_shed', 190], body: ['obj_body', 44], kin: ['obj_kin', 175], cache: ['obj_shed', 205], truck: ['obj_car', 140], drop: ['obj_body', 20] };
+    // the cache, the pickup and a dropped pack have their own sprites (tools/sprites-world.json); older stand-ins if missing
+    const SPR: Record<Spot['kind'], [string, number]> = {
+      door: ['obj_door', 200], car: ['obj_car', 120], shed: ['obj_shed', 190], body: ['obj_body', 44], kin: ['obj_kin', 175],
+      cache: img('obj_cache') ? ['obj_cache', 150] : ['obj_shed', 205], truck: img('obj_truck') ? ['obj_truck', 135] : ['obj_car', 140], drop: img('obj_duffel') ? ['obj_duffel', 30] : ['obj_body', 20],
+    };
     c.fillStyle = 'rgba(0,0,0,0.45)';
     c.beginPath();
     for (const sp of this.spots) {
@@ -1282,6 +1286,12 @@ export class Expedition {
       const x = sp.x - this.cam;
       if (x < -250 || x > W + 250) continue;
       const [id, h] = SPR[sp.kind];
+      if (sp.kind === 'drop' && img('obj_duffel')) {
+        const cv = bakeSpot('obj_duffel', h, false);
+        if (cv) c.drawImage(cv, Math.round(x - cv.width / 2), GROUND - h + 4);
+        if (Math.abs(sp.x - this.px) < 60) { c.font = '13px "Special Elite", monospace'; c.fillStyle = '#efe2c2'; c.textAlign = 'center'; c.fillText(`${keyCap('run.search')} pick up: ${(sp.items ?? []).map(itemLabel).join(', ')}`, x, GROUND - 40); c.textAlign = 'left'; }
+        continue;
+      }
       if (sp.kind === 'drop') {
         c.fillStyle = '#4a3a26';
         c.beginPath(); c.ellipse(x, GROUND - 10, 18, 12, 0, 0, 7); c.fill();
@@ -1306,9 +1316,18 @@ export class Expedition {
     this.zoneB.forEach((bx, i) => {
       const x = bx - this.cam;
       if (x < -200 || x > W + 200) return;
-      c.fillStyle = '#16130f';
-      c.fillRect(x - 4, GROUND - 230, 8, 232);
-      c.fillRect(x - 70, GROUND - 236, 140, 34);
+      // the rail crossing's crossbuck, then the four-way stop; the zone's name on a plate above
+      const sign = i === 0 ? 'obj_sign_rail' : 'obj_sign_stop';
+      const sv = bakeSpot(sign, 200, false);
+      if (sv) {
+        c.drawImage(sv, Math.round(x - sv.width / 2), GROUND - 196);
+        c.fillStyle = 'rgba(14,12,10,0.78)';
+        c.fillRect(x - 74, GROUND - 238, 148, 34);
+      } else {
+        c.fillStyle = '#16130f';
+        c.fillRect(x - 4, GROUND - 230, 8, 232);
+        c.fillRect(x - 70, GROUND - 236, 140, 34);
+      }
       c.font = '12px "Special Elite", monospace';
       c.fillStyle = '#d8c89a';
       c.textAlign = 'center';

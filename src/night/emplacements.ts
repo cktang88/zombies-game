@@ -15,10 +15,12 @@ import { fireProfile, type FireProfile } from '../data/weapons';
 import { EMPLACEMENTS, parseEmplacements, stringifyEmplacements, crewHandling, type EmplacementDef, type EmplacementItem, type Post } from '../data/emplacements';
 import { first, level, gainXp, byId } from '../sim/survivors';
 import { depthScale } from './render';
+import { drawProp, drawGunPart, drawGunBase, gunReach, has, propW } from './props';
 
 const WALL_X = 372;
 const ROOF_Y = 506; // the scaffold's deck
 const FIRESTEP_Y = 688; // the near defenders' row, behind the barricade
+const SCAFFOLD_DECK = 0.2; // emp_scaffold: the deck's height as a fraction from the sprite's top
 /** "the MG nest", "the swivel deer rifle" */
 const lc = (name: string) => name.replace(/^[A-Z](?=[a-z])/, (m) => m.toLowerCase());
 const PROFILE_GUN: Record<string, string> = { mgnest: 'lmg', swivel: 'hunting', flamer: 'flaregun', nailturret: 'nailer' };
@@ -313,7 +315,7 @@ export class Emplacements implements BattleHook {
   }
 
   muzzle(m: Mount) {
-    const len = m.def.id === 'swivel' ? 46 : m.def.id === 'flamer' ? 38 : m.def.id === 'nailturret' ? 34 : 50;
+    const len = gunReach(m.def.id, 1, m.def.id === 'swivel' ? 46 : m.def.id === 'flamer' ? 38 : m.def.id === 'nailturret' ? 34 : 50);
     return { x: m.px + Math.cos(m.ang) * len, y: m.py + Math.sin(m.ang) * len };
   }
 
@@ -425,6 +427,13 @@ export class Emplacements implements BattleHook {
 
   drawScaffold(c: CanvasRenderingContext2D, roofs: Mount[]) {
     const x0 = Math.min(...roofs.map((m) => m.x)) - 40, x1 = Math.max(...roofs.map((m) => m.x)) + 50;
+    // the generated scaffold: its deck (the sandbag row's foot) at ROOF_Y, its legs on the ground
+    if (has('emp_scaffold')) {
+      const h = (704 - ROOF_Y) / (1 - SCAFFOLD_DECK);
+      const w = Math.max(x1 - x0 + 30, propW('emp_scaffold', h) * 0.8);
+      drawProp(c, 'emp_scaffold', (x0 + x1) / 2 + 5, 704, h, undefined, { w: Math.min(w, propW('emp_scaffold', h) * 1.6) });
+      return;
+    }
     c.fillStyle = '#16130f';
     for (let x = x0; x <= x1; x += Math.max(30, (x1 - x0) / 3)) c.fillRect(x, ROOF_Y, 5, 704 - ROOF_Y);
     c.strokeStyle = '#1d1913'; c.lineWidth = 3;
@@ -436,6 +445,7 @@ export class Emplacements implements BattleHook {
   }
 
   drawGun(c: CanvasRenderingContext2D, m: Mount) {
+    if (this.drawGunSprite(c, m)) return;
     c.save();
     if (!m.def.crew) {
       // the nail turret, as it always looked
@@ -498,6 +508,43 @@ export class Emplacements implements BattleHook {
       c.beginPath(); c.moveTo(38, -3); c.lineTo(38 + r, -r * 0.16); c.lineTo(38 + r, r * 0.16); c.lineTo(38, 3); c.fill();
     }
     c.restore();
+  }
+
+  /** The generated base + rotating gun; false (draw the old shapes) when either is missing. */
+  drawGunSprite(c: CanvasRenderingContext2D, m: Mount): boolean {
+    const key = m.def.id;
+    if (!has(`emp_${key === 'mgnest' ? 'mg' : key === 'swivel' ? 'rifle' : key === 'flamer' ? 'flamer' : 'nail'}_gun`)) return false;
+    const footY = !m.def.crew ? 704 : m.post === 'roof' ? ROOF_Y - 2 : 600;
+    if (m.post === 'firestep' && m.def.crew && has('emp_firestep')) drawProp(c, 'emp_firestep', m.px - 2, footY + 6, 22, undefined, { w: 54 });
+    if (!drawGunBase(c, key, m.px, m.py, footY)) return false;
+    // condition: a worn gun reads darker and flatter (baked in steps; no per-frame filter)
+    const worn = Math.round((m.item ? 1 - m.item.cond : 0) * 4) / 4;
+    const look = { b: 1 - worn * 0.3, s: 1 - worn * 0.45, fog: 0, outline: 0 };
+    if (!drawGunPart(c, key, m.px, m.py, m.ang, 1, look)) return false;
+    const reach = gunReach(key, 1, 50);
+    c.save();
+    c.translate(m.px, m.py);
+    c.rotate(m.ang);
+    c.globalCompositeOperation = 'lighter';
+    // the barrel glows as it heats; a swap shows it cherry red
+    const hot = m.swap > 0 ? 0.8 : m.heat;
+    if (hot > 0.25) {
+      c.fillStyle = `rgba(255,${Math.round(110 - hot * 60)},40,${(hot - 0.25) * 0.75})`;
+      c.fillRect(reach * 0.45, -2.5, reach * 0.55, 5);
+    }
+    if (m.flash > 0) {
+      c.fillStyle = 'rgba(255,230,160,0.95)';
+      c.beginPath(); c.moveTo(reach, -2); c.lineTo(reach + 16, -6); c.lineTo(reach + 24, 0); c.lineTo(reach + 16, 6); c.lineTo(reach, 2); c.fill();
+    }
+    if (m.firing > 0) {
+      const r = m.def.cone?.reach ?? 200;
+      const g = c.createLinearGradient(reach, 0, reach + r, 0);
+      g.addColorStop(0, 'rgba(255,230,160,0.9)'); g.addColorStop(0.4, 'rgba(255,140,40,0.55)'); g.addColorStop(1, 'rgba(255,80,20,0)');
+      c.fillStyle = g;
+      c.beginPath(); c.moveTo(reach, -3); c.lineTo(reach + r, -r * 0.16); c.lineTo(reach + r, r * 0.16); c.lineTo(reach, 3); c.fill();
+    }
+    c.restore();
+    return true;
   }
 
   drawOver(c: CanvasRenderingContext2D) {

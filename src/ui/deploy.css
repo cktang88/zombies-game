@@ -31,6 +31,8 @@
 .dep-tok { position: absolute; display: flex; align-items: center; justify-content: center; cursor: grab; touch-action: none; z-index: 2; }
 .dep-tok img { position: relative; max-width: 44px; max-height: 40px; object-fit: contain; pointer-events: none; filter: drop-shadow(0 2px 2px #000); }
 .dep-tok.all img { max-height: 48px; }
+.dep-tok img.world { max-width: 60px; max-height: 44px; filter: drop-shadow(0 1px 1px #000) brightness(1.08); }
+.dep-tok.all img.world { max-height: 52px; }
 .dep-band { position: absolute; top: 3px; bottom: 3px; left: 50%; transform: translateX(-50%); pointer-events: none; }
 .dep-band.ground { background: rgba(60, 50, 30, .55); border: 1px solid rgba(184, 134, 47, .35); }
 .dep-band.object { background: rgba(120, 110, 90, .18); border: 1px solid rgba(230, 220, 198, .25); }

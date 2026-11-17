@@ -23,6 +23,7 @@ import { installModules } from './modules';
 import { meleeGuard } from './melee';
 // ---- end night modules ----
 import { depthScale, bakeSprite, bakeComposite, bakeEdge, bakeLayer, bakeGround, fgStrip, shadowEllipse, type Look } from './render';
+import { drawProp, drawGunBase, drawGunPart, has, propW } from './props';
 import { BattleActors } from './actors'; // rigged bodies (src/anim): drawing, deaths, corpses
 
 export const W = 1280, H = 720;
@@ -2938,7 +2939,8 @@ export class Battle {
     if (G.fort.wire > 0) this.drawWirePosts(c, false);
     if (this.plan.special === 'tunnel') this.drawDrain(c);
     for (const h of this.hooks) h.drawGround?.(c); // night modules
-    if (this.traps > 0) {
+    if (this.traps > 0 && drawProp(c, 'trap_nailbomb', this.trapX, LANES[2] + 3, 18 * depthScale(LANES[2]), LOOK[2])) { /* sprite */ }
+    else if (this.traps > 0) {
       c.fillStyle = '#2b2a25';
       c.beginPath(); c.ellipse(this.trapX, LANES[2], 16, 4, 0, 0, Math.PI * 2); c.fill();
       c.fillStyle = '#a33';
@@ -3114,6 +3116,12 @@ export class Battle {
   // a heap of whatever was in the road: a door, tires, a shopping cart on its side
   drawCover(c: CanvasRenderingContext2D, cv: { x: number; y: number; w: number; h: number; seed: number }) {
     const r = (k: number) => (Math.sin(cv.seed * 12.9898 + k * 78.233) * 43758.5453) % 1;
+    const junk = Math.abs(r(3)) < 0.5 ? 'fort_junk1' : 'fort_junk2';
+    if (has(junk)) {
+      // the heap's generated sprite, stretched to the cover's footprint, graded for its lane
+      const lane = nearestLane(cv.y - 3);
+      if (drawProp(c, junk, cv.x, cv.y + 2, cv.h * 1.15, LOOK[lane], { w: Math.max(cv.w * 1.25, propW(junk, cv.h * 1.15) * 0.85), flip: r(5) < 0 })) return;
+    }
     const x0 = cv.x - cv.w / 2, x1 = cv.x + cv.w / 2, top = cv.y - cv.h;
     c.fillStyle = '#1a1816';
     c.beginPath();
@@ -3159,6 +3167,12 @@ export class Battle {
   drawDrain(c: CanvasRenderingContext2D) {
     const open = this.drainOpen > 0;
     const y = 676;
+    if (has('fort_drain') && has('fort_grate')) {
+      // the hole in the road; its grate over it, or shoved aside when something comes up
+      drawProp(c, 'fort_drain', DRAIN_X, y + 9, 22, LOOK[2], { w: 86 });
+      drawProp(c, 'fort_grate', open ? DRAIN_X + 40 : DRAIN_X, y + (open ? 9 : 6), open ? 14 : 15, LOOK[2], { w: 76, rot: open ? 0.08 : 0 });
+      return;
+    }
     c.fillStyle = '#0b0b0c';
     c.beginPath();
     c.ellipse(DRAIN_X, y, 40, 8, 0, 0, Math.PI * 2);
@@ -3177,6 +3191,7 @@ export class Battle {
 
   // wire belt: posts at both ends of the band, a strand at knee height through each lane
   drawWirePosts(c: CanvasRenderingContext2D, near: boolean) {
+    if (has('fort_wire')) return; // the generated belt carries its own pickets (drawWireLane)
     c.fillStyle = near ? '#1d1a17' : '#2b2622';
     const y = near ? GROUND_BOT : GROUND_TOP + 4, h = near ? 62 : 44;
     for (let k = 0; k < Math.min(3, G.fort.wire); k++) {
@@ -3188,6 +3203,14 @@ export class Battle {
 
   drawWireLane(c: CanvasRenderingContext2D, lane: number) {
     const s = depthScale(LANES[lane]);
+    if (has('fort_wire')) {
+      // one belt segment per lane per section, staggered a little so the rows don't stack
+      for (let k = 0; k < Math.min(3, G.fort.wire); k++) {
+        const x0 = WALL_X + 60 + k * 90 + (LANES[3] - LANES[lane]) * 0.12;
+        drawProp(c, 'fort_wire', x0 + 40, LANES[lane] + 2, 44 * s, LOOK[lane], { w: 86, flip: (lane + k) % 2 === 1 });
+      }
+      return;
+    }
     c.strokeStyle = `rgba(${58 + lane * 8},${55 + lane * 8},${52 + lane * 8},0.85)`;
     c.lineWidth = lane >= 2 ? 1.4 : 1;
     for (let k = 0; k < Math.min(3, G.fort.wire); k++) {
@@ -3223,7 +3246,13 @@ export class Battle {
         c.drawImage(im, WALL_X - w + 10, GROUND_BOT - h, w, h);
       }
       // spikes, a row per lane, on each lane's face
-      for (let i = 0; i < Math.min(5, G.fort.spikes) * 3; i++) {
+      if (G.fort.spikes > 0 && has('fort_spikes')) {
+        const rows = Math.min(5, G.fort.spikes);
+        for (let i = 0; i < rows * 3; i++) {
+          const lane = i % 4, row = Math.floor(i / 4);
+          drawProp(c, 'fort_spikes', wallX(lane) + 4, LANES[lane] - 30 - row * 10, 15, LOOK[lane], { ax: 0, w: 40, rot: -0.12 });
+        }
+      } else for (let i = 0; i < Math.min(5, G.fort.spikes) * 3; i++) {
         c.strokeStyle = '#4a3f35';
         c.lineWidth = 3;
         const lane = i % 4;
@@ -3240,6 +3269,7 @@ export class Battle {
   drawPoles(c: CanvasRenderingContext2D) {
     for (let i = 0; i < Math.min(3, G.fort.lights); i++) {
       const x = 260 - i * 90;
+      if (drawProp(c, 'fort_light', x + 2, 652, 280, LOOK[2])) continue;
       c.fillStyle = '#1a1a1a';
       c.fillRect(x, 380, 4, 270);
       c.fillStyle = '#e8e2c0';
@@ -3248,6 +3278,7 @@ export class Battle {
   }
 
   drawTurret(c: CanvasRenderingContext2D, tu: { x: number; y: number; cd: number; flash: number; ang: number }) {
+    if (drawGunBase(c, 'nailturret', tu.x, tu.y, GROUND_BOT) && drawGunPart(c, 'nailturret', tu.x, tu.y, tu.ang)) return;
     c.save();
     c.fillStyle = '#2a2622';
     c.fillRect(tu.x - 4, tu.y, 8, GROUND_BOT - tu.y);
@@ -3764,6 +3795,14 @@ export class Battle {
     const sc = depthScale(LANES[l]);
     const len = (40 + Math.min(lim, m) * 4) * sc;
     const ht = Math.min(1.15, m / lim) * 70 * sc;
+    const f = Math.min(1, m / lim);
+    const pid = f < 0.35 ? 'fort_pile_s' : f < 0.7 ? 'fort_pile_m' : 'fort_pile_l';
+    if (has(pid)) {
+      // the heap's sprite, its tall end against the wall, as long and as high as the mass
+      drawProp(c, pid, x0 - 4, y + 2, Math.max(16 * sc, ht * 1.1), LOOK[l], { ax: 0, w: len * 1.15 });
+      this.drawPileGauge(c, m, lim, x0, y, ht);
+      return;
+    }
     c.save();
     c.fillStyle = '#16120f';
     c.beginPath();
@@ -3784,16 +3823,19 @@ export class Battle {
       const px = x0 + t * len * 0.9, py = y - ht * Math.pow(1 - t, 0.7) * 0.7;
       c.beginPath(); c.moveTo(px, py); c.lineTo(px + 12 * sc * (i % 2 ? 1 : -0.6), py - 7 * sc); c.stroke();
     }
-    // the gauge, once it starts to matter
-    if (m >= lim * 0.4) {
-      const f = Math.min(1, m / lim);
-      const gx = x0 + 6, gy = y - ht - 12;
-      c.fillStyle = 'rgba(10,9,8,0.6)';
-      c.fillRect(gx, gy, 34, 5);
-      c.fillStyle = f >= 1 ? '#c04030' : f >= 0.8 ? '#c07030' : '#8f7a55';
-      c.fillRect(gx + 1, gy + 1, 32 * f, 3);
-    }
     c.restore();
+    this.drawPileGauge(c, m, lim, x0, y, ht);
+  }
+
+  /** The pile's gauge (UI), once it starts to matter. */
+  drawPileGauge(c: CanvasRenderingContext2D, m: number, lim: number, x0: number, y: number, ht: number) {
+    if (m < lim * 0.4) return;
+    const f = Math.min(1, m / lim);
+    const gx = x0 + 6, gy = y - ht - 12;
+    c.fillStyle = 'rgba(10,9,8,0.6)';
+    c.fillRect(gx, gy, 34, 5);
+    c.fillStyle = f >= 1 ? '#c04030' : f >= 0.8 ? '#c07030' : '#8f7a55';
+    c.fillRect(gx + 1, gy + 1, 32 * f, 3);
   }
 
   drawGlobs(c: CanvasRenderingContext2D) {
