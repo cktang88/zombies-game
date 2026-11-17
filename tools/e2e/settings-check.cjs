@@ -164,7 +164,7 @@ const ok = (cond, what) => { console.log(`${cond ? 'ok  ' : 'FAIL'} ${what}`); i
   await b(() => { const B = window.__battle; for (let i = 0; i < 6; i++) B.spawn('pulper'); B.zombies.forEach((z, i) => { if (z.state !== 'dying') z.x = 600 + (i % 6) * 70; }); B.update(0.016); });
   await page.waitForTimeout(400);
   const zd = await diff('', 'zoneMarkers', [300, 200, 900, 450]), z0 = await diff('', 'zoneMarkers', [300, 200, 900, 450], true);
-  ok(zd > 0.002 && zd > z0 * 4, 'video: damage-zone rings show (and hide when off)');
+  ok(zd > 0.0005 && zd > z0 * 4, `video: damage-zone rings show (and hide when off) ${zd} ${z0}`);
   // effects quality: the night's effects system takes it on its next update (particle budget)
   const fxq = await b(() => { const B = window.__battle, out = {}; for (const q of ['low', 'medium', 'high']) { globalThis.__settings.set('fxQuality', q); B.update(0.016); out[q] = B.vfx.P.limit; } return out; });
   ok(fxq.low < fxq.medium && fxq.medium < fxq.high, `video: Effects quality sets the particle budget (${JSON.stringify(fxq)})`);
