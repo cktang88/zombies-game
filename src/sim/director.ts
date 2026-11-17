@@ -33,8 +33,8 @@ export function campWealth() {
 
 /** Balance knobs (docs/balance.md §9–10): days for the early ramp to reach full strength, and how long each surge takes to arrive (share of the night).
  *  late: from day 13 (eased in from day 9) the nights are × this (tide nights × lateTide: they stay the big nights); crossing: the Crossing's × on threat.
- *  tideMid: the tide's middle wave × this. dark / darkBig: share of a later surge (ordinary nights from darkDay / tide, horde, Crossing) that forms up close in the dark. */
-export const DIRECTOR_TUNE = { rampDays: 9, span: 0.08, mul: 1, early: 0.6, at: [0.0, 0.42, 0.78], share: [0.25, 0.4, 0.35], tideMid: 1.45, dark: 0.25, darkDay: 6, darkBig: 0.6, late: 0.7, lateTide: 0.85, crossing: 2.2 };
+ *  tideMid: the tide's middle wave × this, arriving as tideSub sub-waves tideGap of the night apart. dark / darkBig: share of a later surge (ordinary nights from darkDay / tide, horde, Crossing) that forms up close in the dark. */
+export const DIRECTOR_TUNE = { rampDays: 9, span: 0.08, mul: 1, early: 0.6, at: [0.0, 0.42, 0.78], share: [0.25, 0.4, 0.35], tideMid: 1.45, tideSub: 1, tideGap: 0.1, dark: 0.25, darkDay: 6, darkBig: 0.6, late: 0.7, lateTide: 0.85, crossing: 2.2 };
 (globalThis as unknown as { __directorTune: typeof DIRECTOR_TUNE }).__directorTune = DIRECTOR_TUNE; // debug handle (balance harness)
 export function threatPoints(day = G.day) {
   const p = persona();
@@ -98,29 +98,33 @@ export function planNight(): NightPlan {
   const surgeShare = DIRECTOR_TUNE.share;
   const big = special === 'tide' || special === 'horde' || special === 'crossing';
   for (let s = 0; s < 3; s++) {
-    let sb = pts * surgeShare[s] * (special === 'tide' && s === 1 ? DIRECTOR_TUNE.tideMid : 1);
     const n0 = spawns.length;
-    const t0 = duration * surgeAt[s];
-    const span = duration * DIRECTOR_TUNE.span;
-    // part of the budget goes on combination packs
-    const spent = placePacks(spawns, day, sb, t0, span, special);
-    sb -= spent;
-    budget -= spent;
-    let guard = 0;
-    while (sb > 0.5 && guard++ < 400) {
-      const z = R.weighted(types, (t) => {
-        let w = t.id === 'sleeper' ? 6 : t.id === 'deer' ? 2.2 : t.id === 'drag' ? 1.2 : t.id === 'leaper' || t.id === 'spitter' ? 0.6 : 1;
-        if (special === 'criers' && t.id === 'crier') w *= 4;
-        if ((special === 'tide' || special === 'horde') && t.id === 'deer') w *= 2;
-        if (special === 'horde' && t.id === 'sleeper') w *= 1.5;
-        if (t.cost > sb + 1) w = 0;
-        if (t.cost > pts * 0.25) w *= 0.2;
-        return w;
-      });
-      if (!z) break;
-      sb -= z.cost;
-      budget -= z.cost;
-      spawns.push({ type: z.id, t: t0 + R.range(0, span) });
+    // the tide's middle wave comes as tideSub sub-waves, tideGap of the night apart (a trickle, not one wall of bodies)
+    const subs = special === 'tide' && s === 1 ? Math.max(1, DIRECTOR_TUNE.tideSub) : 1;
+    for (let k = 0; k < subs; k++) {
+      let sb = (pts * surgeShare[s] * (special === 'tide' && s === 1 ? DIRECTOR_TUNE.tideMid : 1)) / subs;
+      const t0 = duration * (surgeAt[s] + k * DIRECTOR_TUNE.tideGap);
+      const span = duration * DIRECTOR_TUNE.span;
+      // part of the budget goes on combination packs
+      const spent = placePacks(spawns, day, sb, t0, span, special);
+      sb -= spent;
+      budget -= spent;
+      let guard = 0;
+      while (sb > 0.5 && guard++ < 400) {
+        const z = R.weighted(types, (t) => {
+          let w = t.id === 'sleeper' ? 6 : t.id === 'deer' ? 2.2 : t.id === 'drag' ? 1.2 : t.id === 'leaper' || t.id === 'spitter' ? 0.6 : 1;
+          if (special === 'criers' && t.id === 'crier') w *= 4;
+          if ((special === 'tide' || special === 'horde') && t.id === 'deer') w *= 2;
+          if (special === 'horde' && t.id === 'sleeper') w *= 1.5;
+          if (t.cost > sb + 1) w = 0;
+          if (t.cost > pts * 0.25) w *= 0.2;
+          return w;
+        });
+        if (!z) break;
+        sb -= z.cost;
+        budget -= z.cost;
+        spawns.push({ type: z.id, t: t0 + R.range(0, span) });
+      }
     }
     // the later surges of a big night (and, from darkDay, part of any) form up close, inside the dark
     const dk = s === 0 ? 0 : big ? DIRECTOR_TUNE.darkBig : day >= DIRECTOR_TUNE.darkDay ? DIRECTOR_TUNE.dark : 0;
