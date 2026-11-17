@@ -12,7 +12,7 @@
 //   5 solve        analytic 2-bone IK for arms (elbow down) and legs (knee forward)
 // Death hands the pose to a Verlet ragdoll (ragdoll.ts) seeded with the pose's velocities
 // plus the killing hit's impulse; once it settles the caller bakes it into the ground.
-import { getGun, getRig, loadGun, loadRig, type GunAsset, type PartMeta, type RigAsset } from './assets';
+import { bakedIcon, getGun, getRig, loadGun, loadRig, type BakedIcon, type GunAsset, type GunLook, type PartMeta, type RigAsset } from './assets';
 import { CLIPS, RELOADS, type Clip, type Key, type TKey } from './clips';
 import { GAITS, applyGait, jitterGait, type Gait } from './gait';
 import { clamp, ease, ik2, lerp, lerpAngle, rng, wrapAngle } from './math';
@@ -127,6 +127,8 @@ export class Rig {
   hideHead = false;
   /** per-look atlases set by the game each frame (lane grade, variant tint, light): null = plain */
   skin: { atlas: CanvasImageSource; dark: CanvasImageSource; grow?: number } | null = null;
+  /** lane grade + ink width for the held weapon (set with skin): the gun is baked to match the body */
+  gunLook: GunLook | null = null;
   /** ink outline stamped under the body: a dilated silhouette atlas grown by `grow` atlas px */
   outline: { src: CanvasImageSource; grow: number } | null = null;
   /** rim band: a silhouette atlas offset by (dx, dy) display px, drawn between outline and body */
@@ -867,18 +869,18 @@ export class Rig {
 
   private drawGun(ctx: CanvasRenderingContext2D) {
     const g = this.gun!, a = this.anchors!;
-    const img = this.magState === 'gun' ? g.full : g.img;
+    const bk = this.bakeGun(this.magState === 'gun' ? 'full' : 'img', g.w, g.h, this.gk);
     if (a.reload === 'break' && this.ch.cyl > 0.01 && a.rack) {
       // break action: barrels hinge down about the hinge pin (the rack anchor)
       const hx = a.rack[0];
       this.setGunXf(ctx, this.gx, this.gy, this.ga, this.gk, a.flip);
-      ctx.drawImage(img, 0, 0, hx, g.h, -a.grip[0], -a.grip[1], hx, g.h);
+      blitIcon(ctx, bk, g.w, 0, hx, -a.grip[0], -a.grip[1]);
       const [px, py] = this.gunPt([(a.rack[0] - a.grip[0]) * this.gk, (a.rack[1] - a.grip[1]) * this.gk]);
       this.setGunXf(ctx, px, py, this.ga + 0.42 * this.ch.cyl, this.gk, a.flip);
-      ctx.drawImage(img, hx, 0, g.w - hx, g.h, 0, -a.rack[1], g.w - hx, g.h);
+      blitIcon(ctx, bk, g.w, hx, g.w, -hx, -a.rack[1]);
     } else {
       this.setGunXf(ctx, this.gx, this.gy, this.ga, this.gk, a.flip);
-      ctx.drawImage(img, -a.grip[0], -a.grip[1]);
+      blitIcon(ctx, bk, g.w, 0, g.w, -a.grip[0], -a.grip[1]);
     }
     if (a.reload === 'revolver' && this.ch.cyl > 0.01 && a.port) {
       // swung-out cylinder
@@ -897,6 +899,19 @@ export class Rig {
       ctx.fillStyle = 'rgba(255,250,220,0.9)'; ctx.beginPath(); ctx.arc(2, 0, 2.6, 0, Math.PI * 2); ctx.fill();
     }
   }
+  /**
+   * The held weapon's icon baked at the size it is drawn (device px per icon px), graded with
+   * the body's lane look and ringed with the body's ink line (assets.ts bakedIcon).
+   */
+  private bakeGun(which: 'full' | 'img' | 'mag', w: number, h: number, k: number): BakedIcon {
+    const g = this.gun!, m = this.cam;
+    const cs = m ? Math.hypot(m.a ?? 1, m.b ?? 0) : 1;
+    const src = which === 'full' ? g.full : which === 'img' ? g.img : g.mag!;
+    // the body's ink: look.ink display px (the rig's atlas outline is grow atlas px = ~that)
+    const inkD = this.gunLook ? this.gunLook.ink : this.skin?.grow ? this.skin.grow * this.ds : 1;
+    return bakedIcon(`${this.weaponId}|${which}`, src, w, h, this.gunLook, this.ds * k * cs, Math.max(0.75, inkD * cs * 0.85));
+  }
+
   private drawSlung(ctx: CanvasRenderingContext2D) {
     const g = this.gun!, a = this.anchors!;
     const T = this.ja[TORSO];
@@ -904,7 +919,7 @@ export class Rig {
     const x = this.jx[TORSO] + Math.cos(T) * this.geo!.torsoLen * 0.55 - Math.sin(T) * -10;
     const y = this.jy[TORSO] + Math.sin(T) * this.geo!.torsoLen * 0.55 + Math.cos(T) * -10;
     this.setGunXf(ctx, x, y, T + Math.PI * 0.62, k, a.flip);
-    ctx.drawImage(g.full, -g.w / 2, -a.grip[1]);
+    blitIcon(ctx, this.bakeGun('full', g.w, g.h, k), g.w, 0, g.w, -g.w / 2, -a.grip[1]);
   }
   private drawString(ctx: CanvasRenderingContext2D) {
     const g = this.gun!, a = this.anchors!;
@@ -923,7 +938,7 @@ export class Rig {
   private drawMagInHand(ctx: CanvasRenderingContext2D) {
     const g = this.gun!, a = this.anchors!;
     this.setGunXf(ctx, this.palmNX, this.palmNY, this.rhoN, this.gk, a.flip);
-    ctx.drawImage(g.mag!, -a.mag![2] / 2, -4);
+    blitIcon(ctx, this.bakeGun('mag', g.mag!.width, g.mag!.height, this.gk), g.mag!.width, 0, g.mag!.width, -a.mag![2] / 2, -4);
   }
   private drawProp(ctx: CanvasRenderingContext2D, kind: string, x: number, y: number, rho: number) {
     this.setGunXf(ctx, x, y, rho - Math.PI / 2, 1);
@@ -960,6 +975,17 @@ export class Rig {
     ctx.drawImage(im, -ww / 2, -hh, ww, hh);
     this.resetXf(ctx);
   }
+}
+
+/**
+ * Draw icon columns [x0, x1) of a baked icon in icon space (the current transform maps icon px),
+ * with icon point (0, 0) at (ox, oy). The ink ring past the icon's edges comes along.
+ */
+function blitIcon(ctx: CanvasRenderingContext2D, b: BakedIcon, iconW: number, x0: number, x1: number, ox: number, oy: number) {
+  const { c, k, pad } = b;
+  const s0 = x0 <= 0 ? 0 : Math.round(x0 * k + pad), s1 = x1 >= iconW ? c.width : Math.round(x1 * k + pad);
+  if (s1 <= s0) return;
+  ctx.drawImage(c, s0, 0, s1 - s0, c.height, (s0 - pad) / k + ox, -pad / k + oy, (s1 - s0) / k, c.height / k);
 }
 
 setTemplateFactory((spriteId, style, gait) => new Rig('turned', spriteId, { style, gait, jitter: false, seed: 1 }));

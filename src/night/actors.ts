@@ -178,6 +178,8 @@ function applyLook(rig: Rig, L: LookSpec, scale: number, facing: number) {
   // the ink outline lives in the atlas copy (a dilated silhouette under every part): no extra pass
   const grow = L.look.outline > 0 ? Math.min(6, Math.max(1, Math.round(L.look.outline / Math.max(0.2, scale)))) : 0;
   rig.skin = { atlas: gradedAtlas(a, key, filter, tints, false, grow), dark: gradedAtlas(a, key, filter, tints, true, grow), grow };
+  // the held gun gets the same grade and ink (baked once per look and size: anim/assets bakedIcon)
+  if (rig.weaponId) rig.gunLook = { key, filter, tints, ink: L.look.outline > 0 ? L.look.outline : 1 };
   rig.outline = null;
   // rim: world-space offset (the rig flips its own offsets by facing); the faint cool moon rim of
   // the far, unlit lanes is left out on full rigs (a whole extra pass for a 15% band)
