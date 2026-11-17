@@ -25,6 +25,7 @@ import { meleeGuard } from './melee';
 // ---- end night modules ----
 import { depthScale, bakeSprite, bakeComposite, bakeEdge, bakeLayer, bakeGround, fgStrip, shadowEllipse, type Look } from './render';
 import { drawProp, drawGunBase, drawGunPart, has, propW } from './props';
+import { QuadRig } from '../anim'; // the dog's quadruped rig
 import { BattleActors } from './actors'; // rigged bodies (src/anim): drawing, deaths, corpses
 import { react, slideStep, classicPose, IMPACT, type Reaction } from './impact'; // flinch / stagger / stumble / knockdown
 
@@ -294,7 +295,7 @@ export class Battle {
   turrets: { x: number; y: number; cd: number; flash: number; ang: number }[] = [];
   surge = 0; // the bell: the Turned move faster while it rings
   boss?: Zombie;
-  dog?: { x: number; y: number; barkT: number; cd: number; name: string };
+  dog?: { x: number; y: number; barkT: number; cd: number; name: string; rig?: QuadRig };
   sharp = 0; // the dog's warning: guards aim better for a moment
   drainOpen = 0;
   covers: { x: number; y: number; w: number; h: number; seed: number }[] = [];
@@ -410,7 +411,7 @@ export class Battle {
     this.setupGuards();
     // last night's bodies, if nobody cleared them (G.flags.pileCarry: JSON number[4])
     try { const pc = G.flags.pileCarry ? JSON.parse(G.flags.pileCarry as string) as number[] : null; if (Array.isArray(pc)) this.piles = [0, 1, 2, 3].map((i) => Math.max(0, +pc[i] || 0)); } catch { /* none */ }
-    if (G.flags.dog) this.dog = { x: 172, y: 699, barkT: 0, cd: 0, name: typeof G.flags.dog === 'string' ? G.flags.dog : 'The dog' };
+    if (G.flags.dog) this.dog = { x: 172, y: 699, barkT: 0, cd: 0, name: typeof G.flags.dog === 'string' ? G.flags.dog : 'The dog', rig: new QuadRig('dog') };
     this.hooks = installModules(this); // night modules (the nail turrets moved to night/emplacements.ts)
     this.actors = new BattleActors(this);
     this.hooks.push(this.actors);
@@ -2638,6 +2639,7 @@ export class Battle {
     if (!d || d.cd > 0 || this.intro > 2) return;
     d.cd = 9;
     d.barkT = 1.6;
+    d.rig?.play('bark');
     this.sharp = 5;
     this.text(d.x + 10, d.y - 70, 'barking', '#d9c9a0', 12);
     if (what === 'the drain') this.say(`${d.name} is going mad at the drain.`, 3);
@@ -2648,6 +2650,8 @@ export class Battle {
     const d = this.dog!;
     d.cd -= dt;
     d.barkT = Math.max(0, d.barkT - dt);
+    d.rig?.update(dt);
+    if (d.rig && d.barkT > 0.3 && !d.rig.action) d.rig.play('bark');
     // one word at a time, not a pile of them
     if (d.barkT > 0 && d.barkT < 1.1 && !this.texts.some((t) => t.x === d.x + 18)) this.text(d.x + 18, d.y - 64, R.pick(['bark', 'growl']), '#bfb39a', 10);
   }
@@ -3190,6 +3194,7 @@ export class Battle {
     const im = img('dog');
     if (!im) return;
     const h = 62 * depthScale(d.y);
+    if (d.rig?.ready) { d.rig.draw(c, d.x, d.y, h / 120); return; }
     const w = (im.width / im.height) * h;
     const hop = d.barkT > 0 ? -Math.abs(Math.sin(this.t * 14)) * 4 : Math.sin(this.t * 2) * 0.6;
     const bk = bakeSprite('dog', Math.round(h), LOOK[3], 0, { pad: PAD });
