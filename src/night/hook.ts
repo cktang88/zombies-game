@@ -1,9 +1,10 @@
 // The battle's module contract. Night modules (traps.ts, melee.ts, emplacements.ts) plug into
 // Battle through these callbacks instead of growing battle.ts. All optional.
 //
-// NOTE (merge): combat A is adding an equivalent `BattleHook` to battle.ts. This local copy
-// mirrors it; once that lands, re-export theirs from here (or rename) and keep the extra
-// members below (`sorted`, `blockFire`) if their interface lacks them.
+// This is the single hook interface (battle.ts imports it). Zombie states the modules can rely on:
+// 'climb' (coming up the corpse pile at the wall) and 'leap' (a Buck, def id 'leaper', in the air).
+// Battle helpers for modules: laneY(i), LANES, wallX(), nearestLane(), damage(z, dmg, head, knock, g,
+// pellet, px, py, isPlayer, fx?, zone?, weak?), kill(), stagger(z, s), cripple(z, isPlayer), piles[lane].
 import type { Battle, NightResult } from './battle';
 
 export type Zed = Battle['zombies'][number];

@@ -14,6 +14,11 @@ import {
   BLOOM_CAP, type FireMode, type Malfunction,
 } from './gunplay';
 import { intelTier } from '../sim/director';
+// ---- night modules (traps / melee / emplacements): hook plumbing, see night/hook.ts ----
+import type { BattleHook } from './hook';
+import { installModules } from './modules';
+import { meleeGuard } from './melee';
+// ---- end night modules ----
 import { depthScale, bakeSprite, bakeComposite, bakeEdge, bakeLayer, bakeGround, fgStrip, shadowEllipse, type Look } from './render';
 
 export const W = 1280, H = 720;
@@ -60,7 +65,7 @@ export interface Zombie {
   y: number;
   hp: number;
   maxHp: number;
-  state: 'walk' | 'wall' | 'over' | 'maul' | 'dying' | 'cover' | 'flee';
+  state: 'walk' | 'wall' | 'over' | 'maul' | 'dying' | 'cover' | 'flee' | 'climb' | 'leap'; // climb: up the corpse pile; leap: a Buck in the air
   phase: number;
   flash: number;
   slow: number;
@@ -137,6 +142,7 @@ export interface Guard {
   sc: number; // depth scale of their row
   burstLane: number; // guards: the lane their burst is locked to
   burstX: number;
+  crew?: boolean; // night modules: manning an emplacement (night/emplacements.ts)
   post: Post;
   order: Order;
   blind: number; // bile in the eyes: aim worse for a few seconds
@@ -190,25 +196,6 @@ function bakeBattleBg(special: string | undefined) {
 let groundBand: HTMLCanvasElement | null = null;
 export interface Light { x: number; y: number; r: number; life: number; max: number; color: string }
 interface FloatText { x: number; y: number; text: string; life: number; color: string; size: number }
-
-/**
- * Plug-in point for separate night modules (traps, melee, emplacements). Keep this stable.
- * Every member of Battle is public; use zombies, guards, lights, fires, particles, say(), text(),
- * damage(), kill(), spawn(), laneY()/LANES/wallX()/nearestLane().
- */
-export interface BattleHook {
-  update?(b: Battle, dt: number): void;
-  /** On the ground, under the darkness mask and the actors. */
-  drawGround?(b: Battle, c: CanvasRenderingContext2D): void;
-  /** Over the actors and particles, before the HUD. */
-  drawOver?(b: Battle, c: CanvasRenderingContext2D): void;
-  /** Return true to consume the key. */
-  onKey?(b: Battle, e: KeyboardEvent): boolean;
-  /** A shot's ray up to the first body it would hit (or the ground). Return true if consumed (e.g. propane tank hit). */
-  onShot?(b: Battle, ray: { x1: number; y1: number; x2: number; y2: number; lane: number }): boolean;
-  onKill?(b: Battle, z: Zombie, by: unknown): void;
-  onEnd?(b: Battle): void;
-}
 
 export interface NightResult {
   kills: number;
@@ -293,8 +280,7 @@ export class Battle {
       this.rDown = -1;
     } else if (k === 's' || k === 'Control') this.ducking = false;
   };
-  /** Separate night modules (traps, melee, emplacements) — see BattleHook. */
-  hooks: BattleHook[] = [];
+  hooks: BattleHook[] = []; // night modules (traps, melee, emplacements): night/hook.ts
   // ---- the leader's gun ----
   bloomShot = 0; // bloom at the last shot (decays from there: bloomNow())
   lastShotT = -9;
@@ -530,9 +516,9 @@ export class Battle {
   // Controls (the HUD's key line mirrors this):
   //   LMB fire · RMB (hold) Focus · MMB/[F] firebomb · [R] reload / clear (hold: speed reload) · [T] ammo / slug swap
   //   [B] fire selector · [Q]/wheel weapon · [S]/[Ctrl] (hold) duck · [E] rally · [M] mark target
-  //   [1-9]/[Tab] select guard · [Z]/[X]/[C]/[V] order (Shift = everyone) · [Y] guard's post · Space hurry · [P]/Esc pause
+  //   [1-9]/[Tab] select guard · [Z]/[X]/[C]/[K] order (Shift = everyone; V is melee, L lures, G deadfall/pipe mine, H gun nest) · [Y] guard's post · Space hurry · [P]/Esc pause
   onKey(e: KeyboardEvent) {
-    for (const h of this.hooks) if (h.onKey?.(this, e)) return;
+    for (const h of this.hooks) if (h.onKey?.(e)) return; // night modules
     const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     if (k === 'r') {
       if (e.repeat) return;
@@ -551,7 +537,7 @@ export class Battle {
     else if (k === 'm') this.markTarget();
     else if (k === 'y') this.cyclePost();
     else if (k === 's' || k === 'Control') this.ducking = true;
-    else if (k === 'z' || k === 'x' || k === 'c' || k === 'v') this.giveOrder(({ z: 'free', x: 'hold', c: 'heads', v: 'wall' } as const)[k], e.shiftKey);
+    else if (k === 'z' || k === 'x' || k === 'c' || k === 'k') this.giveOrder(({ z: 'free', x: 'hold', c: 'heads', k: 'wall' } as const)[k], e.shiftKey);
     else if (k === ' ') { this.fast = true; e.preventDefault(); }
   }
 
@@ -735,7 +721,6 @@ export class Battle {
     for (const z of this.zombies) this.updateZombie(z, dt);
     for (const h of this.hooks) h.update?.(dt); // night modules
     this.zombies = this.zombies.filter((z) => !(z.state === 'dying' && z.dieT > 0.6) && !(z.state === 'flee' && z.x > W + 140));
-    for (const h of this.hooks) h.update?.(this, dt);
     this.updateParticles(dt);
     for (const f of this.fires) {
       f.life -= dt;
@@ -1109,6 +1094,7 @@ export class Battle {
   tryFire(click: boolean) {
     const p = this.player;
     if (!p || !p.w || this.done || this.intro > 3.2 || p.burstLeft > 0) return;
+    if (this.hooks.some((h) => h.blockFire?.())) return; // night modules: on a gun nest
     const prof = this.eff(p);
     if (!click && !prof.auto) return;
     if (this.playerCd > 0) return;
@@ -1310,7 +1296,7 @@ export class Battle {
   }
   sortKey(z: Zombie) {
     // over the wall (or up out of the drain) they are drawn in front of the barricade
-    return (z.state === 'over' || z.state === 'maul' ? WALL_KEY + 2 : z.y) + z.id * 1e-5;
+    return (z.state === 'over' || z.state === 'maul' || z.state === 'climb' || z.state === 'leap' ? WALL_KEY + 2 : z.y) + z.id * 1e-5;
   }
 
   // Ray against the zombies in one lane (±LANE_TOL); returns whether anything was hit, and where it stopped.
@@ -1327,7 +1313,7 @@ export class Battle {
       return tc > 0 && d2 < r * r ? tc - Math.sqrt(r * r - d2) : -1;
     };
     for (const z of this.zombies) {
-      if (z.state === 'dying' || (z.emerge !== undefined && z.emerge > 0.25) || z.leap) continue;
+      if (z.state === 'dying' || (z.emerge !== undefined && z.emerge > 0.25) || z.state === 'leap') continue;
       if (Math.abs(z.y - laneY) > LANE_TOL) continue;
       // the guards' strays rarely find a man lying low in the dark behind the crowd
       if (!isPlayer && z.def.ranged && !((z.seen ?? 0) > 0) && R.chance(0.85)) continue;
@@ -1376,15 +1362,6 @@ export class Battle {
         }
       }
     }
-    if (this.hooks.length) {
-      let rt = hits[0]?.t ?? 1600;
-      if (!hits.length && dy > 0) { const tg = (laneY - 2 - oy) / dy; if (tg > 0) rt = Math.min(rt, tg); }
-      const ray = { x1: ox, y1: oy, x2: ox + dx * rt, y2: oy + dy * rt, lane: nearestLane(laneY) };
-      for (const h of this.hooks) if (h.onShot?.(this, ray)) {
-        this.tracers.push({ x1: ox + dx * 20, y1: oy + dy * 20, x2: ray.x2, y2: ray.y2, life: pellet ? 0.05 : 0.07, w: pellet ? 1 : 1.6 });
-        return { hit: true, x: ray.x2, y: ray.y2 };
-      }
-    }
     let endT = 1600;
     let d = dmg;
     let n = 0;
@@ -1417,7 +1394,7 @@ export class Battle {
   /** Low to the ground: a Drag, or one whose legs are gone. */
   isCrawler(z: Zombie) { return !!z.def.crawl || (!!z.crippled && z.def.id !== 'ferryman'); }
   /** How far up the corpse pile a climber has come (px). */
-  climbLift(z: Zombie) { return z.climb !== undefined ? (1 - z.climb / 1.4) * this.zh(z) * 0.5 : 0; }
+  climbLift(z: Zombie) { return z.state === 'climb' && z.climb !== undefined ? (1 - z.climb / 1.4) * this.zh(z) * 0.5 : 0; }
 
   hitbox(z: Zombie) {
     const h = z.def.height * z.scale * ZS;
@@ -1558,7 +1535,7 @@ export class Battle {
     z.x = Math.min(z.x, W + 150);
     if (z.state === 'wall' && knock * loop > 15 && !heavy) z.state = 'walk';
     // a climber shot in the head drops back onto the pile
-    if (head && z.climb !== undefined && z.hp > 0) { z.climb = undefined; z.state = 'walk'; z.stun = 0.6; }
+    if (head && z.state === 'climb' && z.hp > 0) { z.climb = undefined; z.state = 'walk'; z.stun = 0.6; }
     if (isPlayer) this.hitMark = { kind: mark, t: 0.18 };
     // blood (fewer, smaller and darker with Reduce gore)
     this.blood(px, py, head ? 10 : 4, head ? 4.5 : 3, z.y);
@@ -1639,7 +1616,7 @@ export class Battle {
       G.stats.kills++;
     }
     if (z.def.boss) this.bossDown(z, g);
-    for (const h of this.hooks) h.onKill?.(this, z, g);
+    for (const h of this.hooks) h.onKill?.(z, g); // night modules
     if (g && z.def.ranged) {
       g.s.kills++;
       this.res.killsBy[g.s.id] = (this.res.killsBy[g.s.id] ?? 0) + 1;
@@ -1775,9 +1752,9 @@ export class Battle {
     let tgt: Zombie | undefined;
     let bp = 1e9;
     for (const z of this.zombies) {
-      if (z.state === 'dying' || (z.emerge !== undefined && z.emerge > 0) || z.leap) continue;
+      if (z.state === 'dying' || (z.emerge !== undefined && z.emerge > 0) || z.state === 'leap') continue;
       if (z.ducked && z.state === 'cover') continue; // nothing to aim at but junk
-      const inside = z.state === 'over' || z.state === 'maul';
+      const inside = z.state === 'over' || z.state === 'maul' || z.state === 'climb';
       const ahead = z.x > g.x + 30 && (z.x < range || (z.seen ?? 0) > 0);
       if (!ahead && !(inside && Math.abs(z.x - g.x) < 280)) continue;
       const dw = z.x - WALL_X;
@@ -1903,6 +1880,9 @@ export class Battle {
     z.phase += dt;
     z.laneCd -= dt;
     // ease toward the lane's feet (lane hops, or onto a defenders' row behind the wall)
+    // another module may have pulled it off the pile or out of the air
+    if (z.state !== 'climb') z.climb = undefined;
+    if (z.state !== 'leap') z.leap = undefined;
     if (z.y !== z.ty && !z.leap) {
       const d = z.ty - z.y;
       z.y += Math.sign(d) * Math.min(Math.abs(d), 40 * dt);
@@ -2016,6 +1996,7 @@ export class Battle {
         const x1 = g ? g.x + 40 : WALL_X - 80;
         const y1 = g ? g.y + 2 : DEF_LANES[1];
         z.leap = { x0: z.x, y0: z.y, x1, y1, t: 0, dur: 0.75 };
+        z.state = 'leap';
         this.say('The Buck clears the wall!', 2.5);
         sfx.groan();
       }
@@ -2028,8 +2009,8 @@ export class Battle {
       return;
     }
     // up the corpse pile and over the top
-    if (z.climb !== undefined) {
-      z.climb -= dt;
+    if (z.state === 'climb') {
+      z.climb = (z.climb ?? 1.4) - dt;
       if (z.climb <= 0) {
         z.climb = undefined;
         z.state = 'over';
@@ -2108,7 +2089,7 @@ export class Battle {
       }
       // the pile is high enough to walk up: the ones at the face climb it
       if (atFace && !this.isCrawler(z) && !z.def.boss && this.piles[z.lane] >= this.pileLimit() && R.chance(dt * 0.6)) {
-        z.state = 'over';
+        z.state = 'climb';
         z.climb = 1.4;
         z.x = wallX(z.lane) + w * 0.3;
         sfx.impact('wood', { volume: 0.6 });
@@ -2536,7 +2517,7 @@ export class Battle {
     if (this.focusing) {
       this.nerve -= 20 * dt;
       if (this.nerve <= 0) this.focusing = false;
-    } else if (!this.zombies.some((z) => z.state === 'wall' || z.state === 'over' || z.state === 'maul')) this.nerve += dt;
+    } else if (!this.zombies.some((z) => z.state === 'wall' || z.state === 'over' || z.state === 'maul' || z.state === 'climb')) this.nerve += dt;
     // every further tenth of the wall lost
     const f = G.fort.hp / Math.max(1, G.fort.maxHp);
     if (f < this.wallMark - 0.1) { this.wallMark -= 0.1; this.nerveHit(6); }
@@ -2652,7 +2633,7 @@ export class Battle {
   }
   /** A death close to the wall adds to that lane's pile. */
   addPile(z: Zombie) {
-    if (z.state === 'over' || z.state === 'maul' || z.flip || z.def.ranged || z.def.boss) return;
+    if (z.state === 'over' || z.state === 'maul' || z.state === 'leap' || z.flip || z.def.ranged || z.def.boss) return;
     const d = z.x - wallX(z.lane);
     if (d > 130) return;
     this.piles[z.lane] += z.def.mass ?? 1;
@@ -2716,7 +2697,6 @@ export class Battle {
       c.fillRect(this.trapX - 2, LANES[2] - 5, 4, 4);
     }
     this.drawRoadMarks(c);
-    for (const h of this.hooks) h.drawGround?.(this, c);
     // the fog lies thickest over the far road
     if (this.plan.special === 'fog') this.drawFog(c, 1);
     // darkness, pass A: the whole mask over background and ground
@@ -2807,7 +2787,6 @@ export class Battle {
       c.fillText(t.text, t.x, t.y);
       c.globalAlpha = 1;
     }
-    for (const h of this.hooks) h.drawOver?.(this, c);
     c.restore();
     this.drawHud(c);
     for (const h of this.hooks) h.drawOver?.(c); // night modules
@@ -3237,7 +3216,7 @@ export class Battle {
       sy = 0.84; // coiled
       rot = -0.06;
     }
-    if (z.climb !== undefined) { dy = -this.climbLift(z); rot = -0.25; }
+    if (z.state === 'climb') { dy = -this.climbLift(z); rot = -0.25; }
     if (crawler && z.state !== 'dying') { rot = -1.25; sx = h * 0.42; dy = -w * 0.18; }
     c.translate(Math.round(z.x), Math.round(z.y + dy));
     if (flip) c.scale(-1, 1);
@@ -3757,7 +3736,7 @@ export class Battle {
     // the full key list early in the night (and when paused); afterwards one short line
     if (this.t < 30 || this.paused) {
       c.fillText(`[R] reload (hold: speed) · [Q]/wheel gun${multiAmmo ? ' · [T] ammo' : ''} · [B] selector · RMB focus · [S] duck · [F]/MMB firebomb ${G.stores.molotov}`, 20, H - 24);
-      c.fillText('[1-9]/[Tab] guard · [Z] free [X] hold [C] heads [V] wall (Shift: all) · [Y] post · [M] mark · [E] rally · Space hurry · [P] pause', 20, H - 10);
+      c.fillText('[1-9]/[Tab] guard · [Z] free [X] hold [C] heads [K] wall (Shift: all) · [Y] post · [M] mark · [E] rally · Space hurry · [P] pause', 20, H - 10);
     } else c.fillText(`firebombs ${G.stores.molotov} [F]   ·   [R] reload   [S] duck   RMB focus   [P] keys`, 20, H - 12);
     // messages
     c.textAlign = 'center';
@@ -3849,7 +3828,6 @@ export class Battle {
 
   finish() {
     this.ended = true;
-    for (const h of this.hooks) h.onEnd?.(this);
     this.destroy();
     const r = this.res;
     for (const h of this.hooks) h.onEnd?.(r); // night modules (before the ammunition tally)
