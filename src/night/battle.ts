@@ -17,7 +17,7 @@ import { meleeGuard } from './melee';
 import { depthScale, bakeSprite, bakeComposite, bakeEdge, bakeLayer, bakeGround, fgStrip, shadowEllipse, type Look } from './render';
 
 export const W = 1280, H = 720;
-const WALL_X = 372; // front face of the barricade (near lane)
+export const WALL_X = 372; // front face of the barricade (near lane)
 const ZS = 1.3; // global actor scale for the Turned
 const SH = 158; // survivor display height
 const DRAIN_X = 74; // storm drain grate behind the line
@@ -28,19 +28,19 @@ const DOWN_PAIN = 1.45; // pain at which a mauled guard goes down
 /** Four walking lanes, feet y far → near; the gaps widen with nearness. */
 export const LANES = [604, 628, 655, 685];
 /** Two rows of defenders behind the wall. */
-const DEF_LANES = [662, 688];
-const GROUND_TOP = 596, GROUND_BOT = 704;
+export const DEF_LANES = [662, 688];
+export const GROUND_TOP = 596, GROUND_BOT = 704;
 const LANE_TOL = 16; // a shot only finds bodies within this many px of its lane's feet
 const WALL_KEY = 700; // the barricade's sort key: in front of every walking lane
 /** 0 far … 1 near. */
-const depthT = (y: number) => Math.max(0, Math.min(1, (y - LANES[0]) / (LANES[3] - LANES[0])));
-const nearestLane = (y: number) => {
+export const depthT = (y: number) => Math.max(0, Math.min(1, (y - LANES[0]) / (LANES[3] - LANES[0])));
+export const nearestLane = (y: number) => {
   let li = 0;
   for (let i = 1; i < LANES.length; i++) if (Math.abs(LANES[i] - y) < Math.abs(LANES[li] - y)) li = i;
   return li;
 };
 /** The wall seen slightly from the side: the far lane's face sits ~10px further right. */
-const wallX = (lane: number) => WALL_X + (LANES[3] - LANES[lane]) * 0.12;
+export const wallX = (lane: number) => WALL_X + (LANES[3] - LANES[lane]) * 0.12;
 /** Per-lane atmosphere: far zombies dimmer, cooler, flatter and thinner-edged. */
 const LOOK: Look[] = [
   { b: 0.7, s: 0.65, fog: 0.22, outline: 1, rim: 0.25 },
@@ -52,7 +52,7 @@ const CORPSE: Look = { b: 0.45, s: 0.6, fog: 0, outline: 0 };
 const PAD = 3; // transparent margin of every battle bake, so the layers line up
 const WARM = '#f0c98a', COOL = '#8fa6c8', DARK = '#0a0b10';
 
-interface Zombie {
+export interface Zombie {
   id: number;
   def: ZombieDef;
   sprite: string;
@@ -88,7 +88,7 @@ interface Zombie {
   blocked: number; // seconds spent held up behind the one ahead
 }
 
-interface Guard {
+export interface Guard {
   s: Survivor;
   w: WeaponItem | null;
   x: number;
@@ -126,9 +126,9 @@ interface Guard {
   crew?: boolean; // night modules: manning an emplacement (night/emplacements.ts)
 }
 
-interface Particle { x: number; y: number; vx: number; vy: number; life: number; max: number; size: number; color: string; kind: 'blood' | 'spark' | 'smoke' | 'fire' | 'spore' | 'shell' | 'chunk'; ground: number }
+export interface Particle { x: number; y: number; vx: number; vy: number; life: number; max: number; size: number; color: string; kind: 'blood' | 'spark' | 'smoke' | 'fire' | 'spore' | 'shell' | 'chunk'; ground: number }
 interface Tracer { x1: number; y1: number; x2: number; y2: number; life: number; w: number }
-interface Fire { x: number; y: number; life: number; w: number }
+export interface Fire { x: number; y: number; life: number; w: number }
 interface Lob { x0: number; y0: number; x1: number; y1: number; t: number; dur: number; p: FireProfile; g: Guard | null }
 
 // The painted background, baked once per look (never filtered per frame): an early-night
@@ -161,8 +161,27 @@ function bakeBattleBg(special: string | undefined) {
   return r;
 }
 let groundBand: HTMLCanvasElement | null = null;
-interface Light { x: number; y: number; r: number; life: number; max: number; color: string }
+export interface Light { x: number; y: number; r: number; life: number; max: number; color: string }
 interface FloatText { x: number; y: number; text: string; life: number; color: string; size: number }
+
+/**
+ * Plug-in point for separate night modules (traps, melee, emplacements). Keep this stable.
+ * Every member of Battle is public; use zombies, guards, lights, fires, particles, say(), text(),
+ * damage(), kill(), spawn(), laneY()/LANES/wallX()/nearestLane().
+ */
+export interface BattleHook {
+  update?(b: Battle, dt: number): void;
+  /** On the ground, under the darkness mask and the actors. */
+  drawGround?(b: Battle, c: CanvasRenderingContext2D): void;
+  /** Over the actors and particles, before the HUD. */
+  drawOver?(b: Battle, c: CanvasRenderingContext2D): void;
+  /** Return true to consume the key. */
+  onKey?(b: Battle, e: KeyboardEvent): boolean;
+  /** A shot's ray up to the first body it would hit (or the ground). Return true if consumed (e.g. propane tank hit). */
+  onShot?(b: Battle, ray: { x1: number; y1: number; x2: number; y2: number; lane: number }): boolean;
+  onKill?(b: Battle, z: Zombie, by: unknown): void;
+  onEnd?(b: Battle): void;
+}
 
 export interface NightResult {
   kills: number;
@@ -240,6 +259,10 @@ export class Battle {
   hover?: Zombie; // the body under the crosshair
   hooks: BattleHook[] = []; // night modules (traps, melee, emplacements)
   keyUp = (e: KeyboardEvent) => { if (e.key === ' ') this.fast = false; };
+  /** Separate night modules (traps, melee, emplacements) — see BattleHook. */
+  hooks: BattleHook[] = [];
+  /** Feet y of walking lane i (0 far … 3 near). */
+  laneY(i: number) { return LANES[Math.max(0, Math.min(LANES.length - 1, i))]; }
 
   constructor(canvas: HTMLCanvasElement, plan: NightPlan, onEnd: (r: NightResult) => void) {
     this.canvas = canvas;
@@ -350,7 +373,7 @@ export class Battle {
   }
 
   onKey(e: KeyboardEvent) {
-    for (const h of this.hooks) if (h.onKey?.(e)) return; // night modules
+    for (const h of this.hooks) if (h.onKey?.(this, e)) return;
     if (e.key === 'r' || e.key === 'R') this.startReload();
     else if (e.key === 'f' || e.key === 'F') this.throwMolotov();
     else if (e.key === 'Escape' || e.key === 'p') this.paused = !this.paused;
@@ -482,6 +505,7 @@ export class Battle {
     for (const z of this.zombies) this.updateZombie(z, dt);
     for (const h of this.hooks) h.update?.(dt); // night modules
     this.zombies = this.zombies.filter((z) => !(z.state === 'dying' && z.dieT > 0.6) && !(z.state === 'flee' && z.x > W + 140));
+    for (const h of this.hooks) h.update?.(this, dt);
     this.updateParticles(dt);
     for (const f of this.fires) {
       f.life -= dt;
@@ -849,6 +873,15 @@ export class Battle {
       if (tmax >= 0 && tmin <= tmax) hits.push({ z, t: Math.max(0, tmin), head: false });
     }
     hits.sort((a, b) => a.t - b.t);
+    if (this.hooks.length) {
+      let rt = hits[0]?.t ?? 1600;
+      if (!hits.length && dy > 0) { const tg = (laneY - 2 - oy) / dy; if (tg > 0) rt = Math.min(rt, tg); }
+      const ray = { x1: ox, y1: oy, x2: ox + dx * rt, y2: oy + dy * rt, lane: nearestLane(laneY) };
+      for (const h of this.hooks) if (h.onShot?.(this, ray)) {
+        this.tracers.push({ x1: ox + dx * 20, y1: oy + dy * 20, x2: ray.x2, y2: ray.y2, life: pellet ? 0.05 : 0.07, w: pellet ? 1 : 1.6 });
+        return { hit: true, x: ray.x2, y: ray.y2 };
+      }
+    }
     let endT = 1600;
     let d = dmg;
     let n = 0;
@@ -942,6 +975,7 @@ export class Battle {
       G.stats.kills++;
     }
     if (z.def.boss) this.bossDown(z, g);
+    for (const h of this.hooks) h.onKill?.(this, z, g);
     if (g && z.def.ranged) {
       g.s.kills++;
       this.res.killsBy[g.s.id] = (this.res.killsBy[g.s.id] ?? 0) + 1;
@@ -1747,6 +1781,7 @@ export class Battle {
       c.fillStyle = '#a33';
       c.fillRect(this.trapX - 2, LANES[2] - 5, 4, 4);
     }
+    for (const h of this.hooks) h.drawGround?.(this, c);
     // the fog lies thickest over the far road
     if (this.plan.special === 'fog') this.drawFog(c, 1);
     // darkness, pass A: the whole mask over background and ground
@@ -1835,6 +1870,7 @@ export class Battle {
       c.fillText(t.text, t.x, t.y);
       c.globalAlpha = 1;
     }
+    for (const h of this.hooks) h.drawOver?.(this, c);
     c.restore();
     this.drawHud(c);
     for (const h of this.hooks) h.drawOver?.(c); // night modules
@@ -2531,6 +2567,7 @@ export class Battle {
 
   finish() {
     this.ended = true;
+    for (const h of this.hooks) h.onEnd?.(this);
     this.destroy();
     const r = this.res;
     for (const h of this.hooks) h.onEnd?.(r); // night modules (before the ammunition tally)
