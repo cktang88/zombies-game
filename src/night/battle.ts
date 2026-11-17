@@ -71,10 +71,10 @@ export const LOOK: Look[] = [
  * black). Ink is ~display px round the whole silhouette, heavier near.
  */
 export const TURNED_LOOK: Look[] = [
-  { b: 1.5, s: 0.5, fog: 0.3, haze: '#76838f', outline: 1.2, rim: 0.6 },
-  { b: 1.6, s: 0.55, fog: 0.25, haze: '#7c8990', outline: 1.5, rim: 0.7 },
-  { b: 1.7, s: 0.6, fog: 0.2, haze: '#86928a', outline: 2, rim: 0.8 },
-  { b: 1.8, s: 0.62, fog: 0.17, haze: '#8f9a88', outline: 2.4, rim: 0.9 },
+  { b: 1.35, s: 0.68, fog: 0.22, haze: '#76838f', outline: 1.2, rim: 0.6 },
+  { b: 1.45, s: 0.74, fog: 0.16, haze: '#7c8990', outline: 1.5, rim: 0.7 },
+  { b: 1.55, s: 0.8, fog: 0.11, haze: '#86928a', outline: 2, rim: 0.8 },
+  { b: 1.62, s: 0.84, fog: 0.07, haze: '#8f9a88', outline: 2.4, rim: 0.9 },
 ];
 /** The defenders: a touch below the Turned in value and contrast (they stand back, behind the wall);
  * a plain ink line, no warm rim (the rim over the ink read as a brown sticker halo, critique #9). */
