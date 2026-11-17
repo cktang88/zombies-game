@@ -219,6 +219,8 @@ export interface VoiceOpts { gain?: number; far?: boolean; rev?: number; echo?: 
 export class Engine {
   readonly master: GainNode;
   readonly sfxVol: GainNode;
+  /** Low-pass on the whole sfx bus (ambience included): ears ringing after heavy fire. 20 kHz = open. */
+  readonly muffleLp: BiquadFilterNode;
   readonly sfxIn: GainNode;
   readonly musicIn: GainNode;   // ducking stage
   readonly musicVol: GainNode;
@@ -238,7 +240,11 @@ export class Engine {
     this.master.connect(masterLim);
 
     this.sfxVol = gain(c, 1);
-    this.sfxVol.connect(this.master);
+    this.muffleLp = c.createBiquadFilter();
+    this.muffleLp.type = 'lowpass';
+    this.muffleLp.frequency.value = 20000;
+    this.muffleLp.Q.value = 0.5;
+    this.sfxVol.connect(this.muffleLp).connect(this.master);
     const lim = comp(c, -3, 0, 20, 0.001, 0.1);
     lim.connect(this.sfxVol);
     const makeup = gain(c, 1.45);
