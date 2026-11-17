@@ -1,0 +1,10 @@
+{
+  "id": "z_shambler",
+  "source": "z_shambler__riga",
+  "height": 240,
+  "joints": {
+    "headTop": [433, 164], "neck": [416, 335], "shoulder": [380, 398], "elbow": [491, 451], "wrist": [641, 410], "handTip": [720, 410],
+    "pelvis": [333, 710], "hip": [358, 726], "knee": [472, 893], "ankle": [491, 1118], "toe": [595, 1176],
+    "bHip": [308, 726], "bKnee": [274, 926], "bAnkle": [199, 1118], "bToe": [308, 1201]
+  }
+}

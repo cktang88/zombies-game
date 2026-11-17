@@ -1,0 +1,10 @@
+{
+  "id": "z_runner",
+  "source": "z_runner__riga",
+  "height": 240,
+  "joints": {
+    "headTop": [700, 69], "neck": [692, 177], "shoulder": [667, 206], "elbow": [767, 219], "wrist": [842, 210], "handTip": [971, 206],
+    "pelvis": [667, 377], "hip": [692, 385], "knee": [783, 502], "ankle": [842, 644], "toe": [921, 635],
+    "bHip": [650, 385], "bKnee": [592, 519], "bAnkle": [500, 627], "bToe": [542, 681]
+  }
+}

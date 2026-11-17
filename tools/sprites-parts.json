@@ -1,0 +1,62 @@
+{
+  "model": "google/gemini-3.1-flash-lite-image",
+  "style": "Match the reference image exactly: same person, same clothes, same colours, same mature graphic-novel cel-shaded style with thick confident black ink outlines, two-tone hard-edged shadows, gritty texture, muted desaturated palette, grounded realistic proportions.",
+  "key": "Isolated on a perfectly flat solid pure magenta #FF00FF background, no ground, no cast shadow, no scenery, no text, no labels, no border.",
+  "parts": [
+    {
+      "id": "surv_rifle__sheet",
+      "ref": "surv_rifle",
+      "prompt": "Character cutout parts sheet for 2D skeletal animation of the character in the reference image, WITHOUT the rifle. Every body part drawn separately in strict side view facing right, laid out apart in a grid with wide magenta gaps so no parts touch: the head with neck, the torso with pelvis and no arms, one upper arm in the jacket sleeve, one forearm in the sleeve, one open gripping hand, a second upper arm, a second forearm, a second hand, one thigh, one shin with boot, a second thigh, a second shin with boot."
+    },
+    {
+      "id": "surv_rifle__pose",
+      "ref": "surv_rifle",
+      "prompt": "The same man from the reference image in a neutral rigging pose for 2D skeletal animation: strict side profile facing right, standing straight, legs slightly apart in a mid stride, NO weapon, both arms hanging down relaxed beside the body with empty open hands, full body head to boots."
+    },
+    {
+      "id": "surv_rifle__arms",
+      "ref": "surv_rifle",
+      "prompt": "Only the two arms of the man in the reference image, cut off at the shoulder, drawn as two separate pieces far apart: each arm in its jacket sleeve held straight out horizontally pointing right, side view, ending in a bare hand curled as if gripping a handle but holding nothing. No body, no head, no weapon."
+    },
+    {
+      "id": "z_shambler__sheet",
+      "ref": "z_shambler",
+      "prompt": "Character cutout parts sheet for 2D skeletal animation of the zombie in the reference image. Every body part drawn separately in strict side view facing left, laid out apart in a grid with wide magenta gaps so no parts touch: the head with neck, the torso with pelvis and no arms, one upper arm in the torn sleeve, one forearm, one clawed hand, a second upper arm, a second forearm, a second clawed hand, one thigh, one shin with shoe, a second thigh, a second shin with shoe."
+    },
+    {
+      "id": "z_shambler__pose",
+      "ref": "z_shambler",
+      "prompt": "The same zombie from the reference image in a neutral rigging pose for 2D skeletal animation: strict side profile facing left, standing upright, legs slightly apart in a mid stride, both arms hanging down limp beside the body, full body head to shoes."
+    },
+    {
+      "id": "z_shambler__arms",
+      "ref": "z_shambler",
+      "prompt": "Only the two arms of the zombie in the reference image, cut off at the shoulder, drawn as two separate pieces far apart: each arm in its torn flannel sleeve held straight out horizontally pointing left, side view, ending in a grey clawed hand. No body, no head."
+    },
+    {
+      "id": "surv_rifle__hands",
+      "ref": "surv_rifle",
+      "prompt": "A sheet of six separate bare hands of the man in the reference image, side view, laid out apart in a row with wide magenta gaps: 1 right hand closed around an invisible pistol grip, 2 left hand cupped as if supporting a rifle fore-end from below, 3 open relaxed hand, 4 closed fist, 5 hand pinching a small object between thumb and fingers, 6 open hand palm forward. Each hand ends at the wrist with a short bit of jacket cuff. No weapons, no objects."
+    },
+    {
+      "id": "surv_rifle__riga",
+      "ref": "surv_rifle",
+      "prompt": "The same man from the reference image in a rigging pose for 2D skeletal animation, WITHOUT any weapon: strict side profile facing right, torso upright, both arms held straight out forward at shoulder height (the far arm hidden exactly behind the near arm), hands open and empty, legs in a wide walking stride so the two legs are clearly separated with a gap between them, full body head to boots."
+    },
+    {
+      "id": "z_shambler__riga",
+      "ref": "z_shambler",
+      "prompt": "The same zombie from the reference image in a rigging pose for 2D skeletal animation: strict side profile facing right, torso upright, both arms held straight out forward at shoulder height (the far arm hidden exactly behind the near arm), grey clawed hands, legs in a wide walking stride so the two legs are clearly separated with a gap between them, full body head to shoes."
+    },
+    {
+      "id": "z_brute__riga",
+      "ref": "z_brute",
+      "prompt": "The same huge hulking zombie from the reference image in a rigging pose for 2D skeletal animation: strict side profile facing right, torso upright, both arms held straight out forward at shoulder height (the far arm hidden exactly behind the near arm), big empty hands, legs in a wide walking stride so the two legs are clearly separated with a gap between them, full body head to feet."
+    },
+    {
+      "id": "z_runner__riga",
+      "ref": "z_runner",
+      "prompt": "The same gaunt zombie from the reference image in a rigging pose for 2D skeletal animation: strict side profile facing right, torso upright, both arms held straight out forward at shoulder height (the far arm hidden exactly behind the near arm), clawed hands, legs in a wide walking stride so the two legs are clearly separated with a gap between them, full body head to feet."
+    }
+  ]
+}

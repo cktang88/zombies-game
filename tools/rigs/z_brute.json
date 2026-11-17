@@ -1,0 +1,13 @@
+{
+  "id": "z_brute",
+  "source": "z_brute__riga",
+  "height": 300,
+  "joints": {
+    "headTop": [774, 99], "neck": [757, 207], "shoulder": [707, 249], "elbow": [832, 265], "wrist": [907, 265], "handTip": [1024, 282],
+    "pelvis": [699, 457], "hip": [732, 465], "knee": [757, 549], "ankle": [774, 640], "toe": [849, 657],
+    "bHip": [649, 465], "bKnee": [582, 549], "bAnkle": [532, 632], "bToe": [582, 670]
+  },
+  "radius": { "torso": 0.2, "thigh": 0.07, "upperArm": 0.065, "forearm": 0.075, "hand": 0.075 },
+  "fillMaxX": 790,
+  "force": [{ "part": "hand", "poly": [[880, 262], [935, 262], [935, 400], [880, 400]] }]
+}
