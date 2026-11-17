@@ -75,14 +75,13 @@ function farCopy(src: CanvasImageSource, w: number, h: number): HTMLCanvasElemen
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
   const x = c.getContext('2d')!;
-  x.filter = 'saturate(0.3) contrast(0.78) blur(0.6px)';
+  // no blur: blurred alpha clipped back to the silhouette left every far limb semi-transparent at
+  // its edges (it read as a ghost arm); solid, just pushed back in value and colour
+  x.filter = 'saturate(0.5) contrast(0.9)';
   x.drawImage(src, 0, 0);
   x.filter = 'none';
-  // the blur lifts the alpha edge: clip back to the original silhouette
-  x.globalCompositeOperation = 'destination-in';
-  x.drawImage(src, 0, 0);
   x.globalCompositeOperation = 'source-atop';
-  x.globalAlpha = 0.46;
+  x.globalAlpha = 0.38;
   x.fillStyle = '#14110f';
   x.fillRect(0, 0, w, h);
   return c;

@@ -682,7 +682,10 @@ export class Rig {
       J[sn] = J[th] + Math.cos(o.a1) * g.th; K[sn] = K[th] + Math.sin(o.a1) * g.th;
       J[ft] = J[sn] + Math.cos(o.a2) * g.sn; K[ft] = K[sn] + Math.sin(o.a2) * g.sn;
       // keep the sole flat on the ground (toes down when the gait says so)
-      A[ft] = ank + (fy < -1 ? clamp((o.a2 - Math.PI / 2) * 0.5, -0.4, 0.6) : 0);
+      // the art's own ankle→toe angle is what a flat sole looks like (ankle above the toe): 0 here
+      // tipped every foot toes-up by that much (5-7° on survivors, ~30° on a shambler)
+      const sole = this.asset?.meta.parts.foot?.rest ?? 0;
+      A[ft] = sole + ank + (fy < -1 ? clamp((o.a2 - Math.PI / 2) * 0.5, -0.4, 0.6) : 0);
     } else {
       A[th] = Math.PI / 2 + ch.tilt - hip;
       J[sn] = J[th] + Math.cos(A[th]) * g.th; K[sn] = K[th] + Math.sin(A[th]) * g.th;
