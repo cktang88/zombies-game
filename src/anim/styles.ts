@@ -46,6 +46,7 @@ export const STYLES: Record<string, Style> = {
 };
 
 /** How each body sprite is rigged: rig kind, STYLES key and (the living) the gun it carries.
+ * Every key here has a part atlas in public/sprites/parts/.
  * Turned styles match the ZombieDef ids in src/data/zombies.ts; raiders are survivor rigs.
  * Every part atlas is 240 rig units tall (z_brute 300); z_crawler is a prone rig cut at
  * standing-body scale, so draw it with the scale of a standing Sleeper, not its 42 px box. */
@@ -62,5 +63,13 @@ export const SPRITE_RIGS: Record<string, SpriteRig> = {
   z_bellwether: { kind: 'turned', style: 'bellwether' },
   z_raider: { kind: 'survivor', style: 'raider', weapon: 'lever' },
   z_raider2: { kind: 'survivor', style: 'raider', weapon: 'pump' },
+  // the survivor roster (src/sim/survivors.ts), with the gun each sprite is drawn holding
+  surv_rifle: { kind: 'survivor', style: 'survivor', weapon: 'ar15' }, surv_pistol: { kind: 'survivor', style: 'survivor', weapon: 'revolver' },
+  surv_shotgun: { kind: 'survivor', style: 'survivor', weapon: 'pump' }, surv_smg: { kind: 'survivor', style: 'survivor', weapon: 'smg' },
+  surv_idle: { kind: 'survivor', style: 'survivor' }, surv_f_old: { kind: 'survivor', style: 'survivor', weapon: 'hunting' },
+  surv_f_mid: { kind: 'survivor', style: 'survivor', weapon: 'pump' }, surv_m_mid: { kind: 'survivor', style: 'survivor', weapon: 'service9' },
+  surv_m_young: { kind: 'survivor', style: 'survivor', weapon: 'lever' }, surv_f_native: { kind: 'survivor', style: 'survivor', weapon: 'hunting' },
+  surv_m_old: { kind: 'survivor', style: 'survivor', weapon: 'revolver' }, surv_m_big: { kind: 'survivor', style: 'survivor', weapon: 'smg' },
+  surv_f_young: { kind: 'survivor', style: 'survivor', weapon: 'm1911' },
 };
 

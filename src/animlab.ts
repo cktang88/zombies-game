@@ -315,21 +315,24 @@ async function bench() {
 }
 
 // ---------------------------------------------------------------- gallery (?gallery)
-// Every rigged body sprite (SPRITE_RIGS) in two rows, walking in place on its own style.
+// Every rigged body sprite (SPRITE_RIGS) in rows, walking in place on its own style.
 // `__gal` drives it from a test script: play a clip on all, kill all, toggle walking.
 const gal: Actor[] = [];
 let galWalk = true;
+const galIds = Object.keys(SPRITE_RIGS);
+const GAL_ROWS = galIds.length > 20 ? [205, 415, 625] : [295, 610];
 function gallerySetup() {
   actors.length = 0; gal.length = 0;
-  const ids = Object.keys(SPRITE_RIGS);
-  const per = Math.ceil(ids.length / 2);
+  const ids = galIds;
+  const per = Math.ceil(ids.length / GAL_ROWS.length);
+  const dx = Math.min(128, (W - 110) / per), hh = GAL_ROWS.length > 2 ? 140 : 190;
   ids.forEach((id, i) => {
     const sr = SPRITE_RIGS[id];
     const row = Math.floor(i / per), col = i % per;
     const rig = createRig(sr.kind, id, { style: sr.style, seed: 31 + i * 101 });
     if (sr.weapon) { rig.setWeapon(sr.weapon); rig.aimAt(0, 0); }
     const big = sr.style === 'ferryman' ? 1.2 : sr.style === 'bellwether' ? 1.45 : 1;
-    const a: Actor = { rig, x: 70 + col * 128 + (row ? 40 : 0), y: row ? 610 : 295, h: 190 * big, facing: -1, vx: 0, label: id.replace('z_', '') };
+    const a: Actor = { rig, x: 70 + col * dx + (row % 2 ? 40 : 0), y: GAL_ROWS[row], h: hh * big, facing: -1, vx: 0, label: id.replace(/^(z|surv)_/, '') };
     rig.autoIdle = false;
     rig.onEvent = (n, r) => log(`${r.spriteId}: ${n}`);
     actors.push(a); gal.push(a);
@@ -353,7 +356,7 @@ function galleryStep(dt: number) {
 }
 function galleryRender() {
   ctx.fillStyle = '#8fa0a6'; ctx.fillRect(0, 0, W, H);
-  for (const gy of [295, 610]) { ctx.fillStyle = '#4a4436'; ctx.fillRect(0, gy, W, 14); }
+  for (const gy of GAL_ROWS) { ctx.fillStyle = '#4a4436'; ctx.fillRect(0, gy, W, 14); }
   for (const a of gal) {
     const s = a.h / (a.rig.asset?.meta.height ?? 240);
     a.rig.draw(ctx, a.x, a.y, s, a.facing, images.get(a.rig.spriteId));
