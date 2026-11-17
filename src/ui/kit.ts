@@ -71,7 +71,7 @@ export function installKit() {
   document.addEventListener('scroll', hide, true);
   // touch: a long press shows the card, the next tap anywhere hides it
   let lp = 0;
-  document.addEventListener('touchstart', (e) => { const el = find(e.target); clearTimeout(lp); if (el) lp = window.setTimeout(() => show(el), 380); else hide(); }, { passive: true });
+  document.addEventListener('touchstart', (e) => { const el = find(e.target); clearTimeout(lp); if (cur && el !== cur) hide(); if (el) lp = window.setTimeout(() => show(el), 380); }, { passive: true });
   document.addEventListener('touchend', () => clearTimeout(lp), { passive: true });
   document.addEventListener('toggle', (e) => {
     const d = e.target as HTMLDetailsElement;
