@@ -269,8 +269,9 @@ export class Battle {
         const steps = this.fast && quiet && !this.done ? 4 : 1;
         for (let i = 0; i < steps; i++) this.update(this.slowmo > 0 ? dt * 0.35 : dt);
       }
+      if (this.ended) return;
       this.draw();
-      if (!this.ended) this.raf = requestAnimationFrame(loop);
+      this.raf = requestAnimationFrame(loop);
     };
     this.raf = requestAnimationFrame(loop);
     (window as unknown as { __battle: Battle }).__battle = this;
@@ -672,8 +673,19 @@ export class Battle {
     });
     if (g.mag <= 0) {
       if (def.ammo && G.stores[def.ammo] < this.ammoPer(def)) {
-        g.cd = 2;
-        if (R.chance(0.3)) this.text(g.x + 20, g.y - 150, 'out of ammo', '#c88', 10);
+        // out of ammunition: hatchets and fence pickets at the wall
+        const reach = this.zombies.find((z) => z.state !== 'dying' && (z.state === 'wall' && g.x > 200 || ((z.state === 'over' || z.state === 'maul') && Math.abs(z.x - g.x) < 70)));
+        if (reach) {
+          reach.hp -= 14 + g.s.skills.building;
+          reach.flash = 0.1;
+          sfx.thud();
+          g.recoil = 1;
+          if (reach.hp <= 0) this.kill(reach, g);
+          g.cd = 1.1;
+        } else {
+          g.cd = 2;
+          if (R.chance(0.3)) this.text(g.x + 20, g.y - 150, 'out of ammo', '#c88', 10);
+        }
         return;
       }
       g.reload = def.reload * 1.15;

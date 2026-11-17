@@ -9,7 +9,7 @@ export function newGame(mode = 'siege', seed = (Math.random() * 2 ** 31) >>> 0):
     seed,
     day: 1,
     phase: 'day',
-    stores: { food: 18, scrap: 12, wood: 25, parts: 3, meds: 2, fuel: 4, cloth: 4, light: 90, shell: 12, rifle: 10, liquor: 1, molotov: 0 },
+    stores: { food: 18, scrap: 12, wood: 25, parts: 3, meds: 2, fuel: 4, cloth: 4, light: 130, shell: 16, rifle: 10, liquor: 1, molotov: 0 },
     survivors: [],
     graves: [],
     weapons: [],

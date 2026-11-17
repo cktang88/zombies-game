@@ -15,7 +15,7 @@ export interface Site {
 }
 
 export const SITES: Site[] = [
-  { id: 'route9', name: 'Route 9 houses', desc: 'Split-levels and trailers along the county road. Somebody\'s kitchen, somebody\'s garage.', risk: 0.12, loot: { food: 5, wood: 6, cloth: 3, scrap: 3 }, weaponChance: 0.05, weapons: ['revolver'], survivorChance: 0.1, minDay: 1, stock: 8 },
+  { id: 'route9', name: 'Route 9 houses', desc: 'Split-levels and trailers along the county road. Somebody\'s kitchen, somebody\'s garage.', risk: 0.12, loot: { food: 5, wood: 6, cloth: 3, scrap: 3, light: 6, shell: 2 }, weaponChance: 0.05, weapons: ['revolver'], survivorChance: 0.1, minDay: 1, stock: 8 },
   { id: 'diner', name: 'Ferry Diner', desc: 'The walk-in cooler stopped humming a week ago. The whiteboard still says SOUP.', risk: 0.15, loot: { food: 9, fuel: 1, cloth: 1 }, weaponChance: 0.03, weapons: ['service9'], survivorChance: 0.08, minDay: 1, stock: 5 },
   { id: 'rexall', name: 'Rexall pharmacy', desc: 'Looted twice. Not everything was understood by the looters.', risk: 0.25, loot: { meds: 4, food: 2, cloth: 2 }, weaponChance: 0.02, weapons: ['service9'], survivorChance: 0.06, minDay: 1, stock: 5 },
   { id: 'millyard', name: 'Aubin mill yard', desc: 'Pallets, drums, the maintenance shop. Pond 2 smells like bread gone off.', risk: 0.3, loot: { scrap: 10, parts: 3, fuel: 3, wood: 4 }, weaponChance: 0.04, weapons: ['nailer'], survivorChance: 0.08, minDay: 2, stock: 9 },
