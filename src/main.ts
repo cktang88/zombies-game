@@ -168,15 +168,15 @@ function dawn(r: NightResult) {
   G.pendingEvent = rollIncident();
   report = [...lines, ...morning];
   save();
-  if (wasIce) return iceEpilogue();
+  if (wasIce) return iceEpilogue(r.fell);
   overlay(`<h2>Dawn, ${dateLabel()}</h2>${report.map((l) => `<p>${esc(l)}</p>`).join('')}`, () => day());
 }
 
-function iceEpilogue() {
+function iceEpilogue(fell: boolean) {
   const alive = living();
-  log('lore', 'The river froze. They walked across it in the night, and we were still here in the morning.');
+  log('lore', fell ? 'The river froze. They walked across it and through our house. Some of us lived.' : 'The river froze. They walked across it in the night, and we were still here in the morning.');
   overlay(`<h2>The river is ice</h2>
-    <p>They came across the St. Aubin in the dark, hundreds of them, the ice booming under their weight. In the morning the house on Ferry Road was still standing.</p>
+    <p>They came across the St. Aubin in the dark, hundreds of them, the ice booming under their weight. ${fell ? 'They went through the house on Ferry Road like water through a net. Whoever lived did it hiding in the root cellar, listening to them walk overhead until dawn.' : 'In the morning the house on Ferry Road was still standing.'}</p>
     <p>${alive.map((s) => esc(displayName(s))).join(', ')} saw the first light of December.</p>
     <p>${G.graves.length ? `Behind the house: ${G.graves.map((g) => esc(first(g))).join(', ')}.` : 'Nobody is buried behind the house. Nobody.'}</p>
     <p class="forecast">The ice will hold until April. Winter has only begun. (The game continues as long as you can hold.)</p>`, () => day());
