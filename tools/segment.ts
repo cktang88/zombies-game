@@ -32,6 +32,11 @@ interface RigSrc {
   capless?: string[]; // parts that get no joint cap (e.g. a thigh whose hip sits under a long coat or
   // apron: the cap would copy a disc of the coat onto the leg)
   hands?: HandsSrc;
+  /** a non-humanoid skeleton (quadrupeds): its own bone list replaces BONES; the joint named
+   * `pelvis` is still the origin. Give every part a `radius`. */
+  bones?: Bone[];
+  /** `source` is a shipped sprite (public/sprites/<source>.png, already transparent): no keying */
+  sprite?: boolean;
 }
 /**
  * Alternate hand poses from a generated hands sheet (connected components, left to right).
@@ -75,7 +80,7 @@ interface HandPose {
 }
 interface Bone { part: string; a: string; b: string; parent?: string; ignore?: boolean; front?: boolean }
 
-const BONES: Bone[] = [
+const HUMAN_BONES: Bone[] = [
   { part: 'torso', a: 'pelvis', b: 'neck' },
   { part: 'head', a: 'neck', b: 'headTop', parent: 'torso' },
   { part: 'upperArm', front: true, a: 'shoulder', b: 'elbow', parent: 'torso' },
@@ -115,7 +120,11 @@ function inPoly(x: number, y: number, poly: P[]): boolean {
 interface Cut { name: string; buf: Buffer; w: number; h: number; pivot: P; tip: P; rest: number; len: number; grip?: P }
 
 /** A rig source: the committed raw generation (tools/rigs/src, keyed here) or the cache. */
-async function loadRaw(name: string) {
+async function loadRaw(name: string, sprite = false) {
+  if (sprite) {
+    const { data, info } = await sharp(path.join(ROOT, 'public/sprites', `${name}.png`)).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    return { data, w: info.width, h: info.height };
+  }
   const committed = path.join(ROOT, 'tools/rigs/src', `${name}.png`);
   const buf = fs.existsSync(committed) ? await chromaKey(fs.readFileSync(committed)) : fs.readFileSync(path.join(ROOT, 'tools/.cache/parts-keyed', `${name}.png`));
   const { data, info } = await sharp(buf).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
@@ -156,7 +165,8 @@ async function rotateCut(c: Cut, deg: number): Promise<Cut> {
 }
 
 async function segment(rig: RigSrc) {
-  const src = await loadRaw(rig.source);
+  const src = await loadRaw(rig.source, rig.sprite);
+  const BONES = rig.bones ?? HUMAN_BONES;
   const J = rig.joints;
   // opaque bbox -> scale
   let top = 1e9, bot = -1;
@@ -370,7 +380,7 @@ async function segment(rig: RigSrc) {
   const dbg = Buffer.from(src.data);
   const COL = [[230, 60, 60], [60, 200, 60], [60, 90, 230], [230, 200, 40], [200, 60, 220], [40, 210, 210], [240, 130, 30], [130, 80, 40], [90, 90, 90], [90, 90, 90], [90, 90, 90]];
   for (let i = 0; i < own.length; i++) if (own[i] >= 0) {
-    const c = COL[own[i]];
+    const c = COL[own[i] % COL.length];
     for (let k = 0; k < 3; k++) dbg[i * 4 + k] = (dbg[i * 4 + k] + c[k]) >> 1;
   }
   fs.mkdirSync(path.join(ROOT, 'tools/.cache'), { recursive: true });

@@ -1,0 +1,46 @@
+{
+  "id": "dog",
+  "source": "dog",
+  "sprite": true,
+  "height": 120,
+  "joints": {
+    "pelvis": [62, 52],
+    "neck": [136, 46],
+    "skull": [158, 30],
+    "nose": [192, 22],
+    "tailBase": [54, 46],
+    "tailMid": [28, 52],
+    "tailTip": [3, 50],
+    "shoulder": [130, 54],
+    "elbow": [124, 80],
+    "fPaw": [133, 113],
+    "hip": [62, 55],
+    "stifle": [70, 80],
+    "hPaw": [40, 112],
+    "xfa": [148, 76], "xfb": [150, 92], "xfc": [158, 112],
+    "xha": [76, 76], "xhb": [70, 92], "xhc": [86, 108]
+  },
+  "bones": [
+    { "part": "torso", "a": "pelvis", "b": "neck" },
+    { "part": "neck", "a": "neck", "b": "skull", "parent": "torso" },
+    { "part": "head", "a": "skull", "b": "nose", "parent": "neck" },
+    { "part": "tail1", "a": "tailBase", "b": "tailMid", "parent": "torso" },
+    { "part": "tail2", "a": "tailMid", "b": "tailTip", "parent": "tail1" },
+    { "part": "fUpper", "a": "shoulder", "b": "elbow", "parent": "torso" },
+    { "part": "fLower", "a": "elbow", "b": "fPaw", "parent": "fUpper" },
+    { "part": "hUpper", "a": "hip", "b": "stifle", "parent": "torso" },
+    { "part": "hLower", "a": "stifle", "b": "hPaw", "parent": "hUpper" },
+    { "part": "x1", "a": "xfa", "b": "xfb", "ignore": true },
+    { "part": "x2", "a": "xfb", "b": "xfc", "ignore": true },
+    { "part": "x3", "a": "xha", "b": "xhb", "ignore": true },
+    { "part": "x4", "a": "xhb", "b": "xhc", "ignore": true }
+  ],
+  "radius": {
+    "torso": 0.19, "neck": 0.12, "head": 0.12, "tail1": 0.07, "tail2": 0.07,
+    "fUpper": 0.08, "fLower": 0.06, "hUpper": 0.12, "hLower": 0.07,
+    "x1": 0.06, "x2": 0.05, "x3": 0.06, "x4": 0.05
+  },
+  "force": [
+    { "part": "hLower", "poly": [[28, 84], [52, 79], [64, 84], [58, 96], [50, 98], [48, 120], [26, 120]] }
+  ]
+}
