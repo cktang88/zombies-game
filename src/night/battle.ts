@@ -1977,7 +1977,7 @@ export class Battle {
 
   drawWireLane(c: CanvasRenderingContext2D, lane: number) {
     const s = depthScale(LANES[lane]);
-    c.strokeStyle = `rgba(${90 + lane * 12},${85 + lane * 12},${80 + lane * 12},0.9)`;
+    c.strokeStyle = `rgba(${58 + lane * 8},${55 + lane * 8},${52 + lane * 8},0.85)`;
     c.lineWidth = lane >= 2 ? 1.4 : 1;
     for (let k = 0; k < Math.min(3, G.fort.wire); k++) {
       const x0 = WALL_X + 60 + k * 90;
