@@ -76,13 +76,19 @@ export const TURNED_LOOK: Look[] = [
   { b: 1.55, s: 0.8, fog: 0.11, haze: '#86928a', outline: 2, rim: 0.8 },
   { b: 1.62, s: 0.84, fog: 0.07, haze: '#8f9a88', outline: 2.4, rim: 0.9 },
 ];
-/** The defenders: a touch below the Turned in value and contrast (they stand back, behind the wall);
- * a plain ink line, no warm rim (the rim over the ink read as a brown sticker halo, critique #9). */
+/** The defenders, value-staggered by row (docs/research/04 §8): the far row cooler, darker and hazed
+ * blue, the near row a warm, saturated key (scarves and caps pop), so two survivors side by side on
+ * alternate rows never share a value. A plain ink line; the rim is the light behind the line
+ * (sodium floodlights / the lantern), set per frame in actors.drawGuard, saturated and near-full
+ * alpha so it reads as light, not the brown halo a faint warm band made (critique #9). */
 export const GUARD_LOOK: Look[] = [
-  { b: 0.88, s: 0.8, fog: 0.1, outline: 2, rim: 0 },
-  { b: 0.92, s: 0.85, fog: 0.06, outline: 2.2, rim: 0 },
+  { b: 0.95, s: 0.8, fog: 0.14, haze: '#7a8cb4', outline: 2, rim: 0.8 },
+  { b: 1.0, s: 1.18, fog: 0, outline: 2.2, rim: 0.95 },
 ];
+/** Practical light colours: sodium floodlights, the lantern, a cold moon fill. */
+export const SODIUM = '#ffa040', LANTERN = '#ffc070', MOONLIT = '#9fb8e8';
 const CORPSE: Look = { b: 0.45, s: 0.6, fog: 0, outline: 0 };
+const GRADE_BUDGET = 1.5; // ms a frame the final grade may take before it turns itself off
 const PAD = 3; // transparent margin of every battle bake, so the layers line up
 const WARM = '#f0c98a', COOL = '#8fa6c8', DARK = '#0a0b10', MOON = '#c9d6e4';
 
@@ -246,6 +252,26 @@ export interface NightResult {
   headshots: number;
   lines: string[];
   fell: boolean;
+}
+
+/** The vignette (an ellipse set high: the HUD corners darken, the lanes stay clear) and the sky's
+ * top-down falloff, baked once at half resolution. */
+let vignetteCv: HTMLCanvasElement | null = null;
+function vignette(): HTMLCanvasElement {
+  if (vignetteCv) return vignetteCv;
+  const cv = vignetteCv = document.createElement('canvas');
+  cv.width = W / 2; cv.height = H / 2;
+  const c = cv.getContext('2d')!;
+  c.scale(0.5, 0.5);
+  const top = c.createLinearGradient(0, 0, 0, H * 0.6);
+  top.addColorStop(0, 'rgba(2,4,14,0.45)'); top.addColorStop(1, 'rgba(2,4,14,0)');
+  c.fillStyle = top; c.fillRect(0, 0, W, H * 0.6);
+  c.translate(W / 2, H * 0.42);
+  c.scale(1.7, 1);
+  const v = c.createRadialGradient(0, 0, H * 0.32, 0, 0, H * 0.72);
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.38)');
+  c.fillStyle = v; c.fillRect(-W, -H, W * 2, H * 2);
+  return cv;
 }
 
 /** A soft round puff (radial falloff) in one colour, cached: smoke, spores, dust. */
@@ -3087,9 +3113,9 @@ export class Battle {
     const L = this.lightEnv();
     type D = { y: number; f: () => void };
     const list: D[] = [];
-    for (const z of this.zombies) list.push({ y: this.sortKey(z), f: () => this.drawZombie(c, z, L) });
+    for (const z of this.zombies) list.push({ y: this.sortKey(z), f: () => { this.occlude(c, z); this.drawZombie(c, z, L); } });
     // a downed guard lies in front of the firestep's sandbags (they must stay in sight to be hauled in)
-    for (const gd of this.guards) if (!gd.s.dead && !gd.fled) list.push({ y: gd.downed ? WALL_KEY - 0.4 + gd.homeX * 1e-5 : gd.y + gd.homeX * 1e-5, f: () => this.drawGuard(c, gd) });
+    for (const gd of this.guards) if (!gd.s.dead && !gd.fled) list.push({ y: gd.downed ? WALL_KEY - 0.4 + gd.homeX * 1e-5 : gd.y + gd.homeX * 1e-5, f: () => { this.occludeGuard(c, gd); this.drawGuard(c, gd); } });
     // the firestep's sandbag courses, one in front of each row of defenders: they stand behind the
     // barricade line, legs in cover, torso and gun above it (critique #14)
     list.push({ y: DEF_LANES[0] + 0.5, f: () => this.drawParapet(c, 0) });
@@ -3162,6 +3188,7 @@ export class Battle {
     else if (G.weather === 'rain') this.drawPrecip(c, 'rain');
     this.vfx.drawAdd(c); // flashes, tracers, sparks, fire: emissive, so over the darkness
     this.drawGlow(c);
+    this.drawGrade(c);
     this.drawGuardLabels(c);
     for (const gd of this.guards) if (gd.downed && !gd.s.dead && !gd.fled) this.drawDownedLabel(c, gd);
     // texts
@@ -3203,11 +3230,38 @@ export class Battle {
       c.fillRect(-rx, -rx, rx * 2, rx * 2);
       c.restore();
     };
-    pool(150, 684, 230, 34, '255,214,150', 0.07); // the lantern behind the line
-    for (let i = 0; i < Math.min(3, G.fort.lights); i++) pool(520 + i * 190, 652, 300, 52, '255,226,170', 0.085);
+    pool(150, 684, 230, 34, '255,184,100', 0.1); // the lantern behind the line
+    // sodium floodlight pools: a saturated orange skirt, a hot pale core (warm against the cold road)
+    for (let i = 0; i < Math.min(3, G.fort.lights); i++) {
+      pool(520 + i * 190, 652, 300, 52, '255,150,50', 0.13);
+      pool(520 + i * 190, 654, 120, 22, '255,226,170', 0.12);
+    }
     for (const f of this.fires) pool(f.x, f.y, f.w * 1.1, 40, '255,150,60', 0.3 * Math.min(1, f.life));
     for (const l of this.lights) if (l.max > 1) pool(l.x, Math.max(l.y, LANES[1]), l.r * 0.6, 34, l.color, 0.18 * Math.min(1, l.life / l.max + 0.3));
     c.restore();
+  }
+
+  /**
+   * Occlusion shadow (docs/research/04 §8): a body standing in front of another darkens the one
+   * behind it round its own silhouette, a soft dark halo drawn just before it in the sorted pass.
+   * Only where something stands behind and overlaps, so an empty road keeps its value.
+   */
+  occlusionBlob(c: CanvasRenderingContext2D, x: number, feet: number, w: number, h: number, a: number) {
+    c.globalAlpha = a;
+    c.drawImage(softDot('3,5,14'), x - w, feet - h * 1.08, w * 2, h * 1.0);
+    c.globalAlpha = 1;
+  }
+  occlude(c: CanvasRenderingContext2D, z: Zombie) {
+    if (z.state === 'dying' || z.emerge !== undefined || z.leap) return;
+    const w = this.zw(z) * 0.95;
+    let n = 0;
+    for (const o of this.zombies) if (o !== z && o.y < z.y - 2 && o.state !== 'dying' && Math.abs(o.x - z.x) < w) n++;
+    if (n) this.occlusionBlob(c, z.x, z.y, w, this.zh(z), Math.min(0.5, 0.3 + 0.08 * n) * this.fogAlpha(z));
+  }
+  occludeGuard(c: CanvasRenderingContext2D, g: Guard) {
+    if (g.downed || g.post === 'roof') return;
+    const w = 46 * g.sc;
+    if (this.guards.some((o) => o !== g && !o.s.dead && !o.fled && !o.downed && o.y < g.y - 4 && Math.abs(o.x - g.x) < w * 1.1)) this.occlusionBlob(c, g.x, g.y, w, SH * g.sc, 0.36);
   }
 
   drawShadows(c: CanvasRenderingContext2D) {
@@ -3984,7 +4038,7 @@ export class Battle {
     d.globalCompositeOperation = 'source-over';
     d.clearRect(0, 0, W * s, H * s);
     const base = Math.max(0.12, 0.4 - G.fort.lights * 0.09 + (this.plan.special === 'crossing' ? -0.06 : 0));
-    d.fillStyle = `rgba(4,6,14,${base})`;
+    d.fillStyle = `rgba(6,12,36,${Math.min(0.55, base + 0.06)})`; // moonlit blue, not grey
     d.fillRect(0, 0, W * s, H * s);
     d.globalCompositeOperation = 'destination-out';
     const hole = (x: number, y: number, r: number, a: number) => {
@@ -3996,6 +4050,7 @@ export class Battle {
     };
     // the house: a lantern behind the line, its light on the ground
     hole(120, 640, 260, 0.6);
+    hole(170, 600, 230, 0.45); // its spill up the firestep: the line stays the lit island
     // flashlights taped to barrels
     for (const g of this.guards) {
       if (!g.w || g.s.dead || g.fled || g.downed) continue;
@@ -4052,7 +4107,25 @@ export class Battle {
       c.closePath();
       c.fill();
     }
+    // sodium beams over the road and the lamp heads themselves: the brightest things in the frame
+    const flood = Math.min(3, G.fort.lights);
+    for (let i = 0; i < flood; i++) {
+      const px = 260 - i * 90;
+      const bg = c.createLinearGradient(px, 0, 1100, 0);
+      bg.addColorStop(0, 'rgba(255,170,80,0.06)');
+      bg.addColorStop(1, 'rgba(255,170,80,0)');
+      c.fillStyle = bg;
+      c.beginPath();
+      c.moveTo(px, 380); c.lineTo(1200, 560 - i * 30); c.lineTo(1200, 720); c.lineTo(px, 400);
+      c.fill();
+      for (const hx of has('fort_light') ? [px - 30, px + 35] : [px + 3]) {
+        c.drawImage(softDot('255,150,60'), hx - 46, 381 - 30, 92, 60);
+        c.drawImage(softDot('255,236,200'), hx - 12, 381 - 8, 24, 16);
+      }
+    }
     for (const l of this.lights) {
+      // the white-hot core of a flash: the one moment the frame clips to white
+      if (l.max < 0.1 && l.life > 0) { const r = Math.min(40, l.r * 0.12); c.globalAlpha = Math.min(1, l.life / l.max) * 0.85; c.drawImage(softDot('255,248,230'), l.x - r, l.y - r, r * 2, r * 2); c.globalAlpha = 1; }
       const a = (l.life / l.max) * 0.25;
       const g = c.createRadialGradient(l.x, l.y, 0, l.x, l.y, l.r * 0.6);
       g.addColorStop(0, `rgba(${l.color},${a})`);
@@ -4061,16 +4134,40 @@ export class Battle {
       c.fillRect(l.x - l.r, l.y - l.r, l.r * 2, l.r * 2);
     }
     c.restore();
-    // vignette: an ellipse set high, so the bottom corners (HUD) darken and the lanes stay clear
+    // vignette + the top-down falloff, one cached half-res layer (built once: no per-frame gradients)
+    c.drawImage(vignette(), -24, -24, W + 48, H + 48);
+  }
+
+  /**
+   * The final grade (docs/research/04 §8), Effects quality High only (Medium / Low keep the blue
+   * darkness, the pools and the cached vignette + top falloff, which cost nothing new):
+   *  · split toning: a cold blue soft-light wash (shadows go blue, the lit warm stays warm);
+   *  · an S-curve: the frame soft-lit onto itself, which pushes the lights up and the darks
+   *    down (one blit, no blur).
+   */
+  gradeTone?: CanvasGradient;
+  /** the grade's own cost (ms, smoothed): on a software-rastered canvas the two full-frame blends cost
+   * several ms, so past GRADE_BUDGET it switches itself off for the night (a GPU canvas pays ~0) */
+  gradeMs = 0; gradeN = 0; gradeOff = false;
+  drawGrade(c: CanvasRenderingContext2D) {
+    if (fxQuality() !== 'high' || this.gradeOff) return;
+    const t0 = performance.now();
+    if (!this.gradeTone) {
+      const tone = this.gradeTone = c.createLinearGradient(0, 0, 0, H);
+      tone.addColorStop(0, 'rgb(48,62,108)'); tone.addColorStop(0.75, 'rgb(76,90,132)'); tone.addColorStop(1, 'rgb(80,86,116)');
+    }
     c.save();
-    c.translate(W / 2, H * 0.42);
-    c.scale(1.7, 1);
-    const v = c.createRadialGradient(0, 0, H * 0.32, 0, 0, H * 0.72);
-    v.addColorStop(0, 'rgba(0,0,0,0)');
-    v.addColorStop(1, 'rgba(0,0,0,0.38)');
-    c.fillStyle = v;
-    c.fillRect(-W, -H, W * 2, H * 2);
+    c.globalCompositeOperation = 'soft-light';
+    c.globalAlpha = 0.32;
+    c.fillStyle = this.gradeTone;
+    c.fillRect(-40, -40, W + 80, H + 80);
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.globalAlpha = 0.5;
+    c.drawImage(this.canvas, 0, 0);
     c.restore();
+    const dt = performance.now() - t0;
+    this.gradeMs = this.gradeN++ ? this.gradeMs * 0.9 + dt * 0.1 : dt;
+    if (this.gradeN > 20 && this.gradeMs > GRADE_BUDGET) this.gradeOff = true;
   }
 
   /** open circle = free fire, bar = hold fire, dot = heads only, square = protect wall; a post letter beside it */

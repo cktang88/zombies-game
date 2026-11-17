@@ -27,9 +27,13 @@ import { VARIANT_TINT, FOG_TINT, depthScale, type Look } from './render';
 import { panOf } from './gunfx';
 import type { BattleHook, SortedDraw } from './hook';
 import type { Battle, Zombie, Guard } from './battle';
-import { LANES, DEF_LANES, LOOK, TURNED_LOOK, GUARD_LOOK, wallX, nearestLane } from './battle';
+import { LANES, DEF_LANES, LOOK, TURNED_LOOK, GUARD_LOOK, SODIUM, LANTERN, wallX, nearestLane } from './battle';
+import { G } from '../state';
+import { fxQuality } from '../ui/settings';
 
 const WARM = '#f0c98a', COOL = '#8fa6c8', DARK = '#0a0b10', BURN = '#ff7a2a', MOON = '#c9d6e4';
+/** the cool tint of a body's shadow side: moonlight fill, not grey (split toning on the figure) */
+const SHADOW_HAZE = '#2c3a66';
 const ZS = 1.3; // battle.ts actor scale for the Turned
 const SH = 158; // survivor display height
 const FULL_RIGS = 40; // Turned drawn with the full rig; the rest use the flipbook unless acting
@@ -723,6 +727,21 @@ export class BattleActors implements BattleHook {
     c.globalAlpha = a0 * fog;
     rig.draw(c, z.x, z.y + dy + sink, scale, facing, undefined, this.cam);
     rig.hasDrawn = true;
+    if (lit && !flash && !clip && fxQuality() === 'high' && !z.leap) {
+      // lit from the line: the far half (away from the barricade) in the shaded, cooler grade, one
+      // hard cel terminator (the Turned's value stays: the band only takes the back third down)
+      const x0 = z.x + h * 0.06, lean = h * 0.06, top = z.y + dy - h * 1.3;
+      c.save();
+      c.beginPath();
+      c.moveTo(x0 + lean, top); c.lineTo(x0 + h, top); c.lineTo(x0 + h, z.y + 4); c.lineTo(x0 - lean, z.y + 4);
+      c.closePath();
+      c.clip();
+      applyLook(rig, { look: { ...look, b: +(look.b * 0.8).toFixed(3), fog: look.fog + 0.14, haze: SHADOW_HAZE }, variant: z.variant, lit: true, shade: false, rimColor: MOON, rimA: 0, rimDx: 0, rimDy: 0 }, scale, facing);
+      const ov = rig.overlay; rig.overlay = null;
+      rig.draw(c, z.x, z.y + dy + sink, scale, facing, undefined, this.cam);
+      rig.overlay = ov;
+      c.restore();
+    }
     c.globalAlpha = a0;
     // the Buck's eyes catch the light as it coils
     if (z.def.leap && (z.windup ?? 0) > 0) {
@@ -743,6 +762,12 @@ export class BattleActors implements BattleHook {
     return true;
   }
 
+  /** A muzzle flash (or any instant light) in front of this point this frame: it lights the body from the front. */
+  frontFlash(x: number, y: number): boolean {
+    for (const l of this.b.lights) if (l.max < 0.1 && l.life > 0 && l.x > x - 20 && Math.abs(l.x - x) < 140 && Math.abs(l.y - y) < 120) return true;
+    return false;
+  }
+
   /** Draw a defender with their rig (true), or leave it to the Classic path. */
   drawGuard(c: CanvasRenderingContext2D, g: Guard): boolean {
     if (!rigsOn()) return false;
@@ -750,14 +775,36 @@ export class BattleActors implements BattleHook {
     if (!r || !r.rig.ready) return false;
     const t0 = performance.now();
     const rig = r.rig;
-    const look = GUARD_LOOK[g.y >= DEF_LANES[1] ? 1 : 0];
+    const near = g.y >= DEF_LANES[1];
+    const look = GUARD_LOOK[near ? 1 : 0];
     const scale = (SH * g.sc) / 240;
-    // plain ink, no rim (GUARD_LOOK): the old warm rim, 2 px out over the ink, read as a brown halo
-    const d = +(look.outline * 0.45).toFixed(1);
-    applyLook(rig, { look, variant: 0, lit: true, shade: false, rimColor: WARM, rimA: look.rim ?? 0, rimDx: g.x > 120 ? -d : d, rimDy: 0 }, scale, g.face);
-    rig.overlay = null;
+    // the key is behind the line: the sodium floodlights over the step, or only the lantern (x≈120).
+    // A saturated rim on the side facing it, a shade on the side away (two cel bands), unless a
+    // muzzle flash lights the body from the front this frame.
+    const flood = Math.min(3, G.fort.lights);
+    const left = flood > 0 || g.x > 120; // the light is to the left of this body (screen space)
+    const rimA = (look.rim ?? 0) * (flood > 0 ? 1 : Math.max(0.55, 1 - Math.abs(g.x - 120) / 420));
+    const d = +(look.outline * 0.6).toFixed(1);
+    applyLook(rig, { look, variant: 0, lit: true, shade: false, rimColor: flood > 0 ? SODIUM : LANTERN, rimA: +rimA.toFixed(2), rimDx: left ? -d : d, rimDy: -d * 0.4 }, scale, g.face);
+    rig.overlay = this.b.selected() === g ? { src: silAtlas(rig.asset!, LANTERN), alpha: 0.16 } : null;
     rig.draw(c, g.x, g.y, scale, g.face, undefined, this.cam);
     rig.hasDrawn = true;
+    if (!this.frontFlash(g.x, g.y - SH * g.sc * 0.6)) {
+      // the shadow band: the far half of the body (from the light) redrawn in the shaded, cooler grade,
+      // clipped to a slanted half-plane (cel style: one hard terminator, no per-pixel work)
+      const h = SH * g.sc, dir = left ? 1 : -1;
+      const x0 = g.x + dir * h * 0.03, lean = dir * h * 0.08;
+      c.save();
+      c.beginPath();
+      c.moveTo(x0 + lean, g.y - h * 1.25); c.lineTo(x0 + dir * h, g.y - h * 1.25);
+      c.lineTo(x0 + dir * h, g.y + 4); c.lineTo(x0 - lean, g.y + 4);
+      c.closePath();
+      c.clip();
+      applyLook(rig, { look: { ...look, fog: look.fog + 0.2, haze: SHADOW_HAZE }, variant: 0, lit: false, shade: true, rimColor: DARK, rimA: 0, rimDx: 0, rimDy: 0 }, scale, g.face);
+      rig.overlay = null;
+      rig.draw(c, g.x, g.y, scale, g.face, undefined, this.cam);
+      c.restore();
+    }
     this.rigMs += performance.now() - t0;
     return true;
   }
