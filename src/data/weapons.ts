@@ -71,6 +71,27 @@ export type { WeaponClass } from '../types';
  *   arc        lobbed (40mm, pipe-bomb mortar): ignore bodies on the way; the round lands at
  *              the crosshair's x on the target lane after ~0.6s of flight, then explodes.
  *
+ * MELEE (hand weapons — separate from guns):
+ *   Items live in G.melee (WeaponItem with def = MELEE key); a survivor carries one gun
+ *   (Survivor.weapon) AND one melee weapon (Survivor.melee = uid in G.melee). Never look
+ *   melee defs up in WEAPONS. Call meleeProfile(item, { dmgMul, speedMul, staminaMul }):
+ *   dmg        per target hit (condition folded in)
+ *   reach      px from the body that the swing connects (boat hook ~110, knife ~40)
+ *   arc        how many targets one swing can hit (nearest first, across adjacent lanes)
+ *   swingTime  wind-up seconds before the hit lands; recovery: seconds after before the next
+ *   knock      push-back px; stagger 0..1: chance/impulse to stagger (stop, release a grab)
+ *   bleed      dps applied for BLEED_TIME seconds (machete, nail bat)
+ *   crit       damage multiplier for an overhead strike to the head (wall: a climber's head;
+ *              day runs: swing with the crosshair above the target's head line)
+ *   finisher   kills sleeping / downed / crawling targets outright (knife: silently)
+ *   stamina    cost per swing out of 100 (regen ~18/s); swinging tired = half damage, slow
+ *   noise      noise per swing (chainsaw is loud and draws them)
+ *   wear       condition lost per hit; at 0 the item breaks and is removed
+ *   fuel       fuel taken from stores per swing (chainsaw); no fuel = it will not start
+ *   pry        search-speed multiplier on doors/cars/sheds/caches (crowbar)
+ *   Night combat: melee at the wall vs climbers / over-the-wall, and guards out of ammo use
+ *   their melee weapon (meleeProfile(dmg)) instead of fists. Proficiency class: 'melee'.
+ *
  * Old fields on WeaponDef (dmg, rof, mag, ammo, …) are still present so legacy code
  * compiles, but they ignore ammo types. WEAPON_ORDER lists every gun.
  * ===================================================================================== */
@@ -331,11 +352,12 @@ export const WEAPON_ORDER = [
 
 export const CLASS_NAMES: Record<WeaponClass, string> = {
   handgun: 'Handguns', smg: 'Submachine guns', rifle: 'Rifles', assault: 'Assault rifles', marksman: 'Marksman rifles',
-  shotgun: 'Shotguns', heavy: 'Heavy machine guns', launcher: 'Launchers', bow: 'Bows', improvised: 'Improvised',
+  shotgun: 'Shotguns', heavy: 'Heavy machine guns', launcher: 'Launchers', bow: 'Bows', improvised: 'Improvised', melee: 'Melee',
 };
 
 // Every icon the arsenal needs (spread into the asset preload list).
 export const ARSENAL_ICONS: string[] = [...new Set([
+  'icon_m_hatchet', 'icon_m_fellingaxe', 'icon_m_crowbar', 'icon_m_bat', 'icon_m_machete', 'icon_m_fireaxe', 'icon_m_sledge', 'icon_m_boathook', 'icon_m_knife', 'icon_m_chainsaw',
   'icon_law', 'icon_m79', 'icon_pipemortar', 'icon_rocket', 'icon_g40', 'icon_pipebomb',
   'icon_mod_scope', 'icon_mod_reddot', 'icon_mod_suppressor', 'icon_mod_brake', 'icon_mod_sawedoff',
   'icon_mod_flashlight', 'icon_mod_hatchet', 'icon_mod_bipod', 'icon_mod_extmag', 'icon_mod_drum', 'icon_mod_taped', 'icon_mod_sling',
@@ -347,6 +369,107 @@ export const ARSENAL_ICONS: string[] = [...new Set([
 // Legacy pool names (still used by some night code).
 export const AMMO_NAMES: Record<string, string> = { light: 'Pistol rounds', shell: 'Shells', rifle: 'Rifle rounds', scrap: 'Scrap' };
 
+
+// ---------- melee ----------
+export interface MeleeDef {
+  id: string; name: string; icon: string; niche: string; desc: string;
+  dmg: number; reach: number; arc: number; swingTime: number; recovery: number; knock: number; stagger: number;
+  bleed?: number; crit: number; finisher?: boolean; stamina: number; noise: number; wear: number; fuel?: number; pry?: number;
+  craftable?: boolean;
+}
+export const BLEED_TIME = 4;
+export const MELEE: Record<string, MeleeDef> = {
+  hatchet: {
+    id: 'hatchet', name: 'Hatchet', icon: 'icon_m_hatchet', dmg: 34, reach: 55, arc: 1, swingTime: 0.2, recovery: 0.22, knock: 10, stagger: 0.25, crit: 2, stamina: 8, noise: 0.15, wear: 0.004,
+    niche: 'Fast and cheap: two quick chops while anything heavier is still winding up.',
+    desc: 'A Plumb hatchet from the kindling box by the stove.',
+  },
+  fellingaxe: {
+    id: 'fellingaxe', name: 'Felling axe', icon: 'icon_m_fellingaxe', dmg: 60, reach: 72, arc: 3, swingTime: 0.5, recovery: 0.45, knock: 22, stagger: 0.5, crit: 2, stamina: 20, noise: 0.2, wear: 0.003,
+    niche: 'A slow, wide cleave through three at once.',
+    desc: 'A Michigan-pattern head on a hickory helve, sharpened for pulpwood.',
+  },
+  crowbar: {
+    id: 'crowbar', name: 'Crowbar', icon: 'icon_m_crowbar', dmg: 30, reach: 60, arc: 1, swingTime: 0.28, recovery: 0.3, knock: 30, stagger: 0.7, crit: 1.8, stamina: 12, noise: 0.25, wear: 0.0008, pry: 1.8,
+    niche: 'Knocks them down, never breaks, and pries doors and cars open nearly twice as fast.',
+    desc: 'Thirty inches of mill-shop steel. Opens anything, eventually.',
+  },
+  bat: {
+    id: 'bat', name: 'Aluminum bat', icon: 'icon_m_bat', dmg: 26, reach: 65, arc: 2, swingTime: 0.26, recovery: 0.3, knock: 55, stagger: 0.8, crit: 1.8, stamina: 12, noise: 0.3, wear: 0.002,
+    niche: 'Shove and stagger: buys room more than it kills.',
+    desc: 'Vessey Vikings JV, 2019. The dents are newer.',
+  },
+  machete: {
+    id: 'machete', name: 'Machete', icon: 'icon_m_machete', dmg: 30, reach: 60, arc: 2, swingTime: 0.2, recovery: 0.2, knock: 6, stagger: 0.2, bleed: 9, crit: 2, stamina: 9, noise: 0.1, wear: 0.004,
+    niche: 'Fast, wide, and everything it touches keeps bleeding.',
+    desc: 'Brush machete from the county road crew. Somebody kept it sharp.',
+  },
+  fireaxe: {
+    id: 'fireaxe', name: 'Fire axe', icon: 'icon_m_fireaxe', dmg: 70, reach: 70, arc: 2, swingTime: 0.45, recovery: 0.4, knock: 25, stagger: 0.6, crit: 3, stamina: 18, noise: 0.2, wear: 0.002,
+    niche: 'Heavy crits: an overhead blow splits a head in one.',
+    desc: 'Red-handled pick-head axe off Engine 2. VESSEY VFD on the blade.',
+  },
+  sledge: {
+    id: 'sledge', name: 'Sledgehammer', icon: 'icon_m_sledge', dmg: 55, reach: 70, arc: 2, swingTime: 0.65, recovery: 0.6, knock: 95, stagger: 1, crit: 2, stamina: 28, noise: 0.4, wear: 0.0008,
+    niche: 'Huge knockback that even rocks a Ferryman; slow and exhausting.',
+    desc: 'Eight pounds of fence-post driver. Two swings and you need a breather.',
+  },
+  boathook: {
+    id: 'boathook', name: 'Boat hook', icon: 'icon_m_boathook', dmg: 22, reach: 115, arc: 1, swingTime: 0.3, recovery: 0.3, knock: 40, stagger: 0.45, crit: 1.6, stamina: 10, noise: 0.1, wear: 0.003,
+    niche: 'Reach: hits at nearly twice arm\'s length and holds one off the wall.',
+    desc: 'Ash pole and a bronze hook from the Halvorsen ferry.',
+  },
+  knife: {
+    id: 'knife', name: 'Filleting knife', icon: 'icon_m_knife', dmg: 18, reach: 40, arc: 1, swingTime: 0.15, recovery: 0.15, knock: 2, stagger: 0.05, crit: 2.5, finisher: true, stamina: 5, noise: 0, wear: 0.003,
+    niche: 'Silent finisher: sleeping, downed or crawling ones die without a sound.',
+    desc: 'A Rapala fillet knife from a tackle box. Thin, quick, quiet.',
+  },
+  chainsaw: {
+    id: 'chainsaw', name: 'Chainsaw', icon: 'icon_m_chainsaw', dmg: 24, reach: 62, arc: 2, swingTime: 0.06, recovery: 0.06, knock: 4, stagger: 0.5, bleed: 6, crit: 1.5, stamina: 2, noise: 2.2, wear: 0.0015, fuel: 0.04,
+    niche: 'Devastating and continuous — burns fuel, and every one of them hears it.',
+    desc: 'A Husqvarna from the hardware rental shelf. Hold it down.',
+  },
+  // improvised (craftable)
+  spear: {
+    id: 'spear', name: 'Rebar spear', icon: 'icon_m_boathook', dmg: 30, reach: 100, arc: 2, swingTime: 0.3, recovery: 0.35, knock: 18, stagger: 0.35, crit: 1.6, stamina: 10, noise: 0.1, wear: 0.006, craftable: true,
+    niche: 'Reach on the cheap: thrusts through two in a line.',
+    desc: 'Number-5 rebar ground to a point, tape for a grip.',
+  },
+  nailbat: {
+    id: 'nailbat', name: 'Nail bat', icon: 'icon_m_bat', dmg: 32, reach: 65, arc: 2, swingTime: 0.28, recovery: 0.3, knock: 45, stagger: 0.7, bleed: 5, crit: 1.8, stamina: 12, noise: 0.3, wear: 0.006, craftable: true,
+    niche: 'A bat that also opens them up: shove plus bleed.',
+    desc: 'Sixteen-penny nails through a Louisville Slugger.',
+  },
+  sawblade: {
+    id: 'sawblade', name: 'Saw-blade machete', icon: 'icon_m_machete', dmg: 34, reach: 60, arc: 2, swingTime: 0.24, recovery: 0.24, knock: 8, stagger: 0.2, bleed: 7, crit: 2, stamina: 10, noise: 0.15, wear: 0.007, craftable: true,
+    niche: 'Bandsaw steel from the mill: a heavier, ragged machete.',
+    desc: 'Cut from a broken head-rig bandsaw blade, ground on the bench grinder.',
+  },
+};
+export const MELEE_ORDER = Object.keys(MELEE);
+export const MELEE_ICONS: string[] = [...new Set(Object.values(MELEE).map((m) => m.icon))];
+
+export interface MeleeProfile {
+  cls: 'melee'; dmg: number; reach: number; arc: number; swingTime: number; recovery: number; knock: number; stagger: number;
+  bleed: number; crit: number; finisher: boolean; stamina: number; noise: number; wear: number; fuel: number; pry: number;
+}
+export interface MeleeMods { dmgMul?: number; speedMul?: number; staminaMul?: number }
+/** Melee CONTRACT: hand weapon + condition (+ optional survivor modifiers). Pure. */
+export function meleeProfile(w: WeaponItem, mods: MeleeMods = {}): MeleeProfile {
+  const d = MELEE[w.def];
+  const cond = Math.max(0, Math.min(1, w.cond));
+  const sp = mods.speedMul ?? 1;
+  return {
+    cls: 'melee',
+    dmg: Math.round(d.dmg * (0.7 + 0.3 * cond) * (mods.dmgMul ?? 1)),
+    reach: d.reach, arc: d.arc,
+    swingTime: d.swingTime * sp, recovery: d.recovery * sp,
+    knock: d.knock, stagger: d.stagger, bleed: d.bleed ?? 0, crit: d.crit, finisher: !!d.finisher,
+    stamina: d.stamina * (mods.staminaMul ?? 1), noise: d.noise, wear: d.wear, fuel: d.fuel ?? 0, pry: d.pry ?? 1,
+  };
+}
+/** Bare hands, for a survivor without a melee weapon. */
+export const FISTS: MeleeProfile = { cls: 'melee', dmg: 8, reach: 45, arc: 1, swingTime: 0.2, recovery: 0.6, knock: 60, stagger: 0.3, bleed: 0, crit: 1, finisher: false, stamina: 10, noise: 0.1, wear: 0, fuel: 0, pry: 1 };
 
 // ---------- attachments ----------
 // Which attachment family a gun belongs to (finer than proficiency class for fitting purposes).

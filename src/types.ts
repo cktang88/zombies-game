@@ -65,6 +65,7 @@ export interface Survivor {
   rel: Record<string, Relation>;
   job: JobId;
   weapon: string | null; // weapon instance id
+  melee?: string | null; // melee weapon instance id (G.melee), carried alongside the gun
   armor: string | null;
   kills: number;
   daysSurvived: number;
@@ -93,7 +94,7 @@ export interface Survivor {
 }
 
 // Weapon class: what a survivor's proficiency is in (see CLASS_NAMES in data/weapons.ts)
-export type WeaponClass = 'handgun' | 'smg' | 'rifle' | 'assault' | 'marksman' | 'shotgun' | 'heavy' | 'launcher' | 'bow' | 'improvised';
+export type WeaponClass = 'handgun' | 'smg' | 'rifle' | 'assault' | 'marksman' | 'shotgun' | 'heavy' | 'launcher' | 'bow' | 'improvised' | 'melee';
 
 export interface WeaponDef {
   id: string;
@@ -170,6 +171,7 @@ export interface GameState {
   graves: Survivor[];
   weapons: WeaponItem[];
   modStock?: ModItem[]; // spare attachments on the bench
+  melee?: WeaponItem[]; // melee weapons (def = MELEE key in data/weapons.ts); kept apart from guns
   buildings: Building[];
   fort: { hp: number; maxHp: number; level: number; spikes: number; wire: number; lights: number; traps: number; turrets?: number };
   craftQueue: { recipe: string; progress: number }[];
