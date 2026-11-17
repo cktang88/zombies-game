@@ -4,8 +4,17 @@ import { TRAITS, TRAIT_IDS } from '../data/traits';
 import { FIRST_M, FIRST_F, LAST, BEFORE, OUTBREAK, NICKS } from '../data/names';
 
 export const SKILLS: SkillId[] = ['shooting', 'building', 'crafting', 'medicine', 'scavenging', 'farming', 'social'];
-const SPRITES_M = ['surv_rifle', 'surv_shotgun', 'surv_smg'];
-const SPRITES_F = ['surv_pistol', 'surv_idle'];
+// sprites by sex and age bracket (young <30, mid <55, old)
+const SPRITES: Record<string, string[]> = {
+  m0: ['surv_smg', 'surv_m_young'], m1: ['surv_rifle', 'surv_m_mid', 'surv_m_big'], m2: ['surv_shotgun', 'surv_m_old'],
+  f0: ['surv_idle', 'surv_f_young', 'surv_pistol'], f1: ['surv_f_mid', 'surv_f_native', 'surv_pistol'], f2: ['surv_f_old'],
+};
+export function pickSprite(sex: 'm' | 'f', age: number) {
+  const list = SPRITES[sex + (age < 30 ? 0 : age < 55 ? 1 : 2)];
+  const used = new Set(G.survivors.map((x) => x.sprite));
+  const fresh = list.filter((x) => !used.has(x));
+  return R.pick(fresh.length ? fresh : list);
+}
 
 export const PART_NAMES: Record<BodyPart, string> = {
   head: 'head', torso: 'torso', larm: 'left arm', rarm: 'right arm', lleg: 'left leg', rleg: 'right leg',
@@ -53,7 +62,7 @@ export function makeSurvivor(opts: Partial<Survivor> = {}): Survivor {
     nick: R.chance(0.15) ? R.pick(NICKS) : undefined,
     age,
     sex,
-    sprite: R.pick(sex === 'm' ? SPRITES_M : SPRITES_F),
+    sprite: '',
     before: before.text,
     outbreak: R.pick(OUTBREAK),
     traits,
@@ -78,6 +87,7 @@ export function makeSurvivor(opts: Partial<Survivor> = {}): Survivor {
     tales: [],
     ...opts,
   };
+  if (!s.sprite) s.sprite = pickSprite(s.sex, s.age);
   return s;
 }
 

@@ -9,9 +9,11 @@ import {
 } from '../sim/survivors';
 
 export const W = 1280, H = 720;
-const WALL_X = 352; // front face of the barricade
-const LANE_TOP = 606, LANE_BOT = 668;
-const SURV_Y = 652;
+const WALL_X = 372; // front face of the barricade
+const LANE_TOP = 616, LANE_BOT = 690;
+const SURV_Y = 664;
+const ZS = 1.3; // global actor scale for the Turned
+const SH = 158; // survivor display height
 
 interface Zombie {
   id: number;
@@ -146,7 +148,7 @@ export class Battle {
   setupGuards() {
     const fighters = living().filter(canFight);
     fighters.sort((a, b) => (b.isLeader ? 1 : 0) - (a.isLeader ? 1 : 0));
-    const slots = [228, 162, 98, 40, 280, 130];
+    const slots = [262, 192, 124, 58, 0, 160];
     fighters.slice(0, 6).forEach((s, i) => {
       const w = G.weapons.find((x) => x.uid === s.weapon) ?? null;
       this.guards.push({ s, w, x: slots[i], y: SURV_Y + (i % 2) * 8 - (i >= 4 ? 30 : 0), cd: R.range(0, 1), mag: w ? WEAPONS[w.def].mag : 0, reload: 0, kills: 0, flash: 0, fled: false, recoil: 0 });
@@ -246,6 +248,7 @@ export class Battle {
       if (!this.ended) this.raf = requestAnimationFrame(loop);
     };
     this.raf = requestAnimationFrame(loop);
+    (window as unknown as { __battle: Battle }).__battle = this;
   }
 
   destroy() {
@@ -461,8 +464,7 @@ export class Battle {
   }
 
   muzzle(g: Guard) {
-    const h = 128;
-    return { x: g.x + 58 - g.recoil * 4, y: g.y - h * 0.66 };
+    return { x: g.x + SH * 0.45 - g.recoil * 4, y: g.y - SH * 0.68 };
   }
 
   // Ray against all zombies; returns whether anything was hit.
@@ -512,8 +514,8 @@ export class Battle {
   }
 
   hitbox(z: Zombie) {
-    const h = z.def.height * z.scale;
-    const w = z.def.width * z.scale;
+    const h = z.def.height * z.scale * ZS;
+    const w = z.def.width * z.scale * ZS;
     const lift = z.state === 'over' || z.state === 'maul' ? 0 : 0;
     const top = z.y - h - lift;
     const headH = h * z.def.head;
@@ -610,7 +612,8 @@ export class Battle {
     g.cd -= dt;
     if (g.cd > 0) return;
     const fog = this.plan.special === 'fog';
-    const range = fog ? 760 : 1260;
+    // guards only engage what they can make out in the dark
+    const range = (fog ? 640 : 820) + Math.min(3, G.fort.lights) * 130 + (hasTrait(g.s, 'nightowl') ? 120 : 0);
     const targets = this.zombies.filter((z) => z.state !== 'dying' && z.x < range && z.x > g.x + 30);
     if (!targets.length) return;
     const tgt = targets.reduce((best, z) => {
@@ -637,7 +640,7 @@ export class Battle {
     const goHead = R.chance(0.2 + aim * 0.25);
     const ty = goHead ? hb.hy : (hb.y1 + hb.y2) / 2;
     const tx = goHead ? hb.hx : tgt.x;
-    const err = (def.spread * 1.2 + (1.15 - aim - lightBonus) * 0.06 + (fog ? 0.04 : 0)) * (1 + dist / 1400);
+    const err = (def.spread * 1.2 + (1.15 - aim - lightBonus) * 0.07 + (fog ? 0.04 : 0)) * (1 + dist / 900);
     const base = Math.atan2(ty - mz.y, tx - mz.x);
     for (let i = 0; i < def.pellets; i++) {
       const a = base + R.gauss(0, def.pellets > 1 ? def.spread * 0.7 : err * 0.6);
@@ -696,8 +699,8 @@ export class Battle {
     }
     if (z.state === 'walk') {
       z.x -= speed * dt;
-      if (z.x - (z.def.width * z.scale) / 2 <= WALL_X) {
-        z.x = WALL_X + (z.def.width * z.scale) / 2;
+      if (z.x - (z.def.width * z.scale * ZS) / 2 <= WALL_X) {
+        z.x = WALL_X + (z.def.width * z.scale * ZS) / 2;
         z.state = G.fort.hp > 0 ? 'wall' : 'over';
       }
     } else if (z.state === 'wall') {
@@ -803,7 +806,7 @@ export class Battle {
     // a body left in the road, darkened and laid flat
     const im = img(z.sprite);
     if (!im) return;
-    const h = z.def.height * z.scale;
+    const h = z.def.height * z.scale * ZS;
     const w = (im.width / im.height) * h;
     const c = this.gctx;
     c.save();
@@ -870,7 +873,7 @@ export class Battle {
     else { c.fillStyle = '#2a2d33'; c.fillRect(0, 0, W, H); }
     // night grade: push the painted dusk toward night
     const nightT = Math.min(1, this.t / 40);
-    c.fillStyle = `rgba(14,18,30,${0.38 + nightT * 0.18})`;
+    c.fillStyle = `rgba(14,18,30,${0.22 + nightT * 0.14})`;
     c.fillRect(0, 0, W, H);
     // road
     const g = c.createLinearGradient(0, 590, 0, H);
@@ -903,7 +906,7 @@ export class Battle {
     const list: D[] = [];
     for (const z of this.zombies) list.push({ y: z.y, f: () => this.drawZombie(c, z) });
     for (const gd of this.guards) if (!gd.s.dead && !gd.fled) list.push({ y: gd.y - 40, f: () => this.drawGuard(c, gd) });
-    list.push({ y: 655, f: () => this.drawWall(c) });
+    list.push({ y: 668, f: () => this.drawWall(c) });
     list.sort((a, b) => a.y - b.y);
     for (const d of list) d.f();
     // particles
@@ -971,15 +974,15 @@ export class Battle {
   drawWall(c: CanvasRenderingContext2D) {
     const frac = G.fort.hp / G.fort.maxHp;
     const im = img(frac > 0.45 ? 'barricade' : 'barricade_broken');
-    const h = 150 + Math.min(60, (G.fort.maxHp - 300) * 0.12);
+    const h = 118 + Math.min(50, (G.fort.maxHp - 300) * 0.1);
     if (im) {
       const w = (im.width / im.height) * h;
       if (frac <= 0) {
         c.globalAlpha = 0.85;
-        c.drawImage(im, WALL_X - w + 10, 672 - h * 0.45, w, h * 0.45);
+        c.drawImage(im, WALL_X - w + 10, 694 - h * 0.45, w, h * 0.45);
         c.globalAlpha = 1;
       } else {
-        c.drawImage(im, WALL_X - w + 10, 672 - h, w, h);
+        c.drawImage(im, WALL_X - w + 10, 694 - h, w, h);
       }
       // spikes
       for (let i = 0; i < Math.min(5, G.fort.spikes) * 3; i++) {
@@ -1004,7 +1007,7 @@ export class Battle {
 
   drawGuard(c: CanvasRenderingContext2D, g: Guard) {
     const im = img(g.s.sprite);
-    const h = 128;
+    const h = SH;
     const isP = g === this.player;
     const bob = Math.sin(this.t * 1.6 + g.x) * 1.2;
     if (im) {
@@ -1054,7 +1057,7 @@ export class Battle {
 
   drawZombie(c: CanvasRenderingContext2D, z: Zombie) {
     const im = img(z.sprite);
-    const h = z.def.height * z.scale;
+    const h = z.def.height * z.scale * ZS;
     if (!im) return;
     const w = (im.width / im.height) * h;
     c.save();
@@ -1080,6 +1083,13 @@ export class Battle {
       c.beginPath();
       c.rect(-w / 2 - 10, -h + h * z.def.head * 0.95, w + 20, h);
       c.clip();
+    }
+    const rim = shadeImg(z.sprite, '#a9b8c9');
+    if (rim && z.state !== 'dying') {
+      const a = c.globalAlpha;
+      c.globalAlpha = a * 0.55;
+      c.drawImage(rim, -w / 2 + 1.5, -h - 1.5, w, h);
+      c.globalAlpha = a;
     }
     c.drawImage(im, -w / 2, -h, w, h);
     if (z.flash > 0) {
@@ -1114,7 +1124,7 @@ export class Battle {
     const s = 0.5;
     d.globalCompositeOperation = 'source-over';
     d.clearRect(0, 0, W * s, H * s);
-    const base = Math.max(0.18, 0.62 - G.fort.lights * 0.13 + (this.plan.special === 'crossing' ? -0.1 : 0));
+    const base = Math.max(0.12, 0.46 - G.fort.lights * 0.1 + (this.plan.special === 'crossing' ? -0.08 : 0));
     d.fillStyle = `rgba(4,6,14,${base})`;
     d.fillRect(0, 0, W * s, H * s);
     d.globalCompositeOperation = 'destination-out';

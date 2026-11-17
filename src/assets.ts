@@ -1,7 +1,8 @@
 const imgs = new Map<string, HTMLImageElement>();
 
 const IDS = [
-  'surv_rifle', 'surv_pistol', 'surv_shotgun', 'surv_smg', 'surv_idle',
+  'surv_rifle', 'surv_pistol', 'surv_shotgun', 'surv_smg', 'surv_idle', 'surv_f_old', 'surv_f_mid', 'surv_m_mid', 'surv_m_young',
+  'surv_f_native', 'surv_m_old', 'surv_m_big', 'surv_f_young',
   'z_shambler', 'z_shambler2', 'z_runner', 'z_bloater', 'z_brute', 'z_crawler', 'z_riot', 'z_shrieker',
   'barricade', 'barricade_broken', 'corpse',
   'icon_pistol', 'icon_revolver', 'icon_shotgun', 'icon_rifle', 'icon_smg', 'icon_carbine', 'icon_nailgun', 'icon_molotov',

@@ -30,6 +30,46 @@
       "prompt": "A tired young woman in her twenties with a long braid, oversized army surplus parka and wool beanie, standing holding a claw hammer and a bag of nails, facing right."
     },
     {
+      "id": "surv_f_young",
+      "height": 230,
+      "prompt": "A young woman in her early twenties with an undercut and nose ring, wearing a torn pharmacy smock under a puffy black jacket, holding a pistol pointing right, facing right."
+    },
+    {
+      "id": "surv_m_big",
+      "height": 230,
+      "prompt": "A huge bearded man in his fifties with a shaved head, suspenders over a stained thermal undershirt, a welder's leather apron, holding a submachine gun pointing right, facing right."
+    },
+    {
+      "id": "surv_m_old",
+      "height": 230,
+      "prompt": "A thin elderly man in his seventies with a white mustache, an old army field jacket with faded patches, a VFW cap, holding a revolver steady pointing right, facing right."
+    },
+    {
+      "id": "surv_f_native",
+      "height": 230,
+      "prompt": "An Ojibwe woman in her thirties with a long black braid, a heavy canvas work coat and wool mittens with the fingers cut off, aiming a hunting rifle to the right, facing right."
+    },
+    {
+      "id": "surv_m_young",
+      "height": 230,
+      "prompt": "A lanky teenage-looking young man around nineteen with messy blond hair, a high-school letterman jacket over a hunting vest in blaze orange, aiming a lever-action rifle to the right, facing right."
+    },
+    {
+      "id": "surv_m_mid",
+      "height": 230,
+      "prompt": "A Black man in his thirties with a short beard, a stained diner cook's apron over a thermal shirt and a denim jacket, aiming a pistol to the right, facing right."
+    },
+    {
+      "id": "surv_f_mid",
+      "height": 230,
+      "prompt": "A broad-shouldered woman in her forties with a red bandana over dark curly hair, a paper mill union jacket with a LOCAL 41 patch, holding a pump shotgun ready pointing right, facing right."
+    },
+    {
+      "id": "surv_f_old",
+      "height": 230,
+      "prompt": "A wiry woman in her sixties with short grey hair, reading glasses on a cord, a quilted barn coat and rubber boots, aiming a bolt-action rifle to the right with practiced calm, facing right."
+    },
+    {
       "id": "z_shambler",
       "height": 240,
       "flip": true,
