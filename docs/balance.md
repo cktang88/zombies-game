@@ -588,3 +588,36 @@ Before the change, on the same seeds (1 seed): passive held 3/8 at 0 and fell fr
   - Make the tide special double its middle wave rather than only adding points.
 
 Economy after the change: `npm run simtest` passes. Day-10 ammunition is 1.4 nights in reserve, day 15 is 0.9, and 68% of nights from day 10 end with less than one night left (target ≥ 40%). `tools/balance.ts --quick` reports 8/10. Its two fails (tap vs spray on autos, a niche for the muzzleloader) are in the gun data and are unchanged by this pass.
+
+## 10. Crowd tempo: overtaking, waves in the dark, one body per guard round, double tides
+
+**Why.** §9 left three targets unmet (passive holds days 3–8, the decent bot rarely loses planks, the day-6 tide is not scary). The cause was crowd tempo: single-file lanes paced by Drags and Pulpers, and waves spawned at the screen edge arriving over 30–40 s.
+
+**Changes (in code).**
+- **Overtaking** (`walkLane`, night/battle.ts). A body held more than 0.35 s behind a slower one in its lane (speed × 1.2 or more), or behind a staggered or knocked-down one, squeezes past. It moves at 75% of its speed (`Battle.tune.passSpeed`), a 9 px half-step to the side, for up to 2.5 s. It stays inside its lane's shot tolerance. A wall queue is never overtaken. On a tide night, 15–20 bodies are mid-pass at the peak, and the front of the crowd now reaches the planks.
+- **Waves form up in the dark** (`spawn` / `darkBand`). Plan spawns marked `dark` appear at x from `darkBand()` to 1150. `darkBand()` = the guards' sight in tonight's light + 60 (floodlights and a roof push it out; fog lets them form at 820), never less than 900 and capped at 1090. They fade in over 1.2 s. They are telegraphed by an alert chorus from where they stand, a line ("Out in the dark, close…", at most once per 12 s), CLOSE IN THE DARK on the threat ribbon, and a line in the dusk intel. Which spawns are dark is set by the director: 60% of the 2nd and 3rd surges on tide, horde and Crossing nights (`darkBig`), and 25% from day 6 on ordinary nights (`dark`, `darkDay`).
+- **Guards: one body per round** (`Battle.tune.guardPierce 0`). In the gun data, pierce *n* means the round carries on through *n* more bodies. A guard's round now stops in the first body. The leader keeps the gun's full pierce. With `guardPierce 1` (two bodies), every night through day 8 was still held at 0 by the guards alone. This one lever turns the early game.
+- **Tides double their middle wave** (`DIRECTOR_TUNE.tideMid 2`). The dusk label says so ("…the middle of the night comes twice as thick"). The intel line for that wave reads "Second wave, the tide itself (twice the first)".
+- **Director re-tune.** `early 0.6` (was 0.5). New `late 0.7`, eased in from day 9 to day 13; tide nights use `lateTide 0.85` so they stay the big nights. `crossing 2.2` (the ×, now a knob). With the weaker guards and the denser crowd, ordinary mid- and late-game nights would otherwise end the moment the §6f stores run dry.
+
+**Results** (same harness as §9: 2 seeds × leader; wall lost / max; "fell" = the wall went down; † = deaths). *prep* is the decent bot with a house that stockpiled for the night: on days 13, 20 and 23, about 1.5× the ammunition, a firebomb stock, and wall +60–120. On other days *prep* is the same house as *decent*.
+
+| day | night (pts, bodies) | passive | decent | decent + prep | read |
+|---|---|---|---|---|---|
+| 3 | ordinary (53, ~45) | −12, 0 | 0, 0 | 0, 0 | safe; the guards nearly hold it alone |
+| 6 | **tide** (150, ~140) | **fell**†, **fell** | −45, −279 | −91, −90 | passive breaks; the decent leader loses planks, once nearly all |
+| 8 | ordinary, breather (90, ~55) | **fell**, **fell** | 0, 0 | 0, 0 | passive breaks; the leader alone clears a breather night |
+| 11 | tunnel / ordinary (~150) | **fell**†††, **fell**† | 0, **fell** (out of ammo, slow chew) | −48, −48 | |
+| 13 | tunnel / **tide** (~220, 107–155) | **fell**††, **fell**† | **fell**†, **fell**†† | 0, 0 | the §6f day-13 stock is out of pistol rounds mid-night (as in §9); stockpiled, it holds |
+| 18 | tunnel / ordinary (~120) | **fell**†, **fell** | 0, 0 | 0, 0 | big stocks, a light night |
+| 20 | tunnel / **tide** (~230, 102–151) | **fell**††, **fell**†† | 0, **fell**†† (tide) | 0, 0 | the tide breaks an unprepared house |
+| 23 | **the Crossing** (~250, ~115) | **fell**†, **fell**†† | **fell**†, **fell**† | **fell**††, **held** | a coin flip with full prep |
+
+**Verdict against the targets.**
+- *Passive loses badly by day 6–8:* **met.** The wall goes on the day-6 tide and on day 8 (with deaths from day 11). Before: passive held through day 8.
+- *Decent holds early, loses wall chunks from ~day 6:* **met on day 6** (−45 to −279). The day-8 breather is still clean. Its points are 0.7× the cycle, and the bot alone kills everything at range.
+- *Tide nights are scary:* **met.** Day 6 costs planks. Days 13 and 20 break a house on its normal stores, with 1–2 dead. A stockpiled house holds them.
+- *The Crossing is desperate, just survivable with decent + prep:* **met, narrowly.** Without prep it always falls. With prep, 1 of 2 held.
+- **Caveat: outcomes are binary.** The wall either loses ≤ 50 or falls. The fall comes when the leader's magazine stock runs dry (every fall above has the leader's stock at 0). From there the guards' rounds and then their melee cannot stop the crowd. This is the §6f ammunition squeeze and not tempo: the same seed can land on either side between runs. Partial-loss nights ("chunks") show up mainly on tides. Making losses more gradual would need the leader's options after ammo (melee, firebombs, falling back), and that is out of scope here.
+
+Economy: `npm run simtest -- 3` passes (nights from day 10 ending with < 1 night of ammo: 72%, target ≥ 40%). `tools/balance.ts --quick` reports 8/10, unchanged.
