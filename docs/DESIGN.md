@@ -133,9 +133,16 @@ See research 03. In short: graphic-novel cel shading, heavy ink, two-tone hard s
 - [x] Earned titles (Gatekeeper, Sawbones, Twice-Bitten, One-Arm...), veteran guns that get carved names
 - [x] Nail turrets (generator machinery), wearable mill-plate vests, hand-to-hand when out of ammo
 - [x] More incidents: fire, the Quiet, the Parish, weddings, old faces
-- [ ] Moodle icons above heads at night; downed state + drag-to-safety
-- [ ] Raiders that shoot back, tunnelers, the Bellwether
-- [ ] Faction quests/consequences beyond standing (County raids if hostile, Union steel trades)
-- [ ] Tale grammar variety, wall carvings
+- [x] Moodles above heads at night; downed state + drag-to-safety
+- [x] County raiders that shoot back from cover, tunnelers from the storm drain, horde nights, the Bellwether on the Crossing, the dog
+- [x] Faction consequences (14 faction incidents), 51 incidents total, chronicle grammars, three endings (Ferry, Mill, Spring) with epilogue
+- [x] Procedural music (title/day/night), settings, help ledger, onboarding, phone layout
+- [x] Arsenal: 23 guns with niches, calibers & bullet types, 14 attachments in 6 slots, fireProfile contract (research 01/05)
+- [x] Daylight runs with depth lanes, baked backgrounds, contact shadows (research 04)
+- [ ] Night depth & readability pass (research 04): 4 lanes, baked background, shadows, crowd tint variants, lane hit tests
+- [ ] Combat tactics (research 05): body zones & visible weakspots, enemy roles & telegraphs, accuracy rework, Focus/nerve, guard posts & orders, reload choices, corpse ramps, pre-night deployment, scouting intel, rally & sally, crewed emplacements (MG nest, swivel rifle, flame projector), Leapers & Spitters (duck to dodge)
+- [ ] Survivor progression: XP per skill, psych/courage/grit, weapon-class proficiency, perks at 4/7, Drill job
+- [ ] Day loop (research 06): hour budget, dawn ledger juice, scarcity, seeds/daily, teaser
+- [ ] Campaign/meta: radio threads, score card + endless choice, legacy ledger across runs, tide calendar, push-your-luck runs, companion runs
+- [ ] Shooting feel & balance: layered procedural gun audio, balance harness (docs/balance.md), hitstop/shake/recoil pass, launchers
 - [ ] Animated sprite frames (2–3 per Turned)
-- [ ] Music: sparse cello/drone stems
