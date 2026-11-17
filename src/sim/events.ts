@@ -1,29 +1,16 @@
 import type { PendingEvent, Survivor, Res } from '../types';
-import { G, R, log, add, has, pay, newWeapon, addRep } from '../state';
+import { G, R, log, add, has, pay, newWeapon, rep } from '../state';
 import { WEAPONS } from '../data/weapons';
 import {
   living, first, displayName, makeSurvivor, addThought, changeOpinion, setBond, wound, killSurvivor, isBitten, byId, tale,
   hasTrait, they, them, their, PART_NAMES, addScar, rel,
 } from './survivors';
 import { buildingLevel } from './day';
+import { type Incident, cap, pop, popIntent, lowestSpotlight, shiftRep, admit } from './incident';
+import { FACTION_INCIDENTS, factionTick } from './factions';
+import { MORE_INCIDENTS, storyTick } from './incidents';
 
 // Incidents: the director draws one (sometimes none) each morning.
-interface Incident {
-  id: string;
-  weight: () => number;
-  make: () => PendingEvent | null;
-  resolve?: (choice: number, data: Record<string, unknown>) => string;
-}
-
-const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
-const pop = () => living().length;
-// RimWorld-style population intent: few survivors -> more arrivals
-const popIntent = () => [4, 3, 2.2, 1.6, 1.2, 1, 0.7, 0.45, 0.25, 0.1, 0][Math.min(10, pop())];
-
-function lowestSpotlight(list = living()) {
-  // favour survivors who have had few stories so far
-  return R.weighted(list, (s) => 1 / (1 + s.tales.length))!;
-}
 
 function newcomerEvent(id: string, title: string, intro: (n: Survivor) => string, risky = false): Incident {
   return {
@@ -54,15 +41,12 @@ function newcomerEvent(id: string, title: string, intro: (n: Survivor) => string
         log('event', `${displayName(n)} had a bite under ${their(n)} sleeve. We sent ${them(n)} back out.`);
         return `There it was, on ${their(n)} forearm. ${cap(they(n))} did not argue. ${cap(they(n))} just nodded and walked back out.`;
       }
-      n.arrivedDay = G.day;
       if (d.bitten) wound(n, 'bite', 0.35, 'larm').hidden = true;
-      G.survivors.push(n);
-      for (const s of living()) if (s !== n) { rel(s, n); rel(n, s); }
+      admit(n);
       if (c === 1) {
         changeOpinion(n, living()[0], -10);
         addThought(n, { id: 'strip', label: 'Searched like an animal at the gate', mood: -6, days: 4 }, 1);
       }
-      log('arrival', `${displayName(n)} joined us. ${n.before}`);
       return `${first(n)} is one of us now.`;
     },
   };
@@ -89,13 +73,12 @@ export const INCIDENTS: Incident[] = [
     resolve: (c, d) => {
       const n = d.n as Survivor;
       if (c === 1) return `${first(n)} stayed behind. We left ${them(n)} what food we could spare.`;
-      G.survivors.push(n);
       const by = byId(d.by as string);
+      admit(n, 'found', by);
       if (by) {
         changeOpinion(n, by, 30);
         tale(by, `Found ${first(n)} alive in the ruins.`);
       }
-      log('arrival', `${displayName(n)} came home with ${by ? first(by) : 'the scavengers'}.`);
       return `${first(n)} is one of us now.`;
     },
   },
@@ -116,10 +99,9 @@ export const INCIDENTS: Incident[] = [
     resolve: (c, d) => {
       const a = d.a as Survivor, b = d.b as Survivor;
       if (c === 1) { log('event', `A family came to the gate. We had no room.`); return 'They would not split up. They walked on together.'; }
-      G.survivors.push(a, b);
+      admit(a); admit(b);
       setBond(a, b, 'parent', 'child');
       rel(a, b).opinion = 70; rel(b, a).opinion = 55;
-      log('arrival', `${displayName(a)} and ${first(b)} joined us. Family.`);
       return 'They came in together.';
     },
   },
@@ -129,11 +111,13 @@ export const INCIDENTS: Incident[] = [
     make: () => {
       const wants: Res = R.pick(['fuel', 'food', 'meds', 'light'] as Res[]);
       const offers = R.pick([{ r: 'rifle', n: 18 }, { r: 'shell', n: 20 }, { r: 'parts', n: 6 }, { r: 'meds', n: 3 }, { r: 'food', n: 12 }, { r: 'scrap', n: 20 }].filter((o) => o.r !== wants)) as { r: Res; n: number };
-      const price = { fuel: 6, food: 10, meds: 3, light: 40 }[wants as 'fuel'];
+      // friends of the Ferry families get the family price
+      const friend = rep('ferry') >= 40 ? 0.6 : rep('ferry') >= 10 ? 0.8 : rep('ferry') <= -40 ? 1.5 : 1;
+      const price = Math.max(1, Math.round({ fuel: 6, food: 10, meds: 3, light: 40 }[wants as 'fuel'] * friend));
       const gun = R.chance(0.3) ? R.pick(['revolver', 'pump', 'hunting', 'smg']) : null;
       return {
         id: 'trader', title: 'Peltier\'s boat',
-        text: `Old Peltier tied up at the landing below the house. Ferry families trade with whoever is still breathing. "${R.pick(['Ice is coming. After that I\'m nobody.', 'County boys pay in promises. You pay in goods.', 'Don\'t tell the Union I was here.'])}"\n\nHe wants ${price} ${wants}. He offers ${offers.n} ${offers.r}${gun ? `, or a ${WEAPONS[gun].name.toLowerCase()} for twice the price` : ''}.`,
+        text: `Old Peltier tied up at the landing below the house. Ferry families trade with whoever is still breathing.${friend < 1 ? ' He gives us the family price now.' : friend > 1 ? ' He keeps one hand near the shotgun under the tarp.' : ''} "${R.pick(['Ice is coming. After that I\'m nobody.', 'County boys pay in promises. You pay in goods.', 'Don\'t tell the Union I was here.'])}"\n\nHe wants ${price} ${wants}. He offers ${offers.n} ${offers.r}${gun ? `, or a ${WEAPONS[gun].name.toLowerCase()} for twice the price` : ''}.`,
         data: { wants, price, offers, gun },
         choices: [
           { label: `Trade ${price} ${wants} for ${offers.n} ${offers.r}`, effect: 'a' },
@@ -148,14 +132,14 @@ export const INCIDENTS: Incident[] = [
       const pick = opts[c];
       if (pick === 'a') {
         if (G.stores[wants] < price) return 'We did not have enough. Peltier spat in the river and pushed off.';
-        add(wants, -price); add(offers.r, offers.n); addRep('ferry', 8);
-        return 'Done. He did not count it twice.';
+        add(wants, -price); add(offers.r, offers.n);
+        return 'Done. He did not count it twice.' + shiftRep('ferry', 8);
       }
       if (pick === 'b' && gun) {
         if (G.stores[wants] < price * 2) return 'We did not have enough. Peltier laughed at us.';
-        add(wants, -price * 2); newWeapon(gun, R.range(0.6, 0.95)); addRep('ferry', 12);
+        add(wants, -price * 2); newWeapon(gun, R.range(0.6, 0.95));
         log('event', `Bought a ${WEAPONS[gun].name.toLowerCase()} off the Peltier boat.`);
-        return 'He handed it over wrapped in a feed sack.';
+        return 'He handed it over wrapped in a feed sack.' + shiftRep('ferry', 12);
       }
       return 'He pushed off into the brown water.';
     },
@@ -309,16 +293,15 @@ export const INCIDENTS: Incident[] = [
         G.flags.unionGuy = s.id;
         add('scrap', 40);
         G.fort.maxHp += 80; G.fort.hp += 80;
-        addRep('union', 25);
         log('event', `${displayName(s)} went to stand the Union's wall at the mill for a week. They sent steel plate in trade.`);
-        return `${first(s)} went with the runner. The steel arrived by sled that afternoon.`;
+        return `${first(s)} went with the runner. The steel arrived by sled that afternoon.` + shiftRep('union', 25);
       }
       if (c === 1) {
         if (G.stores.rifle < 15) return 'We do not have it. The runner looks at our wall and does not say anything.';
-        add('rifle', -15); add('scrap', 25); addRep('union', 10);
-        return 'They sent back scrap. Fair trade.';
+        add('rifle', -15); add('scrap', 25);
+        return 'They sent back scrap. Fair trade.' + shiftRep('union', 10);
       }
-      return 'The runner walks back to the mill.';
+      return 'The runner walks back to the mill.' + shiftRep('union', -5);
     },
   },
   {
@@ -336,21 +319,21 @@ export const INCIDENTS: Incident[] = [
     },
     resolve: (c, d) => {
       const want = d.want as Res, n = d.n as number;
-      if (c === 0) { add(want, -n); addRep('county', 10); log('event', `We paid the County men ${n} ${want} to go away.`); for (const s of living()) addThought(s, { id: 'extorted', label: 'Paid off the County men', mood: -4, days: 3 }, 1); return 'They took it and wrote something in a ledger.'; }
-      addRep('county', -25);
+      if (c === 0) { add(want, -n); log('event', `We paid the County men ${n} ${want} to go away.`); for (const s of living()) addThought(s, { id: 'extorted', label: 'Paid off the County men', mood: -4, days: 3 }, 1); return 'They took it and wrote something in a ledger.' + shiftRep('county', 10); }
+      const note = shiftRep('county', -25);
       const shooters = living().reduce((a, s) => a + s.skills.shooting, 0) + G.weapons.length * 2;
       if (R.chance(Math.min(0.85, 0.3 + shooters * 0.02))) {
         const s = lowestSpotlight();
         tale(s, 'Faced down the County men on the road.');
-        if (R.chance(0.4)) { newWeapon('carbine', 0.7); log('tale', `${displayName(s)} faced down the County men on the road. One didn't walk away; we took his carbine.`); return `${first(s)} fired first. One stayed on the road. We have his carbine.`; }
+        if (R.chance(0.4)) { newWeapon('carbine', 0.7); log('tale', `${displayName(s)} faced down the County men on the road. One didn't walk away; we took his carbine.`); return `${first(s)} fired first. One stayed on the road. We have his carbine.` + note + shiftRep('county', -20); }
         log('tale', `${displayName(s)} faced down the County men on the road.`);
-        return `${first(s)} put a round over their heads and they decided we were inspected.`;
+        return `${first(s)} put a round over their heads and they decided we were inspected.` + note;
       }
       const s = R.pick(living());
       wound(s, 'gunshot', R.range(0.3, 0.7));
       add(want, -n);
       log('event', `${displayName(s)} was shot by the County men. They took the ${want} anyway.`);
-      return `${first(s)} was shot. They took what they came for.`;
+      return `${first(s)} was shot. They took what they came for.` + note;
     },
   },
   {
@@ -467,11 +450,15 @@ export const INCIDENTS: Incident[] = [
           addThought(s, { id: 'buried', label: `We buried ${first(g)} properly`, mood: hasTrait(s, 'faithful') ? 8 : 4, days: 4 }, 1);
         }
         log('event', `We buried ${displayName(g)} behind the house. ${R.pick(['Someone said a few words.', 'Nobody knew what to say.', 'The dog would not leave the grave.', 'It started to snow while we filled it in.'])}`);
-        return 'We marked it with a ' + R.pick(['ferry oar', 'hockey stick', 'mill sign', 'cross of lath', 'stack of river stones']) + '.';
+        return 'We marked it with a ' + R.pick(['ferry oar', 'hockey stick', 'mill sign', 'cross of lath', 'stack of river stones']) + '.' + (rep('parish') > -40 ? shiftRep('parish', 3) : '');
       }
       for (const s of living()) if (hasTrait(s, 'faithful') || hasTrait(s, 'gentle')) addThought(s, { id: 'burned', label: `We burned ${first(g)} like trash`, mood: -6, days: 4 }, 1);
       log('event', `We burned ${displayName(g)} on the road. The smoke went east, toward the river.`);
-      return 'The smoke went east.';
+      G.flags.burned = ((G.flags.burned as number) ?? 0) + 1;
+      // the Parish watches the smoke; a promise to bury, broken, costs more
+      const broke = G.flags.promisedBury ? shiftRep('parish', -20) : '';
+      if (G.flags.promisedBury) { delete G.flags.promisedBury; log('event', 'We broke our word to Pastor Engvall. She will hear of it.'); }
+      return 'The smoke went east.' + broke;
     },
   },
   {
@@ -559,14 +546,14 @@ export const INCIDENTS: Incident[] = [
     resolve: (c) => {
       if (c === 0) {
         add('meds', -2);
-        addRep('parish', 20);
+        const note = shiftRep('parish', 20);
         G.flags.parish = ((G.flags.parish as number) ?? 0) + 1;
         for (const s of living()) addThought(s, { id: 'charity', label: 'We helped the Parish', mood: hasTrait(s, 'faithful') || hasTrait(s, 'kind') ? 8 : 3, days: 5 }, 1);
         log('event', 'We left medicine on the Legion hall steps for the Parish.');
-        return 'The next morning there is a loaf of bread on our gatepost, wrapped in a dish towel.';
+        return 'The next morning there is a loaf of bread on our gatepost, wrapped in a dish towel.' + note;
       }
       for (const s of living()) if (hasTrait(s, 'kind') || hasTrait(s, 'faithful')) addThought(s, { id: 'refused_parish', label: 'We let the Parish children cough', mood: -6, days: 4 }, 1);
-      return 'Nobody mentions the note again.';
+      return 'Nobody mentions the note again.' + shiftRep('parish', -5);
     },
   },
   {
@@ -596,17 +583,20 @@ export const INCIDENTS: Incident[] = [
       return 'For an hour nobody looked at the windows.';
     },
   },
+  ...FACTION_INCIDENTS,
+  ...MORE_INCIDENTS,
 ];
 
 export function rollIncident(): PendingEvent | null {
-  if (G.day <= 1 || !living().length) return null;
+  if (G.day <= 1 || !living().length || G.flags.ending) return null;
   const pool = INCIDENTS.filter((i) => (G.director.cooldowns[i.id] ?? 0) <= G.day);
-  const forced = pool.find((i) => i.weight() >= 8);
+  // the heaviest forced incident wins (endings and threats before a burial)
+  const forced = pool.filter((i) => i.weight() >= 8).sort((a, b) => b.weight() - a.weight())[0];
   const pick = forced ?? (R.chance(0.7) ? R.weighted(pool, (i) => i.weight()) : undefined);
   if (!pick) return null;
   const ev = pick.make();
   if (!ev) return null;
-  G.director.cooldowns[pick.id] = G.day + (pick.id === 'radio_voice' ? 2 : 3);
+  G.director.cooldowns[pick.id] = G.day + (pick.cooldown ?? (pick.id === 'radio_voice' ? 2 : 3));
   return ev;
 }
 
@@ -630,6 +620,7 @@ export function returnsTick(): string[] {
       }
     }
   }
+  out.push(...factionTick(), ...storyTick());
   return out;
 }
 

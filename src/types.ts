@@ -74,6 +74,7 @@ export interface Survivor {
   dead?: { day: number; cause: string; epitaph: string };
   tales: string[]; // short memorable things they did
   titles?: string[]; // earned epithets
+  child?: boolean; // a non-combatant child: eats, lifts spirits, never stands the wall
 }
 
 export interface WeaponDef {
