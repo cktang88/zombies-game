@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="dark" />
+<meta name="robots" content="noindex" />
+<title>Vessey Sound Board</title>
+<style>
+  :root { --bg: #111; --fg: #ddd; --mut: #888; --btn: #2a2622; --hi: #c9a24a; --bad: #d55; --ok: #7b7; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--fg); font: 14px/1.4 system-ui, sans-serif; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--hi); margin: 18px 0 6px; }
+  p { color: var(--mut); margin: 0 0 8px; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  button { background: var(--btn); color: var(--fg); border: 1px solid #3a342e; border-radius: 4px; padding: 6px 10px; font: inherit; cursor: pointer; }
+  button:hover { border-color: var(--hi); }
+  button:active { background: #3a342e; }
+  label { color: var(--mut); display: inline-flex; gap: 4px; align-items: center; margin-right: 10px; }
+  select, input[type=range] { accent-color: var(--hi); }
+  table { border-collapse: collapse; font: 12px ui-monospace, monospace; margin-top: 8px; }
+  td, th { padding: 2px 8px; text-align: left; border-bottom: 1px solid #222; }
+  .bad { color: var(--bad); } .ok { color: var(--ok); }
+  #status { font: 12px ui-monospace, monospace; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<h1>Vessey sound board</h1>
+<p>Dev page: audition every procedural sound. Click anywhere first to start audio.</p>
+<div id="app"></div>
+<script type="module" src="./src/soundboard.ts"></script>
+</body>
+</html>

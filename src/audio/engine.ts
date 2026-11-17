@@ -212,7 +212,7 @@ function gain(c: Ctx, v: number) {
 // ---------------------------------------------------------------------------
 // Engine: buses + voices.
 // ---------------------------------------------------------------------------
-export interface Voice { out: GainNode; start: number; end: number; pri: number; srcs: AudioScheduledSourceNode[] }
+export interface Voice { out: GainNode; gain: number; start: number; end: number; pri: number; srcs: AudioScheduledSourceNode[] }
 export interface VoiceOpts { gain?: number; far?: boolean; rev?: number; echo?: number; pan?: number; pri?: number }
 
 export class Engine {
@@ -308,17 +308,20 @@ export class Engine {
     const now = this.now;
     this.voices = this.voices.filter((v) => v.end > now);
     const pri = o.pri ?? 1;
-    while (this.voices.length >= this.maxVoices) {
+    // voices that will still be sounding when this one starts
+    const live = this.voices.filter((v) => v.end > t && v.start <= t + 0.001);
+    while (live.length >= this.maxVoices) {
       let vi = 0;
-      for (let i = 1; i < this.voices.length; i++) {
-        const a = this.voices[i], b = this.voices[vi];
+      for (let i = 1; i < live.length; i++) {
+        const a = live[i], b = live[vi];
         if (a.pri < b.pri || (a.pri === b.pri && a.start < b.start)) vi = i;
       }
-      this.kill(this.voices[vi]);
-      this.voices.splice(vi, 1);
+      this.kill(live[vi], Math.max(now, t));
+      live.splice(vi, 1);
     }
     const c = this.c;
-    const out = gain(c, o.gain ?? 1);
+    const g = o.gain ?? 1;
+    const out = gain(c, g);
     let tail: AudioNode = out;
     if (o.pan) {
       const p = c.createStereoPanner();
@@ -328,19 +331,19 @@ export class Engine {
     tail.connect(o.far ? this.farIn : this.sfxIn);
     if (o.rev) tail.connect(gain(c, o.rev)).connect(this.revIn);
     if (o.echo) tail.connect(gain(c, o.echo)).connect(this.echoIn);
-    const v: Voice = { out, start: t, end: t + len, pri, srcs: [] };
+    const v: Voice = { out, gain: g, start: t, end: t + len, pri, srcs: [] };
     this.voices.push(v);
     return v;
   }
 
-  kill(v: Voice, fade = 0.03) {
-    const now = this.now;
+  /** Fade a voice out at time `at` (default now) and stop its sources. */
+  kill(v: Voice, at = this.now, fade = 0.03) {
     const g = v.out.gain;
-    g.cancelScheduledValues(now);
-    g.setValueAtTime(g.value, now);
-    g.linearRampToValueAtTime(0, now + fade);
-    for (const s of v.srcs) { try { s.stop(now + fade + 0.01); } catch { /* not started / already stopped */ } }
-    v.end = now;
+    g.cancelScheduledValues(at);
+    g.setValueAtTime(v.gain, at);
+    g.linearRampToValueAtTime(0, at + fade);
+    for (const s of v.srcs) { try { s.stop(at + fade + 0.01); } catch { /* not started / already stopped */ } }
+    v.end = at;
   }
 
   /** Make a voice and a Synth writing into it; `len` is a max length guess (cap bookkeeping). */

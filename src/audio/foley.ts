@@ -60,8 +60,8 @@ export function impact(s: Synth, kind: ImpactKind) {
       break;
     case 'burst':
       // the pulper going: a big wet bloom, a sub drop and a few late splats
-      s.noise({ dur: 0.7, v: 1, brown: true, type: 'lowpass', f: 900, f2: 180, sweep: 0.4, q: 0.9, grit: 0.3, attack: 0.004 });
-      s.tone({ f: 75, f2: 34, sweep: 0.25, dur: 0.4, v: 0.75 });
+      s.noise({ dur: 0.7, v: 0.55, brown: true, type: 'lowpass', f: 900, f2: 180, sweep: 0.4, q: 0.9, grit: 0.3, attack: 0.004 });
+      s.tone({ f: 75, f2: 34, sweep: 0.25, dur: 0.4, v: 0.45 });
       for (let i = 0; i < 5; i++) wet(s, rnd(0.02, 0.4), rnd(0.18, 0.32));
       break;
   }
@@ -70,8 +70,8 @@ export function impact(s: Synth, kind: ImpactKind) {
 /** Kill-confirm tick; rises ~6% per kill in a streak (caps after 12). */
 export function confirm(s: Synth, streak: number) {
   const f = 1250 * Math.pow(1.06, Math.max(0, Math.min(12, streak - 1)));
-  s.tone({ f, dur: 0.06, v: 0.08, type: 'triangle', attack: 0.001 });
-  s.tone({ f: f * 2, dur: 0.035, v: 0.03, type: 'sine', attack: 0.001 });
+  s.tone({ f, dur: 0.07, v: 0.15, type: 'triangle', attack: 0.001 });
+  s.tone({ f: f * 2, dur: 0.04, v: 0.05, type: 'sine', attack: 0.001 });
 }
 
 // ---------------------------------------------------------------------------
@@ -98,8 +98,8 @@ function scrape(s: Synth, at: number, h: number, dur: number, v: number) {
   s.noise({ at, dur, v, type: 'bandpass', f: 1700 / h, f2: 1100 / h, q: 2.2, attack: dur * 0.4 });
 }
 function plasticHull(s: Synth, at: number, v: number) {
-  s.noise({ at, dur: 0.06, v, type: 'bandpass', f: rnd(500, 650), q: 2, attack: 0.001 });
-  s.tick(at, 1400, v * 0.4, 0.015, 3);
+  s.noise({ at, dur: 0.07, v: v * 1.8, type: 'bandpass', f: rnd(500, 650), q: 1.5, attack: 0.001 });
+  s.tick(at, 1400, v * 0.8, 0.02, 2.5);
 }
 
 export function reload(s: Synth, kind: ReloadKind, stage: ReloadStage) {
@@ -122,8 +122,8 @@ export function reload(s: Synth, kind: ReloadKind, stage: ReloadStage) {
       } else if (kind === 'bolt') {
         reload(s, kind, 'bolt');
       } else {
-        s.tick(0, 3000 / h, 0.32, 0.015, 5);                  // mag release
-        scrape(s, 0.015, h, 0.09, 0.22);                      // mag slides out
+        s.tick(0, 3000 / h, 0.55, 0.018, 3.5);                // mag release
+        scrape(s, 0.015, h, 0.09, 0.4);                       // mag slides out
       }
       break;
     case 'in':
@@ -154,8 +154,8 @@ export function reload(s: Synth, kind: ReloadKind, stage: ReloadStage) {
       }
       break;
     case 'shell':
-      s.noise({ dur: 0.05, v: 0.3, type: 'bandpass', f: 900 / h, q: 2, attack: 0.004 });   // thumbed in
-      s.tick(0.045, 2500 / h, 0.3, 0.015, 4);                                              // past the latch
+      s.noise({ dur: 0.06, v: 0.6, type: 'bandpass', f: 900 / h, q: 1.6, attack: 0.004 });  // thumbed in
+      s.tick(0.05, 2500 / h, 0.6, 0.02, 3);                                                // past the latch
       break;
     case 'bolt':
       s.tick(0, 2000, 0.32, 0.03, 4);
@@ -169,8 +169,8 @@ export function reload(s: Synth, kind: ReloadKind, stage: ReloadStage) {
         s.ring(0.002, [3000, 4500], 0.08, 0.12);
         s.noise({ at: 0.03, dur: 0.15, v: 0.06, type: 'bandpass', f: 4000, q: 8 });           // the spin
       } else if (kind === 'muzzle') {
-        s.tick(0, 3500, 0.3, 0.012, 5);                        // cap pressed on the nipple
-        s.tick(0.18, 2200, 0.35, 0.02, 4);                     // hammer to half-cock
+        s.tick(0, 3500, 0.6, 0.015, 3);                        // cap pressed on the nipple
+        clack(s, 0.18, 1, 0.5, 2200);                          // hammer to half-cock
       } else {
         s.noise({ dur: 0.06, v: 0.6, type: 'bandpass', f: 700 / h, q: 2, attack: 0.001 });
         s.ring(0.001, [1500 / h, 2400 / h], 0.12, 0.2);
@@ -247,8 +247,8 @@ export function casing(s: Synth, kind: CasingKind) {
 // Handling faults
 // ---------------------------------------------------------------------------
 export function dryFire(s: Synth) {
-  s.tick(0, 3400, 0.4, 0.012, 5);
-  s.ring(0.001, [5200, 7400], 0.03, 0.05);
+  s.tick(0, 3400, 0.8, 0.016, 3);
+  s.ring(0.001, [5200, 7400], 0.04, 0.08);
 }
 export function jam(s: Synth) {
   s.tick(0, 3000, 0.35, 0.012, 5);                                   // the click that didn't fire
@@ -267,10 +267,10 @@ export function overheat(s: Synth) {
 // ---------------------------------------------------------------------------
 export function explosion(s: Synth, size = 1) {
   const z = Math.max(0.4, Math.min(2, size));
-  s.noise({ dur: 0.03, v: 0.8, type: 'highpass', f: 1800, attack: 0.0005 });                        // the crack
-  s.noise({ dur: 1.2 * z, v: 1.3, type: 'lowpass', f: 2200, f2: 140, sweep: 0.5 * z, q: 0.6, grit: 0.6, attack: 0.002 }); // blast
-  s.tone({ f: 120, f2: 28, sweep: 0.35 * z, dur: 1.4 * z, v: 1, attack: 0.004 });                    // sub
-  s.noise({ at: 0.04, dur: 2.4 * z, v: 0.7, brown: true, type: 'lowpass', f: 130, q: 0.7, attack: 0.15, hold: 0.2 }); // rumble
+  s.noise({ dur: 0.03, v: 0.5, type: 'highpass', f: 1800, attack: 0.0005 });                        // the crack
+  s.noise({ dur: 1.2 * z, v: 0.6, type: 'lowpass', f: 2200, f2: 140, sweep: 0.5 * z, q: 0.6, grit: 0.6, attack: 0.002 }); // blast
+  s.tone({ f: 120, f2: 28, sweep: 0.35 * z, dur: 1.4 * z, v: 0.55, attack: 0.004 });                 // sub
+  s.noise({ at: 0.04, dur: 2.4 * z, v: 0.45, brown: true, type: 'lowpass', f: 130, q: 0.7, attack: 0.15, hold: 0.2 }); // rumble
   const bits = Math.round(14 * z);
   for (let i = 0; i < bits; i++) {                                                                  // debris raining down
     const at = 0.3 + Math.pow(Math.random(), 0.7) * 1.6 * z;

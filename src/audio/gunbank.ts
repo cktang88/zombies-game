@@ -68,10 +68,10 @@ export function ensureGun(sr: number, kind: GunKind, sup = false, far = false, a
   if (p) return p;
   if (!canRender()) return Promise.resolve(null);
   const r = recipeFor(kind, sup, far);
-  p = Promise.all(Array.from({ length: TAKES }, async () => {
+  p = Promise.all(Array.from({ length: TAKES }, async (_, i) => {
     const len = Math.ceil(r.len * sr);
     const oc = new OfflineAudioContext(1, len, sr);
-    synthGun(new Synth(oc, oc.destination, 0), r, jitter(), action);
+    synthGun(new Synth(oc, oc.destination, 0), r, jitter(i, TAKES), action);
     return oc.startRendering();
   })).then((bufs) => {
     const win = Math.floor(sr * 0.15);
@@ -133,13 +133,13 @@ export function playGun(E: Engine, kindIn: string, o: GunOpts = {}): boolean {
     src.stop(t + r.len + 0.05);
     v.srcs.push(src);
   } else {
-    v.out.gain.value = vol * (normGuess.get(`${kind}${sup}${far}`) ?? 0.5);
+    v.gain = v.out.gain.value = vol * (normGuess.get(`${kind}${sup}${far}`) ?? 0.5);
     synthGun(new Synth(E.c, v.out, t, v.srcs), r, jitter(), action);
     void ensureGun(E.c.sampleRate, kind, sup, far, action);
   }
   if (o.incendiary) {
     const s = new Synth(E.c, v.out, t, v.srcs);
-    s.noise({ at: 0.01, dur: 0.7, v: 0.35 / Math.max(0.2, v.out.gain.value), type: 'bandpass', f: 1300, f2: 450, q: 0.7, attack: 0.04, grit: 0.4 });
+    s.noise({ at: 0.01, dur: 0.7, v: 0.35 / Math.max(0.2, v.gain), type: 'bandpass', f: 1300, f2: 450, q: 0.7, attack: 0.04, grit: 0.4 });
   }
   E.duck(r.duck * (o.volume ?? 1), delay);
   return true;

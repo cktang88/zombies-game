@@ -176,10 +176,13 @@ export function distant(r: GunRecipe): GunRecipe {
   };
 }
 
-export function jitter(): Jitter {
+/** Per-take variation. Pass (i, n) to stratify takes so round-robin variants always differ. */
+export function jitter(i = 0, n = 1): Jitter {
+  const u = (i + Math.random()) / n;              // 0..1, one bin per take
+  const w = (((i * 2 + 1) % n) + Math.random()) / n; // a different ordering for the filter
   return {
-    p: 0.96 + Math.random() * 0.08,
-    fm: 0.88 + Math.random() * 0.24,
+    p: 0.96 + u * 0.08,
+    fm: 0.88 + w * 0.24,
     lv: () => 0.9 + Math.random() * 0.2,
     tj: () => 0.94 + Math.random() * 0.12,
   };
