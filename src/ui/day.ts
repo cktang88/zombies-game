@@ -1,5 +1,5 @@
 import type { Survivor, JobId, Res, WeaponItem, ModSlot } from '../types';
-import { G, dateLabel, ICE_DAY, has, pay, ordinal, docsFound, rep } from '../state';
+import { G, R, dateLabel, ICE_DAY, has, pay, ordinal, docsFound, rep } from '../state';
 import { DOCS, FACTIONS } from '../data/lore';
 import { spriteUrl } from '../assets';
 import { WEAPONS, CLASS_NAMES, CALIBERS, AMMO_TYPES, MODS, MOD_SLOTS, fireProfile, ammoTypesFor, ammoLabel, selectedAmmo, slotsFor, attachMod, detachMod, type FireProfile } from '../data/weapons';
@@ -549,6 +549,10 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
   const sel = detail ? byId(detail) : null;
   const stale = living().filter((s) => canWork(s) && G.day > 1 && !planConfirmed(s) && !(s.isLeader && ranToday()));
   const heat = heatNeed();
+  // threatPoints() rolls the director's jitter; peek without advancing the seeded RNG so re-renders stay deterministic
+  const r0 = R.s;
+  const tp = threatPoints();
+  R.s = r0;
   root.innerHTML = `<div class="day ${duskArmed && stale.length ? 'armed' : ''}" style="background-image:linear-gradient(rgba(10,10,12,.72),rgba(10,10,12,.9)),url(${spriteUrl('bg_far')})">
     <header>
       <div class="date"><b>${dateLabel()}</b> · day ${G.day} · ${WEATHER_LABEL[G.weather] ?? G.weather} <span class="seed" title="This town's seed. Start a new game from it on the title screen to replay the same Vessey.">seed ${G.seed}${G.flags.daily ? ` · daily ${esc(String(G.flags.daily))}` : ''}</span></div>
@@ -573,8 +577,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
         ${fc ? `<p class="forecast">${esc(fc)}</p>` : ''}
         ${calendarHtml()}
         ${threadsHtml()}
-        <div class="weather">The Weather: <b>${persona().name}</b><br><span class="dim">Tonight feels like ${threatPoints() > 60 ? 'a long one' : threatPoints() > 30 ? 'a bad one' : 'any other night'}.</span></div>
-        <div class="weather">The Weather: <b>${persona().name}</b><br><span class="dim">Tonight feels like ${threatPoints() > 60 ? 'a long one' : threatPoints() > 30 ? 'a bad one' : 'any other night'}.${heat ? ` The stove will want ${heat} fuel.` : ''}</span></div>
+        <div class="weather">The Weather: <b>${persona().name}</b><br><span class="dim">Tonight feels like ${tp > 60 ? 'a long one' : tp > 30 ? 'a bad one' : 'any other night'}.${heat ? ` The stove will want ${heat} fuel.` : ''}</span></div>
         ${runHtml()}
         <button class="dusk" data-act="dusk">${duskArmed && stale.length ? 'Yesterday\'s jobs are marked. Go anyway ›' : 'Go to the wall at dusk ›'}<small>Enter</small></button>
       </section>
