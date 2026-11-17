@@ -37,8 +37,12 @@ export interface HitIn {
 export const IMPACT = {
   /** body mass by ZombieDef id (styles.ts ragdoll masses, a little evened out) */
   mass: { sleeper: 1, deer: 0.8, drag: 0.7, tunneler: 0.8, pulper: 1.8, crier: 0.9, deputy: 1.35, ferryman: 3.2, leaper: 1.1, spitter: 1.2, raider: 1, bellwether: 4 } as Record<string, number>,
-  /** J per unit mass at which each tier starts */
-  at: { flinch: 8, stagger: 62, stumble: 150, knockdown: 290 },
+  /** J per unit mass at which each tier starts. stagger 62 -> 85 (balance.md §11): at 62 a guard's
+   *  revolver round or one shell of buckshot staggered a Sleeper most times, the staggered bodies were
+   *  overtaken by the ones behind (§10 walkLane) and the crowd reached the planks bunched: day-3
+   *  houses with a passive leader fell 4 nights in 14. At 85 those hits flinch; rifles, slugs and the
+   *  player's aimed shots still stagger. */
+  at: { flinch: 8, stagger: 85, stumble: 150, knockdown: 290 },
   /** J = dmg × (DMG0 + knock / KNOCK) + knock × KNOCK_ONCE (the knock term once per shell) */
   DMG0: 0.5, KNOCK: 25, KNOCK_ONCE: 1.5,
   /** blasts: J += push × BLAST */

@@ -4194,8 +4194,13 @@ export class Battle {
       const prof = this.eff(p);
       const icon = img(def.icon);
       const hard = realism() === 'hardcore';
-      c.fillStyle = 'rgba(10,9,8,0.7)';
+      // the panel sits over the near lanes: a light scrim that fades in from the left, so the
+      // Turned walking in under it stay visible (the text carries its own shadow)
+      const pg = c.createLinearGradient(W - 330, 0, W - 20, 0);
+      pg.addColorStop(0, 'rgba(10,9,8,0)'); pg.addColorStop(0.35, 'rgba(10,9,8,0.32)'); pg.addColorStop(1, 'rgba(10,9,8,0.45)');
+      c.fillStyle = pg;
       c.fillRect(W - 330, H - 92, 310, 74);
+      c.shadowColor = 'rgba(0,0,0,0.9)'; c.shadowBlur = 3;
       if (icon) {
         const ih = 44, iw = Math.min(150, (icon.width / icon.height) * ih);
         c.drawImage(icon, W - 320, H - 84, iw, (icon.height / icon.width) * iw);
@@ -4244,6 +4249,7 @@ export class Battle {
         c.fillText(this.jam.clearing > 0 ? 'clearing…' : this.jam.kind === 'barrel' ? `BARREL HOT — ${keyCap('night.reload')} swap` : this.jam.kind === 'double' ? `DOUBLE-FEED — ${keyCap('night.reload')}` : `JAMMED — tap ${keyCap('night.reload')}`, W - 30, H - 98);
       }
     }
+    c.shadowBlur = 0; c.shadowColor = 'transparent';
     // nerve and rally, bottom left above the key line
     if (p) {
       const x = 20, y = 64;
