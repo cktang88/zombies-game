@@ -46,4 +46,39 @@ export class Rng {
   }
 }
 
-export const rng = new Rng();
+/** 32-bit FNV-1a hash of a string: turns words or dates into seeds. */
+export function hashSeed(s: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0) % 2 ** 31;
+}
+
+/** A typed seed: plain digits are used as-is, anything else is hashed. Empty → null. */
+export function parseSeed(text: string): number | null {
+  const t = text.trim();
+  if (!t) return null;
+  if (/^\d{1,10}$/.test(t)) return Number(t) % 2 ** 31;
+  return hashSeed(t.toLowerCase());
+}
+
+/** A fresh random seed for a new game (the only unseeded randomness the sim needs). */
+export function freshSeed(): number {
+  try {
+    const a = new Uint32Array(1);
+    crypto.getRandomValues(a);
+    return a[0] % 2 ** 31;
+  } catch {
+    return (Date.now() * 2654435761) % 2 ** 31;
+  }
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** Daily Vessey: everyone gets the same seed and Weather on the same local calendar day. */
+export function dailySeed(d = new Date()) {
+  const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const seed = hashSeed(`vessey-daily-${iso}`);
+  return { seed, iso, label: `${MONTHS[d.getMonth()]} ${d.getDate()}`, mode: (['siege', 'quiet', 'coin'] as const)[seed % 3] };
+}

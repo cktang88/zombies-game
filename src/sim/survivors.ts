@@ -198,8 +198,9 @@ export function skillOf(s: Survivor, k: SkillId) {
 // thresholds. Combat may read attr(s, 'courage') for panic/flee and level(s, 'heavy') for emplacement handling.
 export type AttrId = 'courage' | 'grit';
 export type ProgressKey = SkillId | AttrId | 'heavy' | `prof_${WeaponClass}`;
-export const WEAPON_CLASSES: WeaponClass[] = ['pistol', 'smg', 'shotgun', 'rifle', 'lmg', 'bow', 'tool'];
-export const CLASS_NAMES: Record<WeaponClass, string> = { pistol: 'pistol', smg: 'SMG', shotgun: 'shotgun', rifle: 'rifle', lmg: 'machine gun', bow: 'bow', tool: 'shop gun' };
+export const WEAPON_CLASSES: WeaponClass[] = ['handgun', 'smg', 'shotgun', 'rifle', 'assault', 'marksman', 'heavy', 'launcher', 'bow', 'improvised'];
+// short labels for cards and sheets (data/weapons.ts CLASS_NAMES has the long ones)
+export const CLASS_SHORT: Record<WeaponClass, string> = { handgun: 'pistol', smg: 'SMG', shotgun: 'shotgun', rifle: 'rifle', assault: 'assault', marksman: 'scoped', heavy: 'MG', launcher: 'launcher', bow: 'bow', improvised: 'shop gun' };
 // Weapon-class proficiency (0..10), separate from shooting. Combat: read prof(s, weaponClass(w.def)) for handling
 // (reload/spread/jam). Award with gainProf(s, cls, xp) (same XP curve as skills; a kill ~ 3 XP).
 export function prof(s: Survivor, cls: WeaponClass) {
@@ -274,7 +275,7 @@ const LEVEL_WORDS: Partial<Record<ProgressKey, string>> = {
 };
 const KEY_NAMES: Record<string, string> = { courage: 'Courage', grit: 'Grit', heavy: 'Heavy weapons', psych: 'Counsel' };
 export function progressName(k: ProgressKey) {
-  if (k.startsWith('prof_')) return CLASS_NAMES[k.slice(5) as WeaponClass] ?? k.slice(5);
+  if (k.startsWith('prof_')) return CLASS_SHORT[k.slice(5) as WeaponClass] ?? k.slice(5);
   return KEY_NAMES[k] ?? k[0].toUpperCase() + k.slice(1);
 }
 export function gainXp(s: Survivor, k: ProgressKey, amount: number): boolean {

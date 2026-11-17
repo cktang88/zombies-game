@@ -8,9 +8,14 @@ import { SKILL_NAMES } from '../data/names';
 import { SITES, BUILDINGS, RECIPES, RES_LABEL, RES_ICON } from '../data/world';
 import {
   living, displayName, first, moodBreakdown, computeMood, moodWord, breakThresholds, pain, woundLabel, byId, canWork, canFight,
-  isBitten, SKILLS, aimFactor, skillOf, workMult,
+  isBitten, SKILLS, aimFactor, skillOf, workMult, attr, ATTRS, ATTR_NAMES, level, xpProgress, topSkills, heldProf, prof,
+  WEAPON_CLASSES, CLASS_SHORT, progressName, type ProgressKey,
 } from '../sim/survivors';
-import { buildingLevel, queueRecipe, WEATHER_LABEL } from '../sim/day';
+import {
+  buildingLevel, queueRecipe, WEATHER_LABEL, DAY_HOURS, DEFAULT_HOURS, jobHours, setJobHours, hoursAvailable, travelHours, survivorSite,
+  searchHours, searchFactor, planConfirmed, confirmPlan, ranToday, runDaylightFor, prepareRun, clockLabel, heatNeed, houseNoise,
+  drillPlan, emplacements, tomorrowTeaser,
+} from '../sim/day';
 import { persona, forecast, threatPoints } from '../sim/director';
 import { sfx, music } from '../audio';
 import { openSettings } from './settings';
@@ -18,37 +23,54 @@ import { openHelp } from './help';
 import { hintHtml, markHintTarget, nextHint, skipHints } from './onboarding';
 import { threadsHtml } from '../sim/threads';
 import { calendarHtml } from '../sim/calendar';
+import { juiceAfterRender } from './juice';
 
 const JOBS: { id: JobId; label: string; hint: string }[] = [
-  { id: 'repair', label: 'Repair the wall', hint: 'Building. Uses timber.' },
-  { id: 'scavenge', label: 'Scavenge', hint: 'Scavenging. Risky.' },
+  { id: 'repair', label: 'Repair the wall', hint: 'Building. Uses timber. Hard on the back.' },
+  { id: 'scavenge', label: 'Scavenge', hint: 'Scavenging. Risky. The walk there and back eats the day.' },
   { id: 'craft', label: 'Workshop', hint: 'Crafting. Works the queue.' },
   { id: 'farm', label: 'Food', hint: 'Farming. Snares, cold frames.' },
   { id: 'doctor', label: 'Tend wounded', hint: 'Medicine.' },
+  { id: 'drill', label: 'Drill', hint: 'Shooting practice. Burns rounds; dry-fire teaches half as much.' },
+  { id: 'counsel', label: 'Counsel', hint: 'Talk the worst-off down. Fewer breaks tomorrow.' },
   { id: 'radio', label: 'Work the radio', hint: 'Social. Needs a radio mast.' },
-  { id: 'rest', label: 'Rest', hint: 'Recover.' },
+  { id: 'rest', label: 'Rest', hint: 'Recover. The whole day off.' },
 ];
 
 // What a job is likely to yield today for this survivor (mirrors sim/day.ts resolveDayWork).
 function jobOutlook(s: Survivor, j: JobId): string {
   const m = workMult(s);
+  const h = j === 'rest' ? 0 : Math.min(hoursAvailable(s), (G.flags[`hours_${s.id}`] as number) ?? DEFAULT_HOURS);
+  const f = h / DEFAULT_HOURS;
   switch (j) {
     case 'repair': {
       const room = Math.max(0, G.fort.maxHp - G.fort.hp);
-      return room <= 0 ? 'wall is whole' : `+${Math.min(room, Math.round((40 + skillOf(s, 'building') * 9) * m))} wall`;
+      return room <= 0 ? 'wall is whole' : `+${Math.min(room, Math.round((40 + skillOf(s, 'building') * 9) * m * f))} wall`;
     }
     case 'craft':
-      return G.craftQueue.length ? `${Math.round((3 + skillOf(s, 'crafting') * 0.9) * m)} work on the queue` : 'queue is empty';
+      return G.craftQueue.length ? `${Math.round((3 + skillOf(s, 'crafting') * 0.9) * m * f)} work on the queue` : 'queue is empty';
     case 'farm': {
       const cold = G.weather === 'cold' || G.weather === 'snow' ? 0.6 : 1;
-      return `~${Math.round((1.5 + skillOf(s, 'farming') * 0.45 + buildingLevel('garden') * 2.2) * m * cold)} food`;
+      return `~${Math.round((1.5 + skillOf(s, 'farming') * 0.45 + buildingLevel('garden') * 2.2) * m * cold * f)} food`;
     }
     case 'doctor': {
       const hurt = living().reduce((a, p) => a + p.wounds.filter((w) => !w.tended && !w.hidden).length, 0);
-      return hurt ? `tends ${Math.min(hurt, Math.round((2 + skillOf(s, 'medicine')) * m))} of ${hurt} wounds` : 'nobody needs tending';
+      return hurt ? `tends ${Math.min(hurt, Math.max(1, Math.round((2 + skillOf(s, 'medicine')) * m * f)))} of ${hurt} wounds` : 'nobody needs tending';
     }
     case 'scavenge':
       return `skill ${s.skills.scavenging}/10`;
+    case 'drill': {
+      const it = G.weapons.find((x) => x.uid === s.weapon);
+      if (!it) return 'needs a gun';
+      const ammo = selectedAmmo(it);
+      const rounds = Math.ceil(10 * f);
+      const live = !!ammo && ammo !== 'scrap' && (G.stores[ammo] ?? 0) >= rounds;
+      return live ? `${rounds} rounds, ${emplacements().length ? '+ gun nest' : 'live fire'}` : 'dry-fire, half pace';
+    }
+    case 'counsel': {
+      const low = living().filter((o) => o !== s && (o.mood < 60 || o.breakState)).length;
+      return low ? `${low} could use it · counsel ${s.skills.psych ?? 0}` : 'everyone is holding';
+    }
     case 'radio':
       return buildingLevel('radio') ? `social ${s.skills.social}/10` : 'needs a radio mast';
     case 'rest':
@@ -76,18 +98,27 @@ function warnings(): string[] {
     if (days < 2) w.push(`Food for ${days ? 'one more day' : 'less than a day'}.${farmers ? '' : ' Nobody is on the Food job.'}`);
     else if (days < 4) w.push(`Food for ${days} days.`);
   }
-  const ammoNeed = new Map<Res, number>();
-  for (const s of living()) {
+  // ammo: what each equipped gun actually loads (fireProfile.ammoRes), in rounds it can fire
+  const ammoNeed = new Map<Res, { guns: number; perShot: number }>();
+  for (const s of living().filter(canFight)) {
     const it = G.weapons.find((x) => x.uid === s.weapon);
-    const a = it ? WEAPONS[it.def]?.ammo : null;
-    if (a) ammoNeed.set(a, (ammoNeed.get(a) ?? 0) + 1);
+    if (!it) continue;
+    const p = fireProfile(it);
+    if (!p.ammoRes) continue;
+    const e = ammoNeed.get(p.ammoRes) ?? { guns: 0, perShot: p.perShot };
+    e.guns++;
+    ammoNeed.set(p.ammoRes, e);
   }
-  for (const [a, n] of ammoNeed) {
-    const have = Math.floor(G.stores[a] ?? 0);
-    if (have < 12 * n) w.push(`${have ? `Only ${have}` : 'No'} ${(RES_LABEL[a] ?? a).toLowerCase()} for ${n === 1 ? 'one gun' : `${n} guns`} on the wall.`);
+  for (const [a, { guns, perShot }] of ammoNeed) {
+    const have = Math.floor((G.stores[a] ?? 0) / (perShot || 1));
+    if (have < 12 * guns) w.push(`${have ? `Only ${have}` : 'No'} ${ammoLabel(a).toLowerCase()} for ${guns === 1 ? 'one gun' : `${guns} guns`} on the wall.`);
   }
   if (G.fort.hp / G.fort.maxHp < 0.4 && !living().some((s) => s.job === 'repair' && canWork(s))) w.push('The wall is barely standing and nobody is repairing it.');
   if (G.craftQueue.length && !living().some((s) => s.job === 'craft' && canWork(s))) w.push('Work is queued but nobody is at the bench.');
+  const ragged = living().filter((s) => s.rest < 0.25 && s.job !== 'rest' && canWork(s));
+  if (ragged.length) w.push(`${ragged.map(first).join(', ')} ${ragged.length === 1 ? 'is' : 'are'} worn out. Give ${ragged.length === 1 ? 'them' : 'them'} short hours or a day of rest.`);
+  const heat = heatNeed();
+  if (heat > G.stores.fuel) w.push(`The stove needs ${heat} fuel tonight and there is ${Math.floor(G.stores.fuel)}.`);
   return w;
 }
 
@@ -118,7 +149,7 @@ function moodBar(s: Survivor) {
   const whyTxt = why.map((p) => `${p.label} ${p.v > 0 ? '+' : '−'}${Math.abs(p.v)}`).join(' · ');
   return `<div class="mood" tabindex="0" title="${esc(whyTxt)}" aria-label="Mood ${Math.round(s.mood)}, ${esc(moodWord(s.mood))}${whyTxt ? `: ${esc(whyTxt)}` : ''}">
   <div class="moodbar">
-    <div class="fill" style="width:${s.mood}%;background:${s.mood > 50 ? '#8a9a5b' : s.mood > th.minor ? '#b08a3c' : '#a8322a'}"></div>
+    <div class="fill" data-tw="mood_${s.id}" style="width:${s.mood}%;background:${s.mood > 50 ? '#8a9a5b' : s.mood > th.minor ? '#b08a3c' : '#a8322a'}"></div>
     <i style="left:${th.minor}%"></i><i style="left:${th.major}%"></i><i style="left:${th.extreme}%"></i>
   </div>
   <div class="why"><b>${esc(moodWord(s.mood))}</b>${why.map((p) => ` <span class="${p.v > 0 ? 'pos' : 'neg'}">${esc(p.label)} ${p.v > 0 ? '+' : '−'}${Math.abs(p.v)}</span>`).join('')}</div>
@@ -138,42 +169,95 @@ function statusTags(s: Survivor) {
   return t.join('');
 }
 
+const riskWord = (r: number) => (r < 0.2 ? 'low' : r < 0.4 ? 'some' : r < 0.6 ? 'high' : 'grave');
+function siteStock(id: string) {
+  const site = SITES.find((x) => x.id === id)!;
+  const left = Math.max(0, (G.flags[`stock_${id}`] as number) ?? site.stock);
+  return { left, max: site.stock, pips: `${'▮'.repeat(left)}${'▯'.repeat(Math.max(0, site.stock - left))}` };
+}
+
+// 07:00–17:00 strip: walking (hatched), working, resting, away on a run.
+function hoursBar(s: Survivor) {
+  const avail = hoursAvailable(s);
+  const h = jobHours(s);
+  const travel = s.job === 'scavenge' ? Math.min(h, travelHours(survivorSite(s))) : 0;
+  const cells: string[] = [];
+  for (let i = 0; i < DAY_HOURS; i++) {
+    const k = i < travel / 2 ? 'tr' : i < h - travel / 2 ? 'wk' : i < h ? 'tr' : i < avail ? 'rs' : 'aw';
+    cells.push(`<i class="${k}" title="${clockLabel(i)}"></i>`);
+  }
+  const job = JOBS.find((j) => j.id === s.job)?.label ?? s.job;
+  const away = s.isLeader && ranToday();
+  let label: string;
+  if (s.job === 'rest') label = away ? `Out on a run from ${clockLabel(avail)}` : 'Rest all day';
+  else if (s.job === 'scavenge') label = `${travel}h walking · ${Math.max(0, h - travel)}h searching${avail - h > 0 ? ` · rest ${avail - h}h` : ''}${h - travel <= 0 ? ' — <b>no time to search</b>' : ''}`;
+  else label = `${esc(job)} ${h}h${avail - h > 0 ? ` + rest ${avail - h}h` : ''}${away ? ` · run from ${clockLabel(avail)}` : ''}`;
+  const can = s.job !== 'rest' && canWork(s) && avail > 0;
+  return `<div class="hours" aria-label="Day plan for ${esc(first(s))}">
+    <div class="hstrip">${cells.join('')}</div>
+    <div class="hrow"><span class="hlabel">${label}</span>${can ? `<button class="mini hb" data-act="hrs" data-d="-1" data-id="${s.id}" aria-label="Fewer hours" ${h <= 1 ? 'disabled' : ''}>−</button><button class="mini hb" data-act="hrs" data-d="1" data-id="${s.id}" aria-label="More hours" ${h >= avail ? 'disabled' : ''}>+</button>` : ''}</div>
+  </div>`;
+}
+
+function skillsMini(s: Survivor) {
+  const top = topSkills(s, 2).map((k) => `<span${s.passions.includes(k) ? ' class="pas" title="Passion: learns 50% faster"' : ''}>${esc(SKILL_NAMES[k])} ${s.skills[k]}</span>`);
+  const heavy = s.training?.heavy ?? 0;
+  if (heavy > 0 || emplacements().length) top.push(`<span title="Crew-served weapons (gun nests)">heavy ${heavy}</span>`);
+  top.push(`<span class="dim" title="Courage: nerve on the wall · Grit: fatigue and pain">nerve ${attr(s, 'courage')} · grit ${attr(s, 'grit')}</span>`);
+  return `<div class="skmini">${top.join('')}</div>`;
+}
+
 function survivorCard(s: Survivor) {
   computeMood(s);
-  const w = G.weapons.find((x) => x.uid === s.weapon);
-  const site = (G.flags[`site_${s.id}`] as string) ?? 'route9';
+  const site = survivorSite(s);
   const sites = SITES.filter((x) => x.minDay <= G.day);
   const freeWeapons = G.weapons.filter((x) => x.uid === s.weapon || !living().some((o) => o.weapon === x.uid));
   const disabled = !canWork(s);
-  return `<div class="card surv" data-id="${s.id}">
+  const stale = !disabled && G.day > 1 && !planConfirmed(s) && !(s.isLeader && ranToday());
+  const hp = heldProf(s);
+  return `<div class="card surv ${stale ? 'stale' : ''}" data-id="${s.id}">
     <img class="portrait" src="${spriteUrl(s.sprite)}" alt="">
     <div class="body">
-      <div class="name"><a data-act="detail" data-id="${s.id}">${esc(displayName(s))}</a> <span class="age">${s.age}</span></div>
+      <div class="name"><a data-act="detail" data-id="${s.id}">${esc(displayName(s))}</a> <span class="age">${s.age}</span>${stale ? '<span class="tag carried" title="Yesterday\'s job carried over. Change it, or press Keep to confirm.">same as yesterday?</span>' : ''}</div>
       <div class="tags">${statusTags(s)}</div>
       ${moodBar(s)}
+      ${skillsMini(s)}
       <div class="row">
         <select data-act="job" data-id="${s.id}" ${disabled ? 'disabled' : ''} aria-label="Job for ${esc(first(s))}">
           ${JOBS.map((j) => `<option value="${j.id}" ${s.job === j.id ? 'selected' : ''}>${j.label} — ${jobOutlook(s, j.id)}</option>`).join('')}
         </select>
         ${s.job === 'scavenge' ? `<select data-act="site" data-id="${s.id}" aria-label="Where ${esc(first(s))} scavenges">${sites.map((x) => {
-          const st = (G.flags[`stock_${x.id}`] as number) ?? x.stock;
-          return `<option value="${x.id}" ${site === x.id ? 'selected' : ''}>${x.name}${st <= 0 ? ' (picked clean)' : ''} — ${x.risk < 0.2 ? 'low' : x.risk < 0.4 ? 'some' : x.risk < 0.6 ? 'high' : 'grave'} risk</option>`;
+          const st = siteStock(x.id);
+          const walk = travelHours(x.id);
+          const search = Math.max(0, jobHours(s) - walk);
+          return `<option value="${x.id}" ${site === x.id ? 'selected' : ''}>${x.name} · ${walk}h walk, ${search}h search · ${st.left <= 0 ? 'picked clean' : `${st.left}/${st.max} left`} · ${riskWord(x.risk)} risk</option>`;
         }).join('')}</select>` : ''}
       </div>
-      ${disabled ? '' : `<div class="jobhint">${esc(JOBS.find((j) => j.id === s.job)?.hint ?? '')}</div>`}
+      ${s.job === 'scavenge' ? `<div class="stock" title="What is left at ${esc(SITES.find((x) => x.id === site)?.name ?? '')}: every trip strips it further">${siteStock(site).pips}<span class="dim">${siteStock(site).left <= 0 ? ' picked clean' : ` ${Math.round(searchFactor(searchHours(s)) * 100)}% of a full search`}</span></div>` : ''}
+      ${disabled ? '' : hoursBar(s)}
+      ${disabled ? '' : `<div class="jobhint">${esc(JOBS.find((j) => j.id === s.job)?.hint ?? '')}${s.job === 'drill' ? ` <span class="dim">${(() => { const d = drillPlan(s); return d.live ? `${d.rounds} ${esc(ammoLabel(d.ammo).toLowerCase())}` : 'no live rounds: dry-fire'; })()}</span>` : ''}</div>`}
       <div class="row small">
         <select data-act="weapon" data-id="${s.id}">
           <option value="">— unarmed —</option>
           ${freeWeapons.map((x) => `<option value="${x.uid}" ${x.uid === s.weapon ? 'selected' : ''}>${esc(x.name ? `"${x.name}"` : WEAPONS[x.def].name)} (${Math.round(x.cond * 100)}%)</option>`).join('')}
         </select>
         ${ammoSelect(G.weapons.find((x) => x.uid === s.weapon), true)}
+        ${hp ? `<span class="prof" title="${esc(first(s))}'s proficiency with ${esc(CLASS_NAMES[hp.cls].toLowerCase())} (0–10). Grows with drill and use.">${esc(CLASS_SHORT[hp.cls])} ${hp.v}</span>` : ''}
         <span class="aim" title="Aim on the wall">aim ${Math.round(aimFactor(s) * 100)}</span>
         ${s.armor ? `<button class="mini" data-act="unarmor" data-id="${s.id}" title="Mill-plate vest: wounds 30% lighter. Take it off.">vest ✓</button>` : (G.flags.armorStock as number) > 0 ? `<button class="mini" data-act="armor" data-id="${s.id}" title="Give a mill-plate vest">+ vest</button>` : ''}
         ${canFight(s) ? '' : '<span class="tag bad">won\'t stand the wall</span>'}
       </div>
     </div>
   </div>`;
-  void w;
+}
+
+// one row on the survivor sheet: base pips, grown pips, empty pips, and the xp bar to the next level
+function progRow(s: Survivor, k: ProgressKey, name: string, passion = false) {
+  const cur = level(s, k);
+  const base = Math.min(cur, (s.base?.[k] as number | undefined) ?? cur);
+  return `<div class="skill prog"><span>${esc(name)}${passion ? ' <b class="pas" title="Passion: learns 50% faster">♦</b>' : ''}</span>
+    <div class="pips" title="${base} at arrival${cur > base ? `, +${cur - base} learned here` : ''}">${'■'.repeat(base)}<i>${'■'.repeat(cur - base)}</i><span>${'■'.repeat(10 - cur)}</span></div>
+    <div class="xpbar" title="${Math.round(xpProgress(s, k) * 100)}% to ${Math.min(10, cur + 1)}"><i style="width:${xpProgress(s, k) * 100}%"></i></div></div>`;
 }
 
 function detailHtml(s: Survivor) {
@@ -184,6 +268,7 @@ function detailHtml(s: Survivor) {
     .filter((x) => x.o)
     .sort((a, b) => Math.abs(b.r.opinion) - Math.abs(a.r.opinion) + (b.r.bond ? 100 : 0) - (a.r.bond ? 100 : 0))
     .slice(0, 5);
+  const heavy = s.training?.heavy ?? 0;
   return `<div class="modal detail">
     <button class="close" data-act="closedetail">×</button>
     <div class="dhead">
@@ -201,8 +286,13 @@ function detailHtml(s: Survivor) {
       <div>
         <h3>Traits</h3>
         ${s.traits.map((t) => `<div class="trait"><b>${TRAITS[t].name}</b> — ${TRAITS[t].desc}</div>`).join('')}
-        <h3>Skills</h3>
-        ${SKILLS.map((k) => `<div class="skill"><span>${SKILL_NAMES[k]}${s.passions.includes(k) ? ' 🔥' : ''}</span><div class="pips">${'■'.repeat(s.skills[k])}<span>${'■'.repeat(10 - s.skills[k])}</span></div></div>`).join('')}
+        <h3>Skills <span class="dim">dark = at arrival · bright = learned here</span></h3>
+        ${SKILLS.map((k) => progRow(s, k, SKILL_NAMES[k], s.passions.includes(k))).join('')}
+        <h3>Nerve and body</h3>
+        ${ATTRS.map((a) => progRow(s, a, ATTR_NAMES[a])).join('')}
+        ${heavy > 0 || emplacements().length ? progRow(s, 'heavy', progressName('heavy')) : ''}
+        <h3>Guns <span class="dim">proficiency by kind</span></h3>
+        <div class="profs">${WEAPON_CLASSES.map((c) => `<span class="${prof(s, c) >= 5 ? 'hi' : prof(s, c) <= 1 ? 'lo' : ''}" title="${Math.round(xpProgress(s, `prof_${c}`) * 100)}% to the next">${esc(CLASS_SHORT[c])} ${prof(s, c)}</span>`).join('')}</div>
       </div>
       <div>
         <h3>Mood ${Math.round(s.mood)} — ${moodWord(s.mood)}</h3>
@@ -210,6 +300,7 @@ function detailHtml(s: Survivor) {
         <h3>Body</h3>
         ${s.wounds.filter((w) => !w.hidden).map((w) => `<div class="wound">${esc(woundLabel(w))} · ${Math.round(w.severity * 100)}%${w.tended ? ' · tended' : ''}${w.bleeding ? ' · <b>bleeding</b>' : ''}${w.infected && w.kind !== 'bite' ? ' · <b>infected</b>' : ''}${w.kind === 'bite' && w.infected ? ' · <b class="bite">the Turn</b>' : ''}</div>`).join('') || '<div class="dim">Whole, for now.</div>'}
         ${s.scars.map((sc) => `<div class="wound scar">${esc(sc.label)}</div>`).join('')}
+        <div class="dim small">Rested ${Math.round(s.rest * 100)}%</div>
       </div>
       <div>
         <h3>People</h3>
@@ -226,22 +317,33 @@ function runMateSelect(l: Survivor) {
   const mates = living().filter((s) => s !== l && canWork(s) && !s.breakState);
   if (!mates.length) return '';
   const cur = G.flags.runMate as string | undefined;
-  return `<select data-act="runmate" title="Take one along: they shoot, carry 6 more, and can drag you home. They do no other work today.">
+  return `<select data-act="runmate" title="Take one along: they shoot, carry 6 more, and can drag you home. They keep your hours: home work until you leave, then the road.">
     <option value="">— go alone —</option>
     ${mates.map((s) => `<option value="${s.id}" ${cur === s.id ? 'selected' : ''}>with ${esc(first(s))}${s.weapon ? '' : ' (unarmed)'}</option>`).join('')}</select>`;
 }
 
+let runLeave = 0;
+let runSite = 'route9';
 function runHtml() {
   const l = living().find((s) => s.isLeader);
   if (!l) return '';
-  if (G.flags.ranToday === G.day) return '<div class="run dim">You have already been out today.</div>';
+  if (ranToday()) return '<div class="run dim">You have already been out today.</div>';
   if (!canWork(l)) return `<div class="run dim">${esc(first(l))} is in no shape to go out.</div>`;
   const sites = SITES.filter((x) => x.minDay <= G.day);
+  if (!sites.some((x) => x.id === runSite)) runSite = sites[0].id;
+  const secs = runDaylightFor(runSite, runLeave);
+  const streetH = Math.max(0, DAY_HOURS - runLeave - travelHours(runSite));
   return `<div class="run"><h3>Lead a run yourself</h3>
-    <p class="dim">${esc(first(l))} goes alone, on foot, in daylight. More loot than a scavenging job, and you choose the risks. ${esc(first(l))} will do no other work today.</p>
-    <select data-act="runsite">${sites.map((x) => `<option value="${x.id}">${x.name} — ${x.risk < 0.2 ? 'low' : x.risk < 0.4 ? 'some' : x.risk < 0.6 ? 'high' : 'grave'} risk</option>`).join('')}</select>
+    <p class="dim">${esc(first(l))} goes on foot, alone or with one other. Far sites eat the day in walking; leaving late leaves less light on the street. ${runLeave ? `${esc(first(l))} works ${runLeave}h at home first.` : `${esc(first(l))} does no other work today.`}</p>
+    <select data-act="runsite" aria-label="Run destination">${sites.map((x) => {
+      const st = siteStock(x.id);
+      return `<option value="${x.id}" ${x.id === runSite ? 'selected' : ''}>${x.name} · ${travelHours(x.id)}h walk · ${st.left <= 0 ? 'picked clean' : `${st.left}/${st.max} left`} · ${riskWord(x.risk)} risk</option>`;
+    }).join('')}</select>
+    <select data-act="runleave" aria-label="Leave at">${[0, 2, 4, 6].map((h) => `<option value="${h}" ${h === runLeave ? 'selected' : ''}>Leave at ${clockLabel(h)}${h ? ` (work ${h}h first)` : ''}</option>`).join('')}</select>
     ${runMateSelect(l)}
-    <button data-act="run">Go ›</button></div>`;
+    <div class="rundl"><div class="hstrip">${Array.from({ length: DAY_HOURS }, (_, i) => `<i class="${i < runLeave ? 'wk' : i < runLeave + travelHours(runSite) / 2 ? 'tr' : i < DAY_HOURS - travelHours(runSite) / 2 ? 'st' : 'tr'}"></i>`).join('')}</div>
+    <span>${streetH}h on the street · ${secs}s of daylight</span></div>
+    <button data-act="run" ${secs < 30 ? 'disabled title="Not enough daylight left to make it worth the walk"' : ''}>Go ›</button></div>`;
 }
 
 function workshopHtml() {
@@ -276,7 +378,7 @@ function wallHtml() {
   const f = G.fort;
   const repairers = living().filter((s) => s.job === 'repair' && canWork(s));
   return `<div class="wall">
-    <div class="wallbar"><div style="width:${(f.hp / f.maxHp) * 100}%"></div><span>${Math.ceil(f.hp)} / ${f.maxHp}</span></div>
+    <div class="wallbar"><div data-tw="wall" style="width:${(f.hp / f.maxHp) * 100}%"></div><span>${Math.ceil(f.hp)} / ${f.maxHp}</span></div>
     <p>${f.hp / f.maxHp > 0.8 ? 'The wall is sound.' : f.hp / f.maxHp > 0.4 ? 'The wall is chewed. Planks split, the car door hangs.' : 'The wall is barely a wall.'} ${repairers.length ? `${repairers.map(first).join(' and ')} will work on it today.` : '<b>Nobody is assigned to repair it.</b>'} Timber: ${G.stores.wood}.</p>
     <ul class="fort">
       <li>Reinforcements: <b>${f.level}</b> <span class="dim">(Forge: reinforce the wall)</span></li>
@@ -422,22 +524,49 @@ function gravesHtml() {
     <div class="ge">${esc(g.dead!.epitaph)}</div></div>`).join('')}</div>`;
 }
 
+const STORE_RES: Res[] = ['food', 'wood', 'scrap', 'parts', 'cloth', 'fuel', 'meds', 'liquor', 'molotov'];
+
+// One compact chip for every round in the house, with a per-caliber breakdown on hover/focus.
+function ammoChip() {
+  const rows = Object.values(CALIBERS).map((c) => {
+    const types = c.types.filter((t) => t !== 'scrap');
+    const n = types.reduce((a, t) => a + Math.floor(G.stores[t] ?? 0), 0);
+    return { c, types, n };
+  }).filter((r) => r.types.length);
+  const total = rows.reduce((a, r) => a + r.n, 0);
+  const keys = rows.flatMap((r) => r.types).join(' ');
+  return `<span class="ammochip" tabindex="0" data-res-group="${keys}" title="Ammunition by caliber"><img src="${spriteUrl(RES_ICON.light)}" alt=""><span class="n">${total}</span><em>rounds ▾</em>
+    <span class="ammopop" role="tooltip">${rows.map((r) => `<span class="${r.n ? '' : 'dim'}"><b>${esc(r.c.name)}</b> ${r.types.map((t) => `${Math.floor(G.stores[t] ?? 0)} ${esc((AMMO_TYPES[t]?.short ?? ammoLabel(t)).toLowerCase())}`).join(' · ')}</span>`).join('')}</span></span>`;
+}
+
+function noiseHtml() {
+  const n = houseNoise();
+  return `<div class="noise" title="Stores, guns, machinery and the stove all draw the dead. Spend or stash to quiet the house.">
+    <div class="nh"><span>Smell and noise of the house</span><b>+${n.pct}% tonight</b></div>
+    <div class="nbar"><i data-tw="noise" style="width:${Math.round(n.level * 100)}%"></i></div>
+    <div class="dim small">${esc(n.words)}</div></div>`;
+}
+
+let duskArmed = false; // first dusk press with carried-over plans only highlights them
+
 export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
   const ice = ICE_DAY - G.day;
   const fc = forecast();
-  const res: Res[] = ['food', 'wood', 'scrap', 'parts', 'cloth', 'fuel', 'meds', 'light', 'shell', 'rifle', 'liquor', 'molotov'];
   const eat = living().length;
   const sel = detail ? byId(detail) : null;
-  root.innerHTML = `<div class="day" style="background-image:linear-gradient(rgba(10,10,12,.72),rgba(10,10,12,.9)),url(${spriteUrl('bg_far')})">
+  const stale = living().filter((s) => canWork(s) && G.day > 1 && !planConfirmed(s) && !(s.isLeader && ranToday()));
+  const heat = heatNeed();
+  root.innerHTML = `<div class="day ${duskArmed && stale.length ? 'armed' : ''}" style="background-image:linear-gradient(rgba(10,10,12,.72),rgba(10,10,12,.9)),url(${spriteUrl('bg_far')})">
     <header>
-      <div class="date"><b>${dateLabel()}</b> · day ${G.day} · ${WEATHER_LABEL[G.weather] ?? G.weather}</div>
+      <div class="date"><b>${dateLabel()}</b> · day ${G.day} · ${WEATHER_LABEL[G.weather] ?? G.weather} <span class="seed" title="This town's seed. Start a new game from it on the title screen to replay the same Vessey.">seed ${G.seed}${G.flags.daily ? ` · daily ${esc(String(G.flags.daily))}` : ''}</span></div>
       <div class="ice">${ice > 0 ? `River freezes in <b>${ice}</b> day${ice === 1 ? '' : 's'}` : ice === 0 ? '<b>The river is freezing tonight.</b>' : 'The river is ice.'}</div>
       <div class="hbtns"><button class="icon" data-act="help" aria-label="Help and controls" title="Help and controls">?</button><button class="icon" data-act="settings" aria-label="Settings" title="Settings">⚙</button></div>
-      <div class="stores">${res.map((r) => `<span title="${RES_LABEL[r]}" class="${r === 'food' && G.stores.food < eat * 2 ? 'low' : ''}"><img src="${spriteUrl(RES_ICON[r])}" alt="">${Math.floor(G.stores[r])}<em>${RES_LABEL[r].replace(' ammo', '').toLowerCase()}</em></span>`).join('')}</div>
+      <div class="stores">${STORE_RES.map((r) => `<span data-res="${r}" title="${RES_LABEL[r]}${r === 'fuel' && heat ? ` · the stove burns ${heat} tonight` : ''}" class="${(r === 'food' && G.stores.food < eat * 2) || (r === 'fuel' && G.stores.fuel < heat) ? 'low' : ''}"><img src="${spriteUrl(RES_ICON[r])}" alt=""><span class="n">${Math.floor(G.stores[r] ?? 0)}</span><em>${RES_LABEL[r].replace(' ammo', '').toLowerCase()}${r === 'fuel' && heat ? ` <b class="heat">−${heat}/night</b>` : ''}</em></span>`).join('')}${ammoChip()}</div>
     </header>
     <main>
       <section class="people">
-        <h2>The house <span class="dim">${living().length} living · eat ${eat}/day${G.flags.dog ? ` · and ${G.flags.dog}` : ''}</span></h2>
+        <h2>The house <span class="dim">${living().length} living · eat ${eat}/day${G.flags.dog ? ` · and ${G.flags.dog}` : ''} · daylight ${clockLabel(0)}–${clockLabel(DAY_HOURS)}</span></h2>
+        ${stale.length ? `<div class="carryover ${duskArmed ? 'flash' : ''}"><span>${stale.length === 1 ? `${esc(first(stale[0]))}'s job` : `${stale.length} jobs`} carried over from yesterday.</span><button class="mini" data-act="keepplans">Keep ${stale.length === 1 ? 'it' : 'them'}</button></div>` : ''}
         ${living().map(survivorCard).join('')}
       </section>
       <section class="center">
@@ -452,8 +581,10 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
         ${calendarHtml()}
         ${threadsHtml()}
         <div class="weather">The Weather: <b>${persona().name}</b><br><span class="dim">Tonight feels like ${threatPoints() > 60 ? 'a long one' : threatPoints() > 30 ? 'a bad one' : 'any other night'}.</span></div>
+        <div class="weather">The Weather: <b>${persona().name}</b><br><span class="dim">Tonight feels like ${threatPoints() > 60 ? 'a long one' : threatPoints() > 30 ? 'a bad one' : 'any other night'}.${heat ? ` The stove will want ${heat} fuel.` : ''}</span></div>
+        ${noiseHtml()}
         ${runHtml()}
-        <button class="dusk" data-act="dusk">Go to the wall at dusk ›<small>Enter</small></button>
+        <button class="dusk" data-act="dusk">${duskArmed && stale.length ? 'Yesterday\'s jobs are marked. Go anyway ›' : 'Go to the wall at dusk ›'}<small>Enter</small></button>
       </section>
     </main>
     ${G.pendingEvent ? `<div class="overlay"><div class="modal event">
@@ -465,13 +596,36 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
     ${G.pendingEvent || sel ? '' : hintHtml()}
   </div>`;
   if (!G.pendingEvent && !sel) markHintTarget(root);
-  duskKey = h.onDusk;
+  juiceAfterRender(root);
+  // Going to the wall with jobs nobody looked at today: the first press highlights them, the second goes.
+  const goDusk = () => {
+    const left = living().filter((s) => canWork(s) && G.day > 1 && !planConfirmed(s) && !(s.isLeader && ranToday()));
+    if (left.length && !duskArmed) {
+      duskArmed = true;
+      sfx.ui();
+      h.rerender();
+      return;
+    }
+    duskArmed = false;
+    for (const s of living()) confirmPlan(s);
+    h.onDusk();
+  };
+  duskKey = goDusk;
   installKeys();
 
   root.onchange = (e) => {
     const t = e.target as HTMLSelectElement;
-    if (t.dataset.act === 'runsite') return;
-    if (t.dataset.act === 'runmate') { if (t.value) G.flags.runMate = t.value; else delete G.flags.runMate; return; }
+    if (t.dataset.act === 'runmate') { if (t.value) G.flags.runMate = t.value; else delete G.flags.runMate; h.rerender(); return; }
+    if (t.dataset.act === 'runsite') {
+      runSite = t.value;
+      h.rerender();
+      return;
+    }
+    if (t.dataset.act === 'runleave') {
+      runLeave = +t.value;
+      h.rerender();
+      return;
+    }
     if (t.dataset.act === 'mod') {
       const w = G.weapons.find((x) => x.uid === t.dataset.w);
       G.modStock ??= [];
@@ -492,8 +646,14 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
     }
     const s = byId(t.dataset.id ?? '');
     if (!s) return;
-    if (t.dataset.act === 'job') s.job = t.value as JobId;
-    if (t.dataset.act === 'site') G.flags[`site_${s.id}`] = t.value;
+    if (t.dataset.act === 'job') {
+      s.job = t.value as JobId;
+      confirmPlan(s);
+    }
+    if (t.dataset.act === 'site') {
+      G.flags[`site_${s.id}`] = t.value;
+      confirmPlan(s);
+    }
     if (t.dataset.act === 'weapon') {
       const prev = living().find((o) => o.weapon === t.value && o !== s);
       if (prev) prev.weapon = null;
@@ -518,7 +678,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
       const q = G.craftQueue[i];
       if (q) {
         const r = RECIPES.find((x) => x.id === q.recipe)!;
-        for (const [k, v] of Object.entries(r.cost)) G.stores[k as Res] += v ?? 0;
+        for (const [k, v] of Object.entries(r.cost)) G.stores[k as Res] = (G.stores[k as Res] ?? 0) + (v ?? 0);
         G.craftQueue.splice(i, 1);
       }
     } else if (act === 'build') {
@@ -534,6 +694,15 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
     } else if (act === 'choice') {
       h.onChoice(+el.dataset.i!);
       return;
+    } else if (act === 'hrs') {
+      const s = byId(el.dataset.id!);
+      if (s) {
+        setJobHours(s, jobHours(s) + +el.dataset.d!);
+        confirmPlan(s);
+      }
+    } else if (act === 'keepplans') {
+      for (const s of living()) confirmPlan(s);
+      duskArmed = false;
     } else if (act === 'armor') {
       const s = byId(el.dataset.id!);
       if (s && (G.flags.armorStock as number) > 0) { s.armor = 'vest'; G.flags.armorStock = (G.flags.armorStock as number) - 1; }
@@ -551,12 +720,15 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
     } else if (act === 'hint-next') nextHint();
     else if (act === 'hint-skip') skipHints();
     else if (act === 'run') {
+      if (runDaylightFor(runSite, runLeave) < 30) return;
       music('off');
-      const sel = root.querySelector('select[data-act=runsite]') as HTMLSelectElement;
-      h.onRun(sel.value);
+      // the run's daylight: G.flags.runDaylight (seconds), set here for the run code to read
+      prepareRun(runSite, runLeave);
+      runLeave = 0;
+      h.onRun(runSite);
       return;
     } else if (act === 'dusk') {
-      h.onDusk();
+      goDusk();
       return;
     }
     sfx.ui();

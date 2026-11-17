@@ -1,11 +1,13 @@
 import type { Survivor, Res } from '../types';
-import { G, R, log, add, pay, has, newWeapon, uid, findDoc } from '../state';
+import { G, R, log, add, pay, has, newWeapon, uid, findDoc, ICE_DAY } from '../state';
+import { Rng } from '../rng';
+import { campWealth, cyclePos, persona } from './director';
 import { SITES, RECIPES, RES_LABEL } from '../data/world';
 import { WEAPONS, MODS, modFits, slotsFor, selectedAmmo } from '../data/weapons';
 import {
   living, first, displayName, workMult, skillOf, addThought, wound, canWork, rel, changeOpinion, setBond, hasTrait,
   computeMood, breakThresholds, killSurvivor, pain, they, their, tale, isBitten, PART_NAMES, closeTo, them, checkTitles,
-  gainXp, attr, counsel, counselled, drainLevelUps, gainProf, heldProf,
+  gainXp, attr, counsel, counselled, drainLevelUps, gainProf, heldProf, canFight,
 } from './survivors';
 import { bondLine, breakLine } from './chronicle';
 
@@ -665,3 +667,53 @@ export const WEATHER_LABEL: Record<string, string> = {
 };
 
 export { uid };
+
+// ---------- the smell and noise of the house (campWealth → threat, made visible) ----------
+/**
+ * How much the house's stores, guns and machinery draw the dead tonight. Mirrors the wealth term in
+ * director.threatPoints(): min(35, sqrt(campWealth) * 0.7) on top of the day's base threat.
+ */
+export function houseNoise() {
+  const part = Math.min(35, Math.sqrt(campWealth()) * 0.7);
+  const base = 10 + 6 * Math.pow(G.day, 1.02) + living().filter(canFight).length * 3;
+  const pct = Math.round((part / base) * 100);
+  const level = part / 35;
+  const words = level > 0.85 ? 'Woodsmoke, cooking, gun oil and generator hum. Everything for a mile knows we are here.'
+    : level > 0.6 ? 'The house smells of woodsmoke and cooking. It carries down the road.'
+      : level > 0.35 ? 'A thread of smoke from the chimney. Some noise at the bench.'
+        : 'Quiet. Cold stove, nothing worth smelling.';
+  return { part, pct, level, words };
+}
+
+// ---------- "one more day": a title-only teaser of tomorrow ----------
+// G.flags.teaser (string), if set by an incident or radio thread, wins; otherwise an omen is drawn from the
+// house's state. The pick is stored per day (G.flags.teaserDay/teaserText) so it stays put across re-renders.
+const OMENS = [
+  'A light blinking on the Legion hall roof. Three short, three long.',
+  'Smoke over the east bank where nobody should be cooking.',
+  'An outboard motor on the river after dark, then nothing.',
+  'Somebody has been at the woodpile. The tracks are boots, not bare feet.',
+  'A new voice on the radio, reading names.',
+  'Crows over Route 9, hundreds of them, circling one house.',
+  'Hoofprints in the frost by the gate. Too many for deer.',
+  'The church bell at All Saints rang once at noon. Nobody rings it anymore.',
+  'A car horn from the direction of the mill, long and steady, until it stopped.',
+];
+export function tomorrowTeaser(): string {
+  if (typeof G.flags.teaser === 'string' && G.flags.teaser) return G.flags.teaser;
+  if (G.flags.teaserDay === G.day && typeof G.flags.teaserText === 'string') return G.flags.teaserText;
+  const rng = new Rng(G.seed * 31 + G.day * 977);
+  const next = G.day + 1;
+  const c: { t: string; w: number }[] = OMENS.map((t) => ({ t, w: 1 }));
+  if (next === ICE_DAY) c.push({ t: 'The river is white almost bank to bank. Tomorrow it holds a man\'s weight.', w: 50 });
+  if (cyclePos(next).peak && next >= 5 && persona().id !== 'coin') c.push({ t: 'The dogs out on Route 9 have not stopped barking since noon.', w: 12 });
+  const bitten = living().find((s) => isBitten(s) && !s.wounds.some((w) => w.hidden));
+  if (bitten) c.push({ t: `${first(bitten)} will not stop scratching at the bandage.`, w: 6 });
+  if (living().length && G.stores.food < living().length * 2) c.push({ t: 'The pantry shelf, nearly bare. Somebody has been counting the cans.', w: 6 });
+  if (G.stores.fuel < heatNeed('cold', next)) c.push({ t: 'Frost on the inside of the windows tomorrow, and not enough fuel for the stove.', w: 5 });
+  if (G.flags.foundSurvivorAt) c.push({ t: `Somebody followed the scavengers home from ${G.flags.foundSurvivorAt}.`, w: 10 });
+  const pick = rng.weighted(c, (x) => x.w)!.t;
+  G.flags.teaserDay = G.day;
+  G.flags.teaserText = pick;
+  return pick;
+}

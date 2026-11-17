@@ -1,14 +1,17 @@
 import './style.css';
-import { G, setState, save, loadSave, clearSave, log, dateLabel, ICE_DAY } from './state';
+import { G, R, setState, save, loadSave, clearSave, log, dateLabel, ICE_DAY } from './state';
 import { loadAssets, spriteUrl } from './assets';
 import { newGame } from './sim/newgame';
 import { renderDay } from './ui/day';
-import { resolveDayWork, dawnTick, nextWeather } from './sim/day';
+import { resolveDayWork, dawnTick, nextWeather, prepareRun, tomorrowTeaser, heatNeed } from './sim/day';
+import { dailySeed, parseSeed } from './rng';
 import { planNight, afterNight, PERSONAS } from './sim/director';
 import { rollIncident, resolveEvent, returnsTick } from './sim/events';
 import { Battle, W, H, type NightResult } from './night/battle';
 import { Expedition, type ExpeditionResult } from './night/expedition';
-import { living, displayName, first, byId } from './sim/survivors';
+import { living, displayName, first, byId, canFight, migrateSurvivor, gainXp, gainProf, heldProf, closeTo, drainLevelUps } from './sim/survivors';
+import { showDawnReport } from './ui/dawn';
+import { AMMO_RES, fireProfile } from './data/weapons';
 import { morningSummary, fateLine, type Fate } from './sim/chronicle';
 import { parseIds } from './sim/incident';
 import { evacuees } from './sim/threads';
@@ -28,13 +31,16 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 function title() {
   music('title');
   const saved = loadSave();
+  const daily = dailySeed();
   app.innerHTML = `<div class="title" style="background-image:linear-gradient(rgba(8,8,10,.35),rgba(8,8,10,.92)),url(${spriteUrl('bg_sky')})">
     <div class="tbox">
       <h1>VESSEY</h1>
       <div class="tsub">before the ice</div>
       <p class="tquote">"IT'S IN THE WATER / IT'S IN THE DEER / IT'S IN US<br>RIVER FREEZES NOV 28 — GET ACROSS OR GET READY"<br><span>— spray paint, Vessey water tower</span></p>
-      ${saved ? `<button data-act="continue">Continue — ${dateLabel(saved.day)}, ${saved.survivors.filter((s) => !s.dead).length} living</button>` : ''}
+      ${saved ? `<button data-act="continue">Continue — ${dateLabel(saved.day)}, ${saved.phase === 'night' ? 'at the wall, ' : ''}${saved.survivors.filter((s) => !s.dead).length} living</button>` : ''}
       <div class="personas">${Object.values(PERSONAS).map((p) => `<button data-act="new" data-id="${p.id}"><b>${p.name}</b><small>${p.desc}</small></button>`).join('')}</div>
+      <div class="seedrow"><input data-seed type="text" inputmode="numeric" maxlength="24" placeholder="seed (optional)" aria-label="Start from seed: type a seed, then pick a Weather above">
+        <button class="mute daily" data-act="daily" title="Everyone who plays today gets the same town, founders and Weather">Daily Vessey · <b>${esc(daily.label)}</b></button></div>
       <p class="how">A paper-mill town on the St. Aubin River, November. The Guard sealed the bridge. Hold a house on Ferry Road with whoever you can find.<br>
       <b>Day:</b> assign survivors, scavenge, build machinery, craft. <b>Night:</b> aim with the mouse, click to fire, aim for the head. [R] reload, [Q] swap, [F] firebomb.</p>
       <div class="tbtns"><button class="mute" data-act="mute" aria-pressed="${muted}">${muted ? 'sound off' : 'sound on'}</button><button class="mute" data-act="settings">settings</button><button class="mute" data-act="help">how to play</button><button class="mute" data-act="ledger">ledger</button></div>
@@ -48,13 +54,21 @@ function title() {
     sfx.ui();
     if (el.dataset.act === 'continue' && saved) {
       setState(saved);
+      for (const s of [...G.survivors, ...G.graves]) migrateSurvivor(s);
       report = ['You return to the house on Ferry Road.'];
       if (G.phase === 'over') return G.flags.ending ? epilogue() : gameOver();
       if (G.flags.crossingChoice === 'pending') return crossing(!!G.flags.crossingFell);
+      // saved at dusk: the night has to be fought again from the start
+      if (G.phase === 'night' && G.nextNight) return night();
       day();
-    } else if (el.dataset.act === 'new') {
+    } else if (el.dataset.act === 'new' || el.dataset.act === 'daily') {
       clearSave();
-      newGame(el.dataset.id);
+      const typed = parseSeed((app.querySelector('[data-seed]') as HTMLInputElement | null)?.value ?? '');
+      if (el.dataset.act === 'daily') {
+        newGame(daily.mode, daily.seed);
+        G.flags.daily = daily.label;
+      } else if (typed !== null) newGame(el.dataset.id, typed);
+      else newGame(el.dataset.id);
       const boons = applyBoons();
       report = [
         `${displayName(living()[0])} leads. ${living().slice(1).map(displayName).join(' and ')} came with ${living()[0].sex === 'm' ? 'him' : 'her'}.`,
@@ -70,6 +84,10 @@ function title() {
     else if (el.dataset.act === 'help') openHelp(app, 'night');
     else if (el.dataset.act === 'ledger') openLedger();
   };
+  // typing a seed should not trigger the title's click handler; Enter starts The Long Siege from it
+  (app.querySelector('[data-seed]') as HTMLInputElement | null)?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') (app.querySelector('[data-act=new][data-id=siege]') as HTMLElement | null)?.click();
+  });
 }
 
 function day() {
@@ -100,8 +118,7 @@ function day() {
 function run(site: string) {
   const l = living().find((s) => s.isLeader);
   if (!l) return;
-  G.flags.ranToday = G.day;
-  l.job = 'rest';
+  if (G.flags.ranToday !== G.day) prepareRun(site, 0); // the day screen normally books it (leave time, runDaylight)
   save();
   app.onclick = null;
   app.onchange = null;
@@ -121,6 +138,12 @@ function afterRun(r: ExpeditionResult) {
     lines.push(`${displayName(r.found)} came back too. ${r.found.before}`);
   }
   lines.push(...r.lines);
+  const l = G.survivors.find((s) => s.isLeader && !s.dead);
+  if (l && !r.died) {
+    gainXp(l, 'scavenging', 40);
+    gainXp(l, 'grit', 15);
+  }
+  lines.push(...drainLevelUps());
   report.push(...lines);
   save();
   if (!living().length) return gameOver();
@@ -144,8 +167,25 @@ function dusk() {
   const lines = resolveDayWork();
   const plan = planNight();
   G.nextNight = plan;
+  G.flags.wallAtDusk = G.fort.hp;
+  const wall = living().filter(canFight);
+  const rounds = new Map<string, number>();
+  for (const s of wall) {
+    const w = G.weapons.find((x) => x.uid === s.weapon);
+    const res = w ? fireProfile(w).ammoRes : null;
+    if (res) rounds.set(res, Math.floor(G.stores[res] ?? 0));
+  }
+  const totalRounds = AMMO_RES.reduce((a, k) => a + Math.floor(G.stores[k] ?? 0), 0);
+  const tonight = `Tonight: ${plan.special ?? 'the usual'}. ${wall.length} at the wall. ${[...rounds.values()].reduce((a, b) => a + b, 0)} rounds for the guns we carry (${totalRounds} in the house). Wall ${Math.ceil(G.fort.hp)}/${G.fort.maxHp}.`;
+  const teaser = tomorrowTeaser();
+  // the session break: saved now, the night must be fought; quitting mid-night replays it from dusk
+  G.phase = 'night';
   save();
-  overlay(`<h2>Dusk, ${dateLabel()}</h2>${lines.map((l) => `<p>${esc(l)}</p>`).join('')}<p class="forecast">${esc(plan.label)}</p>`, () => night());
+  overlay(`<h2>Dusk, ${dateLabel()}</h2>${lines.map((l) => `<p>${esc(l)}</p>`).join('')}
+    <p class="forecast">${esc(plan.label)}</p>
+    <div class="tonight">${esc(tonight)}</div>
+    <div class="teaser"><b>Tomorrow</b>${esc(teaser)}</div>
+    <div class="saved">Saved at dusk. Quitting now costs you the night.</div>`, () => night());
 }
 
 function night() {
@@ -159,13 +199,34 @@ function night() {
   battle.start();
 }
 
+// XP from the night: kills train shooting and the held gun's class; standing the wall builds courage;
+// losing someone close, or the house, shakes it.
+function nightXp(r: NightResult) {
+  const pts = G.nextNight?.points ?? 30;
+  const big = G.nextNight?.special === 'tide' || G.nextNight?.special === 'crossing';
+  for (const s of living()) {
+    const k = r.killsBy?.[s.id] ?? 0;
+    if (k) {
+      gainXp(s, 'shooting', k * 3);
+      const hp = heldProf(s);
+      if (hp) gainProf(s, hp.cls, k * 3);
+    }
+    if (canFight(s)) gainXp(s, 'courage', 6 + pts * 0.15 + k + (r.wallHeld && big ? 20 : 0));
+  }
+  for (const g of G.graves.filter((x) => x.dead?.day === G.day)) {
+    for (const s of living()) if (closeTo(s).some((c) => c.id === g.id)) gainXp(s, 'courage', -60);
+  }
+  if (r.fell) for (const s of living()) gainXp(s, 'courage', -40);
+}
+
 function dawn(r: NightResult) {
   battle = null;
   afterNight(r.deaths.length, r.wallHeld);
+  const nightDay = G.day;
   if (r.fell) {
     // the house is overrun; those inside may not make it
     for (const s of living()) {
-      if (Math.random() < 0.6) {
+      if (R.chance(0.6)) {
         s.dead = { day: G.day, cause: 'when the house on Ferry Road was overrun', epitaph: s.tales[s.tales.length - 1] ?? 'Was there at the end.' };
         G.graves.push(s);
       }
@@ -173,20 +234,16 @@ function dawn(r: NightResult) {
     G.survivors = G.survivors.filter((s) => !s.dead);
   }
   const wasIce = G.day === ICE_DAY;
+  nightXp(r);
   const lines: string[] = [];
-  lines.push(`${r.kills} of the Turned put down.${r.headshots ? ` ${r.headshots} through the head.` : ''}`);
-  if (r.deaths.length) lines.push(`We lost ${r.deaths.join(', ')}.`);
-  if (!r.wallHeld) lines.push('They came over the wall.');
   lines.push(...r.lines);
   // morning report: who carried the night, who broke
   const panicked = living().filter((s) => G.chronicle.some((e) => e.day === G.day && e.kind === 'break' && e.text.startsWith(displayName(s)) && e.text.includes('panicked')));
   lines.push(...morningSummary(r.killsBy, [...living(), ...G.graves], panicked, r.deaths));
-  const used = Object.entries(r.ammoUsed).map(([k, v]) => `${v} ${k === 'light' ? 'pistol rounds' : k === 'shell' ? 'shells' : k === 'rifle' ? 'rifle rounds' : k}`).join(', ');
-  if (used) lines.push(`Spent: ${used}.`);
   if (!living().length) return gameOver();
   G.day++;
   nextWeather();
-  const morning = [...returnsTick(), ...dawnTick()];
+  const morning = [...returnsTick(), ...dawnTick(), ...drainLevelUps()];
   if (!living().length) return gameOver();
   report = [...lines, ...morning];
   // holding: forty days on Ferry Road is the third way out
@@ -199,7 +256,15 @@ function dawn(r: NightResult) {
   G.pendingEvent = rollIncident();
   save();
   if (wasIce && !G.flags.crossingChoice) return crossing(r.fell);
-  overlay(`<h2>Dawn, ${dateLabel()}</h2>${report.map((l) => `<p>${esc(l)}</p>`).join('')}`, () => day());
+  const teaser = G.pendingEvent?.title ?? (typeof G.flags.teaserText === 'string' && G.flags.teaserDay === nightDay ? G.flags.teaserText : undefined);
+  showDawnReport(app, {
+    r,
+    dead: G.graves.filter((g) => (g.dead?.day ?? 0) >= nightDay && g.dead?.cause !== 'deserted'),
+    wallBefore: (G.flags.wallAtDusk as number | undefined) ?? G.fort.hp + (r.wallLost ?? 0),
+    lines: report,
+    teaser,
+    night: nightDay,
+  }, () => day());
 }
 
 const SPRING_DAY = 40;

@@ -1,0 +1,115 @@
+/* Day-loop feedback: floating deltas, hours strips, carried-over plans, ammo chip, house noise, seeds, dawn ledger. */
+
+/* floating +/- numbers */
+.floathost { position: relative; }
+.floatnum { position: absolute; left: 50%; top: -2px; transform: translate(-50%, 0); font-family: var(--type); font-size: 13px; font-weight: bold; pointer-events: none; white-space: nowrap; z-index: 5; text-shadow: 0 1px 2px #000; animation: floatup 1.4s ease-out both; }
+.floatnum.pos { color: #a9c46c; }
+.floatnum.neg { color: #e0705a; }
+@keyframes floatup { 0% { opacity: 0; transform: translate(-50%, 4px); } 15% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -26px); } }
+.tw-down { box-shadow: inset -3px 0 0 #e0705a; }
+.tw-up { box-shadow: inset -3px 0 0 #a9c46c; }
+
+/* the hours strip */
+.hours { display: flex; flex-direction: column; gap: 2px; }
+.hstrip { display: grid; grid-template-columns: repeat(10, 1fr); gap: 2px; height: 8px; max-width: 320px; }
+.hstrip i { display: block; background: #2a261f; border: 1px solid #3b352b; }
+.hstrip i.wk { background: #b8862f; border-color: #c99a40; }
+.hstrip i.tr { background: repeating-linear-gradient(135deg, #6a5426 0 3px, #2a261f 3px 6px); border-color: #6a5426; }
+.hstrip i.rs { background: #3c4a33; border-color: #4f6141; }
+.hstrip i.aw { background: #4a2a20; border-color: #8a4a30; }
+.hstrip i.st { background: #8f7a55; border-color: #b8a070; }
+.hrow { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--dim); }
+.hrow .hlabel { flex: 1; min-width: 0; }
+.hrow b { color: #e0705a; font-weight: normal; }
+.mini.hb { min-width: 26px; min-height: 24px; padding: 0 6px; font-size: 14px; line-height: 1; }
+.skmini { display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: 12px; color: var(--ink); font-family: var(--type); }
+.skmini .pas { color: #e0b060; }
+.surv .prof { font-family: var(--type); font-size: 12px; border: 1px solid #554b3b; padding: 1px 5px; color: #d8c79a; white-space: nowrap; }
+.surv .stock { font-size: 11px; letter-spacing: 1px; color: #b8a070; }
+.surv .stock .dim { letter-spacing: 0; }
+
+/* carried-over plans */
+.card.surv.stale { box-shadow: inset 3px 0 0 #b8862f; padding-left: 8px; background: linear-gradient(90deg, rgba(184,134,47,.07), transparent 60%); }
+.tag.carried { margin-left: 6px; color: #e0b060; border-color: #8a6a2a; font-size: 11px; }
+.carryover { display: flex; align-items: center; gap: 8px; justify-content: space-between; border: 1px dashed #8a6a2a; padding: 4px 8px; margin: 4px 0 6px; font-size: 14px; color: #e0c58a; }
+.carryover.flash { animation: carryflash .9s ease-in-out 2; }
+@keyframes carryflash { 50% { background: rgba(184,134,47,.25); border-color: #e0b060; } }
+.day.armed .card.surv.stale { animation: carryflash .9s ease-in-out 2; }
+
+/* ammo chip */
+.ammochip { position: relative; display: inline-flex; align-items: center; gap: 3px; font-size: 14px; cursor: default; outline: none; }
+.ammochip em { font-style: normal; color: var(--dim); font-size: 11px; }
+.ammochip .ammopop { display: none; position: absolute; right: 0; top: 100%; margin-top: 4px; z-index: 20; background: var(--paper); border: 1px solid #5a4f3c; padding: 6px 8px; min-width: 260px; max-width: 86vw; box-shadow: 0 6px 24px #000; font-size: 12px; line-height: 1.5; }
+.ammochip .ammopop span { display: block; white-space: normal; }
+.ammochip:hover .ammopop, .ammochip:focus .ammopop, .ammochip:focus-within .ammopop { display: block; }
+.stores .heat { color: #e0705a; font-weight: normal; }
+.date .seed { margin-left: 8px; font-family: var(--type); font-size: 11px; color: var(--dim); }
+
+/* house noise */
+.noise { border: 1px solid var(--line); padding: 6px 8px; margin: 8px 0; }
+.noise .nh { display: flex; justify-content: space-between; font-family: var(--type); font-size: 12px; }
+.noise .nh b { color: #e0a060; font-weight: normal; }
+.nbar { height: 6px; background: #0e0d0b; border: 1px solid #3a342a; margin: 4px 0; }
+.nbar i { display: block; height: 100%; background: linear-gradient(90deg, #6a5426, #c9703a); }
+
+/* run planner */
+.run select + select { margin-top: 0; }
+.rundl { display: flex; flex-direction: column; gap: 3px; margin: 4px 0 6px; font-size: 13px; color: var(--dim); }
+.rundl .hstrip { max-width: none; }
+
+/* survivor sheet: growth */
+.skill.prog { display: grid; grid-template-columns: 7.5em auto 1fr; align-items: center; gap: 6px; }
+.skill.prog .pips i { font-style: normal; color: #e0c070; }
+.skill.prog .pas { color: #e0b060; font-weight: normal; }
+.xpbar { height: 4px; background: #0e0d0b; border: 1px solid #3a342a; min-width: 30px; }
+.xpbar i { display: block; height: 100%; background: #8a9a5b; }
+.profs { display: flex; flex-wrap: wrap; gap: 4px; font-family: var(--type); font-size: 12px; }
+.profs span { border: 1px solid #4a4235; padding: 1px 5px; }
+.profs .hi { color: #e0c070; border-color: #8a6a2a; }
+.profs .lo { color: var(--dim); }
+
+/* title: seeds */
+.seedrow { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; align-items: center; margin: 10px 0 4px; }
+.seedrow input { font-family: var(--type); background: #15130f; color: var(--ink); border: 1px solid #4a4235; padding: 6px 8px; width: 12em; font-size: 13px; }
+.seedrow .daily b { color: #e0c070; font-weight: normal; }
+
+/* dusk: tonight + teaser */
+.modal .tonight { font-family: var(--type); font-size: 13px; border-top: 1px dashed #5a4f3c; border-bottom: 1px dashed #5a4f3c; padding: 6px 0; margin: 10px 0; color: #d8c79a; }
+.teaser { font-family: var(--type); font-size: 13px; color: #c9a95a; margin-top: 10px; }
+.teaser b { display: block; font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--dim); font-weight: normal; }
+.modal .saved { font-size: 11px; color: var(--dim); font-family: var(--type); letter-spacing: .1em; text-transform: uppercase; }
+
+/* the dawn ledger */
+.overlay.dawn { cursor: pointer; }
+.modal.ledger.dawnrep { max-width: 720px; cursor: default; }
+.dawnrep h2 { display: flex; justify-content: space-between; align-items: baseline; }
+.dawnrep h2 small { font-size: 12px; color: var(--dim); }
+.dawnrep .st { opacity: 0; transform: translateY(6px); transition: opacity .35s, transform .35s; }
+.dawnrep .st.in { opacity: 1; transform: none; }
+.dawnrep .deathcard { border: 3px double #6a2a20; background: rgba(20,8,6,.6); padding: 8px 12px; margin: 8px 0; display: flex; gap: 10px; align-items: center; }
+.dawnrep .deathcard img { width: 48px; height: 64px; object-fit: contain; filter: grayscale(1) brightness(.8); }
+.dawnrep .deathcard .dn { font-family: var(--type); font-size: 16px; color: #e6dcc6; }
+.dawnrep .deathcard .dc { font-size: 14px; color: var(--dim); }
+.dawnrep .deathcard .de { font-style: italic; }
+.dawnrep .tally { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin: 10px 0; }
+.dawnrep .tally > div { border: 1px solid var(--line); padding: 6px 8px; }
+.dawnrep .tally b { display: block; font-family: var(--type); font-size: 26px; font-weight: normal; color: #e6dcc6; }
+.dawnrep .tally span { font-size: 12px; color: var(--dim); font-family: var(--type); text-transform: uppercase; letter-spacing: .08em; }
+.dawnrep .hsstamp { display: inline-block; margin-left: 6px; font-family: var(--type); font-size: 12px; color: #e0705a; border: 2px solid rgba(168,50,42,.75); padding: 0 5px; transform: rotate(-4deg) scale(1.6); opacity: 0; transition: transform .25s cubic-bezier(.3,1.6,.5,1), opacity .2s; }
+.dawnrep .in .hsstamp { transform: rotate(-4deg) scale(1); opacity: 1; }
+.dawnrep .wallrow { margin: 8px 0; }
+.dawnrep .wallrow .wallbar div { transition: width 1.1s ease-in; }
+.dawnrep .mvp { display: flex; gap: 10px; align-items: center; border: 1px solid #6a5426; padding: 6px 10px; margin: 10px 0; background: rgba(184,134,47,.06); }
+.dawnrep .mvp img { width: 44px; height: 60px; object-fit: contain; }
+.dawnrep .mvp small { display: block; font-family: var(--type); font-size: 11px; letter-spacing: .15em; text-transform: uppercase; color: #c9a95a; }
+.dawnrep .spent { font-size: 14px; color: var(--dim); }
+.dawnrep .lines p { margin: 4px 0; }
+.dawnrep .skiphint { font-size: 11px; color: var(--dim); font-family: var(--type); text-align: right; }
+@media (max-width: 600px) {
+  .dawnrep .tally b { font-size: 21px; }
+  .modal.ledger.dawnrep { padding: 16px 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .floatnum, .carryover.flash, .day.armed .card.surv.stale { animation: none; }
+  .dawnrep .st { transition: none; }
+}

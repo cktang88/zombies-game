@@ -2,14 +2,15 @@ import type { GameState } from '../types';
 import { setState, G, R, log, newWeapon } from '../state';
 import { makeSurvivor, rel, setBond, living } from './survivors';
 import { nextWeather } from './day';
+import { freshSeed } from '../rng';
 
-export function newGame(mode = 'siege', seed = (Math.random() * 2 ** 31) >>> 0): GameState {
+export function newGame(mode = 'siege', seed = freshSeed()): GameState {
   const s: GameState = {
     version: 1,
     seed,
     day: 1,
     phase: 'day',
-    stores: { food: 18, scrap: 12, wood: 25, parts: 3, meds: 2, fuel: 4, cloth: 4, light: 130, shell: 16, rifle: 10, liquor: 1, molotov: 0,
+    stores: { food: 18, scrap: 12, wood: 25, parts: 3, meds: 2, fuel: 4, cloth: 4, light: 70, shell: 16, rifle: 10, liquor: 1, molotov: 0,
       r22: 0, light_hp: 0, shell_slug: 4, shell_flech: 0, shell_fire: 0, rifle_sp: 0, rifle_ap: 0, r556: 0, ball: 0, bolt: 0, bolt_fire: 0, flare: 0, rocket: 0, g40: 0, g40_buck: 0, pipebomb: 0 },
     survivors: [],
     graves: [],
@@ -29,6 +30,7 @@ export function newGame(mode = 'siege', seed = (Math.random() * 2 ** 31) >>> 0):
   setState(s);
   const leader = makeSurvivor({ isLeader: true });
   leader.skills.shooting = Math.max(leader.skills.shooting, 4);
+  if (leader.base) leader.base.shooting = leader.skills.shooting;
   G.survivors.push(leader);
   for (let i = 0; i < 2; i++) G.survivors.push(makeSurvivor());
   const [a, b, c] = G.survivors;
