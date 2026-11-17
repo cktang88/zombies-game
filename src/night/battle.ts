@@ -25,6 +25,7 @@ import { meleeGuard } from './melee';
 import { depthScale, bakeSprite, bakeComposite, bakeEdge, bakeLayer, bakeGround, fgStrip, shadowEllipse, type Look } from './render';
 import { drawProp, drawGunBase, drawGunPart, has, propW } from './props';
 import { BattleActors } from './actors'; // rigged bodies (src/anim): drawing, deaths, corpses
+import { react, slideStep, classicPose, IMPACT, type Reaction } from './impact'; // flinch / stagger / stumble / knockdown
 
 export const W = 1280, H = 720;
 export const WALL_X = 372; // front face of the barricade (near lane)
@@ -112,6 +113,8 @@ export interface Zombie {
   spitT?: number; // Biler: seconds to the next glob
   climb?: number; // coming up the corpse pile: seconds left
   pant?: number; // deer: breath-puff timer
+  slide?: number; // knockback still easing out, px/s (impact.ts)
+  react?: Reaction; // the last stagger / stumble / knockdown (impact.ts): drawing reads it
 }
 
 export interface Guard {
@@ -1603,7 +1606,7 @@ export class Battle {
       rot = -0.08 + Math.sin(z.phase * 7) * 0.06;
     }
     if (z.stun > 0 && z.state !== 'dying') { rot = 0.05 + Math.sin(this.t * 40) * 0.025; dy = 0; }
-    if (z.down !== undefined && z.down > 0) { rot = 1.05; dy = h * 0.12; }
+    { const cp = z.state !== 'dying' ? classicPose(z, h, this.t) : null; if (cp) { rot = cp.rot; dy = cp.dy; sy = cp.sy; } }
     if (z.leap) {
       const q = Math.min(1, z.leap.t / z.leap.dur);
       dy = -Math.sin(q * Math.PI) * (130 + 40 * z.scale);
@@ -1702,6 +1705,7 @@ export class Battle {
     if (fx?.incendiary) z.burn = Math.max(z.burn, BURN.time);
     // a hit ≥ 20 during a Crier's wind-up chokes the keen off
     if (z.def.scream && (z.windup ?? 0) > 0 && d >= 20) this.silence(z, g, isPlayer);
+    if ((z.down ?? 0) > 0) d *= IMPACT.FINISH_MUL; // down in the road: an easy finish
     z.hp -= d;
     z.flash = 0.08;
     // stagger (balance.md §8.8): a body hit rolls fireProfile().stagger; one pellet in four rolls
@@ -1713,6 +1717,8 @@ export class Battle {
     if (!heavy) z.x += (z.flip ? -1 : 1) * knock * loop * (pellet ? 0.25 : 1) * (head ? 1.4 : 1) * (z.state === 'wall' ? 0.5 : 1);
     z.x = Math.min(z.x, W + 150);
     if (z.state === 'wall' && knock * loop > 15 && !heavy) z.state = 'walk';
+    // the hit against the body's weight: flinch, stagger, stumble or knockdown (impact.ts)
+    if (z.hp > 0) react(z, { dmg, knock: knock * loop, zone: weak === 'knee' ? 'leg' : head ? 'head' : zone, pellet, melee: !fx, dir: z.flip ? -1 : 1 }, this.t, () => R.next());
     // a climber shot in the head drops back onto the pile
     if (head && z.state === 'climb' && z.hp > 0) { z.climb = undefined; z.state = 'walk'; z.stun = 0.6; }
     if (isPlayer) this.hitMark = { kind: mark, t: 0.18 };
@@ -2116,6 +2122,7 @@ export class Battle {
       }
       return;
     }
+    slideStep(z, dt, W + 150);
     // staggered or knocked flat: nothing but the clock
     if (z.down !== undefined && z.down > 0) { z.down -= dt; return; }
     if (z.stun > 0) { z.stun -= dt; return; }
@@ -2652,6 +2659,7 @@ export class Battle {
       this.actors.noteBlast(z, x, y, knock * (dmg / ex.dmg));
       z.x = Math.min(W + 150, z.x + push);
       if (z.state === 'wall' && Math.abs(push) > 15) z.state = 'walk';
+      if (z.hp > 0) react(z, { dmg, knock: 0, zone: 'torso', blast: knock * (dmg / ex.dmg), dir: Math.sign(z.x - x || 1) }, this.t, () => R.next());
       if (z.hp <= 0) this.kill(z, g);
     }
     this.noise += 10;
@@ -3502,7 +3510,7 @@ export class Battle {
       c.globalAlpha = 1 - Math.max(0, z.dieT - 0.4) * 5;
     }
     if (z.stun > 0 && z.state !== 'dying') { rot = 0.05 + Math.sin(this.t * 40) * 0.025; dy = 0; }
-    if (z.down !== undefined && z.down > 0) { rot = 1.05; dy = h * 0.12; }
+    { const cp = z.state !== 'dying' ? classicPose(z, h, this.t) : null; if (cp) { rot = cp.rot; dy = cp.dy; sy = cp.sy; } }
     if (z.leap) {
       const q = Math.min(1, z.leap.t / z.leap.dur);
       dy = -Math.sin(q * Math.PI) * (130 + 40 * z.scale);

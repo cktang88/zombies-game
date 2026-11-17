@@ -31,7 +31,36 @@ interface RigSrc {
   restBias?: Record<string, number>;
   capless?: string[]; // parts that get no joint cap (e.g. a thigh whose hip sits under a long coat or
   // apron: the cap would copy a disc of the coat onto the leg)
-  hands?: { source: string; refPose: string; scale?: number; poses: Record<string, { index: number; wrist: P; tip: P; grip?: P }> };
+  hands?: HandsSrc;
+}
+/**
+ * Alternate hand poses from a generated hands sheet (connected components, left to right).
+ * Every pose is cut at its wrist line (the sheet's sleeve cuff is dropped: the forearm part
+ * already ends in the body's own sleeve) and scaled so the refPose (an open hand) measures
+ * `len` × the head bone (neck → crown) from wrist to fingertip.
+ */
+interface HandsSrc {
+  source: string;
+  refPose: string;
+  /** open-hand length as a fraction of the head bone (default 0.42 ≈ half the chin-to-crown height) */
+  len?: number;
+  poses: Record<string, HandPose>;
+}
+interface HandPose {
+  index: number; wrist: P; tip: P;
+  /** palm point (what the hand holds); closed poses default to the centroid of the cut hand */
+  grip?: P;
+  /** a closed hand wrapped round a rod: grip = the fist's centroid */
+  closed?: boolean;
+  /** rotate the art (degrees, clockwise on screen) after the cut: brings every closed hand to the
+   * gun-frame orientation the rig draws it in (wrist to the left / below, knuckles forward) */
+  rot?: number;
+  /** keep pixels from this fraction of wrist→tip past the wrist (default -0.04: a sliver of overlap) */
+  cut?: number;
+  /** drop pixels past this fraction of wrist→tip (a pointing hand trimmed back to its knuckles: a closed grip) */
+  trim?: number;
+  /** source-px polygons cut out of the pose (e.g. a pointing index finger: the rest is a fist) */
+  drop?: P[][];
 }
 interface Bone { part: string; a: string; b: string; parent?: string; ignore?: boolean; front?: boolean }
 
@@ -83,7 +112,7 @@ async function loadRaw(name: string) {
 }
 
 /** Crop a masked region, scale it by s, return the part with pivot/tip in part-local px. */
-async function cutPart(name: string, src: { data: Buffer; w: number; h: number }, mask: Uint8Array, s: number, a: P, b: P): Promise<Cut | null> {
+async function cutPart(name: string, src: { data: Buffer; w: number; h: number }, mask: Uint8Array, s: number, a: P, b: P, g?: P): Promise<Cut | null> {
   let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
   for (let y = 0; y < src.h; y++) for (let x = 0; x < src.w; x++) if (mask[y * src.w + x]) {
     if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
@@ -100,7 +129,19 @@ async function cutPart(name: string, src: { data: Buffer; w: number; h: number }
   const buf = await sharp(out, { raw: { width: w, height: h, channels: 4 } }).resize(W, H, { kernel: 'lanczos3' }).raw().toBuffer();
   const pivot: P = [(a[0] - x0) * (W / w), (a[1] - y0) * (H / h)];
   const tip: P = [(b[0] - x0) * (W / w), (b[1] - y0) * (H / h)];
-  return { name, buf, w: W, h: H, pivot, tip, rest: Math.atan2(b[1] - a[1], b[0] - a[0]), len: Math.hypot(b[0] - a[0], b[1] - a[1]) * s };
+  const grip: P | undefined = g ? [(g[0] - x0) * (W / w), (g[1] - y0) * (H / h)] : undefined;
+  return { name, buf, w: W, h: H, pivot, tip, rest: Math.atan2(b[1] - a[1], b[0] - a[0]), len: Math.hypot(b[0] - a[0], b[1] - a[1]) * s, grip };
+}
+
+/** Rotate a cut part's art by deg (clockwise on screen) round its centre; points follow. */
+async function rotateCut(c: Cut, deg: number): Promise<Cut> {
+  const { data, info } = await sharp(c.buf, { raw: { width: c.w, height: c.h, channels: 4 } })
+    .rotate(deg, { background: { r: 0, g: 0, b: 0, alpha: 0 } }).raw().toBuffer({ resolveWithObject: true });
+  const t = (deg * Math.PI) / 180, cs = Math.cos(t), sn = Math.sin(t);
+  const cx = c.w / 2, cy = c.h / 2, cx2 = info.width / 2, cy2 = info.height / 2;
+  const R = (p: P): P => [cx2 + (p[0] - cx) * cs - (p[1] - cy) * sn, cy2 + (p[0] - cx) * sn + (p[1] - cy) * cs];
+  const pivot = R(c.pivot), tip = R(c.tip);
+  return { ...c, buf: data, w: info.width, h: info.height, pivot, tip, grip: c.grip ? R(c.grip) : undefined, rest: Math.atan2(tip[1] - pivot[1], tip[0] - pivot[0]) };
 }
 
 async function segment(rig: RigSrc) {
@@ -232,19 +273,50 @@ async function segment(rig: RigSrc) {
   }
   // 4. alternate hand poses from a hands sheet (connected components, left to right)
   if (rig.hands) {
-    const hs = await loadRaw(rig.hands.source);
+    const H = rig.hands;
+    const hs = await loadRaw(H.source);
     const comps = components(hs);
-    const ref = rig.hands.poses[rig.hands.refPose];
-    const hsScale = (Math.hypot(J.handTip[0] - J.wrist[0], J.handTip[1] - J.wrist[1]) / Math.hypot(ref.tip[0] - ref.wrist[0], ref.tip[1] - ref.wrist[1])) * s * (rig.hands.scale ?? 0.88);
-    for (const [pose, hp] of Object.entries(rig.hands.poses)) {
-      const m = comps[hp.index];
+    /** the pose's component, cut at the wrist line */
+    const cutMask = (hp: HandPose): Uint8Array | null => {
+      const m0 = comps[hp.index];
+      if (!m0) return null;
+      const m = new Uint8Array(m0);
+      const ax = hp.tip[0] - hp.wrist[0], ay = hp.tip[1] - hp.wrist[1], L2 = ax * ax + ay * ay;
+      const c0 = hp.cut ?? -0.04, c1 = hp.trim ?? 1e9;
+      for (let i = 0; i < m.length; i++) if (m[i]) {
+        const x = i % hs.w, y = (i / hs.w) | 0;
+        const t = ((x - hp.wrist[0]) * ax + (y - hp.wrist[1]) * ay) / L2;
+        if (t < c0 || t > c1 || hp.drop?.some((poly) => inPoly(x, y, poly))) m[i] = 0;
+      }
+      keepLargest(m, hs.w, hs.h);
+      return m;
+    };
+    // scale: the open reference hand, wrist → farthest fingertip, = len × the head bone
+    const ref = H.poses[H.refPose];
+    const refM = cutMask(ref)!;
+    let refLen = 0;
+    {
+      const ax = ref.tip[0] - ref.wrist[0], ay = ref.tip[1] - ref.wrist[1], L = Math.hypot(ax, ay);
+      for (let i = 0; i < refM.length; i++) if (refM[i]) refLen = Math.max(refLen, ((i % hs.w - ref.wrist[0]) * ax + (((i / hs.w) | 0) - ref.wrist[1]) * ay) / L);
+    }
+    // (a rig whose crown joint sits low, e.g. under a hood, still gets hands of a body its height)
+    const headLen = Math.max(Math.hypot(J.headTop[0] - J.neck[0], J.headTop[1] - J.neck[1]) * s, rig.height * 0.19);
+    const hsScale = ((H.len ?? 0.42) * headLen) / refLen;
+    for (const [pose, hp] of Object.entries(H.poses)) {
+      const m = cutMask(hp);
       if (!m) { console.warn('no hand component', pose); continue; }
-      const c = await cutPart(`hand_${pose}`, hs, m, hsScale, hp.wrist, hp.tip);
+      let g: P = hp.grip ?? hp.wrist;
+      if (hp.closed) {
+        let sx = 0, sy = 0, n = 0;
+        for (let i = 0; i < m.length; i++) if (m[i]) { sx += i % hs.w; sy += (i / hs.w) | 0; n++; }
+        g = [sx / n, sy / n];
+      }
+      let c = await cutPart(`hand_${pose}`, hs, m, hsScale, hp.wrist, hp.tip, g);
       if (!c) continue;
-      const g = hp.grip ?? hp.wrist;
-      const dx = g[0] - hp.wrist[0], dy = g[1] - hp.wrist[1];
+      if (hp.rot) c = await rotateCut(c, hp.rot);
+      const dx = c.grip![0] - c.pivot[0], dy = c.grip![1] - c.pivot[1];
       const cs = Math.cos(-c.rest), sn = Math.sin(-c.rest);
-      c.grip = [(dx * cs - dy * sn) * hsScale, (dx * sn + dy * cs) * hsScale];
+      c.grip = [dx * cs - dy * sn, dx * sn + dy * cs];
       cuts.push(c);
     }
   }

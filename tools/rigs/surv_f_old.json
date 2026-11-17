@@ -124,6 +124,76 @@
     "refPose": "open",
     "poses": {
       "grip": {
+        "index": 3,
+        "wrist": [
+          815,
+          329
+        ],
+        "tip": [
+          820,
+          434
+        ],
+        "closed": true,
+        "rot": -90
+      },
+      "support": {
+        "index": 3,
+        "wrist": [
+          815,
+          329
+        ],
+        "tip": [
+          820,
+          434
+        ],
+        "closed": true,
+        "rot": -115.0
+      },
+      "open": {
+        "index": 2,
+        "wrist": [
+          612,
+          327
+        ],
+        "tip": [
+          676,
+          472
+        ],
+        "grip": [
+          647,
+          387
+        ]
+      },
+      "fist": {
+        "index": 3,
+        "wrist": [
+          815,
+          329
+        ],
+        "tip": [
+          820,
+          434
+        ],
+        "closed": true
+      },
+      "pinch": {
+        "index": 4,
+        "wrist": [
+          988,
+          394
+        ],
+        "tip": [
+          1090,
+          346
+        ],
+        "grip": [
+          1090,
+          346
+        ]
+      }
+    },
+    "sheet": {
+      "grip": {
         "index": 0,
         "wrist": [
           120,
@@ -198,6 +268,7 @@
           346
         ]
       }
-    }
+    },
+    "len": 0.42
   }
 }

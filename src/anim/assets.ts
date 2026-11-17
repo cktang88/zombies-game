@@ -205,5 +205,79 @@ export function loadGun(defId: string): Promise<GunAsset | null> {
 }
 export const getGun = (defId: string) => gunCache.get(defId) ?? undefined;
 
+/**
+ * How a held weapon is graded to sit in the body's light: the same filter and flat tints as the
+ * body's atlas (night/actors.ts applyLook), plus the ink outline width in display px.
+ */
+export interface GunLook { key: string; filter: string; tints: [string, number][]; ink: number }
+export interface BakedIcon { c: HTMLCanvasElement; k: number; pad: number }
+/** the icons are bright UI art: pull them into the inked bodies' value range */
+const GUN_GRADE = 'brightness(0.8) saturate(0.78) contrast(1.08)';
+const iconCache = new Map<string, BakedIcon>();
+let iconBytes = 0;
+const ICON_BUDGET = 24 * 1024 * 1024;
+/**
+ * A weapon icon (or its cut-out magazine) resampled once to the size it is drawn at (`k` device
+ * px per icon px, bucketed), graded like the body and ringed with the body's ink line.
+ * Drawing the 100-400 px icons straight down to a 20-90 px gun skipped most of their pixels
+ * (Canvas2D's default sampling has no mipmaps): the dark linework vanished and the guns read
+ * pale and see-through next to the inked bodies.
+ */
+export function bakedIcon(id: string, src: CanvasImageSource, w: number, h: number, look: GunLook | null, k: number, inkPx: number): BakedIcon {
+  k = Math.pow(2, Math.round(Math.log2(Math.max(0.02, Math.min(4, k))) * 6) / 6);
+  const ink = Math.max(0, Math.round(inkPx * 2) / 2);
+  const key = `${id}|${look?.key ?? '-'}|${k.toFixed(4)}|${ink}`;
+  let b = iconCache.get(key);
+  if (b) { iconCache.delete(key); iconCache.set(key, b); return b; }
+  const tw = Math.max(1, Math.round(w * k)), th = Math.max(1, Math.round(h * k));
+  // progressive halving, then one smooth step: every source pixel contributes
+  let cur: CanvasImageSource = src, cw = w, ch = h;
+  while (cw / 2 >= tw && ch / 2 >= th) {
+    const n = document.createElement('canvas');
+    n.width = Math.max(1, Math.round(cw / 2)); n.height = Math.max(1, Math.round(ch / 2));
+    const x = n.getContext('2d')!;
+    x.imageSmoothingQuality = 'high';
+    x.drawImage(cur, 0, 0, cw, ch, 0, 0, n.width, n.height);
+    cur = n; cw = n.width; ch = n.height;
+  }
+  const pad = Math.ceil(ink) + 1;
+  const g = document.createElement('canvas');
+  g.width = tw; g.height = th;
+  const gx = g.getContext('2d')!;
+  gx.imageSmoothingQuality = 'high';
+  gx.filter = `${look?.filter ?? ''} ${GUN_GRADE}`.trim();
+  gx.drawImage(cur, 0, 0, cw, ch, 0, 0, tw, th);
+  gx.filter = 'none';
+  gx.globalCompositeOperation = 'source-atop';
+  for (const [col, al] of look?.tints ?? []) if (al > 0) { gx.globalAlpha = al; gx.fillStyle = col; gx.fillRect(0, 0, tw, th); }
+  // resampled edges are soft: firm up the coverage so the gun is as solid as the body
+  const id2 = gx.getImageData(0, 0, tw, th), d = id2.data;
+  for (let i = 3; i < d.length; i += 4) d[i] = d[i] < 40 ? d[i] : Math.min(255, Math.round(d[i] * 1.5));
+  gx.putImageData(id2, 0, 0);
+  const c = document.createElement('canvas');
+  c.width = tw + pad * 2; c.height = th + pad * 2;
+  const x = c.getContext('2d')!;
+  if (ink > 0) {
+    // the ink line: the silhouette stamped round a ring of radius `ink`, under the gun
+    const sil = document.createElement('canvas');
+    sil.width = tw; sil.height = th;
+    const sx = sil.getContext('2d')!;
+    sx.drawImage(g, 0, 0);
+    sx.globalCompositeOperation = 'source-in';
+    sx.fillStyle = '#050608'; sx.fillRect(0, 0, tw, th);
+    const n = ink > 1.5 ? 16 : 8;
+    for (let i = 0; i < n; i++) { const t = (i / n) * Math.PI * 2; x.drawImage(sil, pad + Math.cos(t) * ink, pad + Math.sin(t) * ink); }
+  }
+  x.drawImage(g, pad, pad);
+  b = { c, k, pad };
+  iconCache.set(key, b);
+  iconBytes += c.width * c.height * 4;
+  if (iconBytes > ICON_BUDGET) for (const [kk, v] of iconCache) {
+    if (iconBytes <= ICON_BUDGET * 0.7) break;
+    iconCache.delete(kk); iconBytes -= v.c.width * v.c.height * 4;
+  }
+  return b;
+}
+
 /** Load every gun with anchors (for a dev page / preloading). */
 export const loadAllGuns = () => Promise.all(Object.keys(WEAPON_ANCHORS).map(loadGun));
