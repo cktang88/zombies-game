@@ -14,7 +14,7 @@
 // plus the killing hit's impulse; once it settles the caller bakes it into the ground.
 import { bakedIcon, getGun, getRig, loadGun, loadRig, type BakedIcon, type GunAsset, type GunLook, type PartMeta, type RigAsset } from './assets';
 import { CLIPS, RELOADS, type Clip, type Key, type TKey } from './clips';
-import { GAITS, applyGait, jitterGait, type Gait } from './gait';
+import { GAITS, applyGait, jitterGait, strideScale, cycleLen, type Gait } from './gait';
 import { clamp, ease, ik2, lerp, lerpAngle, rng, wrapAngle } from './math';
 import { DieOpts, PART_POINTS, P_HEADBASE, RAGDOLL_POINTS, Ragdoll } from './ragdoll';
 import {
@@ -80,12 +80,17 @@ export class Rig {
   geo: RigGeom | null = null;
   gait: Gait;
   baseGait: Gait;
+  runGait: Gait | null = null;
   crawling = false;
   onEvent?: (name: string, rig: Rig) => void;
   /** set by the game each frame: ground speed in px/s (display space) */
   speedPx = 0;
   phase = 0;
   moving = 0;
+  /** stride scale for the current ground speed (gait.ts strideScale); the crowd flipbook bakes it in */
+  strideK = 1;
+  /** the stride scale as the crowd flipbook buckets it (frames are keyed by it) */
+  get strideKey() { return Math.round(this.strideK * 20) / 20; }
   t = 0;
   ch: Channels = { ...CH_DEFAULT };
   // weapon
@@ -176,6 +181,8 @@ export class Rig {
     const walk = o.gait ?? this.style.walks[Math.floor(this.r() * this.style.walks.length)];
     this.baseGait = kind === 'turned' && o.jitter !== false ? jitterGait(GAITS[walk] ?? GAITS.walk, this.r) : GAITS[walk] ?? GAITS.walk;
     this.gait = this.baseGait;
+    // a Turned style with a run (Deer): breaks into it when the walk would have to overstride
+    if (kind === 'turned' && this.style.run && GAITS[this.style.run]) this.runGait = jitterGait(GAITS[this.style.run], this.r);
     this.crawling = !!this.gait.crawl;
     this.phase = this.r();
     this.onEvent = o.onEvent;
@@ -306,12 +313,23 @@ export class Rig {
     // 1. locomotion
     const speedRig = this.speedPx / Math.max(0.05, this.ds);
     this.moving += ((speedRig > 1 ? 1 : 0) - this.moving) * Math.min(1, dt * 6);
+    if (this.runGait && (this.gait === this.baseGait || this.gait === this.runGait)) {
+      const kw = strideScale(this.baseGait, g.legLen, speedRig);
+      if (this.gait === this.baseGait && kw >= 1.12) this.gait = this.runGait;
+      else if (this.gait === this.runGait && kw < 0.98) this.gait = this.baseGait;
+    }
     const gait = this.gait;
-    const strideLen = Math.max(1, (gait.crawl ? 0.45 * (g.ua + g.fa) : gait.stride * g.legLen));
-    this.phase = (this.phase + (dt * speedRig * gait.duty * gait.speedMul) / strideLen + (gait.crawl ? 0 : 0)) % 1;
+    // cadence = ground speed / body travel per cycle, so a planted foot (a crawler's planted hand)
+    // moves back at exactly ground speed. A Turned shortens its stride below its gait's natural
+    // pace (strideScale). In the crowd LOD the flipbook draws the un-jittered preset at a bucketed
+    // stride scale, so the cadence follows that preset there (no skating in the flipbook either).
+    const lg = this.lod ? GAITS[gait.id] ?? gait : gait;
+    if (this.kind === 'turned' && speedRig > 1) this.strideK += (strideScale(lg, g.legLen, speedRig) - this.strideK) * Math.min(1, dt * 3);
+    const k = this.lod ? this.strideKey : this.strideK;
+    this.phase = (this.phase + (dt * speedRig) / Math.max(1, cycleLen(lg, g, k, this.moving))) % 1;
     const ch = this.ch;
     Object.assign(ch, CH_DEFAULT);
-    applyGait(ch, gait, this.phase, g, this.moving);
+    applyGait(ch, gait, this.phase, g, this.moving, k);
     if (this.swap && !gait.crawl) this.stanceLayer(dt, g);
     // breathing
     const br = Math.sin(this.t * (this.kind === 'turned' ? 1.3 : 2.1) + this.seed);
@@ -454,7 +472,7 @@ export class Rig {
     }
     // ---- trunk
     const crouchDrop = ch.crouch * g.legLen * 0.5;
-    const pelX = ch.px, pelY = ch.py + crouchDrop - (this.kind === 'survivor' ? this.legTrim : 0);
+    const pelX = ch.px, pelY = ch.py + crouchDrop - this.legTrim;
     const tiltA = -Math.PI / 2 + ch.tilt;
     const T = tiltA + ch.lean;
     const ux = Math.cos(T), uy = Math.sin(T), vx = -uy, vy = ux;
@@ -476,11 +494,13 @@ export class Rig {
     // standing and walking people stand on nearly straight legs (knee ~7° soft standing, ~10° at
     // mid-stance walking): the stance/gait heights are guesses against each rig's own bone lengths,
     // so measure the straighter knee and trim the hips toward it (not while a clip crouches on purpose)
-    if (this.kind === 'survivor' && ch.footIK > 0.5 && ch.crouch < 0.05) {
+    // The Turned do the same toward their gait's own bend (gait.knee: loose for a shambler, deep
+    // for a stalker), so one preset reads the same on every body's bone lengths.
+    if (ch.footIK > 0.5 && ch.crouch < 0.05 && !this.gait.crawl) {
       const bend = (t: number, s2: number) => Math.abs(Math.atan2(Math.sin(A[s2] - A[t]), Math.cos(A[s2] - A[t])));
       const b = Math.min(bend(N_TH, N_SN), bend(F_TH, F_SN));
-      const want = 0.12 + 0.06 * this.moving;
-      this.legTrim = clamp(this.legTrim + (b - want) * g.legLen * 0.12, -0.04 * g.legLen, 0.16 * g.legLen);
+      const want = this.kind === 'survivor' ? 0.12 + 0.06 * this.moving : (this.lod ? GAITS[this.gait.id] ?? this.gait : this.gait).knee;
+      this.legTrim = clamp(this.legTrim + (b - want) * g.legLen * 0.12, (this.kind === 'survivor' ? -0.04 : -0.12) * g.legLen, 0.16 * g.legLen);
     }
     // ---- weapon placement
     this.gunVisible = false;

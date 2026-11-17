@@ -23,7 +23,8 @@ export function flipFrame(rig: Rig, scale: number): Frame | null {
   const moving = rig.moving > 0.5;
   const f = moving ? Math.floor(rig.phase * FLIP_FRAMES) % FLIP_FRAMES : -1;
   const sb = Math.round((rig.lodScale || scale) * 40) / 40;
-  const key = `${rig.spriteId}|${gait}|${f}|${sb}|${rig.lookKey}`;
+  const sk = moving ? rig.strideKey : 1;
+  const key = `${rig.spriteId}|${gait}|${f}|${sk}|${sb}|${rig.lookKey}`;
   let fr = cache.get(key);
   if (fr) {
     // least-recently-used order: a frame in use moves to the back of the Map
@@ -39,7 +40,9 @@ export function flipFrame(rig: Rig, scale: number): Frame | null {
   t.moving = moving ? 1 : 0;
   t.phase = moving ? (f + 0.5) / FLIP_FRAMES : 0;
   t.ds = sb;
-  t.update(0);
+  t.strideK = sk;
+  // dt = 0 poses without advancing; a few passes let the hip-height loop (legTrim) settle
+  for (let i = 0; i < (t.hasPts ? 2 : 12); i++) t.update(0);
   // tight canvas round the pose (rig units → px), plus the outline / rim margin
   let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
   const p = t.pts;
