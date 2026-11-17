@@ -275,7 +275,7 @@ export class Traps implements BattleHook {
     tr.armed = false;
     tr.spent = true;
     const fx = tr.def.fx, c = tr.def.area.cone!;
-    sfx.boom();
+    sfx.explosion(0.8); this.b.earLoad += 4;
     this.b.shake = Math.max(this.b.shake, 12);
     this.b.noise += tr.def.noise;
     this.b.lights.push({ x: tr.x + 60, y: tr.y - 30, r: 300, life: 0.4, max: 0.4, color: '255,170,80' });

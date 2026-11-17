@@ -114,6 +114,12 @@
 //
 //    sfx.ui(kind?)     'click' (default) | 'type' (typewriter key) | 'paper' | 'stamp'
 //
+//    muffle(amount 0..1, seconds = 3)  ringing ears: low-passes the whole sfx bus (ambience too)
+//                      with a faint high ring, recovering over `seconds`. The battle calls it after
+//                      sustained unprotected heavy fire (not with G.flags.earDefenders).
+//    distant('dog' | 'gun' | 'bell')   one far-off event across the river (tide-eve barking).
+//    stinger('dread' | 'dawn')         a short sting on the music bus.
+//
 //  The existing calls now blend recordings in: impact('flesh'|'head'|'bone'|'wood'|
 //  'metal'|'armor'|'burst') layer real flesh/bone/wood/metal hits over the synth;
 //  groan/scream → zombie vocals; thud → a body fall; wallHit → wood hit (+ splinters);
@@ -618,6 +624,73 @@ export const sfx = {
     if (!smp(id, { gain: kind === 'stamp' ? 0.6 : 0.45, rev: 0, pri: 1, spread: 0.03, gate: `ui:${kind}`, gap: 0.03 })) tone(600, 0.05, 0.05, 'triangle');
   },
 };
+
+// ---------------------------------------------------------------------------
+// Ears: sustained unprotected gunfire dulls everything for a few seconds (a low-pass on the
+// whole sfx bus, ambience included) with a faint high ring under it. Subtle by design.
+// ---------------------------------------------------------------------------
+let muffleUntil = 0;
+/** Muffle the sfx bus: amount 0..1 (1 ≈ 900 Hz cutoff), recovering over `seconds`. */
+export function muffle(amount: number, seconds = 3) {
+  const e = engine();
+  if (!e || !ctx) return;
+  const a = clamp01(amount);
+  if (a <= 0) return;
+  const now = ctx.currentTime;
+  if (now < muffleUntil - 0.5) return; // already ringing: don't restart the ramp
+  muffleUntil = now + seconds;
+  const f = e.muffleLp.frequency;
+  const low = 20000 * Math.pow(900 / 20000, a);
+  f.cancelScheduledValues(now);
+  f.setValueAtTime(Math.max(low, f.value), now);
+  f.exponentialRampToValueAtTime(low, now + 0.08);
+  f.setValueAtTime(low, now + seconds * 0.35);
+  f.exponentialRampToValueAtTime(20000, now + seconds);
+  // the ring: a thin sine around 6 kHz, very quiet, fading with the muffle (past the low-pass)
+  const o = ctx.createOscillator();
+  o.frequency.value = 5600 + Math.random() * 1400;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0, now);
+  g.gain.linearRampToValueAtTime(0.01 * a, now + 0.15);
+  g.gain.exponentialRampToValueAtTime(0.0001, now + seconds);
+  o.connect(g).connect(e.master);
+  o.start(now);
+  o.stop(now + seconds + 0.1);
+}
+
+/** Something far off over the river: 'dog' barks, 'gun' shots, 'bell'. */
+export function distant(kind: 'dog' | 'gun' | 'bell', o: { delay?: number; gain?: number } = {}) {
+  const id: SampleId = kind === 'dog' ? 'dog_far' : kind === 'gun' ? 'gun_far' : 'bell_toll';
+  smp(id, { gain: o.gain ?? 0.4, far: true, delay: o.delay, pan: Math.random() * 1.4 - 0.7, rev: 0.3, echo: 0.2, pri: 0, rate: 0.95 + Math.random() * 0.1 });
+}
+
+/** A short sting on the music bus: 'dread' (a low swell and a cracked minor second, for a bad
+ *  night coming) or 'dawn' (an open fifth). Plays whatever the music mode. */
+export function stinger(kind: 'dread' | 'dawn') {
+  if (muted) return;
+  const c = ac();
+  if (!musicBus || !reverb) return;
+  const now = c.currentTime + 0.05;
+  const out = c.createGain();
+  out.connect(musicBus);
+  out.connect(reverb);
+  const notes = kind === 'dread' ? [[38, 0, 4.5, 0.16], [50, 0.2, 4, 0.08], [51, 1.1, 3.2, 0.05]] : [[50, 0, 3.5, 0.09], [57, 0.3, 3.4, 0.07], [62, 0.7, 3, 0.05]];
+  for (const [m, at, dur, v] of notes) {
+    const o = c.createOscillator();
+    o.type = kind === 'dread' ? 'sawtooth' : 'triangle';
+    o.frequency.value = 440 * Math.pow(2, (m - 69) / 12);
+    const lp = c.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = kind === 'dread' ? 420 : 1600;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0, now + at);
+    g.gain.linearRampToValueAtTime(v, now + at + dur * 0.35);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + at + dur);
+    o.connect(lp).connect(g).connect(out);
+    o.start(now + at);
+    o.stop(now + at + dur + 0.1);
+  }
+}
 
 // Low wind for ambience: the recorded wind bed once it has decoded, filtered noise until then.
 function noiseWind(out: AudioNode, level = 0.06, cutoff = 280) {

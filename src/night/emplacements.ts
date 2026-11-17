@@ -332,7 +332,8 @@ export class Emplacements implements BattleHook {
     m.flash = 0.05;
     b.noise += m.def.noise;
     b.lights.push({ x: mz.x + 10, y: mz.y, r: 220, life: 0.06, max: 0.06, color: '255,200,120' });
-    sfx.shoot(m.def.sound, { far: !isPlayer });
+    sfx.shoot(m.def.sound, { far: isPlayer ? false : 0.4 });
+    if (isPlayer) b.earLoad += m.def.id === 'flamer' ? 0 : 1.2;
     if (isPlayer) b.shake = Math.max(b.shake, m.def.id === 'swivel' ? 3 : 1.6);
     if (m.def.id === 'mgnest' && R.chance(0.6)) b.particles.push({ x: m.px - 6, y: m.py + 4, vx: R.range(-60, -20), vy: R.range(-160, -90), life: 1.2, max: 1.2, size: 2.4, color: '#c9a24a', kind: 'shell', ground: m.y - 4 });
     if (m.item) m.item.cond = Math.max(0.05, m.item.cond - m.def.wear);
@@ -406,7 +407,7 @@ export class Emplacements implements BattleHook {
     m.cd = 1 / m.def.rof;
     m.flash = 0.05;
     b.noise += m.def.noise;
-    sfx.shot('nailer', true);
+    sfx.shoot('nailer', { far: 0.5, volume: 0.7 });
   }
 
   // ---------------- drawing ----------------

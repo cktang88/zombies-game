@@ -5,19 +5,20 @@ import { newGame } from './sim/newgame';
 import { renderDay } from './ui/day';
 import { resolveDayWork, dawnTick, nextWeather, prepareRun, tomorrowTeaser, restoreRunMate } from './sim/day';
 import { dailySeed, parseSeed } from './rng';
-import { planNight, afterNight, PERSONAS } from './sim/director';
+import { planNight, afterNight, PERSONAS, nightIntel } from './sim/director';
+import { POST_NAMES, type Post as GuardPost } from './night/battle';
 import { rollIncident, resolveEvent, returnsTick } from './sim/events';
 import { Battle, W, H, type NightResult } from './night/battle';
 import { Expedition, type ExpeditionResult } from './night/expedition';
-import { living, displayName, first, byId, canFight, migrateSurvivor, gainXp, gainProf, heldProf, closeTo, drainLevelUps } from './sim/survivors';
+import { living, displayName, first, byId, canFight, migrateSurvivor, gainXp, gainProf, heldProf, closeTo, drainLevelUps, makeSurvivor } from './sim/survivors';
 import { showDawnReport } from './ui/dawn';
-import { AMMO_RES, fireProfile } from './data/weapons';
+import { AMMO_RES, fireProfile, WEAPONS } from './data/weapons';
 import { morningSummary, fateLine, type Fate } from './sim/chronicle';
 import { parseIds } from './sim/incident';
 import { evacuees } from './sim/threads';
 import { scoreCard, recordRun, inscribe, canInscribe, isInscribed, loadLegacy, setBoon, applyBoons, BOONS } from './sim/legacy';
 import type { Survivor } from './types';
-import { setMuted, muted, sfx, music } from './audio';
+import { setMuted, muted, sfx, music, ambience, stinger } from './audio';
 import { openSettings } from './ui/settings';
 import { openHelp } from './ui/help';
 import { startAsh } from './ui/titlefx';
@@ -39,6 +40,7 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 
 function title() {
   music('title');
+  ambience('title');
   const saved = loadSave();
   const daily = dailySeed();
   app.innerHTML = `<div class="title" style="background-image:linear-gradient(rgba(8,8,10,.35),rgba(8,8,10,.92)),url(${spriteUrl('bg_sky')})">
@@ -103,6 +105,7 @@ function title() {
 
 function day() {
   music('day');
+  ambience('day');
   G.phase = 'day';
   app.onclick = null;
   app.onchange = null;
@@ -134,6 +137,7 @@ function run(site: string) {
   app.onclick = null;
   app.onchange = null;
   app.innerHTML = `<div class="stage"><canvas width="${W}" height="${H}"></canvas></div>`;
+  ambience('run');
   const ex = new Expedition(app.querySelector('canvas')!, l, site, (r) => afterRun(r));
   ex.start();
 }
@@ -190,11 +194,16 @@ function dusk() {
   const totalRounds = AMMO_RES.reduce((a, k) => a + Math.floor(G.stores[k] ?? 0), 0);
   const tonight = `Tonight: ${plan.special ?? 'the usual'}. ${wall.length} at the wall. ${[...rounds.values()].reduce((a, b) => a + b, 0)} rounds for the guns we carry (${totalRounds} in the house). Wall ${Math.ceil(G.fort.hp)}/${G.fort.maxHp}.`;
   const teaser = tomorrowTeaser();
+  const intel = nightIntel(plan);
+  const big = plan.special === 'tide' || plan.special === 'crossing' || plan.special === 'horde';
   // the session break: saved now, the night must be fought; quitting mid-night replays it from dusk
   G.phase = 'night';
   save();
+  if (big) window.setTimeout(() => stinger('dread'), 250);
   overlay(`<h2>Dusk, ${dateLabel()}</h2>${lines.map((l) => `<p>${esc(l)}</p>`).join('')}
+    ${big ? `<p class="stamp threat">${esc(plan.special === 'crossing' ? 'The Crossing. Everything on the east bank is coming over the ice.' : plan.special === 'tide' ? 'A tide night. The whole east bank moves.' : 'A horde on the road tonight.')}</p>` : ''}
     <p class="forecast">${esc(plan.label)}</p>
+    ${intel.length ? `<div class="intel"><b>What we know</b>${intel.map((l, i) => `<p class="${i === 0 && intel.length > 1 ? 'who' : ''}">${esc(l)}</p>`).join('')}</div>` : ''}
     <div class="tonight">${esc(tonight)}</div>
     <div class="teaser"><b>Tomorrow</b>${esc(teaser)}</div>
     <div class="saved">Saved at dusk. Quitting now costs you the night.</div>`, () => deployStep());
@@ -217,13 +226,65 @@ function deployStep() {
   const stock = G.trapStock ?? {};
   const emps = parseEmplacements(G.flags.emplacements).filter((e) => EMPLACEMENTS[e.id]?.crew);
   const kits = Object.values(stock).some((v) => v > 0);
-  if (!kits && !emps.length) return night();
+  const fighters = living().filter(canFight);
+  const guards = fighters.filter((s) => !s.isLeader).slice(0, 5);
+  if (!kits && !emps.length && !guards.length) return night();
   app.onclick = null;
   app.onchange = null;
-  app.innerHTML = '<div class="deploywrap" style="min-height:100vh;overflow:auto;padding:12px 0;background:#0e0d0b"><div class="dep-crew"></div><div class="dep-root"></div></div>';
+  app.innerHTML = '<div class="deploywrap" style="min-height:100vh;overflow:auto;padding:12px 0;background:#0e0d0b"><div class="dep-posts"></div><div class="dep-crew"></div><div class="dep-root"></div></div>';
+  const postsEl = app.querySelector('.dep-posts') as HTMLElement;
   const crewEl = app.querySelector('.dep-crew') as HTMLElement;
   const rootEl = app.querySelector('.dep-root') as HTMLElement;
-  const fighters = living().filter(canFight);
+  // ---- where each guard stands (night/battle.ts Post); the roof nest if there is one ----
+  const NEST_COST = { wood: 12, scrap: 4 } as const;
+  const renderPosts = () => {
+    if (!guards.length) { postsEl.innerHTML = ''; return; }
+    let saved: Record<string, GuardPost> = {};
+    try { saved = G.flags.posts ? JSON.parse(G.flags.posts as string) as Record<string, GuardPost> : {}; } catch { saved = {}; }
+    const nest = !!G.flags.roofNest || G.buildings.some((b) => b.id === 'roofnest');
+    const opts: GuardPost[] = ['step', 'loop', 'runner', ...(nest ? ['roof' as GuardPost] : [])];
+    const hint: Record<GuardPost, string> = { step: 'shoots over the wall', loop: 'a shotgun at the loophole: shoves harder; gets clawed by big ones', runner: 'carries ammo: everyone reloads faster; shoots only what gets over', roof: 'sees farther and steadier; cannot angle down at the wall' };
+    const canNest = !nest && (G.stores.wood ?? 0) >= NEST_COST.wood && (G.stores.scrap ?? 0) >= NEST_COST.scrap;
+    postsEl.innerHTML = `<div class="dep posts"><header class="dep-h"><h2>Posts</h2><span class="dep-count">one at the loophole, one on the roof</span></header>
+      ${guards.map((s) => {
+        const w = G.weapons.find((x) => x.uid === s.weapon);
+        const cur = saved[s.id] && opts.includes(saved[s.id]) ? saved[s.id] : '';
+        return `<p class="postrow"><b>${esc(first(s))}</b> <span class="dim">${w ? esc(w.name ? `"${w.name}"` : WEAPONS[w.def]?.name.toLowerCase() ?? w.def) : 'no gun'}</span>
+          <select data-post="${esc(s.id)}"><option value="" ${cur ? '' : 'selected'}>let them choose</option>${opts.map((p) => `<option value="${p}" ${p === cur ? 'selected' : ''}>${POST_NAMES[p]}</option>`).join('')}</select>
+          <span class="dim">${cur ? esc(hint[cur]) : ''}</span></p>`;
+      }).join('')}
+      <p class="postrow">${nest ? '<span class="dim">The roof nest is up on the garage.</span>' : `<button type="button" class="mini" data-nest ${canNest ? '' : 'disabled'}>Throw up a roof nest now</button> <span class="dim">${NEST_COST.wood} timber, ${NEST_COST.scrap} scrap (cheaper at the workbench)</span>`}</p></div>`;
+  };
+  const readPosts = () => {
+    if (!guards.length) return;
+    const posts: Record<string, GuardPost> = {};
+    const taken = new Set<GuardPost>();
+    for (const el of Array.from(postsEl.querySelectorAll<HTMLSelectElement>('[data-post]'))) {
+      let p = el.value as GuardPost | '';
+      if (!p) continue;
+      if ((p === 'loop' || p === 'roof') && taken.has(p)) p = 'step';
+      taken.add(p);
+      posts[el.dataset.post!] = p;
+    }
+    if (Object.keys(posts).length) {
+      // anyone left to choose stands the firestep
+      for (const s of guards) posts[s.id] ??= 'step';
+      G.flags.posts = JSON.stringify(posts);
+    } else delete G.flags.posts;
+  };
+  renderPosts();
+  postsEl.addEventListener('change', (e) => { sfx.ui(); readPosts(); renderPosts(); void e; });
+  postsEl.addEventListener('click', (e) => {
+    if (!(e.target as HTMLElement).closest('[data-nest]')) return;
+    if ((G.stores.wood ?? 0) < NEST_COST.wood || (G.stores.scrap ?? 0) < NEST_COST.scrap) return;
+    readPosts();
+    add('wood', -NEST_COST.wood);
+    add('scrap', -NEST_COST.scrap);
+    G.flags.roofNest = 1;
+    report.push('Planks and sandbags went up on the garage roof at dusk: a nest for one rifle.');
+    sfx.ui('stamp');
+    renderPosts();
+  });
   const plan = crewPlan();
   if (emps.length) {
     crewEl.innerHTML = `<div class="dep" style="margin-bottom:10px"><header class="dep-h"><h2>The guns</h2><span class="dep-count">heavy-weapons training decides how well a crew works one</span></header>
@@ -259,6 +320,7 @@ function deployStep() {
   };
   const finish = (ps: Placement[]) => {
     readCrew();
+    readPosts();
     // the electric fence needs the generator and a can of fuel a night
     const kept: Placement[] = [];
     const dropped: string[] = [];
@@ -299,6 +361,7 @@ function deployStep() {
 
 function night() {
   music('night');
+  ambience('night');
   G.phase = 'night';
   app.onclick = null;
   app.onchange = null;
@@ -489,6 +552,7 @@ function crossing(fell: boolean) {
   G.flags.crossingFell = fell;
   save();
   music('title');
+  ambience('title');
   const alive = living();
   endRender = () => endScreen({
     title: 'The river is ice',
@@ -510,6 +574,7 @@ function epilogue() {
   const fresh = recordRun('ending');
   save();
   music('title');
+  ambience('title');
   const ending = String(G.flags.ending);
   const E = ENDINGS[ending] ?? ENDINGS.spring;
   const went = parseIds(G.flags.endWent).map((id) => byId(id)).filter((s): s is Survivor => !!s && !s.dead);
@@ -576,6 +641,7 @@ function openLedger() {
 // debug handle for story testing: roll today's incident now, or force an ending screen
 (globalThis as unknown as { __story: object }).__story = {
   roll: () => { G.pendingEvent = rollIncident(); day(); return G.pendingEvent?.id ?? null; },
+  addSurvivor: () => { const s = makeSurvivor(); s.arrivedDay = 1; G.survivors.push(s); return s.id; },
   crossing: () => crossing(false),
   ending: (kind: string) => { G.flags.ending = kind; G.flags.endWent ??= JSON.stringify(living().map((s) => s.id)); epilogue(); },
 };

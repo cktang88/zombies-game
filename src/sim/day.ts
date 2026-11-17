@@ -74,8 +74,52 @@ export function onRunToday(s: Survivor) {
 }
 /** Daylight hours this survivor has for house work today (the run party loses the hours after leaving). */
 export function hoursAvailable(s: Survivor) {
-  if (onRunToday(s)) return Math.max(0, Math.min(DAY_HOURS, (G.flags.runLeave as number) ?? 0));
-  return DAY_HOURS;
+  if (onRunToday(s)) return Math.max(0, Math.min(DAY_HOURS, ((G.flags.runLeave as number) ?? 0) - choreHours(s)));
+  return Math.max(0, DAY_HOURS - choreHours(s));
+}
+/** Hours of today already spent on one-click chores (oiling the guns, clearing the pile). */
+export function choreHours(s: Survivor) {
+  const v = G.flags[`chore_${s.id}`];
+  return typeof v === 'number' && Math.floor(v / 100) === G.day ? v % 100 : 0;
+}
+/** Who does a chore of `h` hours: the leader if they have the time, else whoever has the most to spare. */
+export function choreHand(h: number): Survivor | undefined {
+  const free = (s: Survivor) => hoursAvailable(s);
+  const able = living().filter((s) => canWork(s) && free(s) >= h);
+  return able.find((s) => s.isLeader) ?? able.sort((a, b) => free(b) - free(a))[0];
+}
+function spendChore(s: Survivor, h: number) {
+  G.flags[`chore_${s.id}`] = G.day * 100 + choreHours(s) + h;
+}
+/** Oil the guns: one hour, a rag (cloth) or a splash of fuel. The cold won't seize them tonight. */
+export function oilGuns(): string | null {
+  if (G.flags.oiledDay === G.day) return null;
+  const s = choreHand(1);
+  if (!s) return 'Nobody has an hour free to oil the guns.';
+  const res = (G.stores.cloth ?? 0) >= 1 ? 'cloth' : (G.stores.fuel ?? 0) >= 1 ? 'fuel' : null;
+  if (!res) return 'No rag and no fuel to oil them with.';
+  add(res, -1);
+  spendChore(s, 1);
+  G.flags.oiledDay = G.day;
+  for (const w of G.weapons) w.cond = Math.min(1, w.cond + 0.01);
+  return `${first(s)} stripped and oiled the guns at the kitchen table (${res === 'cloth' ? 'a rag' : 'a splash of fuel'}, an hour).`;
+}
+/** The bodies against the wall (G.flags.pileCarry): haul them off (3 h, a grim job) or burn them (2 fuel, 1 h). */
+export function clearPile(how: 'haul' | 'burn'): string | null {
+  if (!G.flags.pileCarry) return null;
+  const h = how === 'haul' ? 3 : 1;
+  if (how === 'burn' && (G.stores.fuel ?? 0) < 2) return 'Not enough fuel to burn them (2).';
+  const s = choreHand(h);
+  if (!s) return `Nobody has ${h} hour${h > 1 ? 's' : ''} free for the bodies.`;
+  if (how === 'burn') add('fuel', -2);
+  spendChore(s, h);
+  delete G.flags.pileCarry;
+  if (how === 'haul') {
+    addThought(s, { id: 'hauled_dead', label: 'Hauled the dead off the wall by their ankles', mood: hasTrait(s, 'bloodlust') ? 0 : -4, days: 2 }, 1);
+    return `${first(s)} dragged the bodies off the wall and down to the ditch. ${first(s)} has not said a word since.`;
+  }
+  G.flags.pileBurnt = G.day;
+  return `${first(s)} burned the pile against the wall. The smoke hung over Ferry Road all morning.`;
 }
 /** Hours booked on the survivor's job (Rest books none: the whole day is rest). */
 export function jobHours(s: Survivor) {
@@ -420,6 +464,7 @@ export function finishRecipe(id: string, by?: Survivor): string {
     case 'turret': G.fort.turrets = (G.fort.turrets ?? 0) + 1; break;
     case 'trap': G.fort.traps++; break;
     case 'duffel': G.flags.duffel = true; break;
+    case 'roofnest': G.flags.roofNest = 1; break;
     case 'repairMelee': {
       const k = [...(G.melee ?? [])].sort((a, b) => a.cond - b.cond)[0];
       if (k) k.cond = Math.min(1, k.cond + 0.5);

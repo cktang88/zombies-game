@@ -67,6 +67,19 @@
 .seedrow .daily b { color: #e0c070; font-weight: normal; }
 
 /* dusk: tonight + teaser */
+.modal .stamp.threat { font-size: 14px; display: inline-block; margin: 8px 0 4px; }
+.modal .intel { font-family: var(--type); font-size: 13px; color: #cfc2a2; background: rgba(0,0,0,.18); border-left: 2px solid #6a5426; padding: 6px 10px; margin: 10px 0; }
+.modal .intel b { display: block; font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--dim); font-weight: normal; margin-bottom: 2px; }
+.modal .intel p { margin: 3px 0; line-height: 1.35; }
+.modal .intel p.who { color: var(--dim); font-style: italic; }
+/* dusk deploy: posts */
+.dep.posts .postrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 6px 0; }
+.dep.posts .postrow b { min-width: 7em; }
+/* day: chores on the wall tab */
+.fort.chores li { margin: 6px 0; }
+/* a tide on the way: the sky goes red and the panels warm a little */
+.day.dread header { background: rgba(26,8,7,.78); border-bottom-color: rgba(168,50,42,.45); }
+.day.dread .ice b, .day.dread header .date b { text-shadow: 0 0 12px rgba(176,48,42,.35); }
 .modal .tonight { font-family: var(--type); font-size: 13px; border-top: 1px dashed #5a4f3c; border-bottom: 1px dashed #5a4f3c; padding: 6px 0; margin: 10px 0; color: #d8c79a; }
 .teaser { font-family: var(--type); font-size: 13px; color: #c9a95a; margin-top: 10px; }
 .teaser b { display: block; font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--dim); font-weight: normal; }

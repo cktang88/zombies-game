@@ -3,7 +3,8 @@ import { G, R, log, add } from '../state';
 import { ZOMBIES, WEAKSPOTS, EYES, type ZombieDef, type WeakKind } from '../data/zombies';
 import { WEAPONS, fireProfile, armorDamage, roundsInStores, ammoLabel, ammoTypesFor, selectedAmmo, shotSound, wearMods, blastDamage, AMMO_RES, AMMO_TYPES, BURN, FLARE_LIGHT, type FireProfile } from '../data/weapons';
 import { img, flashImg, shadeImg } from '../assets';
-import { sfx, wind, gunSoundFor } from '../audio';
+import { sfx, wind, gunSoundFor, muffle, ambienceLayer } from '../audio';
+import { flashKind, gunFeel, drawFlash, casingLook, voiceOf, panOf, isSuppressed, type FlashKind } from './gunfx';
 import { reduceGore, shakeScale, realism } from '../ui/settings';
 import {
   living, canFight, aimFactor, first, displayName, wound, pain, killSurvivor, tale, addThought, hasTrait, changeOpinion, byId, isBitten, breakThresholds,
@@ -148,6 +149,11 @@ export interface Guard {
   blind: number; // bile in the eyes: aim worse for a few seconds
   duck: number; // ducking a bile glob: no firing
   holdT: number; // Hold fire: seconds a bloodlust guard has been itching
+  // ---- feel (night/gunfx.ts) ----
+  flashKind?: FlashKind;
+  flashAng?: number;
+  flashSize?: number;
+  kick?: number; // px the sprite is shoved back at full recoil
 }
 /** Where a guard stands (research 05 §5). */
 export type Post = 'step' | 'roof' | 'loop' | 'runner';
@@ -159,7 +165,7 @@ export const ORDER_NAMES: Record<Order, string> = { free: 'Free fire', hold: 'Ho
 interface Glob { x0: number; y0: number; x1: number; y1: number; gy0: number; gy1: number; t: number; dur: number; g: Guard | null; lane: number; ducked?: boolean; rolled?: boolean }
 type Zone = 'head' | 'torso' | 'arm' | 'leg';
 
-export interface Particle { x: number; y: number; vx: number; vy: number; life: number; max: number; size: number; color: string; kind: 'blood' | 'spark' | 'smoke' | 'fire' | 'spore' | 'shell' | 'chunk'; ground: number }
+export interface Particle { x: number; y: number; vx: number; vy: number; life: number; max: number; size: number; color: string; kind: 'blood' | 'spark' | 'smoke' | 'fire' | 'spore' | 'shell' | 'chunk' | 'dust' | 'puff'; ground: number; w?: number; h?: number; rot?: number; bounces?: number }
 interface Tracer { x1: number; y1: number; x2: number; y2: number; life: number; w: number }
 export interface Fire { x: number; y: number; life: number; w: number }
 interface Lob { x0: number; y0: number; x1: number; y1: number; t: number; dur: number; p: FireProfile; g: Guard | null }
@@ -187,8 +193,8 @@ function bakeBattleBg(special: string | undefined) {
     return cv;
   };
   const r = {
-    early: one(ice ? 0.86 : 0.8, fog ? 0.5 : 0.34, 0.5),
-    late: one(ice ? 0.74 : 0.68, fog ? 0.55 : 0.36, 0.7),
+    early: one(ice ? 1.08 : 1.05, fog ? 0.5 : 0.4, 0.4),
+    late: one(ice ? 0.98 : 0.94, fog ? 0.55 : 0.4, 0.55),
   };
   bgCache.set(key, r);
   return r;
@@ -210,6 +216,8 @@ export interface NightResult {
 }
 
 export class Battle {
+  /** Balance knobs (docs/balance.md §9): guard rate of fire, aim error and head-aim share, the Turned at the wall. */
+  static tune = { guardCd: 2.2, guardErr: 1.15, guardHead: 0.85, wallDps: 1.3, guardRange: 0.55, guardShove: 0.35 };
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
   ground: HTMLCanvasElement;
@@ -314,7 +322,21 @@ export class Battle {
   misses = 0;
   rally = 0; // charges
   rallyT = 0;
-  hitMark: { kind: string; t: number } | null = null;
+  hitMark: { kind: string; t: number; kill?: boolean } | null = null;
+  // ---- feel and sound bookkeeping (night/gunfx.ts, audio.ts) ----
+  earLoad = 0; // loudness of recent fire near the leader (ringing ears past ~16)
+  earCd = 0;
+  idleT = 2; // the next ambient groan from the road
+  alertT = -9;
+  killFlash = 0; // the screen edge warms for a beat on a kill
+  ammoPunch = 0; // the ammo count jumps on each round
+  wallShown = -1; // the wall bar eases down; the lost part flashes
+  wallFlash = 0;
+  nerveShown = -1;
+  nerveFlash = 0;
+  slowCd = 0; // slow-mo is rare: at most once per 8 s (bosses excepted)
+  pullKills = 0; // kills by the leader's current trigger pull (multi-kill feel)
+  fireLevel = -1;
   timeScale = 1;
   hitstop = 0;
   lastHitstop = -1;
@@ -361,6 +383,7 @@ export class Battle {
     this.keyHandler = (e) => this.onKey(e);
     this.bindInput();
     wind(true);
+    if (G.buildings.some((b) => b.id === 'generator') && (G.fort.lights > 0 || (G.fort.turrets ?? 0) > 0)) ambienceLayer('generator', 0.22);
     if (plan.special === 'crossing') setTimeout(() => sfx.bell(), 1500);
     this.say(plan.label);
   }
@@ -642,6 +665,13 @@ export class Battle {
       this.last = now;
       const quiet = !this.zombies.some((z) => z.state !== 'dying' && z.x < 1000);
       if (!this.paused) {
+        // slow-mo, the HUD tweens and the ringing ears run on real time
+        this.slowmo = Math.max(0, this.slowmo - dt);
+        this.slowCd = Math.max(0, this.slowCd - dt);
+        this.killFlash = Math.max(0, this.killFlash - dt);
+        this.ammoPunch = Math.max(0, this.ammoPunch - dt * 6);
+        this.wallFlash = Math.max(0, this.wallFlash - dt);
+        this.nerveFlash = Math.max(0, this.nerveFlash - dt);
         // hitstop: a heavy hit holds the world still for a few frames (never the nerve clock)
         if (this.hitstop > 0) { this.hitstop -= dt; this.tickNerve(dt * 0.5); }
         else {
@@ -665,6 +695,8 @@ export class Battle {
     window.removeEventListener('keyup', this.keyUp);
     window.removeEventListener('blur', this.blurHandler);
     this.reloadSfx?.cancel();
+    ambienceLayer('fire', 0);
+    ambienceLayer('generator', 0);
     const c = this.canvas;
     c.onmousemove = c.onmousedown = c.onmouseup = null;
     c.onwheel = null;
@@ -676,8 +708,9 @@ export class Battle {
   update(dt: number) {
     this.t += dt;
     this.intro = Math.max(0, this.intro - dt);
-    this.slowmo = Math.max(0, this.slowmo - dt);
     this.shake = Math.max(0, this.shake - dt * 18);
+    this.updateEars(dt);
+    this.updateVoices(dt);
     this.bloom = this.bloomNow();
     this.rallyT = Math.max(0, this.rallyT - dt);
     if (this.mark) { this.mark.t -= dt; const mz = this.zombies.find((z) => z.id === this.mark!.id); if (this.mark.t <= 0 || !mz || mz.state === 'dying') this.mark = null; }
@@ -840,7 +873,41 @@ export class Battle {
       this.oldFaceBy = of?.by;
     }
     if (straggler && R.chance(0.3)) this.say('Your shooting carries. More are coming up the road.', 3);
-    if (R.chance(0.15)) sfx.groan();
+    const v = voiceOf(def.id);
+    if (v && (def.cost >= 3 || R.chance(0.2))) sfx.zombieVoice(v, 'alert', { far: true, pan: 0.75, volume: def.cost >= 3 ? 0.9 : 0.55 });
+  }
+
+  /** Ringing ears: sustained loud fire near the leader without ear defenders muffles the world for a few seconds. */
+  updateEars(dt: number) {
+    this.earLoad = Math.max(0, this.earLoad - dt * 1.4);
+    this.earCd = Math.max(0, this.earCd - dt);
+    if (this.earLoad > 16 && this.earCd <= 0 && !G.flags.earDefenders && !this.done) {
+      muffle(Math.min(0.65, 0.35 + (this.earLoad - 16) / 40), 3.2);
+      this.earCd = 22;
+      this.earLoad = 8;
+      if (!this.hints.has('ears')) { this.hints.add('ears'); const p = this.player; if (p) this.text(p.x, p.y - 172, 'ears ringing', '#b8ab90', 10); }
+    }
+    // the fire layer follows what is burning on the road
+    const lvl = Math.min(0.6, this.fires.length * 0.2 + (this.zombies.some((z) => z.burn > 0) ? 0.1 : 0));
+    if (Math.abs(lvl - this.fireLevel) > 0.05) { this.fireLevel = lvl; ambienceLayer('fire', lvl); }
+  }
+  /** Sparse groans off the road: one body at a time, more often the more there are, never a wall of it. */
+  updateVoices(dt: number) {
+    this.idleT -= dt;
+    if (this.idleT > 0) return;
+    const out = this.zombies.filter((z) => z.state !== 'dying' && !z.def.ranged && z.x < W + 40 && z.x > WALL_X);
+    this.idleT = (out.length ? Math.max(0.5, 3.2 / Math.sqrt(out.length)) : 2) * R.range(0.7, 1.4);
+    if (!out.length) return;
+    const z = R.pick(out);
+    const v = voiceOf(z.def.id);
+    if (v) sfx.zombieVoice(v, 'idle', { pan: panOf(z.x), far: z.x > 900, volume: 0.55 + 0.35 * depthT(z.y) });
+  }
+  /** A body reaching the wall: a snarl now and then (rate-limited across the horde). */
+  alertVoice(z: Zombie) {
+    if (this.t - this.alertT < 0.6 || !R.chance(0.4)) return;
+    this.alertT = this.t;
+    const v = voiceOf(z.def.id);
+    if (v) sfx.zombieVoice(v, 'alert', { pan: panOf(z.x), volume: 0.75 });
   }
 
   turnSurvivor() {
@@ -1194,6 +1261,7 @@ export class Battle {
       const laneY = this.targetLane();
       const li = nearestLane(laneY);
       this.shotHit = false;
+      this.pullKills = 0;
       if (prof.explosive && prof.arc) {
         // lobbed over the front rank: lands at the crosshair's x on the target lane
         const tx = Math.max(WALL_X + 30, ap.x + (R.next() + R.next() - 1) * sp.single * Math.abs(ap.x - mz.x) * 1.5);
@@ -1226,10 +1294,15 @@ export class Battle {
       if (this.focusing) this.nerve = Math.max(0, this.nerve - 3);
       this.shotsTonight++;
       this.firedHard += 1;
-      this.roundFired(p, prof, mz, false);
-      const pull = prof.dmg * prof.pellets / Math.max(1, ZOMBIES.sleeper.hp);
-      const feel = (prof.auto ? 3.1 : 2.5 + 3.2 * Math.sqrt(pull)) * prof.recoilMul;
-      this.shake = Math.max(this.shake, feel * 0.55);
+      this.roundFired(p, prof, mz, false, base);
+      // §5: shake per pull, never stacking; a multi-kill from one pull holds the world a beat longer
+      this.shake = Math.max(this.shake, gunFeel(prof).shake * (prof.auto ? 0.5 : 0.6));
+      this.ammoPunch = 1;
+      if (this.pullKills >= 2 && !prof.explosive) {
+        this.hitstop = Math.max(this.hitstop, prof.auto ? 0.04 : 0.09);
+        this.text(this.mouse.x + 18, this.mouse.y - 34, this.pullKills >= 3 ? `×${this.pullKills}` : 'double', '#f0d890', 12);
+        if (gunFeel(prof).kick >= 17) this.bigMoment(0.12); // coach gun, muzzleloader: §5 slow-mo on a 2+ kill
+      }
       G.stats.shots++;
       p.w.cond = Math.max(0.05, p.w.cond - 0.0008);
       const left = this.playerMag.get(p.w.uid) ?? 0;
@@ -1247,19 +1320,32 @@ export class Battle {
   }
 
   // what every round does besides the bullet: flash, noise, brass, smoke, arrows to pick up later
-  roundFired(g: Guard, prof: FireProfile, mz: { x: number; y: number }, far: boolean) {
-    g.recoil = Math.min(1, prof.recoilMul);
-    g.flash = 0.06;
+  roundFired(g: Guard, prof: FireProfile, mz: { x: number; y: number }, far: boolean, ang = g.face > 0 ? 0 : Math.PI) {
+    const fe = gunFeel(prof);
+    const w = g.w!;
+    const def = WEAPONS[w.def];
+    g.recoil = 1;
+    g.kick = fe.kick;
+    g.flash = fe.light > 0 ? 0.06 : 0;
+    g.flashKind = flashKind(w, prof);
+    g.flashAng = ang;
+    g.flashSize = fe.size * (far ? 0.85 : 1);
     this.noise += prof.noise * (far ? 0.7 : 1);
-    this.fired.set(g.w!.uid, (this.fired.get(g.w!.uid) ?? 0) + 1);
+    this.fired.set(w.uid, (this.fired.get(w.uid) ?? 0) + 1);
     if (prof.recoverable > 0 && prof.ammoRes) this.recover[prof.ammoRes] = (this.recover[prof.ammoRes] ?? 0) + prof.recoverable * prof.perShot;
     const quiet = prof.noise < 0.5;
-    if (!quiet) this.lights.push({ x: mz.x + 10 * g.face, y: mz.y, r: far ? 180 : 220, life: 0.06, max: 0.06, color: '255,200,120' });
-    const def = WEAPONS[g.w!.def];
-    sfx.shot(quiet ? 'nailer' : shotSound(def.id), far);
+    const supp = isSuppressed(w);
+    if (fe.light > 0) this.lights.push({ x: mz.x + 10 * g.face, y: mz.y, r: (quiet || supp ? 0.35 : 1) * fe.light * (far ? 0.8 : 1), life: 0.06, max: 0.06, color: prof.incendiary ? '255,150,70' : '255,200,120' });
+    sfx.shoot(def.id, { suppressed: supp, far: far ? 0.4 : false, incendiary: prof.incendiary, pan: panOf(mz.x) * 0.6, volume: far ? 0.8 : 1 });
+    if (!quiet && !supp) this.earLoad += prof.noise * (far ? 0.3 : 1) * (prof.pellets > 1 || prof.dmg > 60 ? 1.3 : 1);
     if (prof.smoke) for (let i = 0; i < 4; i++) this.particles.push({ x: mz.x + g.face * R.range(0, 30), y: mz.y + R.range(-6, 6), vx: g.face * R.range(10, 50), vy: R.range(-20, 5), life: 2.2, max: 2.2, size: R.range(8, 14), color: '#bbb', kind: 'smoke', ground: 0 });
-    const brass = !quiet && prof.recoverable <= 0 && def.caliber !== 'bolt';
-    if (!far && brass) this.particles.push({ x: mz.x - 30 * g.face, y: mz.y + 4, vx: -g.face * R.range(20, 60), vy: R.range(-160, -90), life: 1.2, max: 1.2, size: 2.4, color: '#c9a24a', kind: 'shell', ground: g.y - 4 });
+    // a wisp off the muzzle on the heavy ones
+    else if (!prof.auto && fe.kick >= 11) this.particles.push({ x: mz.x + g.face * 8, y: mz.y, vx: g.face * R.range(10, 30), vy: R.range(-25, -10), life: 0.8, max: 0.8, size: R.range(4, 7), color: '#bbb', kind: 'dust', ground: 0 });
+    // brass and hulls: out of the side, bounce twice on the boards, and stay there
+    const cl = casingLook(def.id);
+    if (cl && (!prof.auto || R.chance(far ? 0.35 : 0.7))) {
+      this.particles.push({ x: mz.x - 34 * g.face * g.sc, y: mz.y + 6, vx: -g.face * R.range(30, 90), vy: R.range(-190, -110), life: 2.5, max: 2.5, size: cl.w, w: cl.w, h: cl.h, rot: R.range(0, 6), bounces: 2, color: cl.color, kind: 'shell', ground: g.y - R.range(2, 7) });
+    }
   }
 
   muzzle(g: Guard) {
@@ -1382,7 +1468,11 @@ export class Battle {
       const tg = (laneY - 2 - oy) / dy;
       if (tg > 0 && tg < endT) {
         endT = tg;
-        for (let i = 0; i < 3; i++) this.particles.push({ x: ox + dx * tg, y: oy + dy * tg, vx: R.range(-40, 40), vy: R.range(-80, -20), life: 0.4, max: 0.4, size: 2, color: '#6b5d4a', kind: 'spark', ground: 0 });
+        const gx = ox + dx * tg, gy = oy + dy * tg;
+        const big = pellet ? 0.6 : 1;
+        this.particles.push({ x: gx, y: gy - 2, vx: R.range(-15, 15), vy: R.range(-40, -20), life: 0.7, max: 0.7, size: R.range(4, 7) * big, color: '#8a7c66', kind: 'dust', ground: 0 });
+        for (let i = 0; i < (pellet ? 1 : 3); i++) this.particles.push({ x: gx, y: gy, vx: R.range(-50, 50), vy: R.range(-120, -40), life: 0.45, max: 0.45, size: 2, color: '#6b5d4a', kind: 'spark', ground: gy + 1 });
+        if (isPlayer && !pellet) sfx.impact('ground', { volume: 0.3 });
       }
     }
     this.tracers.push({ x1: ox + dx * 20, y1: oy + dy * 20, x2: ox + dx * endT, y2: oy + dy * endT, life: pellet ? 0.05 : 0.07, w: pellet ? 1 : 1.6 });
@@ -1419,20 +1509,44 @@ export class Battle {
     };
   }
 
-  /** Weakspot circles in world space (none on a crawler, none while it is over the wall). */
+  /** Weakspot circles in world space (none on a crawler, none while it is over the wall). They ride the drawn pose. */
   weakPts(z: Zombie): { kind: WeakKind; x: number; y: number; r: number }[] {
     const spots = WEAKSPOTS[z.sprite];
     if (!spots || z.state === 'dying' || (z.crippled && z.def.id !== 'ferryman')) return [];
     const h = this.zh(z);
     const im = img(z.sprite);
     const dw = im ? (im.width / im.height) * h : this.zw(z);
-    const left = z.x - dw / 2;
     const lift = this.climbLift(z);
-    return spots.filter((s) => !(s.kind === 'knee' && z.crippled)).map((s) => ({
-      kind: s.kind, r: s.r * h,
-      x: z.flip ? z.x + dw / 2 - s.x * dw : left + s.x * dw,
-      y: z.y - h - lift + s.y * h,
-    }));
+    const ps = this.pose(z);
+    const cr = Math.cos(ps.rot), sr = Math.sin(ps.rot);
+    const f = z.flip ? -1 : 1;
+    return spots.filter((s) => !(s.kind === 'knee' && z.crippled)).map((s) => {
+      // the sprite's local frame (feet at 0,0), then the same rotate/flip/translate drawZombie applies
+      const lx = -dw / 2 + s.x * dw, ly = (-h - (ps.dy ? 0 : lift) + s.y * h) * ps.sy;
+      const rx = lx * cr - ly * sr, ry = lx * sr + ly * cr;
+      return { kind: s.kind, r: s.r * h, x: z.x + f * rx, y: z.y + ps.dy + ry };
+    });
+  }
+  /** The tilt, lift and squash drawZombie gives a body this frame (shared with the weakspot rings). */
+  pose(z: Zombie): { rot: number; dy: number; sy: number } {
+    let rot = 0, dy = 0, sy = 1;
+    const h = this.zh(z);
+    const gait = z.def.speed > 60 ? 9 : 3.2;
+    if (z.state === 'walk' || z.state === 'over' || z.state === 'flee') {
+      rot = Math.sin(z.phase * gait) * (z.def.speed > 60 ? 0.05 : 0.04);
+      dy = -Math.abs(Math.sin(z.phase * gait)) * (z.def.speed > 60 ? 5 : 2.5) * z.scale;
+    } else if (z.state === 'wall' || z.state === 'maul') {
+      rot = -0.08 + Math.sin(z.phase * 7) * 0.06;
+    }
+    if (z.stun > 0 && z.state !== 'dying') { rot = 0.05 + Math.sin(this.t * 40) * 0.025; dy = 0; }
+    if (z.down !== undefined && z.down > 0) { rot = 1.05; dy = h * 0.12; }
+    if (z.leap) {
+      const q = Math.min(1, z.leap.t / z.leap.dur);
+      dy = -Math.sin(q * Math.PI) * (130 + 40 * z.scale);
+      rot = -0.5 + q * 0.7;
+    } else if (z.def.leap && (z.windup ?? 0) > 0) { sy = 0.84; rot = -0.06; }
+    if (z.state === 'climb') { dy = -this.climbLift(z); rot = -0.25; }
+    return { rot, dy, sy };
   }
 
   /** Freeze a body for a moment: no walking, no wall damage. */
@@ -1518,7 +1632,7 @@ export class Battle {
       }
     } else if (z.def.armor) {
       d = armorDamage(d, z.def.armor, fx?.armorPen ?? 0);
-      if (d < dmg * 0.6) { mark = 'plate'; if (isPlayer && R.chance(0.3)) sfx.impact('armor', { volume: 0.5 }); }
+      if (d < dmg * 0.6) mark = 'plate';
     }
     if (fx?.incendiary) z.burn = Math.max(z.burn, BURN.time);
     // a hit ≥ 20 during a Crier's wind-up chokes the keen off
@@ -1526,7 +1640,7 @@ export class Battle {
     z.hp -= d;
     z.flash = 0.08;
     // stagger (balance.md §8.8): a body hit rolls fireProfile().stagger; one pellet in four rolls
-    if (!head && fx && (!pellet || R.chance(0.25)) && R.chance(fx.stagger)) staggerHit = true;
+    if (!head && fx && (!pellet || R.chance(isPlayer ? 0.25 : 0.25 * Battle.tune.guardShove)) && R.chance(fx.stagger)) staggerHit = true;
     if (head && d >= 60) { if (z.def.id === 'ferryman') { if (d >= 100) staggerHit = true; } else this.stagger(z, 0.6); }
     if (staggerHit) { if (z.def.id === 'ferryman') this.ferryStagger(z, g, isPlayer); else this.stagger(z, 0.3); }
     const heavy = z.def.id === 'ferryman' || z.def.boss || z.state === 'cover';
@@ -1537,8 +1651,17 @@ export class Battle {
     // a climber shot in the head drops back onto the pile
     if (head && z.state === 'climb' && z.hp > 0) { z.climb = undefined; z.state = 'walk'; z.stun = 0.6; }
     if (isPlayer) this.hitMark = { kind: mark, t: 0.18 };
-    // blood (fewer, smaller and darker with Reduce gore)
-    this.blood(px, py, head ? 10 : 4, head ? 4.5 : 3, z.y);
+    if (mark === 'plate') {
+      // steel on steel: bright sparks off the Deputy's plate, no blood
+      for (let i = 0; i < 6; i++) this.particles.push({ x: px, y: py, vx: (z.flip ? 1 : -1) * R.range(40, 220), vy: R.range(-200, 40), life: 0.3, max: 0.3, size: R.range(1.5, 2.5), color: R.pick(['#ffe8b0', '#ffd080', '#fff4d8']), kind: 'spark', ground: z.y });
+      this.lights.push({ x: px, y: py, r: 50, life: 0.05, max: 0.05, color: '255,220,160' });
+    } else {
+      // blood (fewer, smaller and darker with Reduce gore), scaled by the hit
+      const big = Math.min(1.6, 0.6 + d / 60);
+      this.blood(px, py, Math.round((head ? 8 : 3) * big + (pellet ? 0 : 1)), (head ? 4.5 : 3) * Math.min(1.3, big), z.y);
+      if (!pellet || R.chance(0.3)) this.particles.push({ x: px, y: py, vx: (z.flip ? -1 : 1) * R.range(10, 40), vy: R.range(-20, 0), life: 0.35, max: 0.35, size: (reduceGore() ? 3 : 5) * big * (head ? 1.4 : 1), color: reduceGore() ? '40,10,8' : '110,18,14', kind: 'puff', ground: 0 });
+    }
+    const voice = voiceOf(z.def.id);
     if (z.hp <= 0) {
       if (head && !z.headless && R.chance(isPlayer ? 0.8 : 0.5) && !z.def.crawl && !z.def.ranged && !reduceGore()) {
         z.headless = true;
@@ -1556,13 +1679,21 @@ export class Battle {
             if (this.rally < 2) { this.rally++; this.say('Rally ready — [E] to call the line together.', 3); }
           }
         } else this.nerveGain(2);
-        sfx.confirm(this.streak || 1);
+        sfx.impact(head ? 'head' : mark === 'plate' ? 'armor' : 'flesh');
+        sfx.confirm(head ? Math.max(1, this.streak) : 1);
         this.feel(fx, true, head);
-      }
+        this.killFlash = head ? 0.16 : 0.1;
+        this.hitMark = { kind: mark, t: 0.24, kill: true };
+        this.pullKills++;
+      } else sfx.impact(head ? 'head' : mark === 'plate' ? 'armor' : 'flesh', { volume: 0.35 });
       this.kill(z, g);
     } else {
-      if (isPlayer) { sfx.impact(head ? 'head' : mark === 'plate' ? 'armor' : mark === 'weak' && weak === 'knee' ? 'bone' : 'flesh'); this.feel(fx, false, head); }
-      else sfx.hit();
+      const imp = head ? 'head' : mark === 'plate' ? 'armor' : mark === 'weak' && (weak === 'knee' || weak === 'shoulder') ? 'bone' : 'flesh';
+      if (isPlayer) { sfx.impact(imp); this.feel(fx, false, head); }
+      else sfx.impact(imp, { volume: 0.35 });
+      if (voice && d >= 12 && (isPlayer || R.chance(0.3))) sfx.zombieVoice(voice, 'pain', { pan: panOf(z.x), volume: 0.7 });
+      // the visual read of the shove (§5): a heavy pull rocks it back a step
+      if (isPlayer && fx && !pellet && knock >= 40 && z.def.id !== 'ferryman') this.stagger(z, 0.12);
     }
   }
 
@@ -1616,6 +1747,9 @@ export class Battle {
       G.stats.kills++;
     }
     if (z.def.boss) this.bossDown(z, g);
+    const voice = voiceOf(z.def.id);
+    if (voice && !z.def.boss && R.chance(z.def.id === 'ferryman' ? 1 : z.headless ? 0.25 : 0.5)) sfx.zombieVoice(voice, 'death', { pan: panOf(z.x), volume: 0.8 });
+    if (z.def.id === 'ferryman') { this.bigMoment(0.45); this.shake = Math.max(this.shake, 7); sfx.thud(); }
     for (const h of this.hooks) h.onKill?.(z, g); // night modules
     if (g && z.def.ranged) {
       g.s.kills++;
@@ -1650,7 +1784,7 @@ export class Battle {
       }
     }
     if (z.def.burst) {
-      sfx.burst();
+      sfx.impact('burst');
       for (let i = 0; i < 30; i++) this.particles.push({ x: z.x, y: z.y - 60, vx: R.range(-120, 120), vy: R.range(-140, 20), life: 2.5, max: 2.5, size: R.range(8, 22), color: '#a8862f', kind: 'spore', ground: 0 });
       // the kill line: inside 180 px it rots the wall and the pile against it
       if (z.x - WALL_X < 180 && !z.flip) {
@@ -1666,8 +1800,9 @@ export class Battle {
   }
 
   bossDown(z: Zombie, g: Guard | null) {
-    sfx.boom();
-    this.slowmo = 2;
+    sfx.zombieVoice('bellwether', 'death', { pan: panOf(z.x) });
+    sfx.thud();
+    this.bigMoment(1.4, true);
     this.shake = 12;
     this.surge = 0;
     G.flags.bellwetherDown = G.day;
@@ -1743,7 +1878,7 @@ export class Battle {
     const fog = this.plan.special === 'fog';
     const roof = g.post === 'roof';
     // guards only engage what they can make out in the dark
-    const range = Math.max((fog ? 640 : 820) + Math.min(3, G.fort.lights) * 130 + (hasTrait(g.s, 'nightowl') ? 120 : 0) + (roof ? 260 : 0), g.x + SH * 0.45 + prof.light);
+    const range = Math.max(WALL_X + ((fog ? 640 : 820) - WALL_X) * Battle.tune.guardRange + Math.min(3, G.fort.lights) * 130 + (hasTrait(g.s, 'nightowl') ? 120 : 0) + (roof ? 260 : 0), g.x + SH * 0.45 + prof.light);
     const marked = this.mark ? this.zombies.find((z) => z.id === this.mark!.id) : undefined;
     // orders (bloodlust can't hold its fire for long)
     let order = g.order;
@@ -1807,7 +1942,7 @@ export class Battle {
     const dist = Math.hypot(hb.hx - mz.x, hb.hy - mz.y);
     // where on the body: the head by skill (always, on Heads only); the legs of a herd animal or a far Pulper; a weakspot when they know one
     const heads = order === 'heads';
-    const pHead = heads ? 1 : (0.2 + aim * 0.25) * (tgt.def.ranged ? 0.5 : 1);
+    const pHead = heads ? 1 : (0.2 + aim * 0.25) * Battle.tune.guardHead * (tgt.def.ranged ? 0.5 : 1);
     const pLegs = !heads && ((tgt.def.lunge && !tgt.crippled) || (tgt.def.burst && tgt.x - WALL_X > 300)) ? 0.15 + (hasTrait(g.s, 'gentle') ? 0.15 : 0) : 0;
     const weak = this.weakPts(tgt);
     const wantWeak = !heads && weak.length && R.chance(0.08 + aim * 0.12) ? R.pick(weak) : undefined;
@@ -1816,9 +1951,9 @@ export class Battle {
     if (wantWeak) { tx = wantWeak.x; ty = wantWeak.y; }
     else if (roll < pHead) { tx = hb.hx; ty = hb.hy; }
     else if (roll < pHead + pLegs) ty = hb.y1 + (hb.y2 - hb.y1) * 0.78;
-    const err = (prof.spread * 1.2 + (1.15 - aim - lightBonus) * 0.07 + (fog ? 0.04 : 0)) * (1 + dist / 900) * (tgt.def.ranged ? 1.8 : 1) * (0.5 + 0.5 * prof.braceBloomMul) * (roof ? 0.8 : 1) * (heads ? 0.85 : 1);
+    const err = Battle.tune.guardErr * (prof.spread * 1.2 + (1.15 - aim - lightBonus) * 0.07 + (fog ? 0.04 : 0)) * (1 + dist / 900) * (tgt.def.ranged ? 1.8 : 1) * (0.5 + 0.5 * prof.braceBloomMul) * (roof ? 0.8 : 1) * (heads ? 0.85 : 1);
     const base = Math.atan2(ty - mz.y, tx - mz.x);
-    g.cd = (1 / prof.rof) * (prof.auto ? 1.3 : 1.6) * R.range(0.9, 1.25) * (g.mode === 'panic' ? 0.55 : g.mode === 'rage' ? 0.7 : 1) * (heads ? 1.35 : 1) * (this.rallyT > 0 ? 0.75 : 1);
+    g.cd = Battle.tune.guardCd * (1 / prof.rof) * (prof.auto ? 1.3 : 1.6) * R.range(0.9, 1.25) * (g.mode === 'panic' ? 0.55 : g.mode === 'rage' ? 0.7 : 1) * (heads ? 1.35 : 1) * (this.rallyT > 0 ? 0.75 : 1);
     g.burstLeft = Math.min(prof.burst, g.mag);
     // their shots lock to the target's lane: no rounds wasted on a nearer body in front
     g.burstLane = tgt.y;
@@ -1842,9 +1977,9 @@ export class Battle {
         const a = base + R.gauss(0, prof.pellets > 1 ? prof.spread * 0.7 * (g.post === 'loop' ? 0.8 : 1) : err * 0.6);
         let ly = g.burstLane;
         if (prof.pellets > 1 && R.chance(0.25)) { const adj = LANES[li + (R.chance(0.5) ? 1 : -1)]; if (adj !== undefined) ly = adj; }
-        this.castShot(g, mz.x, mz.y, a, prof.dmg, prof.pierce, prof.knock, prof.pellets > 1, false, prof, ly);
+        this.castShot(g, mz.x, mz.y, a, prof.dmg, prof.pierce, prof.knock * (prof.pellets > 1 ? Battle.tune.guardShove : 1), prof.pellets > 1, false, prof, ly);
       }
-      this.roundFired(g, prof, mz, true);
+      this.roundFired(g, prof, mz, true, base);
       g.w.cond = Math.max(0.05, g.w.cond - 0.0006);
     } while (g.burstLeft > 0 && prof.burstGap <= 0);
     g.burstAng = base;
@@ -1867,7 +2002,7 @@ export class Battle {
     tu.cd = 0.3;
     tu.flash = 0.05;
     this.noise += 0.15;
-    sfx.shot('nailer', true);
+    sfx.shoot('nailer', { far: 0.5, pan: panOf(tu.x) * 0.6, volume: 0.7 });
   }
 
   updateZombie(z: Zombie, dt: number) {
@@ -1935,7 +2070,7 @@ export class Battle {
       if (z.screamT <= 0) {
         z.screamT = R.range(6, 9);
         z.windup = 0;
-        sfx.scream();
+        sfx.zombieVoice('crier', 'attack', { pan: panOf(z.x) });
         this.text(z.x, z.y - 140, '— keening —', '#c9a95a', 12);
         if (z.x - WALL_X < 500) this.nerveHit(8);
         for (let i = 0; i < 2; i++) this.spawn(R.chance(0.5) ? 'sleeper' : 'deer');
@@ -1998,7 +2133,7 @@ export class Battle {
         z.leap = { x0: z.x, y0: z.y, x1, y1, t: 0, dur: 0.75 };
         z.state = 'leap';
         this.say('The Buck clears the wall!', 2.5);
-        sfx.groan();
+        sfx.zombieVoice('leaper', 'attack', { pan: panOf(z.x) });
       }
       if (this.inLane(z)) this.laneLast[z.lane] = z;
       return;
@@ -2073,13 +2208,15 @@ export class Battle {
       if (!atFace && !inQueue) { z.state = 'walk'; return; }
       const k = this.laneQ[z.lane]++;
       // no arms: they can only lean on it; no legs: they claw at the bottom
-      const dmg = z.def.dps * dt * cold * (z.disarmed ? 0.4 : 1) * (z.crippled && z.def.id !== 'ferryman' ? 0.6 : 1);
+      const dmg = z.def.dps * Battle.tune.wallDps * dt * cold * (z.disarmed ? 0.4 : 1) * (z.crippled && z.def.id !== 'ferryman' ? 0.6 : 1);
       G.fort.hp = Math.max(0, G.fort.hp - dmg);
       z.wallHit -= dt;
       if (z.wallHit <= 0) {
         z.wallHit = R.range(0.8, 1.4);
         if (atFace) {
           sfx.wallHit();
+          const v = voiceOf(z.def.id);
+          if (v && R.chance(0.12)) sfx.zombieVoice(v, 'attack', { pan: panOf(z.x), volume: 0.6 });
           for (let i = 0; i < 2; i++) this.particles.push({ x: wallX(z.lane) - 5, y: z.y - R.range(30, 100), vx: R.range(-80, -10), vy: R.range(-100, 0), life: 0.6, max: 0.6, size: 2, color: '#7a6448', kind: 'spark', ground: 0 });
         }
       }
@@ -2119,7 +2256,7 @@ export class Battle {
       if (nx < lim) { nx = Math.min(z.x, lim); held = true; }
     }
     z.x = nx;
-    if (z.x <= face) { z.x = face; z.state = standing ? 'wall' : 'over'; if (z.state === 'wall') this.laneQ[z.lane]++; return; }
+    if (z.x <= face) { z.x = face; z.state = standing ? 'wall' : 'over'; if (z.state === 'wall') { this.laneQ[z.lane]++; this.alertVoice(z); } return; }
     if (held && queued && standing) { z.state = 'wall'; this.laneQ[z.lane]++; return; }
     z.blocked = held ? z.blocked + dt : 0;
     if (held && z.blocked > 0.25 && z.laneCd <= 0) this.hop(z, w, false);
@@ -2186,7 +2323,7 @@ export class Battle {
     const tx = tgt.x + R.range(-10, 14), ty = tgt.y - SH * R.range(0.45, 0.75);
     z.seen = 2.5;
     this.noise += 1;
-    sfx.shot(z.sprite === 'z_raider2' ? 'pump' : 'hunting', true);
+    sfx.shoot(z.sprite === 'z_raider2' ? 'pump' : 'hunting', { far: 0.9, pan: panOf(mz.x) });
     this.lights.push({ x: mz.x, y: mz.y, r: 200, life: 0.08, max: 0.08, color: '255,200,120' });
     if (hit) {
       this.tracers.push({ x1: mz.x, y1: mz.y, x2: tx, y2: ty, life: 0.08, w: 1.4 });
@@ -2201,6 +2338,8 @@ export class Battle {
       // into the barricade, or over everyone's heads
       const ex = R.chance(0.5) ? WALL_X - 6 : tx + R.range(-60, 30);
       const ey = R.chance(0.5) ? R.range(590, 660) : ty - R.range(40, 120);
+      if (ex === WALL_X - 6) sfx.impact('wood', { volume: 0.45, delay: 0.05 });
+      else if (R.chance(0.3)) sfx.impact('ricochet', { volume: 0.3, delay: 0.05 });
       this.tracers.push({ x1: mz.x, y1: mz.y, x2: ex, y2: ey, life: 0.08, w: 1.2 });
       for (let i = 0; i < 3; i++) this.particles.push({ x: ex, y: ey, vx: R.range(-80, 40), vy: R.range(-90, 0), life: 0.4, max: 0.4, size: 2, color: '#8a7a5a', kind: 'spark', ground: 0 });
     }
@@ -2219,6 +2358,8 @@ export class Battle {
   maul(g: Guard, z: Zombie) {
     const s = g.s;
     sfx.hurt();
+    const v = voiceOf(z.def.id);
+    if (v) sfx.zombieVoice(v, 'attack', { pan: panOf(z.x) });
     this.shake = 5;
     const bite = R.chance(z.def.id === 'ferryman' ? 0.2 : 0.38);
     const w = wound(s, bite ? 'bite' : R.pick(['laceration', 'scratch', 'bruise', z.def.id === 'ferryman' ? 'fracture' : 'laceration']), R.range(0.2, 0.5) * (z.def.id === 'ferryman' ? 1.6 : 1) * (z.disarmed ? 0.6 : 1));
@@ -2410,8 +2551,11 @@ export class Battle {
   // ellipse (dx/r)² + (dy/0.3r)² ≤ 1 around the foot point takes blastDamage(), armour ignored,
   // and is thrown outward. Covers about one lane either side.
   blast(x: number, y: number, ex: { radius: number; dmg: number }, knock: number, g: Guard | null) {
-    sfx.boom();
-    this.shake = Math.max(this.shake, 16);
+    const size = Math.max(0.6, Math.min(1.6, ex.radius / 150));
+    sfx.explosion(size);
+    this.earLoad += 6 * size;
+    this.shake = Math.max(this.shake, 9 + 6 * size);
+    const k0 = this.res.kills;
     this.lights.push({ x, y: y - 30, r: 420, life: 0.4, max: 0.4, color: '255,170,80' });
     for (let i = 0; i < 40; i++) this.particles.push({ x: x + R.range(-20, 20), y: y - R.range(0, 30), vx: R.range(-300, 300), vy: R.range(-420, -60), life: 1.2, max: 1.2, size: R.range(2, 6), color: R.pick(['#ffcf6b', '#ff8a3d', '#444']), kind: R.chance(0.6) ? 'spark' : 'smoke', ground: y + 6 });
     // a scorch on the road
@@ -2433,6 +2577,16 @@ export class Battle {
       if (z.hp <= 0) this.kill(z, g);
     }
     this.noise += 10;
+    // a blast that takes three or more: the world holds its breath for a moment
+    const killed = this.res.kills - k0;
+    if (killed >= 3) { this.bigMoment(0.35); if (g && g === this.player) { this.text(x, y - 120, `×${killed}`, '#f0d890', 15); sfx.confirm(3); } }
+    else if (killed > 0 && g && g === this.player) this.hitstop = Math.max(this.hitstop, 0.05);
+  }
+  /** A rare slow-mo beat (a Ferryman dropping, a multi-kill blast, the Bellwether). Real seconds. */
+  bigMoment(sec: number, force = false) {
+    if (this.slowCd > 0 && !force) return;
+    this.slowmo = Math.max(this.slowmo, sec);
+    this.slowCd = 8;
   }
   throwMolotov() {
     if (this.done || G.stores.molotov <= 0) {
@@ -2476,7 +2630,7 @@ export class Battle {
   updateParticles(dt: number) {
     for (const p of this.particles) {
       p.life -= dt;
-      if (p.kind === 'smoke' || p.kind === 'spore') {
+      if (p.kind === 'dust' || p.kind === 'puff') { /* handled below */ } else if (p.kind === 'smoke' || p.kind === 'spore') {
         p.vx *= 0.96; p.vy *= 0.96; p.vy -= 10 * dt;
         if (p.kind === 'spore') p.vy += 18 * dt;
       } else if (p.kind === 'fire') {
@@ -2486,10 +2640,22 @@ export class Battle {
       }
       p.x += p.vx * dt;
       p.y += p.vy * dt;
+      if (p.kind === 'shell') p.rot = (p.rot ?? 0) + p.vx * dt * 0.25;
+      if (p.kind === 'dust' || p.kind === 'puff') { p.vy += 40 * dt; p.vx *= 0.9; }
       if ((p.kind === 'blood' || p.kind === 'chunk' || p.kind === 'shell') && p.ground && p.y >= p.ground && p.vy > 0) {
         if (p.kind === 'shell') {
-          p.vy *= -0.3; p.vx *= 0.5; p.y = p.ground;
-          if (Math.abs(p.vy) < 20) { p.life = 0; this.gctx.fillStyle = '#8a7340'; this.gctx.fillRect(p.x, p.y, 3, 1.5); }
+          // two bounces on the boards, then it settles and stays (a decal on the ground layer)
+          p.y = p.ground;
+          if ((p.bounces ?? 0) > 0) { p.bounces = (p.bounces ?? 0) - 1; p.vy *= -0.35; p.vx *= 0.55; continue; }
+          p.life = 0;
+          const c = this.gctx;
+          c.save();
+          c.translate(p.x, p.y);
+          c.rotate(Math.round((p.rot ?? 0) / 0.5) * 0.15);
+          c.globalAlpha = 0.85;
+          c.fillStyle = p.color;
+          c.fillRect(-(p.w ?? 3) / 2, -(p.h ?? 1.5) / 2, p.w ?? 3, p.h ?? 1.5);
+          c.restore();
           continue;
         }
         const c = this.gctx;
@@ -2743,6 +2909,13 @@ export class Battle {
       const a = Math.max(0, p.life / p.max);
       if (p.kind === 'smoke') { c.fillStyle = `rgba(60,58,55,${a * 0.4})`; c.beginPath(); c.arc(p.x, p.y, p.size * (2 - a), 0, 7); c.fill(); }
       else if (p.kind === 'spore') { c.fillStyle = `rgba(168,134,47,${a * 0.35})`; c.beginPath(); c.arc(p.x, p.y, p.size * (2.2 - a), 0, 7); c.fill(); }
+      else if (p.kind === 'dust') { c.fillStyle = `rgba(120,108,90,${a * 0.35})`; c.beginPath(); c.arc(p.x, p.y, p.size * (1.8 - a * 0.8), 0, 7); c.fill(); }
+      else if (p.kind === 'puff') { c.fillStyle = `rgba(${p.color},${a * 0.45})`; c.beginPath(); c.arc(p.x, p.y, p.size * (1.6 - a * 0.6), 0, 7); c.fill(); }
+      else if (p.kind === 'shell') {
+        c.save(); c.translate(p.x, p.y); c.rotate(p.rot ?? 0);
+        c.fillStyle = p.color; c.fillRect(-(p.w ?? 3) / 2, -(p.h ?? 1.5) / 2, p.w ?? 3, p.h ?? 1.5);
+        c.restore();
+      }
       else if (p.kind === 'fire') {
         c.globalCompositeOperation = 'lighter';
         c.fillStyle = `rgba(255,${(90 + 150 * a) | 0},${(30 + 60 * a * a) | 0},${a * 0.55})`;
@@ -3042,22 +3215,20 @@ export class Battle {
       const w = (body.cv.width - PAD * 2) * k;
       const lean = g.dragging && g.dragT < 3 ? 0.18 : 0; // hauling backward
       c.save();
-      c.translate(Math.round(g.x - g.face * g.recoil * (isP ? 6 : 3)), Math.round(g.y + bob));
+      const kick = g.recoil * g.recoil * (g.kick ?? 6) * (isP ? 0.7 : 0.45);
+      c.translate(g.x - g.face * kick, Math.round(g.y + bob));
       if (g.face < 0) c.scale(-1, 1);
       if (lean) c.rotate(-lean);
+      // muzzle rise on the heavy ones: a pivot at the feet, a few degrees back
+      if ((g.kick ?? 0) >= 10 && g.recoil > 0) c.rotate(-g.recoil * g.recoil * 0.035 * ((g.kick ?? 0) / 18));
       if (crouch) c.scale(1, 0.68);
       c.drawImage(body.cv, -w / 2 - PAD * k, -h - PAD * k, body.cv.width * k, body.cv.height * k);
       c.restore();
     }
-    // muzzle flash
+    // muzzle flash, shaped by the gun (night/gunfx.ts)
     if (g.flash > 0) {
       const mz = this.muzzle(g);
-      c.fillStyle = 'rgba(255,230,160,0.95)';
-      c.beginPath();
-      c.moveTo(mz.x, mz.y - 5);
-      c.lineTo(mz.x + 34 * g.face, mz.y);
-      c.lineTo(mz.x, mz.y + 5);
-      c.fill();
+      drawFlash(c, mz.x, mz.y, g.flashAng ?? (g.face > 0 ? 0 : Math.PI), g.flashKind ?? 'long', g.flash / 0.06, (g.flashSize ?? 1) * g.sc, this.shotsTonight + g.homeX);
     }
     // label; a far-row label steps up out of the way of a near-row neighbour's
     let top = g.y - h;
@@ -3350,7 +3521,7 @@ export class Battle {
     const s = 0.5;
     d.globalCompositeOperation = 'source-over';
     d.clearRect(0, 0, W * s, H * s);
-    const base = Math.max(0.12, 0.46 - G.fort.lights * 0.1 + (this.plan.special === 'crossing' ? -0.08 : 0));
+    const base = Math.max(0.12, 0.4 - G.fort.lights * 0.09 + (this.plan.special === 'crossing' ? -0.06 : 0));
     d.fillStyle = `rgba(4,6,14,${base})`;
     d.fillRect(0, 0, W * s, H * s);
     d.globalCompositeOperation = 'destination-out';
@@ -3434,7 +3605,7 @@ export class Battle {
     c.scale(1.7, 1);
     const v = c.createRadialGradient(0, 0, H * 0.32, 0, 0, H * 0.72);
     v.addColorStop(0, 'rgba(0,0,0,0)');
-    v.addColorStop(1, 'rgba(0,0,0,0.45)');
+    v.addColorStop(1, 'rgba(0,0,0,0.38)');
     c.fillStyle = v;
     c.fillRect(-W, -H, W * 2, H * 2);
     c.restore();
@@ -3595,16 +3766,24 @@ export class Battle {
   drawHud(c: CanvasRenderingContext2D) {
     c.save();
     c.textAlign = 'left';
-    // wall bar, segmented
+    // wall bar, segmented; what was just lost shows pale and drains away behind the live value
     const frac = Math.max(0, G.fort.hp / G.fort.maxHp);
+    if (this.wallShown < 0 || frac > this.wallShown) this.wallShown = frac;
+    if (frac < this.wallShown - 0.004) {
+      if (this.wallFlash <= 0.05 && this.wallShown - frac > 0.02) this.wallFlash = 0.35;
+      this.wallShown = Math.max(frac, this.wallShown - 0.0035);
+    }
+    const wj = this.wallFlash > 0 ? Math.sin(this.wallFlash * 60) * 1.5 * shakeScale() : 0;
     c.fillStyle = 'rgba(10,9,8,0.7)';
     c.fillRect(20, 18, 300, 30);
     const segs = 12;
     for (let i = 0; i < segs; i++) {
       const on = frac * segs > i;
-      c.fillStyle = on ? (frac > 0.5 ? '#8f7a55' : frac > 0.25 ? '#b0702c' : '#a8322a') : 'rgba(80,70,60,0.3)';
-      c.fillRect(26 + i * 24, 30, 20, 12);
+      const ghost = !on && this.wallShown * segs > i;
+      c.fillStyle = on ? (frac > 0.5 ? '#8f7a55' : frac > 0.25 ? '#b0702c' : '#a8322a') : ghost ? `rgba(240,220,190,${0.35 + 0.5 * Math.min(1, this.wallFlash * 3)})` : 'rgba(80,70,60,0.3)';
+      c.fillRect(26 + i * 24 + wj, 30, 20, 12);
     }
+    if (this.wallFlash > 0) { c.strokeStyle = `rgba(220,90,60,${this.wallFlash * 2})`; c.lineWidth = 2; c.strokeRect(21, 19, 298, 28); }
     c.font = '11px "Special Elite", monospace';
     c.fillStyle = '#d9cdb0';
     c.fillText(`THE WALL  ${Math.ceil(G.fort.hp)}/${G.fort.maxHp}`, 26, 27);
@@ -3618,8 +3797,9 @@ export class Battle {
     c.fillText(`${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`, W / 2, 36);
     c.font = '11px "Special Elite", monospace';
     c.fillStyle = '#a89c84';
-    const left = this.plan.spawns.length - this.spawnIdx + this.zombies.filter((z) => z.state !== 'dying').length;
-    c.fillText(`night ${G.day}   ·   ${this.res.kills} down   ·   ${left} still out there`, W / 2, 54);
+    // the Turned and the County men are counted apart; a man running for the trees is not "out there"
+    const left = this.plan.spawns.length - this.spawnIdx + this.zombies.filter((z) => z.state !== 'dying' && z.state !== 'flee').length;
+    c.fillText(`night ${G.day}   ·   ${this.res.kills} down${this.raidersDown ? `   ·   ${this.raidersDown} County ${this.raidersDown === 1 ? 'man' : 'men'}` : ''}   ·   ${left} still out there`, W / 2, 54);
     // the Bellwether
     const b = this.boss;
     if (b && b.state !== 'dying' && b.x < W + 20) {
@@ -3652,6 +3832,14 @@ export class Battle {
       c.fillStyle = v;
       c.fillRect(0, 0, W, H);
     }
+    if (this.killFlash > 0) {
+      const a = this.killFlash * 0.55;
+      const v = c.createRadialGradient(W / 2, H / 2, H * 0.45, W / 2, H / 2, H * 0.95);
+      v.addColorStop(0, 'rgba(255,230,190,0)');
+      v.addColorStop(1, `rgba(255,230,190,${a})`);
+      c.fillStyle = v;
+      c.fillRect(0, 0, W, H);
+    }
     if (p && p.blind > 0) { c.fillStyle = `rgba(150,140,40,${Math.min(0.3, p.blind * 0.08)})`; c.fillRect(0, 0, W, H); }
     if (!this.intro) this.drawThreatRibbon(c);
     // weapon
@@ -3673,8 +3861,9 @@ export class Battle {
       const mag = this.playerMag.get(p.w.uid) ?? 0;
       const cap = prof.mag;
       const chamber = hasChamber(p.w, prof) && mag > cap ? 1 : 0;
-      c.font = '26px "Special Elite", monospace';
-      c.fillStyle = mag === 0 ? '#c04030' : mag <= Math.max(1, cap * 0.3) ? '#d09040' : '#efe2c2';
+      const punch = this.ammoPunch;
+      c.font = `${Math.round(26 + punch * 5)}px "Special Elite", monospace`;
+      c.fillStyle = mag === 0 ? '#c04030' : mag <= Math.max(1, cap * 0.3) ? '#d09040' : punch > 0.5 ? '#fff6dc' : '#efe2c2';
       const reserve = prof.ammoRes ? roundsInStores(prof, G.stores) : '∞';
       const pouch = (this.pouch.get(`${p.w.uid}|${prof.ammoRes}`) ?? []).reduce((a, b) => a + b, 0);
       if (hard) {
@@ -3682,7 +3871,7 @@ export class Battle {
         const f = mag / Math.max(1, cap);
         c.font = '17px "Special Elite", monospace';
         c.fillText(mag === 0 ? 'empty' : f >= 0.85 ? 'full' : f >= 0.5 ? 'most' : f >= 0.25 ? 'half' : mag === 1 ? 'last' : 'low', W - 110, H - 30);
-      } else c.fillText(chamber ? `${mag - 1}+1` : `${mag}`, W - 110, H - 30);
+      } else c.fillText(chamber ? `${mag - 1}+1` : `${mag}`, W - 110 + punch * 2, H - 30 - punch * 2);
       c.font = '14px "Special Elite", monospace';
       c.fillStyle = '#a89c84';
       c.fillText(`/ ${reserve}${pouch ? ` +${pouch}` : ''}`, W - 30, H - 30);
@@ -3715,8 +3904,12 @@ export class Battle {
       c.fillStyle = 'rgba(10,9,8,0.6)';
       c.fillRect(x, y - 12, 210, 22);
       const f = this.nerve / Math.max(1, this.nerveMax);
+      if (this.nerveShown < 0) this.nerveShown = f;
+      if (f < this.nerveShown - 0.03 && this.nerveFlash <= 0) this.nerveFlash = 0.3;
+      this.nerveShown += (f - this.nerveShown) * 0.12;
+      if (this.nerveShown > f) { c.fillStyle = `rgba(230,200,170,${0.3 + this.nerveFlash})`; c.fillRect(x + 54, y - 4, 100 * this.nerveShown, 6); }
       c.fillStyle = f < 0.25 ? '#c04030' : f < 0.5 ? '#c09040' : '#9db0a0';
-      c.fillRect(x + 54, y - 4, 100 * f, 6);
+      c.fillRect(x + 54, y - 4, 100 * Math.min(f, this.nerveShown + 0.01), 6);
       c.strokeStyle = 'rgba(200,190,160,0.3)';
       c.strokeRect(x + 54, y - 4, 100, 6);
       c.font = '10px "Special Elite", monospace';
@@ -3787,9 +3980,10 @@ export class Battle {
       // hit marker, coloured by zone
       if (this.hitMark && this.hitMark.t > 0) {
         const col: Record<string, string> = { head: '#f4ecd8', leg: '#d0a050', arm: '#a8a8a0', plate: '#a8c8f0', body: '#d8c8b0', weak: '#f0c060', glob: '#c8c050' };
-        c.strokeStyle = col[this.hitMark.kind] ?? '#ddd';
-        c.lineWidth = this.hitMark.kind === 'head' || this.hitMark.kind === 'weak' ? 2.5 : 1.8;
-        const q = 6 + (0.18 - this.hitMark.t) * 20;
+        const kill = !!this.hitMark.kill;
+        c.strokeStyle = kill ? (this.hitMark.kind === 'head' ? '#ffe6c0' : '#e8a080') : col[this.hitMark.kind] ?? '#ddd';
+        c.lineWidth = kill ? 3 : this.hitMark.kind === 'head' || this.hitMark.kind === 'weak' ? 2.5 : 1.8;
+        const q = (kill ? 8 : 6) + ((kill ? 0.24 : 0.18) - this.hitMark.t) * (kill ? 30 : 20);
         c.beginPath();
         c.moveTo(this.mouse.x - q, this.mouse.y - q); c.lineTo(this.mouse.x - q / 2, this.mouse.y - q / 2);
         c.moveTo(this.mouse.x + q, this.mouse.y - q); c.lineTo(this.mouse.x + q / 2, this.mouse.y - q / 2);
