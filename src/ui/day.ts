@@ -1,5 +1,6 @@
 import type { Survivor, JobId, Res } from '../types';
-import { G, dateLabel, ICE_DAY, has, pay, ordinal } from '../state';
+import { G, dateLabel, ICE_DAY, has, pay, ordinal, docsFound, rep } from '../state';
+import { DOCS, FACTIONS } from '../data/lore';
 import { spriteUrl } from '../assets';
 import { WEAPONS } from '../data/weapons';
 import { TRAITS } from '../data/traits';
@@ -221,6 +222,17 @@ function chronicleHtml() {
   return `<div class="chron">${[...byDay.entries()].reverse().map(([d, l]) => `<h3>${dateLabel(d)} — the ${ordinal(d)} day</h3>${l.join('')}`).join('')}</div>`;
 }
 
+function townHtml() {
+  const found = docsFound();
+  const word = (v: number) => (v >= 40 ? 'friendly' : v >= 10 ? 'warm' : v > -10 ? 'unknown' : v > -40 ? 'cold' : 'hostile');
+  return `<div class="town">
+    <h3>Vessey</h3>
+    ${FACTIONS.map((f) => `<div class="faction"><b>${f.name}</b> <span class="rep r${word(rep(f.id))}">${word(rep(f.id))}</span><div class="bd">${f.desc}</div></div>`).join('')}
+    <h3>Papers <span class="dim">${found.length} of ${DOCS.length} found — searched from the ruins on runs</span></h3>
+    ${found.length ? found.map((id) => DOCS.find((d) => d.id === id)!).map((d) => `<div class="doc"><b>${esc(d.title)}</b><p>${esc(d.text)}</p></div>`).join('') : '<p class="dim">Nothing yet. Lead runs and search doors, sheds and bodies.</p>'}
+  </div>`;
+}
+
 function gravesHtml() {
   if (!G.graves.length) return '<p class="dim">No graves yet behind the house.</p>';
   return `<div class="graves">${G.graves.map((g) => `<div class="grave" data-act="detail" data-id="${g.id}">
@@ -248,8 +260,8 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
         ${living().map(survivorCard).join('')}
       </section>
       <section class="center">
-        <nav>${['workshop', 'wall', 'armory', 'chronicle', 'graves'].map((t) => `<button class="${tab === t ? 'on' : ''}" data-act="tab" data-id="${t}">${t}</button>`).join('')}</nav>
-        <div class="tabbody">${tab === 'workshop' ? workshopHtml() : tab === 'wall' ? wallHtml() : tab === 'armory' ? armoryHtml() : tab === 'chronicle' ? chronicleHtml() : gravesHtml()}</div>
+        <nav>${['workshop', 'wall', 'armory', 'town', 'chronicle', 'graves'].map((t) => `<button class="${tab === t ? 'on' : ''}" data-act="tab" data-id="${t}">${t}</button>`).join('')}</nav>
+        <div class="tabbody">${tab === 'workshop' ? workshopHtml() : tab === 'wall' ? wallHtml() : tab === 'armory' ? armoryHtml() : tab === 'town' ? townHtml() : tab === 'chronicle' ? chronicleHtml() : gravesHtml()}</div>
       </section>
       <section class="report">
         <h2>This morning</h2>

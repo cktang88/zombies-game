@@ -1,5 +1,5 @@
 import type { Survivor, Res } from '../types';
-import { G, R, log, add, pay, has, newWeapon, uid } from '../state';
+import { G, R, log, add, pay, has, newWeapon, uid, findDoc } from '../state';
 import { SITES, RECIPES, RES_LABEL } from '../data/world';
 import { WEAPONS } from '../data/weapons';
 import {
@@ -140,6 +140,10 @@ function scavenge(siteId: string, team: Survivor[]): string[] {
     }
   }
   G.flags[stockKey] = stock - 1;
+  if (R.chance(0.1)) {
+    const d = findDoc();
+    if (d) got.push(`some papers (${d.title})`);
+  }
   // weapon find with pity counter
   const pity = ((G.flags.weaponPity as number) ?? 0) + 1;
   if (R.chance(site.weaponChance * fullness + pity * 0.015)) {
@@ -334,6 +338,14 @@ export function dawnTick(): string[] {
   }
   out.push(...breaksTick());
   for (const s of living()) checkTitles(s);
+  // guns that have seen enough get names
+  for (const w of G.weapons) {
+    if (w.name || w.kills < 60) continue;
+    const holder = living().find((s) => s.weapon === w.uid);
+    w.name = `${holder ? first(holder) + "'s " : ''}${R.pick(['Old Reliable', 'Gravedigger', 'Night Shift', 'Ferry Fare', 'Long Quiet', 'Homecoming', 'Last Call'])}`;
+    log('tale', `The ${WEAPONS[w.def].name.toLowerCase()} with ${w.kills} notches on the stock is called "${w.name}" now.`);
+    out.push(`Somebody carved a name into the stock of the ${WEAPONS[w.def].name.toLowerCase()}: "${w.name}".`);
+  }
   return out;
 }
 

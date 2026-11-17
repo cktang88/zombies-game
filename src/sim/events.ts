@@ -1,5 +1,5 @@
 import type { PendingEvent, Survivor, Res } from '../types';
-import { G, R, log, add, has, pay, newWeapon } from '../state';
+import { G, R, log, add, has, pay, newWeapon, addRep } from '../state';
 import { WEAPONS } from '../data/weapons';
 import {
   living, first, displayName, makeSurvivor, addThought, changeOpinion, setBond, wound, killSurvivor, isBitten, byId, tale,
@@ -148,12 +148,12 @@ export const INCIDENTS: Incident[] = [
       const pick = opts[c];
       if (pick === 'a') {
         if (G.stores[wants] < price) return 'We did not have enough. Peltier spat in the river and pushed off.';
-        add(wants, -price); add(offers.r, offers.n);
+        add(wants, -price); add(offers.r, offers.n); addRep('ferry', 8);
         return 'Done. He did not count it twice.';
       }
       if (pick === 'b' && gun) {
         if (G.stores[wants] < price * 2) return 'We did not have enough. Peltier laughed at us.';
-        add(wants, -price * 2); newWeapon(gun, R.range(0.6, 0.95));
+        add(wants, -price * 2); newWeapon(gun, R.range(0.6, 0.95)); addRep('ferry', 12);
         log('event', `Bought a ${WEAPONS[gun].name.toLowerCase()} off the Peltier boat.`);
         return 'He handed it over wrapped in a feed sack.';
       }
@@ -309,12 +309,13 @@ export const INCIDENTS: Incident[] = [
         G.flags.unionGuy = s.id;
         add('scrap', 40);
         G.fort.maxHp += 80; G.fort.hp += 80;
+        addRep('union', 25);
         log('event', `${displayName(s)} went to stand the Union's wall at the mill for a week. They sent steel plate in trade.`);
         return `${first(s)} went with the runner. The steel arrived by sled that afternoon.`;
       }
       if (c === 1) {
         if (G.stores.rifle < 15) return 'We do not have it. The runner looks at our wall and does not say anything.';
-        add('rifle', -15); add('scrap', 25);
+        add('rifle', -15); add('scrap', 25); addRep('union', 10);
         return 'They sent back scrap. Fair trade.';
       }
       return 'The runner walks back to the mill.';
@@ -335,7 +336,8 @@ export const INCIDENTS: Incident[] = [
     },
     resolve: (c, d) => {
       const want = d.want as Res, n = d.n as number;
-      if (c === 0) { add(want, -n); log('event', `We paid the County men ${n} ${want} to go away.`); for (const s of living()) addThought(s, { id: 'extorted', label: 'Paid off the County men', mood: -4, days: 3 }, 1); return 'They took it and wrote something in a ledger.'; }
+      if (c === 0) { add(want, -n); addRep('county', 10); log('event', `We paid the County men ${n} ${want} to go away.`); for (const s of living()) addThought(s, { id: 'extorted', label: 'Paid off the County men', mood: -4, days: 3 }, 1); return 'They took it and wrote something in a ledger.'; }
+      addRep('county', -25);
       const shooters = living().reduce((a, s) => a + s.skills.shooting, 0) + G.weapons.length * 2;
       if (R.chance(Math.min(0.85, 0.3 + shooters * 0.02))) {
         const s = lowestSpotlight();
@@ -557,6 +559,7 @@ export const INCIDENTS: Incident[] = [
     resolve: (c) => {
       if (c === 0) {
         add('meds', -2);
+        addRep('parish', 20);
         G.flags.parish = ((G.flags.parish as number) ?? 0) + 1;
         for (const s of living()) addThought(s, { id: 'charity', label: 'We helped the Parish', mood: hasTrait(s, 'faithful') || hasTrait(s, 'kind') ? 8 : 3, days: 5 }, 1);
         log('event', 'We left medicine on the Legion hall steps for the Parish.');

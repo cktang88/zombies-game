@@ -171,3 +171,9 @@ a[data-act] { cursor: pointer; color: var(--ink); text-decoration: underline dot
 .run select { width: 100%; margin: 4px 0; }
 .run button { width: 100%; }
 .run h3 { margin-top: 0; }
+.faction { padding: 6px 0; border-bottom: 1px dotted var(--line); }
+.rep { font-family: var(--type); font-size: 11px; text-transform: uppercase; margin-left: 6px; }
+.rfriendly { color: #a8c070; } .rwarm { color: #c8c080; } .runknown { color: var(--dim); } .rcold { color: #c09060; } .rhostile { color: #e05040; }
+.doc { background: #e8dfc8; color: #2a241c; padding: 10px 14px; margin: 8px 0; font-family: var(--type); font-size: 13px; transform: rotate(-0.3deg); box-shadow: 2px 3px 8px #000; }
+.doc:nth-child(even) { transform: rotate(0.4deg); }
+.doc p { margin: 4px 0 0; line-height: 1.45; }

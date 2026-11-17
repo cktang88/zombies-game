@@ -156,7 +156,16 @@ export class Battle {
       const w = G.weapons.find((x) => x.uid === s.weapon) ?? null;
       this.guards.push({ s, w, x: slots[i], y: SURV_Y + (i % 2) * 8 - (i >= 4 ? 30 : 0), cd: R.range(0, 1), mag: w ? WEAPONS[w.def].mag : 0, reload: 0, kills: 0, flash: 0, fled: false, recoil: 0 });
     });
-    for (const g of this.guards) if (g.w) this.playerMag.set(g.w.uid, WEAPONS[g.w.def].mag);
+    // magazines are loaded from the stores, not conjured
+    for (const g of this.guards) {
+      if (!g.w) continue;
+      const def = WEAPONS[g.w.def];
+      const per = this.ammoPer(def);
+      const got = def.ammo ? Math.min(def.mag, Math.floor(G.stores[def.ammo] / per + 1e-6)) : def.mag;
+      if (def.ammo) add(def.ammo, -got * per);
+      g.mag = got;
+      this.playerMag.set(g.w.uid, got);
+    }
     // the frayed may come apart on the wall tonight
     for (const g of this.guards) {
       const th = breakThresholds(g.s);
@@ -1339,16 +1348,16 @@ export class Battle {
     this.destroy();
     const r = this.res;
     r.wallLost = Math.round(this.wallStart - G.fort.hp);
-    for (const k of ['light', 'shell', 'rifle', 'scrap', 'molotov'] as Res[]) {
-      const used = (this.ammoStart[k] ?? 0) - G.stores[k];
-      if (used > 0) r.ammoUsed[k] = Math.round(used);
-    }
     // put ammo still in magazines back in the stores
     for (const g of this.guards) {
       if (!g.w) continue;
       const def = WEAPONS[g.w.def];
       const m = g === this.player ? this.playerMag.get(g.w.uid) ?? 0 : g.mag;
       if (def.ammo) add(def.ammo, m * this.ammoPer(def));
+    }
+    for (const k of ['light', 'shell', 'rifle', 'scrap', 'molotov'] as Res[]) {
+      const used = (this.ammoStart[k] ?? 0) - G.stores[k];
+      if (used > 0.5) r.ammoUsed[k] = Math.round(used);
     }
     // tales from the night
     const fighters = this.guards.filter((g) => !g.s.dead);

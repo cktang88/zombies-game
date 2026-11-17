@@ -1,5 +1,5 @@
 import type { Survivor, Res, WeaponItem } from '../types';
-import { G, R, log, add, newWeapon } from '../state';
+import { G, R, log, add, newWeapon, findDoc } from '../state';
 import { ZOMBIES, type ZombieDef } from '../data/zombies';
 import { WEAPONS } from '../data/weapons';
 import { SITES, RES_LABEL, type Site } from '../data/world';
@@ -390,6 +390,10 @@ export class Expedition {
       if (!R.chance(0.65)) continue;
       const n = Math.round((v ?? 0) * mult * R.range(0.5, 1.5));
       if (n > 0) { add(k as Res, n); this.loot[k as Res] = (this.loot[k as Res] ?? 0) + n; got.push(`${n} ${RES_LABEL[k as Res].toLowerCase()}`); }
+    }
+    if (sp.kind !== 'car' && R.chance(0.22)) {
+      const d = findDoc();
+      if (d) { got.push(`papers: "${d.title}"`); this.lines.push(`Found papers: ${d.title}. (Town tab)`); }
     }
     if (R.chance(this.site.weaponChance * 0.5 * sp.loot)) {
       const wd = R.pick(this.site.weapons);

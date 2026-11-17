@@ -77,3 +77,25 @@ export function ordinal(n: number) {
   const s = ['th', 'st', 'nd', 'rd'], v = n % 100;
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
+
+// ---------- lore documents & faction standing ----------
+import { DOCS, type Doc } from './data/lore';
+export function docsFound(): string[] {
+  try { return JSON.parse((G.flags.docs as string) ?? '[]'); } catch { return []; }
+}
+export function findDoc(): Doc | null {
+  const have = docsFound();
+  const left = DOCS.filter((d) => !have.includes(d.id));
+  if (!left.length) return null;
+  const d = R.pick(left);
+  have.push(d.id);
+  G.flags.docs = JSON.stringify(have);
+  log('lore', `Found: ${d.title}.`);
+  return d;
+}
+export function rep(f: string) {
+  return (G.flags[`rep_${f}`] as number) ?? 0;
+}
+export function addRep(f: string, d: number) {
+  G.flags[`rep_${f}`] = Math.max(-100, Math.min(100, rep(f) + d));
+}
