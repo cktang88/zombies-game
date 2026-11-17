@@ -3026,7 +3026,6 @@ export class Battle {
       groundBand = bakeGround(W, H - GROUND_TOP, GROUND_TOP, LANES, { rut: 0.06, base: ['rgba(22,23,26,0.15)', 'rgba(22,23,26,0.42)', 'rgba(16,17,20,0.62)'] });
     }
     c.drawImage(groundBand, 0, GROUND_TOP);
-    c.drawImage(this.ground, 0, 0);
     // ground-level props behind every lane
     if (G.fort.wire > 0) this.drawWirePosts(c, false);
     if (this.plan.special === 'tunnel') this.drawDrain(c);
@@ -3044,6 +3043,10 @@ export class Battle {
     // darkness, pass A: the whole mask over background and ground
     this.buildDark();
     c.drawImage(this.dark, 0, 0, W, H);
+    // the road's decal layer (settled corpses, blood, brass) after pass A, like the trap decals and the
+    // actors: a body baked into the road used to take the full mask on top of its own corpse darkening
+    // and read as a black cut-out next to the living (gfx-audit round 3)
+    c.drawImage(this.ground, 0, 0);
     this.drawPools(c);
     // contact shadows: one batched path, before the sorted actors
     this.drawShadows(c);
@@ -3078,7 +3081,8 @@ export class Battle {
     for (const d of list) d.f();
     // the front plane: near-black weeds and kerb rubble, parallaxed faster than the backdrop
     const fg = fgStrip();
-    c.drawImage(fg, Math.round(-400 + px * 1.4), H - 44);
+    // (the view pivots on the playfield: the backdrop slides with the aim, the near plane against it)
+    c.drawImage(fg, Math.round(-400 - px * 0.5), H - 44);
     // particles
     for (const p of this.particles) {
       const a = Math.max(0, p.life / p.max);
@@ -3351,7 +3355,9 @@ export class Battle {
         // a rail per lane on its face, up to three rows as the upgrades stack
         const rows = Math.min(3, Math.ceil(G.fort.spikes / 2));
         for (let row = 0; row < rows; row++) for (let lane = 0; lane < 4; lane += row === 1 ? 2 : 1) {
-          drawProp(c, 'fort_spikes', wallX(lane) + 2, LANES[lane] - 34 - row * 16, 18, LOOK[lane], { ax: 0, w: 44, rot: -0.1 });
+          // rail butts nailed into the barricade's face (one flat image, so one face x for every lane;
+          // wallX's lane offset left the far rails hanging 10-20 px off it in the air)
+          drawProp(c, 'fort_spikes', WALL_X - 8, LANES[lane] - 34 - row * 16, 18, LOOK[lane], { ax: 0, w: 46, rot: -0.1 });
         }
       } else for (let i = 0; i < Math.min(5, G.fort.spikes) * 3; i++) {
         c.strokeStyle = '#4a3f35';

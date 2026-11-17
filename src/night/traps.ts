@@ -428,10 +428,10 @@ export class Traps implements BattleHook {
         if (tr.t <= 0) { tr.on = false; tr.armed = false; tr.spent = true; this.b.text(tr.x, tr.y - 70, 'burnt out', '#a08060', 11); continue; }
         if (tr.tick > 0.5) {
           tr.tick = 0;
-          b.lights.push({ x: tr.x, y: tr.y - 50, r: 220, life: 0.9, max: 0.9, color: '255,150,60' });
+          b.lights.push({ x: tr.x, y: tr.y - 70, r: 220, life: 0.9, max: 0.9, color: '255,150,60' });
         }
-        if (R.chance(dt * 18)) b.particles.push({ x: tr.x + R.range(-10, 10), y: tr.y - 56 * depthScale(tr.y) - R.range(0, 10), vx: R.range(-6, 6), vy: R.range(-110, -50), life: 0.6, max: 0.6, size: R.range(3, 6), color: '#ffb347', kind: 'fire', ground: 0 });
-        if (R.chance(dt * 3)) b.particles.push({ x: tr.x, y: tr.y - 90, vx: R.range(-4, 14), vy: R.range(-40, -20), life: 2.5, max: 2.5, size: R.range(8, 14), color: '#111', kind: 'smoke', ground: 0 });
+        if (R.chance(dt * 18)) b.particles.push({ x: tr.x + R.range(-10, 10), y: tr.y - 78 * depthScale(tr.y) - R.range(0, 10), vx: R.range(-6, 6), vy: R.range(-110, -50), life: 0.6, max: 0.6, size: R.range(3, 6), color: '#ffb347', kind: 'fire', ground: 0 });
+        if (R.chance(dt * 3)) b.particles.push({ x: tr.x, y: tr.y - 115, vx: R.range(-4, 14), vy: R.range(-40, -20), life: 2.5, max: 2.5, size: R.range(8, 14), color: '#111', kind: 'smoke', ground: 0 });
         if (R.chance(dt / 6)) sfx.fire();
       }
       if (id === 'flare' && tr.on) { tr.t -= dt; if (tr.t <= 0) tr.on = false; }
@@ -771,7 +771,7 @@ export class Traps implements BattleHook {
         }
         c.restore();
       } else if (id === 'sludge' && (tr.armed || tr.on)) {
-        c.fillStyle = 'rgba(78,64,26,0.42)';
+        c.fillStyle = 'rgba(44,38,16,0.5)'; // dark rot smear (the old olive read as paint over the night road)
         for (let l = 0; l < 4; l++) { const y = LANES[l] + 2; c.beginPath(); c.ellipse(tr.x + Math.sin(l * 2.1) * 10, y, hw * 0.9, 8 * depthScale(y), 0.04 * l, 0, Math.PI * 2); c.fill(); }
       } else if ((id === 'roofnails' || id === 'glass') && tr.armed) {
         const spr = id === 'glass' ? 'trap_glass' : 'trap_roofnails';
@@ -794,7 +794,9 @@ export class Traps implements BattleHook {
       } else if (id === 'spikepit' && !tr.spent || id === 'spikepit' && tr.bodies > 0) {
         const im = sprite('trap_pit');
         const s = depthScale(tr.y), w = 84 * s, h = (w * 50) / 90;
-        if (im) c.drawImage(im, tr.x - w / 2, tr.y - h * 0.62, w, h);
+        // lane-graded like the other kits (the raw sprite read brighter than the road around it)
+        if (drawProp(c, 'trap_pit', tr.x, tr.y - h * 0.62 + h, h, LOOK[tr.lane], { w })) { /* sprite */ }
+        else if (im) c.drawImage(im, tr.x - w / 2, tr.y - h * 0.62, w, h);
         else { c.fillStyle = '#0c0b0a'; c.beginPath(); c.ellipse(tr.x, tr.y, w / 2, 8 * s, 0, 0, Math.PI * 2); c.fill(); }
         if (tr.bodies) { c.fillStyle = `rgba(30,14,10,${0.25 * tr.bodies})`; c.beginPath(); c.ellipse(tr.x, tr.y - 2, w * 0.4, 6 * s, 0, 0, Math.PI * 2); c.fill(); }
       }
@@ -836,7 +838,7 @@ export class Traps implements BattleHook {
       } });
       else if (id === 'barrels' && (tr.on || !tr.spent)) out.push({ y: tr.y - 0.3, f: () => {
         const im = sprite('trap_barrel');
-        const h = 58 * s, w = (h * 56) / 110;
+        const h = 80 * s, w = (h * 56) / 110; // a 55-gal drum: 0.88 m × 0.57 m at 90 px/m (was 0.64 m, smaller than it reads next to the 0.5 m propane tank)
         for (let k = -1; k <= 1; k++) if (!drawProp(c, 'trap_barrel', tr.x + k * w * 0.8, tr.y + Math.abs(k) * 2 * s, h, look, { w, b: tr.on ? 1.15 : 1 }) && im) c.drawImage(im, tr.x + k * w * 0.8 - w / 2, tr.y - h + Math.abs(k) * 2 * s, w, h);
         if (tr.on) {
           c.save(); c.globalCompositeOperation = 'lighter';
