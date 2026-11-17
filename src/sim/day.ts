@@ -5,7 +5,7 @@ import { WEAPONS, MODS, modFits, slotsFor, selectedAmmo } from '../data/weapons'
 import {
   living, first, displayName, workMult, skillOf, addThought, wound, canWork, rel, changeOpinion, setBond, hasTrait,
   computeMood, breakThresholds, killSurvivor, pain, they, their, tale, isBitten, PART_NAMES, closeTo, them, checkTitles,
-  gainXp, attr, counsel, counselled, drainLevelUps,
+  gainXp, attr, counsel, counselled, drainLevelUps, gainProf, heldProf,
 } from './survivors';
 import { bondLine, breakLine } from './chronicle';
 
@@ -226,6 +226,8 @@ export function resolveDayWork(): string[] {
         if (d.live && d.ammo) add(d.ammo, -d.rounds);
         gainXp(s, 'shooting', (d.live ? 2 : 1) * XP_PER_HOUR * hours);
         if (d.heavy) gainXp(s, 'heavy', (d.live ? 2 : 1) * 5 * hours);
+        const held = heldProf(s);
+        if (held) gainProf(s, held.cls, (d.live ? 2 : 1) * 5 * hours);
         out.push(d.live
           ? `${first(s)} drilled ${hours}h${d.heavy ? ' on the gun nest' : ''} and burned ${d.rounds} ${(RES_LABEL[d.ammo!] ?? 'rounds').toLowerCase()}.`
           : `${first(s)} dry-fired for ${hours}h${d.heavy ? ' behind the gun nest' : ''}. Without live rounds it only half takes.`);
@@ -312,6 +314,12 @@ function scavenge(siteId: string, team: Survivor[]): string[] {
     G.flags.weaponPity = 0;
     log('event', `${names} came back from ${site.name} with a ${WEAPONS[w.def].name.toLowerCase()}.`);
   } else G.flags.weaponPity = pity;
+  // attachments turn up now and then (daylight runs find them more often)
+  if (site.mods?.length && R.chance(0.07 * fullness * Math.min(1.3, search))) {
+    const md = R.pick(site.mods);
+    (G.modStock ??= []).push({ uid: uid('m'), def: md, cond: R.range(0.55, 1) });
+    got.push(`a ${MODS[md].name.toLowerCase()}`);
+  }
   out.push(`${names} searched ${site.name}: ${got.length ? got.join(', ') : 'nothing worth carrying'}.${stock <= 1 ? ' The place is picked clean.' : ''}`);
   // danger
   for (const s of team) {

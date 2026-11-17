@@ -1,6 +1,7 @@
 import type { Survivor, SkillId, Thought, Wound, BodyPart, Scar } from '../types';
 import { G, R, uid, log } from '../state';
 import { TRAITS, TRAIT_IDS } from '../data/traits';
+import { weaponClass, type WeaponClass } from '../data/weapons';
 import { FIRST_M, FIRST_F, LAST, BEFORE, OUTBREAK, NICKS } from '../data/names';
 
 export const SKILLS: SkillId[] = ['shooting', 'building', 'crafting', 'medicine', 'scavenging', 'farming', 'social', 'psych'];
@@ -94,6 +95,7 @@ export function makeSurvivor(opts: Partial<Survivor> = {}): Survivor {
     for (const [k, v] of Object.entries(before.attrs ?? {})) s.attrs[k as AttrId] = Math.min(10, s.attrs[k as AttrId] + (v ?? 0));
   }
   s.xp ??= {};
+  s.prof ??= baseProf(s, before.prof);
   s.base ??= { ...s.skills, ...s.attrs };
   return s;
 }
@@ -195,7 +197,32 @@ export function skillOf(s: Survivor, k: SkillId) {
 // Effects here: grit cuts fatigue drain (sim/day.ts) and the pain penalty in workMult; courage shifts break
 // thresholds. Combat may read attr(s, 'courage') for panic/flee and level(s, 'heavy') for emplacement handling.
 export type AttrId = 'courage' | 'grit';
-export type ProgressKey = SkillId | AttrId | 'heavy';
+export type ProgressKey = SkillId | AttrId | 'heavy' | `prof_${WeaponClass}`;
+export const WEAPON_CLASSES: WeaponClass[] = ['pistol', 'smg', 'shotgun', 'rifle', 'lmg', 'bow', 'tool'];
+export const CLASS_NAMES: Record<WeaponClass, string> = { pistol: 'pistol', smg: 'SMG', shotgun: 'shotgun', rifle: 'rifle', lmg: 'machine gun', bow: 'bow', tool: 'shop gun' };
+// Weapon-class proficiency (0..10), separate from shooting. Combat: read prof(s, weaponClass(w.def)) for handling
+// (reload/spread/jam). Award with gainProf(s, cls, xp) (same XP curve as skills; a kill ~ 3 XP).
+export function prof(s: Survivor, cls: WeaponClass) {
+  return s.prof?.[cls] ?? 0;
+}
+export function gainProf(s: Survivor, cls: WeaponClass, xp: number) {
+  return gainXp(s, `prof_${cls}`, xp);
+}
+/** Proficiency with the gun this survivor carries (null if unarmed). */
+export function heldProf(s: Survivor): { cls: WeaponClass; v: number } | null {
+  const w = G.weapons.find((x) => x.uid === s.weapon);
+  if (!w) return null;
+  const cls = weaponClass(w.def);
+  return { cls, v: prof(s, cls) };
+}
+function baseProf(s: Survivor, grants: Partial<Record<WeaponClass, number>> = {}) {
+  const out: Partial<Record<string, number>> = {};
+  for (const c of WEAPON_CLASSES) {
+    const v = Math.round(s.skills.shooting * 0.35 + R.gauss(0, 0.8) + (grants[c] ?? 0));
+    out[c] = Math.max(0, Math.min(10, v));
+  }
+  return out;
+}
 export const ATTRS: AttrId[] = ['courage', 'grit'];
 export const ATTR_NAMES: Record<AttrId, string> = { courage: 'Courage', grit: 'Grit' };
 const levelUps: string[] = [];
@@ -222,7 +249,8 @@ export function attr(s: Survivor, a: AttrId): number {
 export function level(s: Survivor, k: ProgressKey): number {
   if (k === 'courage' || k === 'grit') return attr(s, k);
   if (k === 'heavy') return s.training?.heavy ?? 0;
-  return s.skills[k] ?? 0;
+  if (k.startsWith('prof_')) return s.prof?.[k.slice(5)] ?? 0;
+  return s.skills[k as SkillId] ?? 0;
 }
 function setLevel(s: Survivor, k: ProgressKey, v: number) {
   v = Math.max(0, Math.min(10, v));
@@ -230,7 +258,8 @@ function setLevel(s: Survivor, k: ProgressKey, v: number) {
     attr(s, k);
     s.attrs![k] = v;
   } else if (k === 'heavy') (s.training ??= {}).heavy = v;
-  else s.skills[k] = v;
+  else if (k.startsWith('prof_')) (s.prof ??= {})[k.slice(5)] = v;
+  else s.skills[k as SkillId] = v;
 }
 export function xpNeeded(lvl: number) {
   return 100 * (lvl + 1);
@@ -239,12 +268,13 @@ export function xpProgress(s: Survivor, k: ProgressKey) {
   const lvl = level(s, k);
   return lvl >= 10 ? 1 : Math.max(0, Math.min(1, (s.xp?.[k] ?? 0) / xpNeeded(lvl)));
 }
-const LEVEL_WORDS: Record<ProgressKey, string> = {
+const LEVEL_WORDS: Partial<Record<ProgressKey, string>> = {
   shooting: 'shooting straight', building: 'building', crafting: 'the bench work', medicine: 'stitching', scavenging: 'finding things',
   farming: 'growing things', social: 'talking to people', psych: 'talking people down', courage: 'standing the wall', grit: 'going without', heavy: 'working the gun nest',
 };
 const KEY_NAMES: Record<string, string> = { courage: 'Courage', grit: 'Grit', heavy: 'Heavy weapons', psych: 'Counsel' };
 export function progressName(k: ProgressKey) {
+  if (k.startsWith('prof_')) return CLASS_NAMES[k.slice(5) as WeaponClass] ?? k.slice(5);
   return KEY_NAMES[k] ?? k[0].toUpperCase() + k.slice(1);
 }
 export function gainXp(s: Survivor, k: ProgressKey, amount: number): boolean {
@@ -273,7 +303,7 @@ export function gainXp(s: Survivor, k: ProgressKey, amount: number): boolean {
     setLevel(s, k, lvl);
     up = true;
   }
-  if (up) levelUps.push(`${first(s)} got better at ${LEVEL_WORDS[k]}: ${progressName(k)} ${lvl}.`);
+  if (up) levelUps.push(`${first(s)} got better at ${LEVEL_WORDS[k] ?? `the ${progressName(k)}`}: ${progressName(k)} ${lvl}.`);
   return up;
 }
 /** Level-up lines queued since the last call (shown in the dusk and dawn reports). */
@@ -285,6 +315,7 @@ export function migrateSurvivor(s: Survivor) {
   if (s.skills.psych == null) s.skills.psych = Math.max(0, Math.min(10, Math.round(s.skills.social * 0.6)));
   s.attrs ??= baseAttrs(s, false);
   s.xp ??= {};
+  s.prof ??= baseProf(s);
   s.base ??= { ...s.skills, ...s.attrs };
 }
 /** The survivor's best skills, highest first. */

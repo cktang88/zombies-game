@@ -85,6 +85,9 @@ export interface Survivor {
   // Crew-served weapon training 0..10 (MG nests and other G.flags.emplacements). Grows from the Drill job
   // while an emplacement exists. Combat should read it via level(s, 'heavy').
   training?: { heavy?: number };
+  // Weapon-class proficiency 0..10 (WeaponClass in data/weapons.ts: pistol, smg, shotgun, rifle, lmg, bow, tool),
+  // separate from the general shooting skill. Read with prof(s, cls); award with gainProf(s, cls, xp).
+  prof?: Partial<Record<string, number>>;
   // Values at arrival (skills and attributes), to show growth on the survivor sheet.
   base?: Partial<Record<string, number>>;
 }
