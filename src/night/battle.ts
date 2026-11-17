@@ -9,6 +9,11 @@ import {
   living, canFight, aimFactor, first, displayName, wound, pain, killSurvivor, tale, addThought, hasTrait, changeOpinion, byId, isBitten, breakThresholds,
   moodBreakdown, their, them, grantTitle,
 } from '../sim/survivors';
+// ---- night modules (traps / melee / emplacements): hook plumbing, see night/hook.ts ----
+import type { BattleHook } from './hook';
+import { installModules } from './modules';
+import { meleeGuard } from './melee';
+// ---- end night modules ----
 import { depthScale, bakeSprite, bakeComposite, bakeEdge, bakeLayer, bakeGround, fgStrip, shadowEllipse, type Look } from './render';
 
 export const W = 1280, H = 720;
@@ -118,6 +123,7 @@ interface Guard {
   sc: number; // depth scale of their row
   burstLane: number; // guards: the lane their burst is locked to
   burstX: number;
+  crew?: boolean; // night modules: manning an emplacement (night/emplacements.ts)
 }
 
 interface Particle { x: number; y: number; vx: number; vy: number; life: number; max: number; size: number; color: string; kind: 'blood' | 'spark' | 'smoke' | 'fire' | 'spore' | 'shell' | 'chunk'; ground: number }
@@ -232,6 +238,7 @@ export class Battle {
   lanes: Zombie[][] = [[], [], [], []]; // walkers per lane at the start of this update, by x
   prebake: (() => void)[] = []; // sprite bakes worked off during the intro
   hover?: Zombie; // the body under the crosshair
+  hooks: BattleHook[] = []; // night modules (traps, melee, emplacements)
   keyUp = (e: KeyboardEvent) => { if (e.key === ' ') this.fast = false; };
 
   constructor(canvas: HTMLCanvasElement, plan: NightPlan, onEnd: (r: NightResult) => void) {
@@ -255,7 +262,7 @@ export class Battle {
     this.res = { kills: 0, deaths: [], wallHeld: true, wallLost: 0, ammoUsed: {}, killsBy: {}, headshots: 0, lines: [], fell: false };
     this.setupGuards();
     if (G.flags.dog) this.dog = { x: 172, y: 699, barkT: 0, cd: 0, name: typeof G.flags.dog === 'string' ? G.flags.dog : 'The dog' };
-    for (let i = 0; i < Math.min(2, G.fort.turrets ?? 0); i++) this.turrets.push({ x: WALL_X - 20 - i * 46, y: 560 - i * 14, cd: 1, flash: 0, ang: 0 });
+    this.hooks = installModules(this); // night modules (the nail turrets moved to night/emplacements.ts)
     this.queueBakes();
     const turning = G.flags.turningTonight as string | undefined;
     if (turning && byId(turning) && !byId(turning)!.dead) this.turnAt = this.duration * R.range(0.25, 0.6);
@@ -343,6 +350,7 @@ export class Battle {
   }
 
   onKey(e: KeyboardEvent) {
+    for (const h of this.hooks) if (h.onKey?.(e)) return; // night modules
     if (e.key === 'r' || e.key === 'R') this.startReload();
     else if (e.key === 'f' || e.key === 'F') this.throwMolotov();
     else if (e.key === 'Escape' || e.key === 'p') this.paused = !this.paused;
@@ -472,6 +480,7 @@ export class Battle {
     this.laneLast.fill(undefined);
     this.laneQ.fill(0);
     for (const z of this.zombies) this.updateZombie(z, dt);
+    for (const h of this.hooks) h.update?.(dt); // night modules
     this.zombies = this.zombies.filter((z) => !(z.state === 'dying' && z.dieT > 0.6) && !(z.state === 'flee' && z.x > W + 140));
     this.updateParticles(dt);
     for (const f of this.fires) {
@@ -690,6 +699,7 @@ export class Battle {
   tryFire(click: boolean) {
     const p = this.player;
     if (!p || !p.w || this.done || this.intro > 3.2 || p.burstLeft > 0) return;
+    if (this.hooks.some((h) => h.blockFire?.())) return; // night modules: on a gun nest
     const prof = this.prof(p.w);
     if (!click && !prof.auto) return;
     if (this.playerCd > 0) return;
@@ -814,6 +824,7 @@ export class Battle {
 
   // Ray against the zombies in one lane (±LANE_TOL); returns whether anything was hit, and where it stopped.
   castShot(g: Guard, ox: number, oy: number, ang: number, dmg: number, pierce: number, knock: number, pellet: boolean, isPlayer: boolean, fx: FireProfile | undefined, laneY: number) {
+    for (const h of this.hooks) if (h.onShot?.(g, ox, oy, ang, laneY, pellet, isPlayer)) return { hit: true, x: ox, y: oy }; // night modules (propane)
     const dx = Math.cos(ang), dy = Math.sin(ang);
     const hits: { z: Zombie; t: number; head: boolean }[] = [];
     for (const z of this.zombies) {
@@ -924,6 +935,7 @@ export class Battle {
     if (z.state === 'dying') return;
     z.state = 'dying';
     z.dieT = 0;
+    for (const h of this.hooks) h.onKill?.(z, g); // night modules
     if (z.def.ranged) this.raidersDown++;
     else {
       this.res.kills++;
@@ -998,7 +1010,7 @@ export class Battle {
   updateGuard(g: Guard, dt: number) {
     g.flash = Math.max(0, g.flash - dt);
     g.recoil = Math.max(0, g.recoil - dt * 8);
-    if (g.s.dead || g.fled || g.downed || g.dragging || g.x !== g.homeX || g === this.player || !g.w) return;
+    if (g.s.dead || g.fled || g.downed || g.dragging || g.x !== g.homeX || g === this.player || !g.w || g.crew) return;
     // cowards and the fragile may leave the wall when it's breaking
     if (!this.res.wallHeld && (hasTrait(g.s, 'coward') || g.s.mood < 20) && R.chance(dt * 0.3)) {
       g.fled = true;
@@ -1056,19 +1068,8 @@ export class Battle {
     }
     if (g.mag <= 0) {
       if (roundsInStores(prof, G.stores) < 1) {
-        // out of ammunition: hatchets and fence pickets at the wall
-        const reach = this.zombies.find((z) => z.state !== 'dying' && (z.state === 'wall' && g.x > 200 || ((z.state === 'over' || z.state === 'maul') && Math.abs(z.x - g.x) < 70)));
-        if (reach) {
-          reach.hp -= prof.melee > 0 ? prof.melee : 14 + g.s.skills.building;
-          reach.flash = 0.1;
-          sfx.thud();
-          g.recoil = 1;
-          if (reach.hp <= 0) this.kill(reach, g);
-          g.cd = 1.1;
-        } else {
-          g.cd = 2;
-          if (R.chance(0.3)) this.text(g.x + 20, g.y - 150, 'out of ammo', '#c88', 10);
-        }
+        // out of ammunition: their hand weapon at the wall (night/melee.ts)
+        meleeGuard(this, g);
         return;
       }
       g.reload = (prof.reloadPerRound ? prof.reload * prof.mag * 0.75 : prof.reload) * 1.15;
@@ -1739,6 +1740,7 @@ export class Battle {
     // ground-level props behind every lane
     if (G.fort.wire > 0) this.drawWirePosts(c, false);
     if (this.plan.special === 'tunnel') this.drawDrain(c);
+    for (const h of this.hooks) h.drawGround?.(c); // night modules
     if (this.traps > 0) {
       c.fillStyle = '#2b2a25';
       c.beginPath(); c.ellipse(this.trapX, LANES[2], 16, 4, 0, 0, Math.PI * 2); c.fill();
@@ -1778,6 +1780,7 @@ export class Battle {
       list.push({ y: GROUND_BOT - 1, f: () => this.drawWirePosts(c, true) });
     }
     this.turrets.forEach((tu, i) => list.push({ y: WALL_KEY + 1 - i * 0.1, f: () => this.drawTurret(c, tu) }));
+    for (const h of this.hooks) if (h.sorted) list.push(...h.sorted(c)); // night modules
     list.sort((a, b) => a.y - b.y);
     for (const d of list) d.f();
     for (const gd of this.guards) if (gd.downed && !gd.s.dead && !gd.fled) this.drawDownedLabel(c, gd);
@@ -1834,6 +1837,7 @@ export class Battle {
     }
     c.restore();
     this.drawHud(c);
+    for (const h of this.hooks) h.drawOver?.(c); // night modules
   }
 
   drawFog(c: CanvasRenderingContext2D, k: number) {
@@ -2529,6 +2533,7 @@ export class Battle {
     this.ended = true;
     this.destroy();
     const r = this.res;
+    for (const h of this.hooks) h.onEnd?.(r); // night modules (before the ammunition tally)
     r.wallLost = Math.round(this.wallStart - G.fort.hp);
     // put ammo still in magazines back in the stores
     const held = new Set<string>();
