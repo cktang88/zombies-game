@@ -108,6 +108,10 @@ The workshop runs a craft queue powered by survivors assigned to it. The machine
 
 Crafted weapons can roll as **named masterworks** ("Marla's Second Shift"). They keep a kill count, and the chronicle mentions who carried them.
 
+## 7b. Daylight runs (`src/night/expedition.ts`)
+
+The leader can spend the day leading a run instead of working. It is a side-scrolling street of 3.6–6k px, generated from the chosen site's risk and loot table. Searchable spots are doors, cars, sheds, bodies and Kin at their tables; searching takes 2.5s, faster with scavenging skill, and makes noise. Sleepers stand still until you get close or make noise. You can shove with Space. Daylight runs out after about 150s, and then the dead wake everywhere and stragglers spawn at the screen edges. Walk back off the left edge to get home. Dying out there loses everything carried. Runs give more loot than the auto-scavenge job, plus documents, guns and sometimes a survivor who follows you home.
+
 ## 8. The chronicle
 
 Every notable event is logged with its day and kind (death, arrival, tale, break, social, lore, battle). Survivors keep up to 8 *tales*, which are shown on their sheet, used in epitaphs, and kept on the graves tab and the end-of-run memorial. Planned: per-kind sentence grammars, earned titles ("Gatekeeper"), and carvings on the wall and gun stocks.
@@ -123,10 +127,15 @@ See research 03. In short: graphic-novel cel shading, heavy ink, two-tone hard s
 - [x] Storyteller director + 16 incidents
 - [x] Workshop machinery + crafting + fortifications
 - [x] Chronicle, graves, end-of-run memorial
+- [x] Daylight side-scrolling runs (Union City style): search doors/cars/sheds/bodies, sleepers wake on noise, Kin at tables, find survivors & papers
+- [x] 22 found documents + four factions with standing (Town tab)
+- [x] Night panic (low-mood guards) and rage (a loved one falls); named "old face" Turned from a survivor's past
+- [x] Earned titles (Gatekeeper, Sawbones, Twice-Bitten, One-Arm...), veteran guns that get carved names
+- [x] Nail turrets (generator machinery), wearable mill-plate vests, hand-to-hand when out of ammo
+- [x] More incidents: fire, the Quiet, the Parish, weddings, old faces
 - [ ] Moodle icons above heads at night; downed state + drag-to-safety
-- [ ] More incidents (raiders that shoot back, fire, tunnelers, the Quiet, Bellwether)
-- [ ] Faction standing (Local 41, Parish, Ferry families, County)
-- [ ] Scavenging as a short side-scrolling run (optional, Union City style)
-- [ ] Earned titles, tale grammar, wall carvings
+- [ ] Raiders that shoot back, tunnelers, the Bellwether
+- [ ] Faction quests/consequences beyond standing (County raids if hostile, Union steel trades)
+- [ ] Tale grammar variety, wall carvings
 - [ ] Animated sprite frames (2–3 per Turned)
 - [ ] Music: sparse cello/drone stems

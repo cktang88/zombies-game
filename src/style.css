@@ -179,3 +179,4 @@ a[data-act] { cursor: pointer; color: var(--ink); text-decoration: underline dot
 .doc p { margin: 4px 0 0; line-height: 1.45; }
 .titles span { font-family: var(--type); color: var(--ochre); margin-right: 8px; }
 button.mini { padding: 1px 6px; font-size: 11px; }
+.ce { break-inside: avoid; }
