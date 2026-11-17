@@ -456,7 +456,9 @@ export class Rig {
     const neckX = pelX + ux * g.torsoLen, neckY = pelY + uy * g.torsoLen;
     J[HEAD] = neckX; K[HEAD] = neckY; A[HEAD] = T + g.restHeadRel + ch.head;
     const shX = pelX + ux * g.sh[0] + vx * g.sh[1], shY = pelY + uy * g.sh[0] + vy * g.sh[1];
-    const fshX = shX + vx * g.fShOff, fshY = shY + vy * g.fShOff;
+    // the far shoulder: behind the near one bare-handed, ahead of it in a bladed long-gun stance
+    const fOff = holding && a!.hold !== 'melee' && this.swap ? st.farSh * g.height : g.fShOff;
+    const fshX = shX + vx * fOff, fshY = shY + vy * fOff;
     J[N_UA] = shX; K[N_UA] = shY; J[F_UA] = fshX; K[F_UA] = fshY;
     J[N_TH] = pelX + pux * g.nHip[0] + pvx * g.nHip[1]; K[N_TH] = pelY + puy * g.nHip[0] + pvy * g.nHip[1];
     J[F_TH] = pelX + pux * g.fHip[0] + pvx * g.fHip[1]; K[F_TH] = pelY + puy * g.fHip[0] + pvy * g.fHip[1];
@@ -483,7 +485,7 @@ export class Rig {
         // butt in the near shoulder pocket, butt-to-muzzle line on the target; at low ready the
         // muzzle dips about the stock, which stays in (a touch lower in) the shoulder
         const butt = loc(a!.butt ?? a!.grip);
-        const up = st.pocket[0] - st.lowDrop * lr, fw = st.pocket[1];
+        const up = st.pocket[0] - st.lowDrop * lr, fw = g.sh[1] + st.pocket[1];
         const pocketX = neckX + vx * fw + ux * up, pocketY = neckY + vy * fw + uy * up;
         const d = Math.atan2(muz[1] - butt[1], muz[0] - butt[0]);
         gAimA = lerpAngle(aim, Math.max(aim, lowA), lr) - d;
@@ -491,10 +493,13 @@ export class Rig {
         gX = pocketX - (butt[0] * c - butt[1] * s); gY = pocketY - (butt[0] * s + butt[1] * c);
       } else if (a!.hold === 'pistol') {
         // arms out from the near shoulder (isosceles from the side); low ready: out and down
+        // the grip (palm) goes out along the line of the arms to the wrist's reach plus the palm's
+        // offset from the wrist: elbows nearly locked (~160°), the gun ~0.4 H out from the chest
         const ext = (st.ext ?? 0.85) * (1 - 0.18 * lr);
         const ae = lerp(aim, Math.max(aim, lowA), lr);
         gAimA = ae - Math.atan2(muz[1], muz[0]) * 0.5;
-        gX = shX + Math.cos(ae) * reach * ext + vx * 2 + ux * st.pocket[0]; gY = shY + Math.sin(ae) * reach * ext + 3 + uy * st.pocket[0];
+        const D = reach * ext + 8, la = ae - Math.asin(clamp(st.pocket[0] / D, -0.5, 0.5));
+        gX = shX + Math.cos(la) * D; gY = shY + Math.sin(la) * D;
       } else if (a!.hold === 'bow') {
         const ae = lerp(aim, Math.max(aim, lowA), lr);
         gAimA = ae - Math.PI / 2;
@@ -522,8 +527,10 @@ export class Rig {
         if (a!.fore) {
           // the support hand slides back along the fore-end until its elbow can bend
           let [fx, fy] = gp(a!.fore);
-          const d = Math.hypot(fx - nsX, fy - nsY), maxD = reach * 0.86;
-          if (d > maxD) { const back = Math.min(d - maxD, Math.abs(loc(a!.fore)[0]) * 0.6); fx -= Math.cos(this.ga) * back; fy -= Math.sin(this.ga) * back; }
+          // (the palm is gx ahead of the wrist: measure the arm to the wrist, not the palm)
+          const sgx = P.hand_support?.gx ?? 10;
+          const d = Math.hypot(fx - nsX, fy - nsY), maxD = reach * 0.95 + sgx; // a slight bend at the elbow, under the gun
+          if (d > maxD) { const back = Math.min(d - maxD, Math.abs(loc(a!.fore)[0]) * 0.85); fx -= Math.cos(this.ga) * back; fy -= Math.sin(this.ga) * back; }
           defN = { x: fx, y: fy, rho: this.ga, pose: 'support' };
         }
         // pistol: the support hand cups the trigger hand from below / in front of the grip
@@ -970,6 +977,9 @@ export class Rig {
     const c = Math.cos(r), s = Math.sin(r);
     const mx = mirror ? -1 : 1;
     this.xf(ctx, S * F * c * mx, S * s, -S * F * s * mx, S * c, this.dx + S * F * (this.jx[i] + ox), this.dy + S * (this.jy[i] + oy));
+    // arm art stretched along its bone to the bone's real length (skeleton.ts geomOf, ARM)
+    const g = this.geo, k = !g ? 1 : i === N_UA || i === F_UA ? g.uaK : i === N_FA || i === F_FA ? g.faK : 1;
+    if (k !== 1) { ctx.rotate(m.rest); ctx.scale(k, 1); ctx.rotate(-m.rest); }
     if (grow) ctx.drawImage(src, m.x - grow, m.y - grow, m.w + grow * 2, m.h + grow * 2, -m.px - grow, -m.py - grow, m.w + grow * 2, m.h + grow * 2);
     else ctx.drawImage(src, m.x, m.y, m.w, m.h, -m.px, -m.py, m.w, m.h);
   }

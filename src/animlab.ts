@@ -1,5 +1,5 @@
 // Anim lab: dev page for the cutout bone rig (animlab.html).
-import { createRig, gradedAtlas, loadAllGuns, loadRig, SPRITE_RIGS, type Rig } from './anim';
+import { createRig, gradedAtlas, loadAllGuns, loadRig, measureArms, SPRITE_RIGS, type Rig } from './anim';
 import { WEAPONS } from './data/weapons';
 import { spriteUrl } from './assets';
 
@@ -452,6 +452,17 @@ function closeupRender(step = false) {
     a.rig.draw(ctx, a.x, a.y, s, a.facing);
     if (DEBUG) a.rig.drawSkeleton(ctx);
     ctx.fillStyle = 'rgba(240,235,220,0.9)'; ctx.font = '11px system-ui'; ctx.fillText(a.label ?? '', a.x - 50, a.y + 22);
+    if (DEBUG) {
+      // bone lengths and elbow angles against the real-arm targets (anim/armcheck.ts)
+      const m = measureArms(a.rig);
+      if (m) {
+        ctx.font = '10px ui-monospace, monospace';
+        ctx.fillStyle = m.problems.length ? '#ff9a7a' : '#9fe0a0';
+        ctx.fillText(`ua ${m.ua.toFixed(3)} fa ${m.fa.toFixed(3)} H · ${m.stance}`, a.x - 50, a.y + 35);
+        ctx.fillText(`T ${m.trigger.elbow.toFixed(0)}° ${m.trigger.reach.toFixed(2)} S ${m.support.elbow.toFixed(0)}° ${m.support.reach.toFixed(2)}`, a.x - 50, a.y + 47);
+        m.problems.slice(0, 2).forEach((p, k) => ctx.fillText(p, a.x - 50, a.y + 59 + k * 12));
+      }
+    }
   }
 }
 
@@ -462,7 +473,7 @@ if (params.has('closeup')) (async () => {
   closeupSetup();
   closeupPose();
   closeupRender();
-  (window as unknown as { __cu: unknown }).__cu = { render: closeupRender, actors: CU };
+  (window as unknown as { __cu: unknown }).__cu = { render: closeupRender, actors: CU, measure: () => CU.map((a) => ({ label: a.label, m: measureArms(a.rig) })) };
   const tick = () => { closeupRender(true); requestAnimationFrame(tick); };
   if (!params.has('still')) requestAnimationFrame(tick);
 })();

@@ -83,18 +83,19 @@ Rig units: 240 = body height (≈133 per metre); L = leg length (~104); angles i
 
 | Stance (weapons) | Feet near / far (×L from pelvis) | Pelvis height (×L) | Lean (+share of a) | Head | Gun placement | Low ready |
 |---|---|---|---|---|---|---|
-| `rifle` (AR, carbine, rifles, lever, crossbow) | −0.20 / +0.24 | 0.955 | 0.12 + 0.25a | cheek weld, ≤ +0.36 chin-down then the gun rises | butt 3 below / 1 ahead of the neck base, butt→muzzle line on the target | stock stays in the shoulder (6 lower), muzzle to +0.8 |
+| `rifle` (AR, carbine, rifles, lever, crossbow) | −0.20 / +0.24 | 0.955 | 0.12 + 0.25a | cheek weld, ≤ +0.36 chin-down then the gun rises | butt 3 below the neck base, 16 ahead of the near shoulder joint (the pocket), butt→muzzle line on the target | stock stays in the shoulder (6 lower), muzzle to +0.8 |
 | `shotgun` (pump, auto, coach, .410, pipe, 40 mm) | −0.22 / +0.25 | 0.945 | 0.16 + 0.25a | cheek weld | as rifle | as rifle |
-| `smg` (SMG, nailer) | −0.20 / +0.24 | 0.955 | 0.14 + 0.25a | cheek weld | butt 2 below the neck | as rifle |
-| `hip` (LMG) | −0.26 / +0.26 | 0.93 | 0.24 + 0.15a | 0.4a, no weld | butt 50 below the neck, 10 ahead (under the arm) | muzzle to +0.45 |
-| `pistol` (2-handed) | −0.14 / +0.16 | 0.965 | 0.12 + 0.2a | 0.45a, erect | grip 0.94 of arm reach from the near shoulder along a, lifted 9 toward the eye line | out and down to +0.75, reach −18% |
-| `pistol1` | −0.12 / +0.14 | 0.97 | 0.08 + 0.15a | 0.45a | 0.97 reach | +0.8 |
+| `smg` (SMG, nailer) | −0.20 / +0.24 | 0.955 | 0.14 + 0.25a | cheek weld | butt 2 below the neck, 22 ahead of the shoulder (the folded stock is short) | as rifle |
+| `hip` (LMG) | −0.26 / +0.26 | 0.93 | 0.24 + 0.15a | 0.4a, no weld | butt 50 below the neck, 18 ahead of the shoulder (under the arm) | muzzle to +0.45 |
+| `pistol` (2-handed) | −0.14 / +0.16 | 0.965 | 0.12 + 0.2a | 0.45a, erect | grip (palm) at 0.985 of the arm's reach + the palm offset from the near shoulder, along a lifted 9 toward the eye line: elbows ~160-175° | out and down to +0.75, reach −18% |
+| `pistol1` | −0.12 / +0.14 | 0.97 | 0.08 + 0.15a | 0.45a | 0.99 reach | +0.8 |
 | `bow` | −0.16 / +0.18 | 0.97 | 0.04 | 0.6a | bow hand = far arm at 0.93 reach | +0.5 |
 | `tube` (LAW) | −0.20 / +0.24 | 0.955 | 0.1 + 0.2a | 0.6a | butt 2 above the neck, on the shoulder | +0.35 |
 
 Elbows: the arms are 2-bone IK with the elbow-down solution, so the trigger elbow hangs below the grip and
-the support elbow under the fore-end; the support hand slides back along the fore-end until its arm can
-bend (reach × 0.86). Recoil: torso lean −0.009…−0.014 per recoil unit and the pelvis 0.12–0.3 back (feet
+the support elbow under the fore-end; the support hand slides back along the fore-end until its arm (to
+the wrist) can bend (reach × 0.95). The far (support) shoulder sits `farSh` ahead of the near one: +0.05 H
+in the bladed long-gun stances (the weak side leads), 0 for the isosceles pistol, −0.035 H bare-handed. Recoil: torso lean −0.009…−0.014 per recoil unit and the pelvis 0.12–0.3 back (feet
 planted) plus the gun's own kick along its axis. Low ready blends in when not aiming, or when walking and
 no shot was fired for 1.2 s; firing brings the gun straight up. The stance's feet and pelvis height are
 weighted by `1 − moving` so walking uses the gait.
@@ -105,9 +106,41 @@ on the head (0.22 up the head bone, 0.3 forward) is bisected onto it by turning 
 [−0.2, +0.36]; what the head can't reach, the gun is lifted by.
 
 Reloads: `ready` moves the gun to the chest workspace (half the torso up, 22 forward), muzzle canted up by
-the clip's `gunTilt` (base 0.12 rad); the stance's legs stay planted. Bolt guns are worked by the trigger
+the clip's `gunTilt` (base 0.12 rad); the shotgun's shell-by-shell load brings it all the way down to the
+hip (`gunDY` +16), muzzle level, trigger hand at the hip, as in the reference photo; the stance's legs stay planted. Bolt guns are worked by the trigger
 hand (`reloadBolt`, `boltCycle` on role `f`, the round in the trigger hand), the lever by the trigger hand;
 mags, shells and the pump stay with the support hand.
+
+### 4b. Arms at real proportions (round 2: "arms scrunched, hands too close to the shoulder")
+
+Measured in every human rig (13 survivors + 2 raiders, `public/sprites/parts/*.json`, H = 240): upper
+arms 0.145–0.197 H, **forearms 0.12–0.16 H** (real: 0.14–0.16), whole arms 0.27–0.32 H (real ≈ 0.33).
+Segmentation took the arm lengths from side-view art in which the arm is foreshortened toward the camera.
+Together with a butt pocket at the neck and a far shoulder placed *behind* the near one, every long-gun
+pose folded the trigger arm to a 45–60° elbow with the hand at the chin, and the support hand slid back to
+the magazine well.
+
+Fix (measured, not eyeballed; `tools/e2e/pose-check.cjs`, `src/anim/armcheck.ts`):
+- **Bones** (`skeleton.ts geomOf`, `ARM`): upper arm clamped to 0.175–0.19 H, forearm to 0.148–0.158 H.
+  The arm art is **stretched along its bone** to the new length (`Rig.part`: rotate(rest)·scale(k,1)·
+  rotate(−rest)); nothing is shrunk.
+- **Pocket** relative to the near shoulder joint (+16 forward), not the neck: the trigger hand sits about a
+  forearm ahead of the pocket. Pump and hunting-rifle grips moved onto the stock wrist behind the trigger
+  guard (`tools/gun-lop.ts` prints each gun's butt→grip against a real length of pull).
+- **Bladed far shoulder** (`farSh`), and the support reach measured to the wrist.
+
+| (15 rigs, aiming) | trigger elbow | trigger reach | hand ahead of shoulder | support elbow | support reach |
+|---|---|---|---|---|---|
+| AR-15, before | 51–74° | 0.44–0.60 | 0.14–0.17 H | 105–176° | 0.79–1.00 (clamped) |
+| AR-15, after | 61–73° | 0.52–0.60 | 0.19 H | 144–150° | 0.95–0.97 |
+| pump, before | 45–70° | 0.39–0.57 | 0.13–0.16 H | 105–176° | 0.8–1.0 |
+| pump, after | 63–77° | 0.53–0.63 | 0.20 H | 145–149° | 0.95–0.96 |
+| 9 mm, before | 122–129° | 0.88–0.90 | 0.25–0.29 H | 144–156° | 0.95–0.98 |
+| 9 mm, after | 160–176° | 0.98–1.00 | 0.32 H | 142–152° | 0.95–0.98 |
+
+Targets per stance are `ARM_TARGETS` (rifle/shotgun: trigger elbow 60–115°, support 125–178° at 0.82–0.995
+reach; pistol: both ≥ 135–150°, hands ≥ 0.28 H out). `animlab.html?closeup&debug` prints each rig's
+bone lengths and elbow angles under it.
 
 ## 5. Depth layering (right-facing; camera sees the right side)
 
@@ -152,7 +185,10 @@ naming a hand library.
 
 ## 7. Verification
 
-`animlab.html?closeup&still&h=150&w=service9,ar15,pump,smg,lmg` (every survivor × 5 classes),
+`node tools/e2e/pose-check.cjs <url>`: every human rig × 8 guns (rifle, shotgun, smg, hip, pistol) must
+fall inside the real-arm ranges (§4b); it exits 1 otherwise.
+`animlab.html?closeup&still&h=150&w=service9,ar15,pump,smg,lmg` (every survivor × 5 classes; `&debug` adds
+the skeleton and the arm numbers),
 `&act=reload&at=…`, `&act=walk`, `&act=low`; in-game `docs/screenshots/night.jpg`, `nest.jpg`, `run.jpg`
 (`node tools/e2e/shots.cjs night nest run`). Compared side by side against the reference photos above.
 

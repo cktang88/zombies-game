@@ -7,6 +7,7 @@ export { GAITS, type Gait } from './gait';
 export { STYLES, SPRITE_RIGS, type Style, type SpriteRig } from './styles';
 export { WEAPON_ANCHORS, anchorsFor, type WeaponAnchors } from './weaponAnchors';
 export type { DieOpts, DeathKind } from './ragdoll';
+export { measureArms, ARM_TARGETS, type ArmReport } from './armcheck';
 
 /** Display scale for a rig drawn `heightPx` tall (rigs are authored 240 units tall). */
 export const rigScale = (heightPx: number) => heightPx / 240;

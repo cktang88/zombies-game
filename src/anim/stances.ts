@@ -30,12 +30,17 @@ export interface Stance {
   lean: number; leanAim: number;
   /** head follows this share of the aim angle; `cheek` = the head drops onto the stock (cheek weld) */
   headAim: number; cheek: boolean;
-  /** [up, forward] rig units in the torso frame: long guns put the butt there relative to the NECK base
-   * (the shoulder pocket sits beside it, the bore at about collar height, so the cheek can drop onto
-   * the comb); pistols lift the grip by `up` from the near shoulder toward the eye line */
+  /** [up, forward] rig units in the torso frame: long guns put the butt `up` from the NECK base and
+   * `forward` of the near SHOULDER joint (the pocket is in front of the deltoid: the trigger hand then
+   * sits about a forearm ahead of it, as in a real mount); pistols lift the line of the arms by `up`
+   * toward the eye line */
   pocket: [number, number];
   /** pistols: fraction of arm reach the gun is pushed out to */
   ext?: number;
+  /** the far (support) shoulder ahead of the near one, fraction of height (+ = forward): bladed
+   * long-gun stances lead with the weak side, so its shoulder is ~6-8 cm forward; an isosceles
+   * pistol stance squares both shoulders to the target (0); bare hands hang it a little behind */
+  farSh: number;
   /** low ready: muzzle-down angle (rad) when not aiming / walking; pocket drop (rig units) */
   lowAngle: number; lowDrop: number;
   /** recoil: torso rocks back (rad per recoil unit) and the pelvis shifts back */
@@ -55,23 +60,23 @@ const FREE: Slot[] = ['fLeg', 'fUA', 'fFA', 'slung', 'torso', 'head', 'nLeg', 'g
 
 const S = (id: StanceId, o: Partial<Stance>): Stance => ({
   id, layers: LONG, feet: [-0.2, 0.24], height: 0.955, lean: 0.12, leanAim: 0.25, headAim: 0.8, cheek: true,
-  pocket: [-3, 1], lowAngle: 0.8, lowDrop: 6, recoilLean: 0.009, recoilBack: 0.12, ...o,
+  pocket: [-3, 16], farSh: 0.05, lowAngle: 0.8, lowDrop: 6, recoilLean: 0.009, recoilBack: 0.12, ...o,
 });
 
 export const STANCES: Record<StanceId, Stance> = {
-  free: S('free', { layers: FREE, feet: [0.06, -0.06], height: 0.985, lean: 0, leanAim: 0, headAim: 0.4, cheek: false, recoilLean: 0.004, recoilBack: 0 }),
+  free: S('free', { farSh: -0.035, layers: FREE, feet: [0.06, -0.06], height: 0.985, lean: 0, leanAim: 0, headAim: 0.4, cheek: false, recoilLean: 0.004, recoilBack: 0 }),
   // bladed rifle stance: weak foot ~0.45 leg lengths ahead of the strong one, soft knees, nose over the toes
   rifle: S('rifle', {}),
   // a shotgun is fought more aggressively: more lean into the recoil, a bit lower
   shotgun: S('shotgun', { lean: 0.16, height: 0.945, feet: [-0.22, 0.25], recoilLean: 0.012, recoilBack: 0.2 }),
   // short stock: the same weld, the gun sits a little higher and closer
-  smg: S('smg', { lean: 0.14, pocket: [-2, 1] }),
+  smg: S('smg', { lean: 0.14, pocket: [-2, 22] }), // a short (folded) stock: pushed out to a real length of pull
   // hip fire (LMG): butt tucked under the armpit, gun at the belt line, wide and low, leaning into it
-  hip: S('hip', { lean: 0.24, leanAim: 0.15, height: 0.93, feet: [-0.26, 0.26], headAim: 0.4, cheek: false, pocket: [-50, 10], lowAngle: 0.45, lowDrop: 4, recoilLean: 0.006, recoilBack: 0.25 }),
+  hip: S('hip', { lean: 0.24, leanAim: 0.15, height: 0.93, feet: [-0.26, 0.26], headAim: 0.4, cheek: false, pocket: [-50, 18], farSh: 0.05, lowAngle: 0.45, lowDrop: 4, recoilLean: 0.006, recoilBack: 0.25 }),
   // two-handed pistol (isosceles seen from the side: both arms out, slight forward lean, head erect)
-  pistol: S('pistol', { layers: PISTOL, feet: [-0.14, 0.16], height: 0.965, lean: 0.12, leanAim: 0.2, headAim: 0.45, cheek: false, pocket: [9, 0], ext: 0.94, lowAngle: 0.75, lowDrop: 0, recoilLean: 0.006, recoilBack: 0.05 }),
-  pistol1: S('pistol1', { layers: PISTOL, feet: [-0.12, 0.14], height: 0.97, lean: 0.08, leanAim: 0.15, headAim: 0.45, cheek: false, pocket: [9, 0], ext: 0.97, lowAngle: 0.8, lowDrop: 0, recoilLean: 0.006, recoilBack: 0.05 }),
-  bow: S('bow', { layers: BOW, feet: [-0.16, 0.18], height: 0.97, lean: 0.04, leanAim: 0.15, headAim: 0.6, cheek: false, lowAngle: 0.5, lowDrop: 0, recoilLean: 0, recoilBack: 0 }),
+  pistol: S('pistol', { layers: PISTOL, feet: [-0.14, 0.16], height: 0.965, lean: 0.12, leanAim: 0.2, headAim: 0.45, cheek: false, pocket: [9, 0], ext: 0.985, farSh: 0, lowAngle: 0.75, lowDrop: 0, recoilLean: 0.006, recoilBack: 0.05 }),
+  pistol1: S('pistol1', { layers: PISTOL, feet: [-0.12, 0.14], height: 0.97, lean: 0.08, leanAim: 0.15, headAim: 0.45, cheek: false, pocket: [9, 0], ext: 0.99, farSh: -0.02, lowAngle: 0.8, lowDrop: 0, recoilLean: 0.006, recoilBack: 0.05 }),
+  bow: S('bow', { farSh: 0.02, layers: BOW, feet: [-0.16, 0.18], height: 0.97, lean: 0.04, leanAim: 0.15, headAim: 0.6, cheek: false, lowAngle: 0.5, lowDrop: 0, recoilLean: 0, recoilBack: 0 }),
   // launcher tube on the shoulder: upright, braced
-  tube: S('tube', { lean: 0.1, leanAim: 0.2, headAim: 0.6, cheek: false, pocket: [2, -2], lowAngle: 0.35, lowDrop: 4, recoilLean: 0.014, recoilBack: 0.3 }),
+  tube: S('tube', { lean: 0.1, leanAim: 0.2, headAim: 0.6, cheek: false, pocket: [2, 8], farSh: 0, lowAngle: 0.35, lowDrop: 4, recoilLean: 0.014, recoilBack: 0.3 }),
 };

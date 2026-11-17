@@ -116,10 +116,14 @@ const shellIn: Clip = {
   dur: 0.55,
   fadeIn: 0.15, fadeOut: 0.15,
   num: {
-    ready: [[0, 0.5], [1, 0.5]],
-    gunTilt: [[0, -0.12], [1, -0.12]],
-    head: [[0, 0.3], [1, 0.3]],
-    lean: [[0, 0.06], [1, 0.06]],
+    // the gun comes down to the hip, muzzle level and forward, loading port up (the reference
+    // shotgun reload, docs/research/11-shooting-poses.md): trigger hand at the hip, shells fed from below
+    ready: [[0, 1], [1, 1]],
+    gunTilt: [[0, -0.16], [1, -0.16]],
+    gunDY: [[0, 16], [1, 16]],
+    gunDX: [[0, 6], [1, 6]],
+    head: [[0, 0.42], [1, 0.42]],
+    lean: [[0, 0.08], [1, 0.08]],
   },
   n: [
     [0, G('port', 10, 8, 'support')],

@@ -56,10 +56,14 @@ export interface RigGeom {
   fShOff: number; // far shoulder perp offset
   nHip: [number, number]; fHip: [number, number]; // hips in pelvis frame
   ua: number; fa: number; hand: number; th: number; sn: number; ft: number; headLen: number;
+  /** the arm art is stretched along the bone by this much to reach ua / fa (1 = as segmented) */
+  uaK: number; faK: number;
   legLen: number; // thigh + shin + ankle height
   ankleH: number;
   height: number;
 }
+/** Real arm proportions (fraction of standing height): upper arm, forearm, hand. */
+export const ARM = { ua: [0.175, 0.19] as [number, number], fa: [0.148, 0.158] as [number, number], hand: [0.1, 0.11] as [number, number] };
 const cache = new WeakMap<RigMeta, RigGeom>();
 export function geomOf(meta: RigMeta): RigGeom {
   const hit = cache.get(meta);
@@ -84,8 +88,19 @@ export function geomOf(meta: RigMeta): RigGeom {
     ua: len('upperArm', 'shoulder', 'elbow'), fa: len('forearm', 'elbow', 'wrist'), hand: len('hand', 'wrist', 'handTip'),
     th: len('thigh', 'hip', 'knee'), sn: len('shin', 'knee', 'ankle'), ft: len('foot', 'ankle', 'toe'),
     headLen: len('head', 'neck', 'headTop'),
-    legLen: 0, ankleH, height: meta.height,
+    legLen: 0, ankleH, height: meta.height, uaK: 1, faK: 1,
   };
+  // People's arms at real proportions (docs/research/11-shooting-poses.md §arms): the segmented
+  // arms come out of side-view art where the arm is foreshortened toward the camera, so some rigs
+  // had forearms of 0.12 H and whole arms of 0.27 H (real: upper arm 0.17-0.19 H, forearm
+  // 0.14-0.16 H). The bones are set to the real range and the arm art is stretched along the bone
+  // to match (Rig.part), instead of the pose folding a short arm up against the shoulder.
+  if (/^(surv_|z_raider)/.test(meta.id ?? '')) {
+    const H = meta.height;
+    const ua = Math.min(ARM.ua[1] * H, Math.max(ARM.ua[0] * H, g.ua)), fa = Math.min(ARM.fa[1] * H, Math.max(ARM.fa[0] * H, g.fa));
+    g.uaK = ua / g.ua; g.faK = fa / g.fa;
+    g.ua = ua; g.fa = fa;
+  }
   g.legLen = g.th + g.sn + ankleH;
   cache.set(meta, g);
   return g;
