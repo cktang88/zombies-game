@@ -1,7 +1,7 @@
 import type { Survivor, Res, WeaponItem } from '../types';
 import { G, R, log, add, newWeapon, findDoc, uid } from '../state';
 import { ZOMBIES, type ZombieDef } from '../data/zombies';
-import { WEAPONS, fireProfile, ammoTypesFor, ammoLabel, AMMO_TYPES, armorDamage, roundsInStores, shotSound, BURN, FLARE_LIGHT, MODS, wearMods, blastDamage, type FireProfile } from '../data/weapons';
+import { WEAPONS, fireProfile, ammoTypesFor, ammoLabel, AMMO_TYPES, armorDamage, roundsInStores, shotSound, BURN, FLARE_LIGHT, MODS, wearMods, blastDamage, MELEE, meleeProfile, FISTS, BLEED_TIME, type FireProfile, type MeleeProfile } from '../data/weapons';
 import { SITES, RES_LABEL, type Site } from '../data/world';
 import { img, flashImg, shadeImg } from '../assets';
 import { sfx, wind } from '../audio';
@@ -25,9 +25,9 @@ const STACK: Partial<Record<Res, number>> = {
   light: 20, light_hp: 20, r22: 50, shell: 8, shell_slug: 8, shell_flech: 8, shell_fire: 8, rifle: 12, rifle_sp: 12, rifle_ap: 12,
   r556: 30, ball: 15, bolt: 12, bolt_fire: 8, flare: 4, rocket: 1, g40: 3, g40_buck: 3, pipebomb: 2,
 };
-type PackItem = { kind: 'res'; res: Res; n: number } | { kind: 'gun'; def: string; cond: number } | { kind: 'mod'; def: string; cond: number };
-const itemSlots = (it: PackItem) => (it.kind === 'gun' ? 3 : it.kind === 'mod' ? 1 : Math.ceil(it.n / (STACK[it.res] ?? 5)));
-const itemLabel = (it: PackItem) => (it.kind === 'gun' ? WEAPONS[it.def].name.toLowerCase() : it.kind === 'mod' ? MODS[it.def].name.toLowerCase() : `${it.n} ${RES_LABEL[it.res].toLowerCase()}`);
+type PackItem = { kind: 'res'; res: Res; n: number } | { kind: 'gun'; def: string; cond: number } | { kind: 'mod'; def: string; cond: number } | { kind: 'melee'; def: string; cond: number };
+const itemSlots = (it: PackItem) => (it.kind === 'gun' ? 3 : it.kind === 'melee' ? 2 : it.kind === 'mod' ? 1 : Math.ceil(it.n / (STACK[it.res] ?? 5)));
+const itemLabel = (it: PackItem) => (it.kind === 'gun' ? WEAPONS[it.def].name.toLowerCase() : it.kind === 'melee' ? MELEE[it.def].name.toLowerCase() : it.kind === 'mod' ? MODS[it.def].name.toLowerCase() : `${it.n} ${RES_LABEL[it.res].toLowerCase()}`);
 const GROUND = 664;
 const SH = 158;
 const ZS = 1.3;
@@ -164,7 +164,7 @@ function bakeBackgrounds() {
 
 interface EZ {
   def: ZombieDef; sprite: string; x: number; y: number; hp: number; state: 'sleep' | 'walk' | 'grab' | 'dying' | 'kin';
-  phase: number; flash: number; dieT: number; grabT: number; dir: number; headless?: boolean; lungeT: number; burn?: number; grabWho?: 'p' | 'm';
+  phase: number; flash: number; dieT: number; grabT: number; dir: number; headless?: boolean; lungeT: number; burn?: number; grabWho?: 'p' | 'm'; stun?: number; bleed?: number; bleedDps?: number; wake?: number;
   id: number; lane: number; sc: number; variant: number;
 }
 interface Spot { x: number; searched: boolean; kind: 'door' | 'car' | 'shed' | 'body' | 'kin' | 'cache' | 'truck' | 'drop'; label: string; loot: number; survivor?: boolean; zone: number; items?: PackItem[] }
@@ -232,7 +232,15 @@ export class Expedition {
   // leader downed
   downed = 0; // >0: seconds before the mate must reach the leader
   dragging = false;
-  shooter: 'p' | 'm' = 'p';
+  shooter: 'p' | 'm' | 'k' = 'p'; // who gets the kill: leader's gun, companion, leader's melee
+  // melee: [V] or right-click; chainsaw runs while held
+  kn: WeaponItem | null = null;
+  stamina = 100;
+  swingT = 0;
+  swingCd = 0;
+  swingTired = false;
+  slashT = 0;
+  rdown = false;
   onEnd: (r: ExpeditionResult) => void;
   kh: (e: KeyboardEvent) => void;
   ku: (e: KeyboardEvent) => void;
@@ -258,6 +266,7 @@ export class Expedition {
       this.mateMag = this.mateW ? fireProfile(this.mateW).mag : 0;
       this.mateX = this.px - 60;
     }
+    this.kn = G.melee?.find((x) => x.uid === s.melee) ?? null;
     this.mag = this.w ? this.prof()!.mag : 0;
     this.magRes = this.w ? this.prof()!.ammoRes : null;
     this.build();
@@ -267,7 +276,7 @@ export class Expedition {
     (globalThis as unknown as { __EX: Expedition }).__EX = this; // debug handle (tests)
     wind(true);
     this.say(`${this.site.name}. ${this.site.desc}`, 6);
-    this.say(`[A/D] walk · [E] search · [Space] shove${this.w && ammoTypesFor(this.w.def).length > 1 ? ' · [T] ammo' : ''} · [Tab]/[G] pick & drop from the pack · home is the left edge.`, 8);
+    this.say(`[A/D] walk · [E] search · [Space] shove${this.w && ammoTypesFor(this.w.def).length > 1 ? ' · [T] ammo' : ''} · [Tab]/[G] pick & drop from the pack · [V]/right-click ${this.kn ? MELEE[this.kn.def].name.toLowerCase() : 'fists'} · home is the left edge.`, 8);
     if (this.mate) this.say(`${first(this.mate)} comes along. ${first(this.mate)} carries ${MATE_CAP} more and watches your back.`, 6);
   }
 
@@ -365,8 +374,8 @@ export class Expedition {
       this.mouse.y = ((e.clientY - r.top) / r.height) * H;
     };
     c.onmousemove = pos;
-    c.onmousedown = (e) => { pos(e); if (e.button === 0) { this.mouse.down = true; this.fire(true); } };
-    c.onmouseup = () => (this.mouse.down = false);
+    c.onmousedown = (e) => { pos(e); if (e.button === 0) { this.mouse.down = true; this.fire(true); } if (e.button === 2) { this.rdown = true; this.swing(); } };
+    c.onmouseup = (e) => { if (e.button === 2) this.rdown = false; else this.mouse.down = false; };
     c.oncontextmenu = (e) => e.preventDefault();
     window.addEventListener('keydown', this.kh);
     window.addEventListener('keyup', this.ku);
@@ -380,6 +389,7 @@ export class Expedition {
     if (k === 't') this.cycleAmmo();
     if (k === 'tab') { this.sel = this.pack.length ? (this.sel + 1) % this.pack.length : 0; e.preventDefault(); }
     if (k === 'g') this.dropSelected();
+    if (k === 'v') this.swing();
     if (k === ' ') { this.shove(); e.preventDefault(); }
   }
 
@@ -446,7 +456,8 @@ export class Expedition {
       if (!this.keys.has('e') || Math.abs(this.searching.x - this.px) > 70 || grabbed || this.downed) this.searching = null;
       else {
         const helper = this.mate && !this.mateDown && Math.abs(this.mateX - this.searching.x) < 140 ? skillOf(this.mate, 'scavenging') * 0.05 : 0;
-        this.searchT += dt * (0.7 + skillOf(this.s, 'scavenging') * 0.06 + helper);
+        const pry = ['door', 'car', 'shed', 'cache'].includes(this.searching.kind) ? this.mprof().pry : 1;
+        this.searchT += dt * (0.7 + skillOf(this.s, 'scavenging') * 0.06 + helper) * pry;
         if (this.searchT >= this.searchTime(this.searching)) this.finishSearch(this.searching);
       }
     }
@@ -467,6 +478,12 @@ export class Expedition {
       this.reload -= dt;
       if (this.reload <= 0) this.doReload();
     }
+    // melee timing and stamina
+    this.slashT = Math.max(0, this.slashT - dt);
+    this.swingCd -= dt;
+    if (this.swingT > 0) { this.swingT -= dt; if (this.swingT <= 0) this.resolveSwing(); }
+    else if (this.swingCd <= 0) this.stamina = Math.min(100, this.stamina + 18 * dt * Math.max(0.5, 1 - pain(this.s) * 0.3));
+    if (this.kn && MELEE[this.kn.def].fuel && (this.keys.has('v') || this.rdown)) this.swing();
     if (this.burstLeft > 0) {
       this.burstT -= dt;
       if (this.burstT <= 0) this.shootRound();
@@ -512,15 +529,24 @@ export class Expedition {
       if (R.chance(dt * 18)) this.parts.push({ x: z.x + R.range(-12, 12), y: z.y - R.range(20, this.zh(z)), vx: R.range(-20, 20), vy: R.range(-260, -120), life: 0.5, color: R.pick(['#ff9a3a', '#ffcf6a', '#d8501c']), size: R.range(2, 4), g: GROUND + 40 });
       if (z.hp <= 0) { this.kill(z); return; }
     }
+    if (z.bleed && z.bleed > 0) {
+      z.bleed -= dt;
+      z.hp -= (z.bleedDps ?? 0) * dt;
+      if (R.chance(dt * 8)) this.parts.push({ x: z.x + R.range(-8, 8), y: z.y - this.zh(z) * R.range(0.3, 0.7), vx: R.range(-30, 30), vy: R.range(-40, 20), life: 1, color: '#4a0d0b', size: 2.5, g: z.y });
+      if (z.hp <= 0) { this.shooter = 'k'; this.kill(z); this.shooter = 'p'; return; }
+    }
     z.phase += dt;
     if (z.state === 'kin') return;
+    if (z.stun && z.stun > 0) { z.stun -= dt; if (z.state === 'grab') z.state = 'walk'; return; }
     // go for whoever is nearer: the leader or the companion
     const mateUp = this.mate && this.mateX;
     const who: 'p' | 'm' = z.state === 'grab' ? z.grabWho ?? 'p' : mateUp && Math.abs(this.mateX - z.x) < Math.abs(this.px - z.x) ? 'm' : 'p';
     const tx = who === 'm' ? this.mateX : this.px;
     const d = tx - z.x;
     if (z.state === 'sleep') {
-      if (Math.abs(d) < 110 || (this.daylight < 0 && R.chance(dt * 0.3))) { z.state = 'walk'; if (R.chance(0.5)) sfx.groan(); }
+      // close by, a Sleeper stirs after a moment: long enough to put a blade in it first
+      if (Math.abs(d) < 110) z.wake = (z.wake ?? 0) + dt; else z.wake = 0;
+      if ((z.wake ?? 0) > 1.1 || Math.abs(d) < 26 || (this.daylight < 0 && R.chance(dt * 0.3))) { z.state = 'walk'; if (R.chance(0.5)) sfx.groan(); }
       return;
     }
     if (z.state === 'walk') {
@@ -653,7 +679,7 @@ export class Expedition {
     if (!tz || this.mateCd > 0) return;
     if (!p || (this.mateMag <= 0 && roundsInStores(p, G.stores) < 1)) {
       // no gun or no ammo: shove what is close
-      if (Math.abs(tz.x - this.mateX) < 55) { tz.x += Math.sign(tz.x - this.mateX) * 70; tz.hp -= 8; if (tz.state === 'grab') tz.state = 'walk'; this.mateCd = 1; sfx.thud(); if (tz.hp <= 0) { this.shooter = 'm'; this.kill(tz); this.shooter = 'p'; } }
+      if (Math.abs(tz.x - this.mateX) < 55) { tz.x += Math.sign(tz.x - this.mateX) * 70; tz.hp -= this.mateMelee(); if (tz.state === 'grab') tz.state = 'walk'; this.mateCd = 1; sfx.thud(); if (tz.hp <= 0) { this.shooter = 'm'; this.kill(tz); this.shooter = 'p'; } }
       return;
     }
     if (this.mateMag <= 0) { this.mateReload = p.reloadPerRound ? p.reload * p.mag : p.reload; return; }
@@ -674,6 +700,11 @@ export class Expedition {
     this.noise = Math.min(4, this.noise + p.noise * 0.7);
     if (this.mateW) this.mateW.cond = Math.max(0.05, this.mateW.cond - 0.0008);
     sfx.shot(shotSound(this.mateW!.def), true);
+  }
+
+  mateMelee() {
+    const k = this.mate && G.melee?.find((x) => x.uid === this.mate!.melee);
+    return k ? meleeProfile(k).dmg : 8;
   }
 
   mateDies(cause: string) {
@@ -916,9 +947,91 @@ export class Expedition {
         tale(this.mate, `Shot one off ${first(this.s)} at ${this.site.name}.`);
         this.say(`${first(this.mate)} shot it off you.`, 2.5);
       }
+    } else if (this.shooter === 'k') {
+      this.s.kills++;
+      if (this.kn) this.kn.kills++;
     } else {
       this.s.kills++;
       if (this.w) this.w.kills++;
+    }
+  }
+
+  // ---------- melee ----------
+  mprof(): MeleeProfile {
+    return this.kn ? meleeProfile(this.kn) : FISTS;
+  }
+
+  swing() {
+    if (this.swingT > 0 || this.swingCd > 0 || this.downed > 0 || this.dragging || this.searching) return;
+    const p = this.mprof();
+    if (p.fuel && G.stores.fuel < p.fuel) { if (this.t - this.fuelNag > 2) { this.say('The saw coughs and dies. No fuel.', 2); this.fuelNag = this.t; } return; }
+    this.swingTired = this.stamina < p.stamina;
+    this.stamina = Math.max(0, this.stamina - p.stamina);
+    this.swingT = Math.max(0.01, p.swingTime * (this.swingTired ? 1.5 : 1));
+  }
+  fuelNag = -9;
+
+  meleeSound(kind: string) {
+    const a = sfx as unknown as { melee?: (kind: string, weapon: string) => void };
+    if (a.melee) a.melee(kind, this.kn?.def ?? 'fists');
+    else if (kind === 'miss') sfx.thud();
+    else sfx.hit();
+  }
+
+  resolveSwing() {
+    const p = this.mprof();
+    if (p.fuel) add('fuel', -p.fuel);
+    this.noise = Math.min(4, this.noise + p.noise);
+    this.heat = Math.min(6, this.heat + p.noise * 0.08);
+    this.slashT = 0.12;
+    this.swingCd = p.recovery * (this.swingTired ? 1.5 : 1);
+    const my = this.mouse.y;
+    const targets = this.zs
+      .filter((z) => z.state !== 'dying' && z.state !== 'kin')
+      .map((z) => ({ z, dx: (z.x - this.px) * this.face }))
+      .filter((o) => o.dx > -10 && o.dx <= p.reach + this.zw(o.z) / 2)
+      .sort((a, b) => a.dx - b.dx)
+      .slice(0, p.arc);
+    if (!targets.length) { this.meleeSound('miss'); return; }
+    let hits = 0;
+    for (const { z } of targets) {
+      const h = this.zh(z);
+      // backstab a Sleeper, or finish a crawler with a finisher: dead, and quiet
+      if (z.state === 'sleep' || (p.finisher && z.def.id === 'drag')) {
+        z.hp = 0;
+        this.shooter = 'k'; this.kill(z); this.shooter = 'p';
+        this.meleeSound('finisher');
+        hits++;
+        continue;
+      }
+      const overhead = my <= z.y - h * (1 - z.def.head);
+      let dmg = p.dmg * (this.swingTired ? 0.5 : 1);
+      dmg = overhead ? dmg * p.crit : armorDamage(dmg, z.def.armor, 0);
+      z.hp -= dmg;
+      z.flash = 0.1;
+      z.x += this.face * p.knock * (z.def.id === 'ferryman' ? 0.15 : 1);
+      if (R.chance(p.stagger)) { z.stun = 0.5 + p.stagger * 0.6; if (z.state === 'grab') z.state = 'walk'; }
+      if (p.bleed) { z.bleed = BLEED_TIME; z.bleedDps = p.bleed; }
+      for (let i = 0; i < (overhead ? 8 : 4); i++) this.parts.push({ x: z.x - this.face * this.zw(z) * 0.3, y: z.y - h * (overhead ? 0.85 : 0.55), vx: this.face * R.range(20, 160), vy: R.range(-180, 20), life: 1.2, color: R.pick(['#4a0d0b', '#5e1410']), size: R.range(1.5, 3.5), g: z.y });
+      if (z.hp <= 0) {
+        if (overhead && !z.headless && z.def.id !== 'drag') z.headless = true;
+        this.shooter = 'k'; this.kill(z); this.shooter = 'p';
+      }
+      this.meleeSound(overhead ? 'crit' : 'hit');
+      hits++;
+    }
+    this.shake = Math.max(this.shake, Math.min(6, p.knock / 15));
+    // wear: every hit costs the edge or the handle
+    if (this.kn && hits) {
+      this.kn.cond -= p.wear * hits;
+      if (this.kn.cond <= 0) {
+        const name = MELEE[this.kn.def].name.toLowerCase();
+        G.melee = (G.melee ?? []).filter((x) => x !== this.kn);
+        this.s.melee = null;
+        this.kn = null;
+        this.say(`The ${name} breaks.`, 2.5);
+        this.lines.push(`${first(this.s)}'s ${name} broke on a run.`);
+      }
     }
   }
 
@@ -968,6 +1081,11 @@ export class Expedition {
       this.toPack({ kind: 'mod', def: md, cond: R.range(0.6, 1) });
       got.push(`a ${MODS[md].name.toLowerCase()}`);
     }
+    if (this.site.melee?.length && R.chance(cache ? 0.3 : 0.1 * sp.loot * ZONE_LOOT[sp.zone])) {
+      const md = R.pick(this.site.melee);
+      this.toPack({ kind: 'melee', def: md, cond: R.range(0.5, 1) });
+      got.push(`a ${MELEE[md].name.toLowerCase()}`);
+    }
     if (R.chance(cache ? 0.7 : this.site.weaponChance * 0.5 * sp.loot * ZONE_LOOT[sp.zone])) {
       const wd = R.pick(this.site.weapons);
       this.toPack({ kind: 'gun', def: wd, cond: R.range(0.5, 1) });
@@ -1009,6 +1127,7 @@ export class Expedition {
       for (const it of this.pack) {
         if (it.kind === 'res') { add(it.res, it.n); this.loot[it.res] = (this.loot[it.res] ?? 0) + it.n; }
         else if (it.kind === 'gun') { newWeapon(it.def, it.cond); this.weapons.push(it.def); this.lines.push(`Brought home a ${WEAPONS[it.def].name.toLowerCase()}.`); }
+        else if (it.kind === 'melee') { (G.melee ??= []).push({ uid: uid('k'), def: it.def, cond: it.cond, kills: 0 }); this.lines.push(`Brought home a ${MELEE[it.def].name.toLowerCase()}.`); }
         else { (G.modStock ??= []).push({ uid: uid('m'), def: it.def, cond: it.cond }); this.lines.push(`Brought home a ${MODS[it.def].name.toLowerCase()}.`); }
       }
       if (this.dragging && this.mate) {
@@ -1191,6 +1310,14 @@ export class Expedition {
     c.scale(this.face, 1);
     c.drawImage(im, -w / 2, -h, w, h);
     c.restore();
+    if (this.slashT > 0) {
+      const p = this.mprof();
+      c.strokeStyle = `rgba(240,230,210,${this.slashT * 6})`;
+      c.lineWidth = 3;
+      c.beginPath();
+      c.arc(x, GROUND - h * 0.6, Math.min(p.reach + 20, 130), this.face > 0 ? -1.1 : Math.PI - 0.6, this.face > 0 ? 0.6 : Math.PI + 1.1);
+      c.stroke();
+    }
     if (this.downed > 0) {
       c.font = '13px "Special Elite", monospace'; c.fillStyle = '#c04030'; c.textAlign = 'center';
       c.fillText(`DOWN — ${Math.ceil(this.downed)}s`, x, GROUND - 70); c.textAlign = 'left';
@@ -1301,6 +1428,15 @@ export class Expedition {
     c.fillStyle = '#d9c9a0';
     c.fillRect(W / 2 - 150 + 300 * (this.px / this.len) - 2, 20, 4, 12);
     for (const sp of this.spots) { c.fillStyle = sp.searched ? '#555' : '#c9b27a'; c.fillRect(W / 2 - 150 + 300 * (sp.x / this.len), 25, 2, 2); }
+    // stamina
+    c.fillStyle = 'rgba(0,0,0,0.6)';
+    c.fillRect(20, 63, 200, 3);
+    c.fillStyle = this.stamina < 25 ? '#b0502c' : '#8aa6c0';
+    c.fillRect(20, 63, 2 * this.stamina, 3);
+    c.textAlign = 'right';
+    c.fillStyle = '#a89c84';
+    c.fillText(`${this.kn ? `${MELEE[this.kn.def].name} ${Math.round(this.kn.cond * 100)}%` : 'fists'} [V]`, W - 20, H - 64);
+    c.textAlign = 'left';
     // heat & zone
     c.fillStyle = 'rgba(0,0,0,0.6)';
     c.fillRect(20, 68, 200, 6);
