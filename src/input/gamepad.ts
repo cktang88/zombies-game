@@ -62,8 +62,10 @@ function pressBind(b: PadBind) {
 // ---- menus: focus moves between visible buttons, A clicks
 function focusables(): HTMLElement[] {
   const overlays = Array.from(document.querySelectorAll<HTMLElement>('.overlay, .rotprompt'));
-  const root = overlays.sort((a, b) => (+getComputedStyle(b).zIndex || 0) - (+getComputedStyle(a).zIndex || 0))[0] ?? document.body;
-  return Array.from(root.querySelectorAll<HTMLElement>('button, [href], input, select, [tabindex]:not([tabindex="-1"])'))
+  // the top layer: highest z-index, and on a tie the one added last (a sheet over the day, help over a modal)
+  let root: HTMLElement = document.body, rz = -Infinity;
+  for (const o of overlays) { const z = +getComputedStyle(o).zIndex || 0; if (z >= rz) { rz = z; root = o; } }
+  return Array.from(root.querySelectorAll<HTMLElement>('button, summary, [href], input, select, [tabindex]:not([tabindex="-1"])'))
     .filter((el) => !(el as HTMLButtonElement).disabled && el.offsetParent !== null && !el.closest('.tbtns-pad'));
 }
 function moveFocus(dx: number, dy: number) {
@@ -88,22 +90,33 @@ function moveFocus(dx: number, dy: number) {
   best.scrollIntoView?.({ block: 'nearest' });
 }
 
-function menuFrame(btn: boolean[], edge: (i: number) => boolean, p: Gamepad) {
+// a held direction repeats: first after REPEAT_DELAY s, then every REPEAT_EVERY s
+const REPEAT_DELAY = 0.4, REPEAT_EVERY = 0.12;
+let menuDir = '';
+let menuRepeat = 0;
+/** The direction the D-pad (first) or the left stick points, or null. */
+function padDir(btn: boolean[], p: Gamepad): [number, number] | null {
   const lx = p.axes[0] ?? 0, ly = p.axes[1] ?? 0;
   const stick = Math.abs(lx) > 0.6 || Math.abs(ly) > 0.6;
-  const dir = stick && !held.has('menustick') ? (Math.abs(lx) > Math.abs(ly) ? [Math.sign(lx), 0] : [0, Math.sign(ly)]) : null;
-  if (stick) held.set('menustick', () => {}); else held.delete('menustick');
-  if (edge(12)) moveFocus(0, -1);
-  else if (edge(13)) moveFocus(0, 1);
-  else if (edge(14)) moveFocus(-1, 0);
-  else if (edge(15)) moveFocus(1, 0);
-  else if (dir) moveFocus(dir[0], dir[1]);
+  return btn[12] ? [0, -1] : btn[13] ? [0, 1] : btn[14] ? [-1, 0] : btn[15] ? [1, 0]
+    : stick ? (Math.abs(lx) > Math.abs(ly) ? [Math.sign(lx), 0] : [0, Math.sign(ly)]) : null;
+}
+function menuFrame(btn: boolean[], edge: (i: number) => boolean, p: Gamepad, dt: number) {
+  const dir = padDir(btn, p);
+  const key = dir ? dir.join(',') : '';
+  if (key !== menuDir) {
+    menuDir = key;
+    menuRepeat = REPEAT_DELAY;
+    if (dir) moveFocus(dir[0], dir[1]);
+  } else if (dir && (menuRepeat -= dt) <= 0) {
+    menuRepeat = REPEAT_EVERY;
+    moveFocus(dir[0], dir[1]);
+  }
   if (edge(0)) {
     const a = document.activeElement as HTMLElement | null;
     if (a && a !== document.body) a.click(); else focusables()[0]?.focus();
   }
   if (edge(1) || edge(9)) sendKey('keydown', 'Escape');
-  void btn;
 }
 
 function frame(now: number) {
@@ -121,12 +134,15 @@ function frame(now: number) {
   const m = inMenu ? 'menu' : 'game';
   if (m !== mode) {
     if (m === 'menu') releaseAll();
+    // likewise a direction still held: no move (and no repeat) until it changes
+    menuDir = padDir(btn, p)?.join(',') ?? '';
+    menuRepeat = Infinity;
     mode = m;
     // a button still down from the other mode does nothing until it is let go and pressed again
     prev = btn.slice();
     return;
   }
-  if (inMenu) { menuFrame(btn, edge, p); prev = btn; return; }
+  if (inMenu) { menuFrame(btn, edge, p, dt); prev = btn; return; }
 
   const binds = PAD[s!.ctx];
   for (const b of binds) {
