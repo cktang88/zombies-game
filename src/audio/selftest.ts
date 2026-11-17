@@ -10,6 +10,7 @@ import {
   CASING_KINDS, IMPACT_KINDS, RELOAD_KINDS, RELOAD_STAGES,
   casing, confirm, dryFire, explosion, impact, jam, overheat, reload,
 } from './foley';
+import { SAMPLE_IDS, load as loadSample, play as playSample, ready as sampleReady } from './samples';
 
 export interface Row { name: string; peak: number; rms: number; ok: boolean; note?: string }
 export interface Report { sampleRate: number; rows: Row[]; chain: { peak: number; clipped: number; maxVoices: number }; failures: string[] }
@@ -105,6 +106,11 @@ export async function runSelfTest(): Promise<Report> {
   };
   for (const [t, k, o] of shots) { playGun(E, k, { ...(o ?? {}), delay: t }); maxVoices = Math.max(maxVoices, concurrent()); }
   for (let i = 0; i < 24; i++) { const s = E.synth(0.3 + i * 0.1, 0.5, { rev: 0.06 }); impact(s, IMPACT_KINDS[i % IMPACT_KINDS.length]); }
+  // recorded layers on top (only those already decoded: the sound board loads them first)
+  for (let i = 0; i < 30; i++) {
+    const id = (['z_attack', 'z_scream', 'flesh', 'wood_hit', 'gun_rifle', 'z_big'] as const)[i % 6];
+    if (sampleReady(id)) playSample(E, id, { delay: 0.2 + i * 0.13, gain: 0.8, rev: 0.1 });
+  }
   explosion(E.synth(2.0, 3.5, { rev: 0.6, echo: 0.5, pri: 3 }), 1.4);
   maxVoices = Math.max(maxVoices, concurrent());
   const out = await oc.startRendering();
@@ -114,6 +120,17 @@ export async function runSelfTest(): Promise<Report> {
     for (let i = 0; i < d.length; i++) { const a = Math.abs(d[i]); if (a > peak) peak = a; if (a >= 0.999) clipped++; }
   }
   if (peak > 1) failures.push(`chain peak ${peak.toFixed(3)} > 1`);
+
+  // recorded samples: every variant through the full chain at unity voice gain
+  for (const id of SAMPLE_IDS) {
+    const oc2 = new OfflineAudioContext(1, SR * 4.5, SR);
+    await loadSample(oc2, id);
+    if (!sampleReady(id)) { failures.push(`sample ${id}: nothing decoded`); continue; }
+    const E2 = new Engine(oc2);
+    playSample(E2, id, { delay: 0.01, gain: 1, spread: 0, gainJitter: 0, maxLen: 4 });
+    const b = await oc2.startRendering();
+    add(`sample ${id}`, stats(b).peak, maxWindowRms(b), 0.003, 1.0);
+  }
   if (clipped > 0) failures.push(`chain clipped ${clipped} samples`);
   if (maxVoices > E.maxVoices) failures.push(`voices ${maxVoices} > cap ${E.maxVoices}`);
   return { sampleRate: SR, rows, chain: { peak, clipped, maxVoices }, failures };

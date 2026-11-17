@@ -60,6 +60,71 @@
 //  Dev sound board: /soundboard.html (built alongside the game).
 //
 // =====================================================================================
+//  RECORDED SAMPLES — zombies, melee, footsteps, searching, ambience (battle/expedition)
+// =====================================================================================
+//
+//  ~300 short CC0 recordings live in public/sfx/ (≈3 MB mp3, mono; sources in CREDITS.md,
+//  rebuilt by tools/sfx-build.py). src/audio/samples.ts fetches them lazily (core sets
+//  are preloaded right after the first user gesture), decodes, caches and round-robins
+//  the variants. Until a set has decoded — or if it never does — every call below falls
+//  back to a procedural sound, so nothing ever goes silent. All of it goes through the
+//  same voices, voice cap (40, plus max 7 zombie vocals at once), buses and volume
+//  settings as the gun kit.
+//
+//    sfx.zombieVoice(type, kind, { pan?, far?, delay?, volume? })
+//        type: 'sleeper' | 'deer' | 'pulper' | 'crier' | 'ferryman' | 'drag' | 'leaper'
+//              | 'spitter' | 'bellwether' | 'deputy'   (unknown ids → sleeper)
+//        kind: 'idle'  — ambient groan; call rarely (each zombie every ~4–12 s, ≤ 2–3/s
+//                        across the horde: idles are dropped first when vocals pile up)
+//              'alert' — spotted the player / reached the barricade
+//              'attack'— a swing/bite/lunge (Crier: its scream; Spitter: the spit)
+//              'pain'  — took a non-lethal hit (throttled per type, so call it freely)
+//              'death' — killed (pair it with impact('head'|'flesh') yourself)
+//        Each type has its own voice: Deer pant and snarl, Pulpers gurgle, Criers
+//        scream, the Ferryman and the Bellwether are pitched down and huge, Drags are
+//        low and quiet, Leapers fast and sharp, Spitters hiss and hawk.
+//
+//    sfx.melee(kind, weapon?, { pan?, delay?, volume? })
+//        kind: 'swing' (the whoosh, call at the start of the swing) | 'hit' (connects
+//        with a zombie) | 'heavy' (a charged/critical/finishing blow: crunch + bone).
+//        weapon: any weapon id or name — matched loosely: machete/hatchet/axe/knife/
+//        sickle/cleaver/blade → blade; crowbar/pipe/wrench/rebar → metal blunt; bat/
+//        club/plank/shovel/hammer/sledge → wooden/blunt; heavy ones get the slow whoosh.
+//
+//    sfx.footstep(surface, { pan?, volume?, far? })
+//        surface: 'asphalt' | 'leaves' | 'gravel' | 'wood' | 'grass' | 'mud'
+//        One call per footfall (≈ every 0.35–0.5 s walking); throttled at 60 ms.
+//
+//    sfx.search(kind, { pan?, volume?, delay? })
+//        kind: 'door' (open, creaky) | 'close' | 'creak' (floorboard/hinge) | 'rummage'
+//        (drawers, boxes, tools, cans; call 1–3 times while a search bar fills) |
+//        'drawer' | 'glass' (breaking a window) | 'paper' (a note, a map)
+//
+//    ambience(scene)   'night' | 'day' | 'run' | 'title' | 'off'
+//        Looping recorded beds plus sparse random events, on their own bus (lightly
+//        ducked under gunfire, scaled by the sfx volume). Crossfades between scenes.
+//          night: wind, crickets, the river; far dogs, far gunfire (other survivors),
+//                 creaking trees, rarely a distant blast or the church bell
+//          day:   birds, light wind, the river; a dog now and then
+//          run:   gusty wind, birds; far dogs, far gunfire, creaks (daylight runs)
+//          title: wind and river, an occasional bell across the water
+//        While a scene plays, the old wind(on) is a no-op, so calling both is safe.
+//        Extra layers: ambienceLayer('fire' | 'generator' | 'static' | 'river', level 0..1)
+//        — e.g. a burning barricade or the radio — level 0 removes it.
+//
+//    sfx.ui(kind?)     'click' (default) | 'type' (typewriter key) | 'paper' | 'stamp'
+//
+//  The existing calls now blend recordings in: impact('flesh'|'head'|'bone'|'wood'|
+//  'metal'|'armor'|'burst') layer real flesh/bone/wood/metal hits over the synth;
+//  groan/scream → zombie vocals; thud → a body fall; wallHit → wood hit (+ splinters);
+//  fire → crackle; bell → a struck bell; explosion → a recorded blast/far rumble;
+//  shoot()/gun() add a quiet real gunshot tail under the pre-rendered procedural shot
+//  (rifles, pistols, shotguns; not bows/nailers/suppressed). setReducedGore(true)
+//  (the 'reduce gore' setting) turns the wet layers down.
+//  Preload a set early if you want it ready for its first use:
+//    preloadSamples(['z_scream', ...])  (ids: see src/audio/sample-manifest.ts)
+//
+// =====================================================================================
 //
 // Other public API:
 //   wind(on)                    low wind ambience used by the night canvases
@@ -78,11 +143,19 @@ import {
   casing as casingFx, confirm as confirmFx, dryFire, explosion as explosionFx, impact as impactFx,
   jam as jamFx, overheat as overheatFx, reload as reloadFx, reloadPlan,
 } from './audio/foley';
+import { MeleeKind, SearchKind, Surface, searchFx, step as stepFx, swish } from './audio/foley';
+import { Bed, PlayOpts, SampleId, load as loadSample, play as playSample, preload, ready as sampleReady } from './audio/samples';
 import { WEAPONS } from './data/weapons';
 
 export type { GunKind } from './audio/guns';
 export type { GunOpts } from './audio/gunbank';
-export type { CasingKind, ImpactKind, ReloadKind, ReloadStage } from './audio/foley';
+export type { CasingKind, ImpactKind, ReloadKind, ReloadStage, MeleeKind, Surface, SearchKind } from './audio/foley';
+export type { SampleId } from './audio/samples';
+
+const CORE_SAMPLES: SampleId[] = [
+  'z_groan', 'z_alert', 'z_attack', 'z_pain', 'z_death', 'flesh', 'bone', 'crunch', 'splat', 'bodyfall',
+  'wood_hit', 'wood_crack', 'amb_wind', 'amb_crickets', 'ui_click', 'gun_rifle', 'gun_pistol', 'gun_shotgun',
+];
 
 let ctx: AudioContext | null = null;
 let E: Engine | null = null;
@@ -117,9 +190,13 @@ function ac() {
     wet.gain.value = 0.55;
     reverb.connect(wet).connect(musicBus);
     if (wantMode !== mode) queueMicrotask(() => music(wantMode));
+    if (wantScene !== 'off') queueMicrotask(() => ambience(wantScene));
     // render the gun bank in the background (a few hundred ms of offline work)
     const sr = ctx.sampleRate;
     setTimeout(() => void prewarm(sr), 250);
+    // then the recorded sets the battle needs first (~1.3 MB); the rest load on first use
+    const c0 = ctx;
+    setTimeout(() => void preload(c0, CORE_SAMPLES), 900);
   }
   if (ctx.state === 'suspended' && !document.hidden) void ctx.resume();
   return ctx;
@@ -245,6 +322,100 @@ function fx(len: number, draw: (s: Synth) => void, o: { delay?: number; gate?: s
   draw(e.synth(delay, len, { gain: o.volume ?? 1, rev: o.rev ?? 0.08, echo: o.echo ?? 0, pri: o.pri ?? 0, far: o.far }));
 }
 
+// ---------------------------------------------------------------------------
+// Recorded samples (src/audio/samples.ts). smp() returns false when the set
+// hasn't decoded yet (it starts loading it) — callers then synthesize instead.
+// ---------------------------------------------------------------------------
+function smp(id: SampleId, o: PlayOpts & { gate?: string; gap?: number } = {}): boolean {
+  const e = engine();
+  if (!e) return true; // muted: nothing to fall back to either
+  if (o.gate && !e.gate(o.gate, e.now + (o.delay ?? 0), o.gap ?? 0.03)) return true;
+  return playSample(e, id, { rev: 0.06, pri: 0, ...o });
+}
+
+let goreLevel = 1;
+/** The 'reduce gore' setting: turns the wet flesh/splatter layers down. */
+export function setReducedGore(on: boolean) { goreLevel = on ? 0.35 : 1; }
+
+/** Start loading sample sets now (e.g. the Crier's screams before its first night). */
+export function preloadSamples(ids: SampleId[]) {
+  const c = ac();
+  void preload(c, ids);
+}
+/** Play the next raw variant of a sample set (sound board; loops play their first 4 s). */
+export function auditionSample(id: SampleId) {
+  smp(id, { gain: 0.8, spread: 0, gainJitter: 0, pri: 2, maxLen: id.startsWith('amb_') ? 4 : undefined });
+}
+/** True once a sample set has decoded (the sound board uses this). */
+export const sampleLoaded = (id: SampleId) => sampleReady(id);
+/** Load one set and report whether it decoded (tests / sound board). */
+export async function loadSampleSet(id: SampleId): Promise<boolean> {
+  await loadSample(ac(), id);
+  return sampleReady(id);
+}
+
+// zombie vocals: never more than a handful at once; idles yield first
+let vocalEnds: number[] = [];
+function vocalSlot(e: Engine, kind: ZombieVoiceKind): boolean {
+  const now = e.now;
+  vocalEnds = vocalEnds.filter((t) => t > now);
+  const cap = kind === 'idle' ? 4 : kind === 'alert' ? 6 : 7;
+  if (vocalEnds.length >= cap) return false;
+  vocalEnds.push(now + (kind === 'idle' ? 1.6 : 0.9));
+  return true;
+}
+
+export type ZombieVoiceType = 'sleeper' | 'deer' | 'pulper' | 'crier' | 'ferryman' | 'drag' | 'leaper' | 'spitter' | 'bellwether' | 'deputy';
+export type ZombieVoiceKind = 'idle' | 'alert' | 'attack' | 'pain' | 'death';
+export const ZOMBIE_VOICE_TYPES: ZombieVoiceType[] = ['sleeper', 'deer', 'pulper', 'crier', 'ferryman', 'drag', 'leaper', 'spitter', 'bellwether', 'deputy'];
+export const ZOMBIE_VOICE_KINDS: ZombieVoiceKind[] = ['idle', 'alert', 'attack', 'pain', 'death'];
+
+// [sample set, playback rate, gain, extra layer?]
+type VoiceSpec = [SampleId, number, number, SampleId?];
+const VOICES: Record<ZombieVoiceType, Record<ZombieVoiceKind, VoiceSpec>> = {
+  sleeper: { idle: ['z_groan', 1, 0.6], alert: ['z_alert', 1, 0.75], attack: ['z_attack', 1, 0.75], pain: ['z_pain', 1, 0.7], death: ['z_death', 1, 0.8] },
+  deputy: { idle: ['z_groan', 0.92, 0.6], alert: ['z_alert', 0.92, 0.75], attack: ['z_attack', 0.92, 0.8], pain: ['z_pain', 0.9, 0.7], death: ['z_death', 0.92, 0.8] },
+  deer: { idle: ['z_breath', 1.15, 0.55], alert: ['z_snarl', 1.1, 0.75], attack: ['z_snarl', 1.2, 0.8], pain: ['z_pain', 1.18, 0.7], death: ['z_death', 1.12, 0.75] },
+  pulper: { idle: ['z_wet', 0.85, 0.6], alert: ['z_wet', 0.8, 0.75, 'z_groan'], attack: ['z_wet', 0.9, 0.8], pain: ['z_wet', 1, 0.75], death: ['z_death', 0.8, 0.7, 'splat'] },
+  crier: { idle: ['z_groan', 1.25, 0.5], alert: ['z_scream', 1, 0.85], attack: ['z_scream', 1.05, 0.9], pain: ['z_pain', 1.3, 0.7], death: ['z_scream', 0.85, 0.75] },
+  ferryman: { idle: ['z_big', 0.85, 0.7], alert: ['z_big', 0.8, 0.85], attack: ['z_attack', 0.72, 0.9], pain: ['z_pain', 0.68, 0.8], death: ['z_big', 0.7, 0.95] },
+  drag: { idle: ['z_groan', 0.82, 0.45], alert: ['z_alert', 0.85, 0.55], attack: ['z_attack', 0.9, 0.6], pain: ['z_pain', 0.85, 0.55], death: ['z_death', 0.85, 0.6] },
+  leaper: { idle: ['z_alert', 1.12, 0.55], alert: ['z_snarl', 1.05, 0.75], attack: ['z_attack', 1.25, 0.85], pain: ['z_pain', 1.2, 0.7], death: ['z_death', 1.15, 0.75] },
+  spitter: { idle: ['z_wet', 1.15, 0.55], alert: ['z_spit', 1, 0.7], attack: ['z_spit', 1.05, 0.85], pain: ['z_pain', 1.1, 0.7], death: ['z_wet', 1.05, 0.75, 'z_death'] },
+  bellwether: { idle: ['z_big', 0.62, 0.8], alert: ['z_big', 0.58, 0.95], attack: ['z_attack', 0.6, 1], pain: ['z_big', 0.75, 0.85], death: ['z_big', 0.5, 1, 'bell_toll'] },
+};
+
+// melee weapon classes, matched loosely on the id/name
+type MeleeClass = 'blade' | 'metal' | 'blunt' | 'fist';
+function meleeClass(w = ''): { cls: MeleeClass; heavy: boolean } {
+  const s = w.toLowerCase();
+  const heavy = /axe|hatchet|sledge|maul|crowbar|bat|shovel|pipe|plank|club|rebar|pick/.test(s) && !/knife/.test(s);
+  if (/machete|hatchet|axe|knife|sickle|cleaver|blade|sword|scythe|bayonet|saw/.test(s)) return { cls: 'blade', heavy };
+  if (/crowbar|pipe|wrench|rebar|iron|tire|spanner|pan/.test(s)) return { cls: 'metal', heavy };
+  if (/fist|punch|kick|shove|bash|hand/.test(s)) return { cls: 'fist', heavy: false };
+  return { cls: 'blunt', heavy };
+}
+
+// which recorded shot sits under each procedural gun family
+const GUN_LAYER: Partial<Record<GunKind, [SampleId, number]>> = {
+  pistol: ['gun_pistol', 1.05], pistol45: ['gun_pistol', 0.95], magnum: ['gun_pistol', 0.85], burst: ['gun_pistol', 1.08],
+  smg: ['gun_pistol', 1.1], rimfire: ['gun_pistol', 1.25],
+  pump: ['gun_shotgun', 1], double: ['gun_shotgun', 0.95], autoshot: ['gun_shotgun', 1.03], shotgun410: ['gun_shotgun', 1.12], pipe: ['gun_shotgun', 0.9],
+  boltRifle: ['gun_rifle', 1], lever: ['gun_rifle', 1.05], marksman: ['gun_rifle', 0.97], muzzleloader: ['gun_shotgun', 0.8],
+  ar: ['gun_rifle', 1.08], carbine: ['gun_rifle', 1.1], lmg: ['gun_rifle', 1.02],
+};
+function gunLayer(kindIn: string, o: GunOpts) {
+  const kind = resolveGun(kindIn);
+  const L = kind && !o.suppressed ? GUN_LAYER[kind] : undefined;
+  if (!L) return;
+  const far = !!o.far;
+  const d = o.far === true ? 0.6 : typeof o.far === 'number' ? o.far : 0;
+  smp(L[0], {
+    rate: L[1], gain: (o.volume ?? 1) * (far ? 0.5 - d * 0.3 : 0.32), far, pan: o.pan, pri: 0, rev: 0.12, echo: far ? 0.3 : 0.1,
+    delay: (o.delay ?? 0) + (far ? 0.015 + d * 0.07 : 0), gate: `gl:${L[0]}`, gap: 0.06, maxLen: 1.4,
+  });
+}
+
 let casingCount = 0;
 
 export const sfx = {
@@ -252,13 +423,14 @@ export const sfx = {
   /** One shot of a gun family (GunKind or alias like '22', '410', 'rifle-bolt', 'assault'). */
   gun(kind: GunKind | string, opts: GunOpts = {}) {
     const e = engine();
-    if (e) playGun(e, kind, opts);
+    if (e && playGun(e, kind, opts)) gunLayer(kind, opts);
   },
   /** One trigger pull of a WEAPONS id: the shot + its ejected casing. */
   shoot(defId: string, opts: GunOpts = {}) {
     const g = gunSoundFor(defId);
     const e = engine();
     if (!e || !playGun(e, g.kind, opts)) return;
+    gunLayer(g.kind, opts);
     // casings: skip for distant guns; thin them out under full-auto
     if (g.casing && !opts.far && (g.kind !== 'lmg' && g.kind !== 'smg' && g.kind !== 'carbine' || casingCount++ % 3 === 0)) {
       sfx.casing(g.casing, (opts.delay ?? 0) + g.casingDelay + Math.random() * 0.15);
@@ -269,6 +441,21 @@ export const sfx = {
     const rev = kind === 'burst' ? 0.2 : kind === 'ricochet' || kind === 'armor' ? 0.15 : 0.06;
     fx(kind === 'burst' ? 0.9 : 0.45, (s) => impactFx(s, kind), { ...o, gate: `imp:${kind}`, gap: 0.025, rev, pri: kind === 'head' || kind === 'burst' ? 1 : 0 });
     if (kind === 'armor' && Math.random() < 0.25) fx(0.5, (s) => impactFx(s, 'ricochet'), { delay: (o.delay ?? 0) + 0.02, gate: 'imp:ric', gap: 0.15, rev: 0.2, volume: o.volume });
+    // recorded layer on top (wet/bone/wood/metal texture the synth can't do)
+    const v = o.volume ?? 1, delay = o.delay ?? 0, gate = `ims:${kind}`;
+    switch (kind) {
+      case 'flesh': smp('flesh', { gain: 0.55 * v * goreLevel, delay, gate, gap: 0.05 }); break;
+      case 'head':
+        smp('crunch', { gain: 0.6 * v, delay, gate, gap: 0.05, pri: 1 });
+        smp('splat', { gain: 0.5 * v * goreLevel, delay: delay + 0.012, gate: 'ims:head2', gap: 0.05, rate: 1.1 });
+        break;
+      case 'bone': smp('bone', { gain: 0.6 * v, delay, gate, gap: 0.05 }); break;
+      case 'burst': smp('splat', { gain: 0.8 * v * goreLevel, delay, gate, gap: 0.05, pri: 1, rev: 0.15, rate: 0.85 }); break;
+      case 'wood': smp('wood_hit', { gain: 0.6 * v, delay, gate, gap: 0.05 }); break;
+      case 'metal': smp('metal_hit', { gain: 0.45 * v, delay, gate, gap: 0.05 }); break;
+      case 'armor': smp('metal_hit', { gain: 0.3 * v, delay, gate, gap: 0.06, rate: 1.2 }); break;
+      default: break;
+    }
   },
   /** Kill-confirm tick. streak = consecutive kills within ~1.5 s (1 = first). */
   confirm(streak = 1) {
@@ -299,7 +486,99 @@ export const sfx = {
     const e = engine();
     if (!e) return;
     fx(3 * size + 0.5, (s) => explosionFx(s, size), { delay: o.delay, far: o.far, rev: 0.6, echo: 0.5, pri: 3, volume: o.far ? 0.5 : 1 });
+    const r = 1 / Math.sqrt(Math.max(0.4, size));
+    if (o.far) smp('explosion_far', { gain: 0.7, delay: o.delay, far: true, rate: r, pri: 2 });
+    else {
+      smp('explosion', { gain: 0.5 * Math.min(1.3, size), delay: o.delay, rate: r, rev: 0.4, pri: 2 });
+      smp('explosion_far', { gain: 0.55 * Math.min(1.3, size), delay: (o.delay ?? 0) + 0.02, rate: r, pri: 2, rev: 0.3 });
+    }
     e.duck(0.9 * Math.min(1, size), o.delay ?? 0);
+  },
+
+  // ---- zombies (recorded) ----------------------------------------------------------------
+  /** A zombie vocalization. See the header for the type/kind vocabulary. */
+  zombieVoice(type: ZombieVoiceType | string, kind: ZombieVoiceKind, o: { pan?: number; far?: boolean; delay?: number; volume?: number } = {}) {
+    const e = engine();
+    if (!e) return;
+    const t: ZombieVoiceType = (ZOMBIE_VOICE_TYPES as string[]).includes(type) ? (type as ZombieVoiceType) : 'sleeper';
+    const spec = VOICES[t][kind] ?? VOICES[t].idle;
+    // per type+kind throttle: a horde of pains in one frame is one pain
+    const gap = kind === 'idle' ? 0.35 : kind === 'pain' ? 0.12 : 0.08;
+    if (!e.gate(`zv:${t}:${kind}`, e.now + (o.delay ?? 0), gap)) return;
+    if (!vocalSlot(e, kind)) return;
+    const big = t === 'ferryman' || t === 'bellwether';
+    const vol = (o.volume ?? 1) * spec[2];
+    const po: PlayOpts = {
+      rate: spec[1], gain: vol, pan: o.pan, far: o.far, delay: o.delay, spread: 0.06,
+      rev: big ? 0.25 : 0.1, echo: big || kind === 'alert' ? 0.12 : 0, pri: kind === 'idle' ? 0 : 1,
+      lp: t === 'drag' ? 2400 : undefined,
+    };
+    if (playSample(e, spec[0], po)) {
+      const extra = spec[3];
+      if (extra) playSample(e, extra, { ...po, gain: vol * (extra === 'splat' ? 0.6 * goreLevel : 0.5), rate: extra === 'bell_toll' ? 1 : spec[1], delay: (o.delay ?? 0) + 0.05 });
+      // the big ones get a sub-octave double for weight
+      if (big && kind !== 'idle') playSample(e, spec[0], { ...po, rate: spec[1] * 0.5, gain: vol * 0.35, spread: 0.01 });
+      return;
+    }
+    // procedural stand-in until the recordings decode
+    const F: Partial<Record<ZombieVoiceType, number>> = { crier: 1100, deer: 260, leaper: 200, spitter: 180, ferryman: 55, bellwether: 45, drag: 70 };
+    const f = F[t] ?? 95;
+    const scream = t === 'crier' && kind !== 'idle' && kind !== 'pain';
+    const rr = (a: number, b: number) => a + Math.random() * (b - a);
+    fx(1.3, (s) => {
+      if (scream) { s.tone({ f: f * rr(0.9, 1.1), f2: f * 1.4, dur: 1.1, v: 0.08, type: 'sawtooth', lp: 3500, attack: 0.05 }); return; }
+      const d = kind === 'idle' ? 0.9 : kind === 'death' ? 0.8 : 0.4;
+      s.tone({ f: f * rr(0.85, 1.2), f2: f * (kind === 'pain' ? 1.4 : 0.7), dur: d, v: 0.09, type: 'sawtooth', lp: 900, attack: 0.04 });
+      s.noise({ dur: d, v: 0.06, type: 'bandpass', f: f * 6, q: 2, attack: 0.05 });
+    }, { delay: o.delay, volume: o.volume, far: o.far, rev: 0.1, pri: kind === 'idle' ? 0 : 1 });
+  },
+
+  // ---- melee (recorded) --------------------------------------------------------------------
+  /** A melee swing / hit / heavy hit. weapon: any id or name (matched loosely; see header). */
+  melee(kind: MeleeKind, weapon?: string, o: { pan?: number; delay?: number; volume?: number } = {}) {
+    const e = engine();
+    if (!e) return;
+    const { cls, heavy } = meleeClass(weapon);
+    const v = o.volume ?? 1, d0 = o.delay ?? 0;
+    const base = { pan: o.pan, delay: d0, pri: 1, rev: 0.05 };
+    if (kind === 'swing') {
+      if (!smp(heavy ? 'swing_heavy' : 'swing', { ...base, gain: 0.5 * v, rate: heavy ? 0.85 : cls === 'blade' ? 1.1 : 1, gate: 'mel:sw', gap: 0.06 })) {
+        fx(0.4, (s) => swish(s, heavy), { ...base, volume: v, gate: 'mel:sw', gap: 0.06 });
+      }
+      return;
+    }
+    if (!e.gate('mel:hit', e.now + d0, 0.05)) return;
+    const hv = kind === 'heavy';
+    const hitId: SampleId = cls === 'blade' ? 'flesh' : 'blunt';
+    const ok = smp(hitId, { ...base, gain: (hv ? 0.85 : 0.65) * v * (cls === 'blade' ? goreLevel : 1), rate: hv ? 0.85 : cls === 'fist' ? 1.15 : 1 });
+    if (cls === 'blade') smp('blade', { ...base, gain: 0.3 * v, rate: hv ? 0.8 : 0.95, delay: d0 + 0.005 });
+    if (cls === 'metal') smp('metal_hit', { ...base, gain: 0.25 * v, rate: 1.1 });
+    if (cls === 'blunt' && heavy) smp('wood_hit', { ...base, gain: 0.25 * v, rate: 1.2 });
+    if (hv) {
+      smp('crunch', { ...base, gain: 0.5 * v, delay: d0 + 0.01 });
+      smp('bone', { ...base, gain: 0.5 * v, delay: d0 + 0.03 });
+    }
+    if (!ok) fx(0.45, (s) => impactFx(s, hv ? 'bone' : 'flesh'), { ...base, volume: v });
+  },
+
+  // ---- expedition foley (recorded) -------------------------------------------------------
+  /** One footfall on a surface ('asphalt' | 'leaves' | 'gravel' | 'wood' | 'grass' | 'mud'). */
+  footstep(surface: Surface | string = 'asphalt', o: { pan?: number; volume?: number; far?: boolean } = {}) {
+    const id: SampleId = surface === 'leaves' || surface === 'grass' ? 'step_leaves' : surface === 'gravel' || surface === 'mud' ? 'step_gravel'
+      : surface === 'wood' ? 'step_wood' : 'step_asphalt';
+    const v = (o.volume ?? 1) * (surface === 'grass' ? 0.45 : 0.55);
+    if (!smp(id, { gain: v, pan: o.pan, far: o.far, rate: surface === 'mud' ? 0.8 : 1, spread: 0.08, gainJitter: 0.2, rev: 0.03, gate: 'step', gap: 0.06 })) {
+      fx(0.2, (s) => stepFx(s, surface), { volume: o.volume, far: o.far, gate: 'step', gap: 0.06, rev: 0.03 });
+    }
+  },
+  /** Searching a house: 'door' | 'close' | 'creak' | 'rummage' | 'drawer' | 'glass' | 'paper'. */
+  search(kind: SearchKind | string, o: { pan?: number; volume?: number; delay?: number } = {}) {
+    const ids: Record<string, SampleId> = { door: 'door_open', close: 'door_close', creak: 'door_creak', rummage: 'rummage', drawer: 'rummage', glass: 'glass', paper: 'ui_paper' };
+    const id = ids[kind] ?? 'rummage';
+    const v = (o.volume ?? 1) * (kind === 'glass' ? 0.75 : 0.6);
+    const ok = smp(id, { gain: v, pan: o.pan, delay: o.delay, rev: 0.1, pri: 1, gate: `srch:${kind}`, gap: 0.08 });
+    if (ok && kind === 'door' && Math.random() < 0.5) smp('door_creak', { gain: v * 0.6, pan: o.pan, delay: (o.delay ?? 0) + 0.05, rev: 0.12 });
+    if (!ok) fx(0.8, (s) => searchFx(s, kind), { volume: o.volume, delay: o.delay, rev: 0.1 });
   },
 
   // ---- legacy ----------------------------------------------------------------------
@@ -312,38 +591,137 @@ export const sfx = {
   shell() { sfx.reload('pump', 'shell'); },
   hit() { sfx.impact('flesh'); },
   headpop() { sfx.impact('head'); },
-  thud() { noise(0.15, 220, 1, 0.35, 0.15); },
-  wallHit() { sfx.impact('wood'); },
-  groan() { tone(80 + Math.random() * 60, 0.9, 0.06, 'sawtooth', -30); },
-  scream() { tone(900 + Math.random() * 300, 1.2, 0.08, 'sawtooth', 500); tone(1300, 1.0, 0.04, 'triangle', -400); },
+  thud() {
+    if (smp('bodyfall', { gain: 0.7, gate: 'thud', gap: 0.05 })) noise(0.12, 220, 1, 0.18, 0.12);
+    else noise(0.15, 220, 1, 0.35, 0.15);
+  },
+  wallHit() {
+    sfx.impact('wood');
+    if (Math.random() < 0.3) smp('wood_crack', { gain: 0.45, delay: 0.02, gate: 'crack', gap: 0.4, rev: 0.1 });
+  },
+  groan() { if (!smp('z_groan', { gain: 0.55, spread: 0.08, gate: 'groan', gap: 0.3, rev: 0.1 })) tone(80 + Math.random() * 60, 0.9, 0.06, 'sawtooth', -30); },
+  scream() {
+    if (smp('z_scream', { gain: 0.8, gate: 'scream', gap: 0.2, rev: 0.15, echo: 0.15, pri: 1 })) return;
+    tone(900 + Math.random() * 300, 1.2, 0.08, 'sawtooth', 500); tone(1300, 1.0, 0.04, 'triangle', -400);
+  },
   burst() { sfx.impact('burst'); },
   boom() { sfx.explosion(1); },
-  fire() { noise(0.6, 1200, 0.3, 0.15, 0.6, 'highpass'); },
+  fire() { if (!smp('fire_burst', { gain: 0.6, gate: 'fire', gap: 0.15, maxLen: 1.6 })) noise(0.6, 1200, 0.3, 0.15, 0.6, 'highpass'); },
   hurt() { tone(220, 0.25, 0.12, 'triangle', -120); },
-  bell() { tone(392, 3, 0.18, 'sine'); tone(784, 2.5, 0.06, 'sine'); tone(523, 3, 0.05, 'sine'); },
-  ui() { tone(600, 0.05, 0.05, 'triangle'); },
+  bell() {
+    tone(392, 3, 0.18, 'sine'); tone(784, 2.5, 0.06, 'sine'); tone(523, 3, 0.05, 'sine');
+    smp('bell_toll', { gain: 0.35, rate: 0.98, spread: 0.01, rev: 0.4, echo: 0.2, pri: 1 });  // the strike
+  },
+  /** UI sound: 'click' (default) | 'type' | 'paper' | 'stamp'. */
+  ui(kind: 'click' | 'type' | 'paper' | 'stamp' = 'click') {
+    const id: SampleId = kind === 'type' ? 'ui_type' : kind === 'paper' ? 'ui_paper' : kind === 'stamp' ? 'ui_stamp' : 'ui_click';
+    if (!smp(id, { gain: kind === 'stamp' ? 0.6 : 0.45, rev: 0, pri: 1, spread: 0.03, gate: `ui:${kind}`, gap: 0.03 })) tone(600, 0.05, 0.05, 'triangle');
+  },
 };
 
-// Low wind drone for ambience
-let windNode: AudioBufferSourceNode | null = null;
+// Low wind for ambience: the recorded wind bed once it has decoded, filtered noise until then.
+function noiseWind(out: AudioNode, level = 0.06, cutoff = 280) {
+  const c = ac();
+  const n = c.createBufferSource();
+  n.buffer = noiseBuf;
+  n.loop = true;
+  const f = c.createBiquadFilter();
+  f.type = 'lowpass';
+  f.frequency.value = cutoff;
+  const g = c.createGain();
+  g.gain.value = level;
+  n.connect(f).connect(g).connect(out);
+  n.start();
+  return { stop() { try { n.stop(); } catch { /* stopped */ } g.disconnect(); } };
+}
+let windBed: Bed | null = null;
 export function wind(on: boolean) {
   if (muted && on) return;
   const c = ac();
-  if (on && !windNode) {
-    windNode = c.createBufferSource();
-    windNode.buffer = noiseBuf;
-    windNode.loop = true;
-    const f = c.createBiquadFilter();
-    f.type = 'lowpass';
-    f.frequency.value = 280;
-    const g = c.createGain();
-    g.gain.value = 0.06;
-    windNode.connect(f).connect(g).connect(sfxBus!);
-    windNode.start();
-  } else if (!on && windNode) {
-    windNode.stop();
-    windNode = null;
+  if (on && !windBed && !scene) {
+    windBed = new Bed(c, E!.ambIn, 'amb_wind', 0.5, (out) => noiseWind(out, 0.12), 1.5);
+  } else if (!on && windBed) {
+    windBed.stop(1);
+    windBed = null;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Ambience scenes: looping recorded beds + sparse random events (see header).
+// ---------------------------------------------------------------------------
+export type AmbienceScene = 'night' | 'day' | 'run' | 'title';
+interface SceneDef {
+  beds: [SampleId, number, number?][];           // id, level, optional low-pass
+  events: [SampleId, number, number, number][];  // id, mean gap (s), gain, far 0..1
+}
+const SCENES: Record<AmbienceScene, SceneDef> = {
+  night: {
+    beds: [['amb_wind', 0.5], ['amb_crickets', 0.22], ['amb_river', 0.16, 1800]],
+    events: [['dog_far', 40, 0.35, 0.8], ['gun_far', 55, 0.45, 1], ['tree_creak', 35, 0.3, 0.3], ['explosion_far', 240, 0.5, 1], ['bell_toll', 150, 0.25, 1]],
+  },
+  day: {
+    beds: [['amb_birds', 0.4], ['amb_wind', 0.18], ['amb_river', 0.14, 2500]],
+    events: [['dog_far', 70, 0.3, 0.9], ['bell_toll', 200, 0.2, 1]],
+  },
+  run: {
+    beds: [['amb_gust', 0.38], ['amb_birds', 0.15]],
+    events: [['dog_far', 45, 0.35, 0.8], ['gun_far', 70, 0.4, 1], ['tree_creak', 40, 0.3, 0.4]],
+  },
+  title: {
+    beds: [['amb_wind', 0.32, 1400], ['amb_river', 0.26, 2200]],
+    events: [['bell_toll', 45, 0.22, 1], ['dog_far', 90, 0.2, 1]],
+  },
+};
+let scene: AmbienceScene | null = null;
+let wantScene: AmbienceScene | 'off' = 'off';
+let sceneBeds: Bed[] = [];
+let sceneTimers: number[] = [];
+const layers = new Map<string, Bed>();
+
+/** Switch the ambience scene ('off' stops it). Safe before the first gesture: starts on it. */
+export function ambience(s: AmbienceScene | 'off') {
+  wantScene = s;
+  if (!ctx) return;  // started on the first gesture (see ac())
+  if (s === 'off' ? scene === null : s === scene) return;
+  for (const b of sceneBeds) b.stop(2.5);
+  for (const t of sceneTimers) clearTimeout(t);
+  sceneBeds = [];
+  sceneTimers = [];
+  scene = s === 'off' ? null : s;
+  if (!scene) return;  // (muted: the beds still run, under a master gain of 0)
+  if (windBed) { windBed.stop(2); windBed = null; }
+  const c = ac();
+  const def = SCENES[scene];
+  for (const [id, level, lp] of def.beds) {
+    sceneBeds.push(new Bed(c, E!.ambIn, id, level, id === 'amb_wind' || id === 'amb_gust' ? (out) => noiseWind(out, 0.12) : undefined, 4, lp));
+  }
+  const mine = scene;
+  for (const [id, gap, gain, far] of def.events) {
+    void loadSample(c, id);
+    const next = () => {
+      const t = window.setTimeout(() => {
+        if (scene !== mine) return;
+        const e = engine();
+        if (e && !document.hidden) {
+          playSample(e, id, { gain, far: far > 0.5, pan: Math.random() * 1.6 - 0.8, rev: 0.3, echo: 0.2, pri: 0, rate: 0.95 + Math.random() * 0.1, lp: far > 0.5 ? 2200 : undefined });
+        }
+        next();
+      }, gap * (0.4 + Math.random() * 1.2) * 1000);
+      sceneTimers.push(t);
+    };
+    next();
+  }
+}
+
+/** An extra looping layer over the scene: 'fire' | 'generator' | 'static' | 'river'. level 0 removes it. */
+export function ambienceLayer(kind: 'fire' | 'generator' | 'static' | 'river', level: number) {
+  if (muted && level > 0) return;
+  const id: SampleId = kind === 'fire' ? 'amb_fire' : kind === 'generator' ? 'amb_generator' : kind === 'static' ? 'amb_static' : 'amb_river';
+  const have = layers.get(kind);
+  if (level <= 0) { have?.stop(1); layers.delete(kind); return; }
+  if (have) { have.level(level); return; }
+  const c = ac();
+  layers.set(kind, new Bed(c, E!.ambIn, id, level, undefined, 1.5));
 }
 
 // ---------------------------------------------------------------------------

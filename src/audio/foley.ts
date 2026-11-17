@@ -278,3 +278,56 @@ export function explosion(s: Synth, size = 1) {
     else s.noise({ at, dur: 0.08, v: rnd(0.1, 0.2), brown: true, type: 'lowpass', f: rnd(300, 600) });
   }
 }
+
+// ---------------------------------------------------------------------------
+// Melee, footsteps, searching: procedural stand-ins used until (or if never) the
+// recorded samples in public/sfx decode. See src/audio/samples.ts.
+// ---------------------------------------------------------------------------
+export type MeleeKind = 'swing' | 'hit' | 'heavy';
+export const MELEE_KINDS: MeleeKind[] = ['swing', 'hit', 'heavy'];
+export type Surface = 'asphalt' | 'leaves' | 'gravel' | 'wood' | 'grass' | 'mud';
+export const SURFACES: Surface[] = ['asphalt', 'leaves', 'gravel', 'wood', 'grass', 'mud'];
+export type SearchKind = 'door' | 'close' | 'creak' | 'rummage' | 'drawer' | 'glass' | 'paper';
+export const SEARCH_KINDS: SearchKind[] = ['door', 'close', 'creak', 'rummage', 'drawer', 'glass', 'paper'];
+
+/** A whoosh: band-passed noise sweeping down; heavy = slower, darker. */
+export function swish(s: Synth, heavy = false) {
+  const d = heavy ? 0.22 : 0.13;
+  s.noise({ dur: d, v: 0.4, type: 'bandpass', f: heavy ? rnd(900, 1200) : rnd(1800, 2400), f2: heavy ? 300 : 700, q: 1.2, attack: d * 0.6 });
+}
+
+export function step(s: Synth, surface: string) {
+  switch (surface) {
+    case 'leaves': case 'grass':
+      s.noise({ dur: 0.12, v: surface === 'grass' ? 0.12 : 0.2, type: 'highpass', f: 2500, attack: 0.01 });
+      s.noise({ at: 0.03, dur: 0.08, v: 0.1, type: 'bandpass', f: 4200, q: 1, attack: 0.005 });
+      break;
+    case 'gravel': case 'mud':
+      for (let i = 0; i < 4; i++) s.tick(i * 0.012 + rnd(0, 0.01), rnd(2500, 4500), 0.12, 0.012, 2);
+      s.noise({ dur: 0.08, v: 0.2, brown: true, type: 'lowpass', f: 600, attack: 0.003 });
+      break;
+    case 'wood':
+      s.noise({ dur: 0.07, v: 0.3, type: 'bandpass', f: rnd(260, 340), q: 2.5, attack: 0.002 });
+      break;
+    default: // asphalt: a soft heel and a scuff
+      s.noise({ dur: 0.06, v: 0.28, brown: true, type: 'lowpass', f: 500, attack: 0.002 });
+      s.noise({ at: 0.02, dur: 0.06, v: 0.05, type: 'highpass', f: 3000, attack: 0.01 });
+  }
+}
+
+export function searchFx(s: Synth, kind: string) {
+  switch (kind) {
+    case 'glass':
+      for (let i = 0; i < 6; i++) s.ring(i * 0.02 + rnd(0, 0.03), [rnd(3000, 6000), rnd(6500, 8000)], 0.15, 0.08);
+      s.noise({ dur: 0.2, v: 0.25, type: 'highpass', f: 3500, attack: 0.001 });
+      break;
+    case 'creak': case 'door':
+      s.tone({ f: rnd(380, 460), f2: rnd(250, 330), dur: 0.6, v: 0.04, type: 'sawtooth', lp: 1400, attack: 0.08 });
+      break;
+    case 'close':
+      s.noise({ dur: 0.15, v: 0.5, brown: true, type: 'lowpass', f: 400, attack: 0.002 });
+      break;
+    default: // rummage / drawer / paper: a few scuffs and clacks
+      for (let i = 0; i < 3; i++) s.noise({ at: i * 0.09 + rnd(0, 0.05), dur: 0.06, v: 0.15, type: 'bandpass', f: rnd(1200, 3000), q: 1.5, attack: 0.004 });
+  }
+}

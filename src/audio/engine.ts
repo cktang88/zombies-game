@@ -6,7 +6,8 @@
 //    │ └──► farIn ─► lowpass ─────────► sfxIn               │
 //    ├──► revIn ─► hp ─► street convolver ─► sfxIn          ├─► master ─► masterLim ─► out
 //    └──► echoIn ─► filters ─► delay(+fb) ─► pan ─► sfxIn   │
-//  music ─► musicIn (duck) ─► musicVol ────────────────────┘
+//  music ─► musicIn (duck) ─► musicVol ────────────────────┤
+//  ambience beds ─► ambIn (ducked lightly) ─► sfxVol ──────┘
 
 export type Ctx = BaseAudioContext;
 
@@ -224,6 +225,8 @@ export class Engine {
   readonly revIn: GainNode;
   readonly echoIn: GainNode;
   readonly farIn: GainNode;
+  /** Ambience beds (recorded loops): straight to the sfx volume, past the glue compressor. */
+  readonly ambIn: GainNode;
   maxVoices = 40;
   voices: Voice[] = [];
   private lastAt = new Map<string, number>();
@@ -244,6 +247,9 @@ export class Engine {
     glue.connect(makeup);
     this.sfxIn = gain(c, 1);
     this.sfxIn.connect(glue);
+
+    this.ambIn = gain(c, 1);
+    this.ambIn.connect(this.sfxVol);
 
     this.musicVol = gain(c, 1);
     this.musicVol.connect(this.master);
@@ -362,5 +368,10 @@ export class Engine {
     g.cancelScheduledValues(t);
     g.setTargetAtTime(target, t, 0.012);
     g.setTargetAtTime(1, t + 0.08 + amount * 0.12, 0.25);
+    // the night ambience dips a little too, so a shot reads over the wind
+    const a = this.ambIn.gain;
+    a.cancelScheduledValues(t);
+    a.setTargetAtTime(1 - Math.min(0.4, amount * 0.35), t, 0.02);
+    a.setTargetAtTime(1, t + 0.15 + amount * 0.2, 0.6);
   }
 }
