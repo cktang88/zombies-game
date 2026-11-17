@@ -267,6 +267,8 @@ export function killSurvivor(s: Survivor, cause: string, epitaph?: string) {
   s.dead = { day: G.day, cause, epitaph: epitaph ?? defaultEpitaph(s) };
   s.job = 'rest';
   if (s.weapon) s.weapon = null;
+  if (s.armor && !cause.includes('turned')) G.flags.armorStock = ((G.flags.armorStock as number) ?? 0) + 1;
+  s.armor = null;
   G.graves.push(s);
   G.survivors = G.survivors.filter((x) => x.id !== s.id);
   log('death', `${displayName(s)} died: ${cause}.`);

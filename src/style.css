@@ -177,3 +177,5 @@ a[data-act] { cursor: pointer; color: var(--ink); text-decoration: underline dot
 .doc { background: #e8dfc8; color: #2a241c; padding: 10px 14px; margin: 8px 0; font-family: var(--type); font-size: 13px; transform: rotate(-0.3deg); box-shadow: 2px 3px 8px #000; }
 .doc:nth-child(even) { transform: rotate(0.4deg); }
 .doc p { margin: 4px 0 0; line-height: 1.45; }
+.titles span { font-family: var(--type); color: var(--ochre); margin-right: 8px; }
+button.mini { padding: 1px 6px; font-size: 11px; }

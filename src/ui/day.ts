@@ -94,6 +94,7 @@ function survivorCard(s: Survivor) {
           ${freeWeapons.map((x) => `<option value="${x.uid}" ${x.uid === s.weapon ? 'selected' : ''}>${esc(x.name ? `"${x.name}"` : WEAPONS[x.def].name)} (${Math.round(x.cond * 100)}%)</option>`).join('')}
         </select>
         <span class="aim" title="Aim on the wall">aim ${Math.round(aimFactor(s) * 100)}</span>
+        ${s.armor ? `<button class="mini" data-act="unarmor" data-id="${s.id}" title="Mill-plate vest: wounds 30% lighter. Take it off.">vest ✓</button>` : (G.flags.armorStock as number) > 0 ? `<button class="mini" data-act="armor" data-id="${s.id}" title="Give a mill-plate vest">+ vest</button>` : ''}
         ${canFight(s) ? '' : '<span class="tag bad">won\'t stand the wall</span>'}
       </div>
     </div>
@@ -116,6 +117,7 @@ function detailHtml(s: Survivor) {
       <div>
         <h2>${esc(displayName(s))}</h2>
         <div class="sub">${s.age}, ${s.sex === 'm' ? 'man' : 'woman'} · with us since ${dateLabel(s.arrivedDay)} · ${s.kills} put down${s.dead ? ` · died ${dateLabel(s.dead.day)}` : ''}</div>
+        ${s.titles?.length ? `<div class="titles">${s.titles.map((t) => `<span>“${esc(t)}”</span>`).join(' ')}</div>` : ''}
         <p class="story"><b>Before.</b> ${esc(s.before)}</p>
         <p class="story"><b>When it began.</b> ${esc(s.outbreak)}</p>
         ${s.dead ? `<p class="story epitaph">${esc(s.dead.cause)}. <i>${esc(s.dead.epitaph)}</i></p>` : ''}
@@ -327,6 +329,12 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
     } else if (act === 'choice') {
       h.onChoice(+el.dataset.i!);
       return;
+    } else if (act === 'armor') {
+      const s = byId(el.dataset.id!);
+      if (s && (G.flags.armorStock as number) > 0) { s.armor = 'vest'; G.flags.armorStock = (G.flags.armorStock as number) - 1; }
+    } else if (act === 'unarmor') {
+      const s = byId(el.dataset.id!);
+      if (s?.armor) { s.armor = null; G.flags.armorStock = ((G.flags.armorStock as number) ?? 0) + 1; }
     } else if (act === 'run') {
       const sel = root.querySelector('select[data-act=runsite]') as HTMLSelectElement;
       h.onRun(sel.value);
