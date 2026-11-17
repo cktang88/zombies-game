@@ -553,11 +553,17 @@ export class Rig {
       if (this.hasAim && rw < 0.05 && aimW > 0.95 && a!.hold !== 'bow') {
         const lx = ((this.aimWX - this.dx) * this.df) / this.ds, ly = (this.aimWY - this.dy) / this.ds;
         const [mx, my] = this.gunPt(muz);
-        if (Math.hypot(lx - mx, ly - my) > 20) {
-          let err = Math.atan2(ly - my, lx - mx) - (this.ga + this.recoil * 0.03 + (muz[0] < 0 ? Math.PI : 0));
+        const bore = this.ga + this.recoil * 0.03 + (muz[0] < 0 ? Math.PI : 0);
+        const d = Math.hypot(lx - mx, ly - my);
+        const ahead = (lx - mx) * Math.cos(bore) + (ly - my) * Math.sin(bore);
+        if (d > 20 && ahead > 12) {
+          let err = Math.atan2(ly - my, lx - mx) - bore;
           err = Math.atan2(Math.sin(err), Math.cos(err));
-          this.aimCorr = clamp(this.aimCorr + err * 0.7, -0.6, 0.6);
-        }
+          // turning the gun about the shoulder also swings the muzzle, which moves the target's
+          // bearing from it by about r/d as much again: scale the gain so a near target can't ring
+          const r = Math.hypot(mx - shX, my - shY);
+          this.aimCorr = clamp(this.aimCorr + (err * 0.8) / (1 + r / d), -0.45, 0.45);
+        } else this.aimCorr *= 0.9;
       } else this.aimCorr *= 0.9;
       // cheek weld: the head drops onto the comb of the stock; what it can't reach, the gun comes up to
       if (st.cheek && raise > 0.01 && a!.butt) this.cheekWeld(loc(a!.butt), muz, gun.combY !== undefined ? loc([a!.butt[0], gun.combY]) : null, raise);
@@ -1027,8 +1033,20 @@ export class Rig {
     // arm art stretched along its bone to the bone's real length (skeleton.ts geomOf, ARM)
     const g = this.geo, k = !g ? 1 : i === N_UA || i === F_UA ? g.uaK : i === N_FA || i === F_FA ? g.faK : 1;
     if (k !== 1) { ctx.rotate(m.rest); ctx.scale(k, 1); ctx.rotate(-m.rest); }
+    // forearms end at the wrist: the source painting's own hand (a glove, a fist) was cut into the
+    // forearm part, and the hand library draws the real one, so cut the art off just past the wrist
+    const fa = i === N_FA || i === F_FA;
+    if (fa) {
+      const L = Math.hypot(m.tx - m.px, m.ty - m.py) + 3 + grow;
+      ctx.save();
+      ctx.rotate(m.rest);
+      ctx.beginPath(); ctx.rect(-4000, -4000, 4000 + L, 8000);
+      ctx.rotate(-m.rest);
+      ctx.clip();
+    }
     if (grow) ctx.drawImage(src, m.x - grow, m.y - grow, m.w + grow * 2, m.h + grow * 2, -m.px - grow, -m.py - grow, m.w + grow * 2, m.h + grow * 2);
     else ctx.drawImage(src, m.x, m.y, m.w, m.h, -m.px, -m.py, m.w, m.h);
+    if (fa) ctx.restore();
   }
 
   private setGunXf(ctx: CanvasRenderingContext2D, x: number, y: number, a: number, k: number, flip?: boolean) {
