@@ -103,6 +103,76 @@ export function bakeSil(sprite: string, h: number, color: string, pad: number): 
   return cv;
 }
 
+// one scratch canvas for building rim bands
+let scratch: [HTMLCanvasElement, CanvasRenderingContext2D] | null = null;
+function rimBand(sprite: string, w: number, h: number, pad: number, color: string, dx: number, dy: number): HTMLCanvasElement | null {
+  const sil = silhouette(sprite, color);
+  if (!sil) return null;
+  const cw = Math.ceil(w + pad * 2), ch = Math.ceil(h + pad * 2);
+  if (!scratch || scratch[0].width < cw || scratch[0].height < ch) scratch = canvas(Math.max(cw, scratch?.[0].width ?? 0), Math.max(ch, scratch?.[0].height ?? 0));
+  const [cv, x] = scratch;
+  x.globalCompositeOperation = 'source-over';
+  x.clearRect(0, 0, cv.width, cv.height);
+  x.drawImage(sil, pad + dx, pad + dy, w, h);
+  // only the part of the shifted silhouette that sticks out past the body
+  x.globalCompositeOperation = 'destination-out';
+  x.drawImage(sil, pad, pad, w, h);
+  x.globalCompositeOperation = 'source-over';
+  return cv;
+}
+
+/** A thin rim band (shifted silhouette minus the body), laid out like bakeSprite(…, {pad}). */
+export function bakeEdge(sprite: string, h: number, color: string, dx: number, dy: number, pad: number): HTMLCanvasElement | null {
+  const key = `e|${sprite}|${Math.round(h)}|${color}|${dx}|${dy}|${pad}`;
+  const hit = silCache.get(key);
+  if (hit) return hit;
+  const im = img(sprite);
+  if (!im) return null;
+  const w = (im.width / im.height) * h;
+  const band = rimBand(sprite, w, h, pad, color, dx, dy);
+  if (!band) return null;
+  const [cv, x] = canvas(w + pad * 2, h + pad * 2);
+  x.drawImage(band, 0, 0);
+  silCache.set(key, cv);
+  return cv;
+}
+
+/**
+ * Everything about a crowd body that does not change frame to frame, in one canvas, so a
+ * body is a single drawImage: outline, graded sprite, fog, variant tint, an optional flat
+ * shade over all of it (the unlit "near-silhouette"), and an optional rim band on top.
+ */
+export function bakeComposite(
+  sprite: string, h: number, look: Look, variant: number, pad: number,
+  o: { shade?: [string, number]; rim?: [string, number, number, number] } = {},
+): Baked | null {
+  const key = `c|${sprite}|${Math.round(h)}|${lookKey(look)}|${variant}|${pad}|${o.shade?.join() ?? ''}|${o.rim?.join() ?? ''}`;
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const im = img(sprite);
+  if (!im) return null;
+  const w = (im.width / im.height) * h;
+  const [cv, x] = canvas(w + pad * 2, h + pad * 2);
+  if (look.outline > 0) stampOutline(x, sprite, pad, w, h, look.outline);
+  const [tint, ta, vb] = VARIANT_TINT[variant] ?? VARIANT_TINT[0];
+  x.filter = `brightness(${(look.b * vb).toFixed(3)}) saturate(${look.s.toFixed(3)})`;
+  x.drawImage(im, pad, pad, w, h);
+  x.filter = 'none';
+  x.globalCompositeOperation = 'source-atop';
+  if (look.fog) { x.globalAlpha = look.fog; x.fillStyle = FOG_TINT; x.fillRect(0, 0, cv.width, cv.height); }
+  if (ta) { x.globalAlpha = ta; x.fillStyle = tint; x.fillRect(0, 0, cv.width, cv.height); }
+  if (o.shade) { x.globalAlpha = o.shade[1]; x.fillStyle = o.shade[0]; x.fillRect(0, 0, cv.width, cv.height); }
+  x.globalCompositeOperation = 'source-over';
+  if (o.rim && o.rim[1] > 0) {
+    const band = rimBand(sprite, w, h, pad, o.rim[0], o.rim[2], o.rim[3]);
+    if (band) { x.globalAlpha = o.rim[1]; x.drawImage(band, 0, 0); }
+  }
+  x.globalAlpha = 1;
+  const b = { cv, pad, h };
+  cache.set(key, b);
+  return b;
+}
+
 // source-size silhouettes, the input to the display-size bakes above
 const srcSil = new Map<string, HTMLCanvasElement>();
 function silhouette(sprite: string, color: string): HTMLCanvasElement | null {
@@ -150,12 +220,13 @@ export function bakeLayer(id: string, w: number, h: number, filter: string, fog:
  * The ground plane: dark asphalt, speckle, faint tyre ruts along the lane ys.
  * `top` is the screen y of the canvas' first row; the result is `w` wide and `h` tall.
  */
-export function bakeGround(w: number, h: number, top: number, lanes: number[], o: { rut?: number } = {}): HTMLCanvasElement {
+export function bakeGround(w: number, h: number, top: number, lanes: number[], o: { rut?: number; base?: [string, string, string] } = {}): HTMLCanvasElement {
   const [gc, g] = canvas(w, h);
   const grd = g.createLinearGradient(0, 0, 0, gc.height);
-  grd.addColorStop(0, 'rgba(22,23,26,0.2)');
-  grd.addColorStop(0.25, 'rgba(22,23,26,0.6)');
-  grd.addColorStop(1, 'rgba(12,12,14,0.85)');
+  const [a, b, c] = o.base ?? ['rgba(22,23,26,0.2)', 'rgba(22,23,26,0.6)', 'rgba(12,12,14,0.85)'];
+  grd.addColorStop(0, a);
+  grd.addColorStop(0.25, b);
+  grd.addColorStop(1, c);
   g.fillStyle = grd;
   g.fillRect(0, 0, gc.width, gc.height);
   for (let i = 0; i < 900 * (w / 1536); i++) {
