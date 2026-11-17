@@ -6,6 +6,6 @@ export const PROP_IDS = [
   'emp_nail_gun', 'emp_nail_base', 'emp_firestep', 'emp_scaffold',
   'fort_wire', 'fort_spikes', 'fort_light', 'fort_pile_s', 'fort_pile_m', 'fort_pile_l', 'fort_drain', 'fort_grate', 'fort_junk1', 'fort_junk2',
   'trap_nailbomb', 'trap_roofnails', 'trap_flare', 'trap_oil', 'trap_tincan', 'trap_radio', 'trap_snarepost', 'trap_fencepost', 'trap_fencegen',
-  'trap_door', 'trap_gallows', 'trap_sludge', 'trap_pipemine', 'trap_glass', 'trap_bear', 'trap_propane', 'trap_barrel', 'trap_net',
+  'trap_door', 'trap_gallows', 'trap_sludge', 'trap_pipemine', 'trap_glass', 'trap_bear', 'trap_pit', 'trap_propane', 'trap_barrel', 'trap_net',
   'obj_truck', 'obj_cache', 'obj_sign_rail', 'obj_sign_stop', 'obj_duffel',
 ];
