@@ -1,19 +1,19 @@
 import type { Survivor, WeaponItem, Res, NightPlan } from '../types';
 import { G, R, log, add } from '../state';
-import { ZOMBIES, type ZombieDef } from '../data/zombies';
-import { WEAPONS, fireProfile, armorDamage, roundsInStores, ammoLabel, ammoTypesFor, shotSound, wearMods, blastDamage, AMMO_RES, AMMO_TYPES, BURN, FLARE_LIGHT, type FireProfile } from '../data/weapons';
+import { ZOMBIES, WEAKSPOTS, EYES, type ZombieDef, type WeakKind } from '../data/zombies';
+import { WEAPONS, fireProfile, armorDamage, roundsInStores, ammoLabel, ammoTypesFor, selectedAmmo, shotSound, wearMods, blastDamage, AMMO_RES, AMMO_TYPES, BURN, FLARE_LIGHT, type FireProfile } from '../data/weapons';
 import { img, flashImg, shadeImg } from '../assets';
-import { sfx, wind } from '../audio';
-import { reduceGore, shakeScale } from '../ui/settings';
+import { sfx, wind, gunSoundFor } from '../audio';
+import { reduceGore, shakeScale, realism } from '../ui/settings';
 import {
   living, canFight, aimFactor, first, displayName, wound, pain, killSurvivor, tale, addThought, hasTrait, changeOpinion, byId, isBitten, breakThresholds,
-  moodBreakdown, their, them, grantTitle,
+  moodBreakdown, their, them, grantTitle, prof, attr,
 } from '../sim/survivors';
-// ---- night modules (traps / melee / emplacements): hook plumbing, see night/hook.ts ----
-import type { BattleHook } from './hook';
-import { installModules } from './modules';
-import { meleeGuard } from './melee';
-// ---- end night modules ----
+import {
+  kickFor, bloomAfter, aimedDelay, climbFor, heatLimit, heatCool, usesHeat, swapsBarrel, fireModes, hasChamber, manualAction, drawTime, shooterMods, clearTime,
+  BLOOM_CAP, type FireMode, type Malfunction,
+} from './gunplay';
+import { intelTier } from '../sim/director';
 import { depthScale, bakeSprite, bakeComposite, bakeEdge, bakeLayer, bakeGround, fgStrip, shadowEllipse, type Look } from './render';
 
 export const W = 1280, H = 720;
@@ -86,6 +86,20 @@ export interface Zombie {
   variant: number; // crowd variant (0 neutral, 1 cold, 2 sickly)
   laneCd: number; // seconds before it may hop lanes again
   blocked: number; // seconds spent held up behind the one ahead
+  // ---- combat depth (research 05) ----
+  stun: number; // staggered: no walking, no wall damage
+  legDmg: number; // accumulated leg damage (×limbMul); ≥35% max HP → crippled
+  armDmg: number; // accumulated arm damage; ≥25% max HP → disarmed (wall dps ×0.4)
+  crippled?: boolean; // legs gone: a crawler (the Ferryman limps instead)
+  disarmed?: boolean;
+  staggers?: number[]; // Ferryman: times of recent stagger hits (two within 1.2 s = knockdown)
+  down?: number; // knocked down for this many seconds
+  windup?: number; // Crier keen wind-up, Buck crouch, Biler spit wind-up
+  leap?: { x0: number; y0: number; x1: number; y1: number; t: number; dur: number };
+  leapt?: boolean;
+  spitT?: number; // Biler: seconds to the next glob
+  climb?: number; // coming up the corpse pile: seconds left
+  pant?: number; // deer: breath-puff timer
 }
 
 export interface Guard {
@@ -123,8 +137,21 @@ export interface Guard {
   sc: number; // depth scale of their row
   burstLane: number; // guards: the lane their burst is locked to
   burstX: number;
-  crew?: boolean; // night modules: manning an emplacement (night/emplacements.ts)
+  post: Post;
+  order: Order;
+  blind: number; // bile in the eyes: aim worse for a few seconds
+  duck: number; // ducking a bile glob: no firing
+  holdT: number; // Hold fire: seconds a bloodlust guard has been itching
 }
+/** Where a guard stands (research 05 §5). */
+export type Post = 'step' | 'roof' | 'loop' | 'runner';
+/** What a guard shoots at: Free fire, Hold fire, Heads only, Protect the wall. */
+export type Order = 'free' | 'hold' | 'heads' | 'wall';
+export const POST_NAMES: Record<Post, string> = { step: 'Firestep', roof: 'Roof nest', loop: 'Loophole', runner: 'Runner' };
+export const ORDER_NAMES: Record<Order, string> = { free: 'Free fire', hold: 'Hold fire', heads: 'Heads only', wall: 'Protect wall' };
+/** A bile glob in the air (Biler). */
+interface Glob { x0: number; y0: number; x1: number; y1: number; gy0: number; gy1: number; t: number; dur: number; g: Guard | null; lane: number; ducked?: boolean; rolled?: boolean }
+type Zone = 'head' | 'torso' | 'arm' | 'leg';
 
 export interface Particle { x: number; y: number; vx: number; vy: number; life: number; max: number; size: number; color: string; kind: 'blood' | 'spark' | 'smoke' | 'fire' | 'spore' | 'shell' | 'chunk'; ground: number }
 interface Tracer { x1: number; y1: number; x2: number; y2: number; life: number; w: number }
@@ -257,10 +284,64 @@ export class Battle {
   lanes: Zombie[][] = [[], [], [], []]; // walkers per lane at the start of this update, by x
   prebake: (() => void)[] = []; // sprite bakes worked off during the intro
   hover?: Zombie; // the body under the crosshair
-  hooks: BattleHook[] = []; // night modules (traps, melee, emplacements)
-  keyUp = (e: KeyboardEvent) => { if (e.key === ' ') this.fast = false; };
+  keyUp = (e: KeyboardEvent) => {
+    const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (k === ' ') this.fast = false;
+    else if (k === 'r') {
+      // a tap is the smart reload (or tap-rack); a hold already did a speed reload
+      if (this.rDown >= 0 && !this.rDone) this.startReload('smart');
+      this.rDown = -1;
+    } else if (k === 's' || k === 'Control') this.ducking = false;
+  };
   /** Separate night modules (traps, melee, emplacements) — see BattleHook. */
   hooks: BattleHook[] = [];
+  // ---- the leader's gun ----
+  bloomShot = 0; // bloom at the last shot (decays from there: bloomNow())
+  lastShotT = -9;
+  climbN = 0; // rounds in the current string of fire
+  climbY = 0; // px the muzzle has climbed
+  heat = new Map<string, number>(); // per gun uid
+  modes = new Map<string, FireMode>(); // fire selector per gun uid
+  pouch = new Map<string, number[]>(); // partial magazines kept on tactical reloads, by `${uid}|${ammo}`
+  tube = new Map<string, Res[]>(); // shell order in tube guns
+  jam: { kind: Malfunction | 'barrel'; clearing: number } | null = null;
+  reloadKind: 'tac' | 'empty' | 'speed' = 'tac';
+  reloadTotal = 1;
+  reloadSfx?: { cancel(): void };
+  rDown = -1; // performance.now() when [R] went down (a hold = speed reload)
+  rDone = false;
+  dropped: Partial<Record<Res, number>> = {}; // rounds in magazines dropped over the wall
+  droppedMags = 0;
+  settle = 0; // optic settle time after swinging onto a new body
+  settleId = -1;
+  shotsTonight = 0;
+  firedHard = 0; // rounds fired recently (tinnitus/ringing proxy)
+  shotHit = false;
+  ducking = false; // [S]/[Ctrl] held: under the parapet
+  // ---- nerve, focus, rally (research 05 §4, §10) ----
+  nerve = 50;
+  nerveMax = 70;
+  focusing = false;
+  shakeT = 0; // nerve hit zero: the hands shake
+  zeroes = 0;
+  streak = 0; // headshot kills in a row
+  misses = 0;
+  rally = 0; // charges
+  rallyT = 0;
+  hitMark: { kind: string; t: number } | null = null;
+  timeScale = 1;
+  hitstop = 0;
+  lastHitstop = -1;
+  // ---- orders and posts ----
+  sel = -1; // index into guards of the selected guard (-1 none)
+  mark: { id: number; t: number } | null = null;
+  // ---- corpse piles per lane (research 05 §7) ----
+  piles = [0, 0, 0, 0];
+  pileRot = 0; // a Pulper burst at the wall: ramps form sooner tonight
+  pileWarned = false;
+  globs: Glob[] = [];
+  wallMark = 1; // the last tenth of wall integrity the leader's nerve took a hit at
+  hints = new Set<string>();
   /** Feet y of walking lane i (0 far … 3 near). */
   laneY(i: number) { return LANES[Math.max(0, Math.min(LANES.length - 1, i))]; }
 
@@ -284,6 +365,8 @@ export class Battle {
     for (const k of [...AMMO_RES, 'scrap', 'molotov'] as Res[]) this.ammoStart[k] = G.stores[k] ?? 0;
     this.res = { kills: 0, deaths: [], wallHeld: true, wallLost: 0, ammoUsed: {}, killsBy: {}, headshots: 0, lines: [], fell: false };
     this.setupGuards();
+    // last night's bodies, if nobody cleared them (G.flags.pileCarry: JSON number[4])
+    try { const pc = G.flags.pileCarry ? JSON.parse(G.flags.pileCarry as string) as number[] : null; if (Array.isArray(pc)) this.piles = [0, 1, 2, 3].map((i) => Math.max(0, +pc[i] || 0)); } catch { /* none */ }
     if (G.flags.dog) this.dog = { x: 172, y: 699, barkT: 0, cd: 0, name: typeof G.flags.dog === 'string' ? G.flags.dog : 'The dog' };
     this.hooks = installModules(this); // night modules (the nail turrets moved to night/emplacements.ts)
     this.queueBakes();
@@ -307,21 +390,83 @@ export class Battle {
       const w = G.weapons.find((x) => x.uid === s.weapon) ?? null;
       const x = 262 - i * gap;
       const y = DEF_LANES[i % 2 === 0 ? 1 : 0];
-      this.guards.push({ s, w, x, y, sc: depthScale(y), cd: R.range(0, 1), mag: 0, reload: 0, kills: 0, flash: 0, fled: false, recoil: 0, homeX: x, face: 1, mauledT: 0, burstLeft: 0, burstT: 0, burstAng: 0, burstErr: 0, burstLane: LANES[2], burstX: 0, lastTgt: 0, dragT: 0, moodleC: '', moodleT: R.range(0, 1) });
+      this.guards.push({
+        s, w, x, y, sc: depthScale(y), cd: R.range(0, 1), mag: 0, reload: 0, kills: 0, flash: 0, fled: false, recoil: 0, homeX: x, face: 1, mauledT: 0, burstLeft: 0, burstT: 0, burstAng: 0, burstErr: 0, burstLane: LANES[2], burstX: 0, lastTgt: 0, dragT: 0, moodleC: '', moodleT: R.range(0, 1),
+        post: 'step', order: 'free', blind: 0, duck: 0, holdT: 0,
+      });
     });
     // magazines are loaded from the stores, not conjured
     for (const g of this.guards) {
       if (!g.w) continue;
-      const prof = this.prof(g.w);
+      const prof = this.prof(g.w, g.s);
       g.mag = this.loadFromStores(prof, prof.mag);
       this.playerMag.set(g.w.uid, g.mag);
     }
+    // posts: set at dusk (G.flags.posts = JSON { survivorId: post }) or sensible defaults
+    let posts: Record<string, Post> = {};
+    try { posts = G.flags.posts ? JSON.parse(G.flags.posts as string) as Record<string, Post> : {}; } catch { posts = {}; }
+    let orders: Record<string, Order> = {};
+    try { orders = G.flags.orders ? JSON.parse(G.flags.orders as string) as Record<string, Order> : {}; } catch { orders = {}; }
+    const others = this.guards.filter((g) => !g.s.isLeader);
+    for (const g of others) { if (posts[g.s.id]) g.post = posts[g.s.id]; if (orders[g.s.id]) g.order = orders[g.s.id]; }
+    if (!Object.keys(posts).length) {
+      // a shotgun at the loophole, the best long gun on the roof (if there is a nest), a runner when the line is long
+      const loop = others.find((g) => g.w && WEAPONS[g.w.def].caliber === 'shot' && !hasTrait(g.s, 'coward'));
+      if (loop && others.length >= 2) loop.post = 'loop';
+      if (this.roofNest()) {
+        const roof = others.filter((g) => g.post === 'step' && g.w && ['rifle', 'marksman'].includes(WEAPONS[g.w.def].cls)).sort((a, b) => b.s.skills.shooting - a.s.skills.shooting)[0];
+        if (roof) roof.post = 'roof';
+      }
+      if (others.length >= 4) {
+        const run = others.filter((g) => g.post === 'step').sort((a, b) => (a.w ? WEAPONS[a.w.def].dmg : 0) - (b.w ? WEAPONS[b.w.def].dmg : 0))[0];
+        if (run && (!run.w || WEAPONS[run.w.def].cls === 'handgun')) run.post = 'runner';
+      }
+    }
+    for (const g of others) this.placePost(g, g.post);
     // the frayed may come apart on the wall tonight
     for (const g of this.guards) {
       const th = breakThresholds(g.s);
       if (!g.s.isLeader && g.s.mood < th.minor && R.chance(g.s.mood < th.major ? 0.6 : 0.3)) g.panicAt = R.range(15, 60);
     }
     this.guards.sort((a, b) => a.y - b.y);
+    // the leader's nerve (research 05 §4)
+    const L = this.guards.find((g) => g.s.isLeader) ?? this.guards[0];
+    if (L) {
+      const s = L.s;
+      let max = 55 + 4 * s.skills.shooting + (attr(s, 'courage') - 4) * 2;
+      if (hasTrait(s, 'ironwill')) max += 15;
+      if (hasTrait(s, 'steady')) max += 10;
+      if (hasTrait(s, 'jittery')) max -= 15;
+      if (hasTrait(s, 'fragile')) max -= 10;
+      if (hasTrait(s, 'coward')) max -= 20;
+      if (s.mood < 25) max -= 10;
+      this.nerveMax = Math.max(30, Math.round(max));
+      this.nerve = this.nerveMax * 0.8;
+    }
+  }
+
+  /** A roof nest exists if the camp built one (a day project sets G.flags.roofNest). */
+  roofNest() { return !!G.flags.roofNest || G.buildings.some((b) => b.id === 'roofnest'); }
+
+  /** Move a guard to a post's slot. */
+  placePost(g: Guard, post: Post) {
+    if (post === 'loop' && hasTrait(g.s, 'coward')) {
+      this.say(`${first(g.s)} won't take the loophole. "Not with my face in their teeth."`, 3);
+      post = 'step';
+    }
+    g.post = post;
+    if (post === 'roof') { g.homeX = 150; g.y = 548; }
+    else if (post === 'loop') { g.homeX = WALL_X - 28; g.y = DEF_LANES[1]; }
+    else {
+      // back to a free slot on the step
+      const used = new Set(this.guards.filter((o) => o !== g && o.post !== 'roof' && o.post !== 'loop').map((o) => Math.round(o.homeX)));
+      let x = 262;
+      while (used.has(x) && x > 60) x -= 50;
+      g.homeX = x;
+      g.y = DEF_LANES[this.guards.indexOf(g) % 2 === 0 ? 1 : 0];
+    }
+    g.x = g.homeX;
+    g.sc = depthScale(post === 'roof' ? DEF_LANES[0] : g.y) * (post === 'roof' ? 0.92 : 1);
   }
 
   lastPlayer?: Guard;
@@ -343,13 +488,15 @@ export class Battle {
     c.onmousemove = pos;
     c.onmousedown = (e) => {
       pos(e);
-      if (e.button === 2) this.throwMolotov();
+      if (e.button === 2) this.setFocus(true);
+      else if (e.button === 1) { this.throwMolotov(); e.preventDefault(); }
       else {
         this.mouse.down = true;
         this.tryFire(true);
       }
     };
-    c.onmouseup = () => (this.mouse.down = false);
+    c.onmouseup = (e) => { if (e.button === 2) this.setFocus(false); else if (e.button === 0) this.mouse.down = false; };
+    c.onwheel = (e) => { e.preventDefault(); this.cycleWeapon(e.deltaY < 0 ? -1 : 1); };
     c.oncontextmenu = (e) => e.preventDefault();
     c.ontouchstart = (e) => {
       const t = e.touches[0];
@@ -370,17 +517,42 @@ export class Battle {
     c.ontouchend = () => (this.mouse.down = false);
     window.addEventListener('keydown', this.keyHandler);
     window.addEventListener('keyup', this.keyUp);
+    window.addEventListener('blur', this.blurHandler);
+  }
+  blurHandler = () => { this.mouse.down = false; this.focusing = false; this.ducking = false; this.rDown = -1; };
+
+  /** Hold RMB: Focus. Time ×0.6, spread ×0.4, kick ×0.5; drains nerve. Can't start below 10. */
+  setFocus(on: boolean) {
+    if (on && (this.nerve < 10 || !this.player || this.done)) { if (on && this.nerve < 10) this.text(this.mouse.x, this.mouse.y - 30, 'no nerve left', '#c88', 11); return; }
+    this.focusing = on;
   }
 
+  // Controls (the HUD's key line mirrors this):
+  //   LMB fire · RMB (hold) Focus · MMB/[F] firebomb · [R] reload / clear (hold: speed reload) · [T] ammo / slug swap
+  //   [B] fire selector · [Q]/wheel weapon · [S]/[Ctrl] (hold) duck · [E] rally · [M] mark target
+  //   [1-9]/[Tab] select guard · [Z]/[X]/[C]/[V] order (Shift = everyone) · [Y] guard's post · Space hurry · [P]/Esc pause
   onKey(e: KeyboardEvent) {
     for (const h of this.hooks) if (h.onKey?.(this, e)) return;
-    if (e.key === 'r' || e.key === 'R') this.startReload();
-    else if (e.key === 'f' || e.key === 'F') this.throwMolotov();
-    else if (e.key === 'Escape' || e.key === 'p') this.paused = !this.paused;
-    else if (/^[1-9]$/.test(e.key)) this.switchWeapon(+e.key - 1);
-    else if (e.key === 'q' || e.key === 'Q') this.cycleWeapon();
-    else if (e.key === 't' || e.key === 'T') this.cycleAmmo();
-    else if (e.key === ' ') { this.fast = true; e.preventDefault(); }
+    const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (k === 'r') {
+      if (e.repeat) return;
+      if (this.jam || this.playerReload > 0) { this.startReload(); return; }
+      this.rDown = performance.now();
+      this.rDone = false;
+    }
+    else if (k === 'f') this.throwMolotov();
+    else if (k === 'Escape' || k === 'p') this.paused = !this.paused;
+    else if (/^[1-9]$/.test(k)) this.selectGuard(+k - 1);
+    else if (k === 'Tab') { e.preventDefault(); this.selectGuard(this.sel + 1, true); }
+    else if (k === 'q') this.cycleWeapon(1);
+    else if (k === 't') this.cycleAmmo();
+    else if (k === 'b') this.cycleMode();
+    else if (k === 'e') this.useRally();
+    else if (k === 'm') this.markTarget();
+    else if (k === 'y') this.cyclePost();
+    else if (k === 's' || k === 'Control') this.ducking = true;
+    else if (k === 'z' || k === 'x' || k === 'c' || k === 'v') this.giveOrder(({ z: 'free', x: 'hold', c: 'heads', v: 'wall' } as const)[k], e.shiftKey);
+    else if (k === ' ') { this.fast = true; e.preventDefault(); }
   }
 
   // weapons the leader may pick up: their own and any unassigned
@@ -390,6 +562,7 @@ export class Battle {
     return G.weapons.filter((w) => !held.has(w.uid));
   }
 
+  /** Change guns: a pistol comes up faster than any reload; a machine gun does not. */
   switchWeapon(i: number) {
     const p = this.player;
     const list = this.available();
@@ -397,39 +570,80 @@ export class Battle {
     p.w = list[i];
     p.s.weapon = p.w.uid;
     this.playerReload = 0;
-    if (!this.playerMag.has(p.w.uid)) this.playerMag.set(p.w.uid, 0);
-    sfx.reload();
-  }
-
-  // [T]: the next bullet type for the leader's gun; what's in the magazine goes back to the stores
-  cycleAmmo() {
-    const p = this.player;
-    if (!p || !p.w) return;
-    const types = ammoTypesFor(p.w.def);
-    if (types.length < 2) return;
-    const prof = this.prof(p.w);
-    const cur = prof.ammoRes;
-    const have = types.filter((t) => t === cur || (G.stores[t] ?? 0) > 0);
-    const next = have[(have.indexOf(cur!) + 1) % have.length];
-    if (!next || next === cur) { this.say(`No other ammunition for the ${WEAPONS[p.w.def].name.toLowerCase()}.`, 2); return; }
-    const m = this.playerMag.get(p.w.uid) ?? 0;
-    if (cur && m > 0) add(cur, m * prof.perShot);
-    this.playerMag.set(p.w.uid, 0);
+    this.reloadSfx?.cancel();
+    this.jam = null;
     p.burstLeft = 0;
-    p.w.ammoType = next;
-    this.playerReload = 0;
-    this.say(`Loading ${ammoLabel(next).toLowerCase()}.`, 2);
-    this.startReload();
+    if (!this.playerMag.has(p.w.uid)) this.playerMag.set(p.w.uid, 0);
+    const prof = this.prof(p.w, p.s);
+    this.playerCd = Math.max(this.playerCd, drawTime(prof));
+    this.bloomShot = Math.max(this.bloomNow(), 0.05);
+    this.lastShotT = this.t;
+    this.climbN = 0;
+    sfx.reload(gunSoundFor(p.w.def).reload, 'out');
+    this.text(this.mouse.x, this.mouse.y - 26, (p.w.name ?? WEAPONS[p.w.def].name).toLowerCase(), '#d9c9a0', 11);
   }
 
-  cycleWeapon() {
+  cycleWeapon(dir = 1) {
     const p = this.player;
     const list = this.available();
     if (!p || !list.length) return;
     const i = p.w ? list.indexOf(p.w) : -1;
-    this.switchWeapon((i + 1) % list.length);
+    this.switchWeapon((i + dir + list.length) % list.length);
   }
 
+  // ---------- orders ----------
+  /** The guards the player can give orders to (not the leader), in their order on the line, left to right. */
+  orderable() { return this.guards.filter((g) => g !== this.player && !g.s.dead && !g.fled).sort((a, b) => a.homeX - b.homeX); }
+  selectGuard(i: number, wrap = false) {
+    const list = this.orderable();
+    if (!list.length) return;
+    if (wrap) i = ((i % list.length) + list.length) % list.length;
+    const g = list[i];
+    if (!g) return;
+    this.sel = i;
+    sfx.ui();
+    const mag = g.w ? `${g.mag}/${this.prof(g.w, g.s).mag}` : '';
+    this.say(`${first(g.s)} — ${g.w ? (g.w.name ?? WEAPONS[g.w.def].name).toLowerCase() : 'no gun'} ${mag} — ${POST_NAMES[g.post].toLowerCase()}, ${ORDER_NAMES[g.order].toLowerCase()}`, 2.5);
+  }
+  selected(): Guard | undefined { return this.sel >= 0 ? this.orderable()[this.sel] : undefined; }
+  giveOrder(o: Order, all: boolean) {
+    const list = all ? this.orderable() : [this.selected()].filter((g): g is Guard => !!g);
+    if (!list.length) { this.say('Select a guard first: [1-9] or [Tab]. Shift sets everyone.', 2.5); return; }
+    for (const g of list) g.order = o;
+    sfx.ui();
+    this.say(`${all ? 'Everyone' : first(list[0].s)}: ${ORDER_NAMES[o].toLowerCase()}.`, 2);
+  }
+  cyclePost() {
+    const g = this.selected();
+    if (!g) { this.say('Select a guard first: [1-9] or [Tab].', 2); return; }
+    const opts: Post[] = ['step', 'loop', 'runner', ...(this.roofNest() ? ['roof' as Post] : [])];
+    let next = opts[(opts.indexOf(g.post) + 1) % opts.length];
+    // one at the loophole, one on the roof
+    for (let k = 0; k < opts.length && (next === 'loop' || next === 'roof') && this.guards.some((o) => o !== g && o.post === next && !o.s.dead); k++) next = opts[(opts.indexOf(next) + 1) % opts.length];
+    this.placePost(g, next);
+    this.say(`${first(g.s)} to the ${POST_NAMES[g.post].toLowerCase()}.`, 2);
+  }
+  markTarget() {
+    const z = this.pick(this.mouse.x, this.mouse.y);
+    if (!z) return;
+    this.mark = { id: z.id, t: 5 };
+    sfx.ui();
+  }
+  /** [E]: a Rally, banked from a five-headshot streak. */
+  useRally() {
+    const p = this.player;
+    if (!p || this.rally <= 0 || this.rallyT > 0) { if (this.rally <= 0) this.text(this.mouse.x, this.mouse.y - 30, 'no rally banked', '#a89c84', 10); return; }
+    this.rally--;
+    this.rallyT = 4 + 0.4 * p.s.skills.social;
+    this.nerve = Math.min(this.nerveMax, this.nerve + 20);
+    this.say(`${first(p.s)}: "${R.pick(['Hold! Hold the line!', 'Pick your shots! Heads!', 'Steady — they die like anybody!', 'With me! Now!'])}"`, 3);
+    for (const g of this.guards) if (this.standing(g) && g.mode === 'panic') { g.mode = undefined; g.panicAt = undefined; }
+    const fled = this.guards.find((g) => g.fled && !g.s.dead && g.s.id !== G.flags.turningTonight);
+    if (fled && R.chance(0.6)) { fled.fled = false; fled.x = fled.homeX; this.say(`${first(fled.s)} comes back to the wall.`, 3); }
+    tale(p.s, `Called the line together, night ${G.day}.`);
+    for (const g of this.guards) if (g !== p && this.standing(g)) changeOpinion(g.s, p.s, 3);
+    sfx.bell();
+  }
   say(text: string, life = 5) {
     this.messages.push({ text, life });
     if (this.messages.length > 4) this.messages.shift();
@@ -442,8 +656,14 @@ export class Battle {
       this.last = now;
       const quiet = !this.zombies.some((z) => z.state !== 'dying' && z.x < 1000);
       if (!this.paused) {
-        const steps = this.fast && quiet && !this.done ? 4 : 1;
-        for (let i = 0; i < steps; i++) this.update(this.slowmo > 0 ? dt * 0.35 : dt);
+        // hitstop: a heavy hit holds the world still for a few frames (never the nerve clock)
+        if (this.hitstop > 0) { this.hitstop -= dt; this.tickNerve(dt * 0.5); }
+        else {
+          const steps = this.fast && quiet && !this.done ? 4 : 1;
+          this.timeScale = (this.slowmo > 0 ? 0.35 : 1) * (this.focusing ? 0.6 : 1);
+          for (let i = 0; i < steps; i++) this.update(dt * this.timeScale);
+          this.tickNerve(dt);
+        }
       }
       if (this.ended) return;
       this.draw();
@@ -457,8 +677,11 @@ export class Battle {
     cancelAnimationFrame(this.raf);
     window.removeEventListener('keydown', this.keyHandler);
     window.removeEventListener('keyup', this.keyUp);
+    window.removeEventListener('blur', this.blurHandler);
+    this.reloadSfx?.cancel();
     const c = this.canvas;
     c.onmousemove = c.onmousedown = c.onmouseup = null;
+    c.onwheel = null;
     c.ontouchstart = c.ontouchmove = c.ontouchend = null;
     wind(false);
   }
@@ -469,7 +692,14 @@ export class Battle {
     this.intro = Math.max(0, this.intro - dt);
     this.slowmo = Math.max(0, this.slowmo - dt);
     this.shake = Math.max(0, this.shake - dt * 18);
-    this.bloom = Math.max(0, this.bloom - dt * 0.12);
+    this.bloom = this.bloomNow();
+    this.rallyT = Math.max(0, this.rallyT - dt);
+    if (this.mark) { this.mark.t -= dt; const mz = this.zombies.find((z) => z.id === this.mark!.id); if (this.mark.t <= 0 || !mz || mz.state === 'dying') this.mark = null; }
+    this.firedHard = Math.max(0, this.firedHard - dt * 1.5);
+    if (this.hitMark) { this.hitMark.t -= dt; if (this.hitMark.t <= 0) this.hitMark = null; }
+    for (const g of this.guards) { g.blind = Math.max(0, g.blind - dt); g.duck = Math.max(0, g.duck - dt); }
+    this.updateGlobs(dt);
+    this.updatePiles(dt);
     this.surge = Math.max(0, this.surge - dt);
     this.sharp = Math.max(0, this.sharp - dt);
     this.drainOpen = Math.max(0, this.drainOpen - dt);
@@ -558,12 +788,12 @@ export class Battle {
     const yoff = R.range(-3, 3);
     const y = LANES[lane] + yoff;
     const jit = R.range(0.96, 1.04);
-    const hpMul = def.ranged || def.boss ? 1 : 1 + Math.max(0, G.day - 8) * 0.03;
+    const hpMul = def.ranged || def.boss ? 1 : 1 + Math.max(0, G.day - 8) * 0.02; // balance.md §8.9
     const sprite = R.pick(def.sprites);
     const z: Zombie = {
       id: this.nextId++, def, sprite, x: W + R.range(30, 120), y, hp: def.hp * hpMul, maxHp: def.hp * hpMul, state: 'walk',
       phase: R.range(0, 10), flash: 0, slow: 0, burn: 0, dieT: 0, maulT: 0, lungeT: R.range(1, 3), screamT: R.range(3, 6), scale: depthScale(y) * jit, wallHit: 0, name,
-      lane, ty: y, jit, variant: R.int(0, 2), laneCd: 1, blocked: 0,
+      lane, ty: y, jit, variant: R.int(0, 2), laneCd: 1, blocked: 0, stun: 0, legDmg: 0, armDmg: 0,
     };
     const w = this.zw(z);
     // heads alternate in x as well as y: stand off from the neighbours, never on top of the one ahead
@@ -609,6 +839,12 @@ export class Battle {
       sfx.bell();
     } else if (def.lunge) {
       this.dogBark('a runner');
+    } else if (def.spit) {
+      z.stopX = R.range(560, 780);
+      z.spitT = R.range(1.5, 3);
+      if (!this.hints.has('biler')) { this.hints.add('biler'); this.say('A Biler. It spits over the wall — hold [S] to duck, or shoot the glob.', 5); }
+    } else if (def.leap) {
+      if (!this.hints.has('buck')) { this.hints.add('buck'); this.say('A Buck. When it crouches and its eyes catch the light, it jumps. Shoot it in the crouch.', 5); }
     }
     this.zombies.push(z);
     if (name) {
@@ -635,7 +871,7 @@ export class Battle {
     this.zombies.push({
       id: this.nextId++, def: ZOMBIES.sleeper, sprite: s.sex === 'm' ? 'z_shambler' : 'z_shambler2', x, y, hp: 90, maxHp: 90, state: 'over',
       phase: 0, flash: 0, slow: 0, burn: 0, dieT: 0, maulT: 0, lungeT: 0, screamT: 99, scale: depthScale(y), name: first(s), wallHit: 0,
-      lane: 3, ty: y, jit: 1, variant: 0, laneCd: 0, blocked: 0,
+      lane: 3, ty: y, jit: 1, variant: 0, laneCd: 0, blocked: 0, stun: 0, legDmg: 0, armDmg: 0,
     });
     this.say(`${first(s).toUpperCase()} HAS TURNED. Behind the wall.`, 7);
     this.shake = 8;
@@ -645,6 +881,11 @@ export class Battle {
   }
 
   // ---------- shooting ----------
+  // The leader's gun (docs/balance.md §8, research 05 §3, DESIGN "real, not annoying"):
+  // patience is accurate (aimed shots ×0.6, bloom that recovers in a third of a second),
+  // spraying is not (per-class kick to a 0.30 cap, recoil climb, heat). Skill reaches the hand
+  // as sway. The gun's state (chamber, partial mags, the tube, stoppages) is the player's to manage,
+  // but [R] always does the sensible thing.
   updatePlayer(dt: number) {
     const p = this.player;
     if (p !== this.lastPlayer) {
@@ -654,16 +895,39 @@ export class Battle {
       if (p?.w) this.playerMag.set(p.w.uid, p.mag);
       if (o) o.burstLeft = 0;
       this.playerReload = 0;
+      this.jam = null;
+      this.reloadKind = 'tac';
     }
     this.lastPlayer = p;
     if (!p || !p.w) return;
     this.playerCd -= dt;
-    const prof = this.prof(p.w);
+    this.settle = Math.max(0, this.settle - dt);
+    const prof = this.eff(p);
+    // heat bleeds off quickly once the trigger is let go
+    for (const [uid, h] of this.heat) this.heat.set(uid, Math.max(0, h - heatCool(prof) * dt));
+    if (this.jam && this.jam.clearing > 0) {
+      this.jam.clearing -= dt;
+      if (this.jam.clearing <= 0) {
+        if (this.jam.kind === 'barrel') { this.heat.set(p.w.uid, 0); this.say('Fresh barrel.', 1.5); }
+        this.jam = null;
+        sfx.reload(gunSoundFor(p.w.def).reload, 'rack');
+      }
+    }
     if (this.playerReload > 0) {
       this.playerReload -= dt;
       if (this.playerReload <= 0) this.finishReload(p);
     }
+    // a hold on [R] is a speed reload: the magazine goes in the snow
+    if (this.rDown >= 0 && !this.rDone && performance.now() - this.rDown > 350) {
+      this.rDone = true;
+      this.startReload('speed');
+    }
+    // the settle time of a slow optic: swinging onto a new body
+    const hv = this.hover;
+    if (hv && hv.id !== this.settleId) { this.settleId = hv.id; if (prof.switchTime > 0) this.settle = prof.switchTime; }
     p.face = this.mouse.x < p.x - 12 ? -1 : 1;
+    // the recoil climb falls away when the string of fire ends
+    if (this.t - this.lastShotT > Math.max(0.18, 1.6 / prof.rof)) { this.climbN = 0; this.climbY = Math.max(0, this.climbY - dt * 120); }
     if (p.burstLeft > 0) {
       p.burstT -= dt;
       if (p.burstT <= 0) this.playerRound(p, prof);
@@ -672,15 +936,38 @@ export class Battle {
     p.flash = Math.max(0, p.flash - dt);
   }
 
-  // fireProfile is pure; cache it per gun until its condition or load changes
-  profCache = new Map<string, { cond: number; ammo: Res | undefined; p: FireProfile }>();
-  prof(w: WeaponItem): FireProfile {
-    const c = this.profCache.get(w.uid);
-    if (c && Math.abs(c.cond - w.cond) < 0.02 && c.ammo === w.ammoType) return c.p;
-    const p = fireProfile(w);
-    this.profCache.set(w.uid, { cond: w.cond, ammo: w.ammoType, p });
+  // fireProfile is pure; cache it per gun (and shooter, and load) until its condition changes
+  profCache = new Map<string, { cond: number; p: FireProfile }>();
+  prof(w: WeaponItem, s?: Survivor, ammo?: Res): FireProfile {
+    const key = `${w.uid}|${s?.id ?? ''}|${ammo ?? w.ammoType ?? ''}`;
+    const c = this.profCache.get(key);
+    if (c && Math.abs(c.cond - w.cond) < 0.02) return c.p;
+    const item = ammo ? { ...w, ammoType: ammo } : w;
+    const cls = WEAPONS[w.def]?.cls ?? 'improvised';
+    const p = fireProfile(item, s ? { shooter: shooterMods(s, cls, !s.isLeader || s !== this.player?.s) } : {});
+    this.profCache.set(key, { cond: w.cond, p });
     return p;
   }
+  /** The leader's profile as the selector and the tube make it: semi / burst / auto, and the next shell's type. */
+  eff(p: Guard, ammo?: Res): FireProfile {
+    const w = p.w!;
+    const base = this.prof(w, p.s, ammo);
+    const mode = this.modes.get(w.uid);
+    if (!mode || mode === fireModes(w, base)[0]) return base;
+    if (mode === 'semi') return { ...base, auto: false, burst: 1 };
+    // burst on an automatic: three rounds at its cyclic rate
+    return { ...base, auto: false, burst: base.burst > 1 ? base.burst : 3, burstGap: base.burst > 1 ? base.burstGap : 1 / base.rof };
+  }
+  /** Shell types in a tube gun's magazine, top (next to fire) last. Kept the same length as the round count. */
+  tubeOf(w: WeaponItem, n: number): Res[] {
+    let t = this.tube.get(w.uid);
+    if (!t) { t = []; this.tube.set(w.uid, t); }
+    const def = selectedAmmo(w);
+    while (t.length < n && def) t.unshift(def);
+    if (t.length > n) t.splice(0, t.length - n);
+    return t;
+  }
+  usesTube(w: WeaponItem, p: FireProfile) { return p.reloadPerRound && ammoTypesFor(w.def).length > 1; }
 
   // take up to `want` rounds of this profile's ammunition out of the stores
   loadFromStores(prof: FireProfile, want: number) {
@@ -690,107 +977,287 @@ export class Battle {
     return got;
   }
 
-  startReload() {
+  /** [R]: clear a stoppage first; otherwise reload — tactical (the partial mag goes in the pouch, one stays chambered), empty, or speed (hold [R]: the mag is dropped). */
+  startReload(kind: 'smart' | 'speed' | 'auto' = 'smart') {
     const p = this.player;
-    if (!p || !p.w || this.playerReload > 0) return;
-    const prof = this.prof(p.w);
+    if (!p || !p.w) return;
+    if (this.jam) {
+      if (this.jam.clearing <= 0) {
+        this.jam.clearing = this.jam.kind === 'barrel' ? 2.2 * (1.1 - prof(p.s, 'heavy') * 0.04) : clearTime(this.prof(p.w, p.s), p.s, this.jam.kind);
+        if (this.jam.kind === 'double') this.say('Double-feed. Lock, strip, rack.', 2);
+        sfx.reload(gunSoundFor(p.w.def).reload, this.jam.kind === 'barrel' ? 'out' : 'bolt');
+      }
+      return;
+    }
+    if (this.playerReload > 0) return;
+    const prof0 = this.prof(p.w, p.s);
     const mag = this.playerMag.get(p.w.uid) ?? 0;
-    if (mag >= prof.mag) return;
-    if (roundsInStores(prof, G.stores) < 1) {
-      this.say(`No ${ammoLabel(prof.ammoRes).toLowerCase()} left. Switch weapons [Q].`, 2);
-      sfx.click();
+    const keep = hasChamber(p.w, prof0) && mag > 0 ? 1 : 0;
+    if (mag >= prof0.mag + keep) return;
+    const pouchKey = `${p.w.uid}|${prof0.ammoRes}`;
+    const pouch = this.pouch.get(pouchKey) ?? [];
+    if (roundsInStores(prof0, G.stores) < 1 && !pouch.length) {
+      this.say(`No ${ammoLabel(prof0.ammoRes).toLowerCase()} left. Switch weapons [Q].`, 2);
+      sfx.dry();
       return;
     }
     const armHurt = p.s.wounds.some((w) => w.part === 'larm' || w.part === 'rarm') ? 1.35 : 1;
     const lost = p.s.scars.some((s) => s.label.includes('arm')) ? 1.6 : 1;
-    // shell-by-shell guns reload one round at a time, and firing interrupts it
-    this.playerReload = prof.reload * armHurt * lost * (!prof.reloadPerRound && p.w.cond < 0.4 ? 1.3 : 1);
-    sfx.reload();
+    const runner = this.guards.some((g) => g.post === 'runner' && this.standing(g)) ? 0.85 : 1;
+    let t = prof0.reload * armHurt * lost * runner * (!prof0.reloadPerRound && p.w.cond < 0.4 ? 1.3 : 1);
+    if (!prof0.reloadPerRound) {
+      if (mag <= keep) { this.reloadKind = 'empty'; if (hasChamber(p.w, prof0)) t += 0.3; } // rack the slide
+      else if (kind === 'speed') {
+        this.reloadKind = 'speed';
+        t *= 0.7;
+        // the mag goes in the snow: picked up at dawn if the wall holds (never on Hardcore)
+        const res = prof0.ammoRes;
+        if (res) this.dropped[res] = (this.dropped[res] ?? 0) + (mag - keep) * prof0.perShot;
+        this.droppedMags++;
+        this.playerMag.set(p.w.uid, keep);
+        this.text(p.x + 30, p.y - 110, 'mag dropped', '#a89c84', 10);
+      } else {
+        this.reloadKind = 'tac';
+        if (mag - keep > 0) pouch.push(mag - keep);
+        this.pouch.set(pouchKey, pouch);
+        this.playerMag.set(p.w.uid, keep);
+      }
+    } else this.reloadKind = 'tac';
+    this.playerReload = t;
+    this.reloadTotal = t;
+    this.reloadSfx?.cancel();
+    if (prof0.reloadPerRound) sfx.reload(gunSoundFor(p.w.def).reload, 'shell');
+    else this.reloadSfx = sfx.reloadFor(p.w.def, t);
+    void kind;
   }
 
   finishReload(g: Guard) {
     if (!g.w) return;
-    const prof = this.prof(g.w);
+    const prof = this.prof(g.w, g.s);
     const mag = this.playerMag.get(g.w.uid) ?? 0;
-    const got = this.loadFromStores(prof, prof.reloadPerRound ? 1 : prof.mag - mag);
-    this.playerMag.set(g.w.uid, mag + got);
     if (prof.reloadPerRound) {
-      sfx.shell();
+      // one shell at a time, of whatever type is selected for the next load
+      const tube = this.usesTube(g.w, prof) ? this.tubeOf(g.w, mag) : null;
+      const got = this.loadFromStores(prof, 1);
+      this.playerMag.set(g.w.uid, mag + got);
+      if (tube && got && prof.ammoRes) tube.push(prof.ammoRes);
       if (mag + got < prof.mag && got > 0) this.startReload();
-    } else sfx.reload();
+      return;
+    }
+    // fullest first: a fresh magazine from the stores, else the fullest partial from the pouch
+    const pouchKey = `${g.w.uid}|${prof.ammoRes}`;
+    const pouch = this.pouch.get(pouchKey) ?? [];
+    const fresh = Math.min(prof.mag, roundsInStores(prof, G.stores));
+    pouch.sort((a, b) => a - b);
+    let got: number;
+    if (fresh < prof.mag && pouch.length && pouch[pouch.length - 1] > fresh) got = pouch.pop()!;
+    else got = this.loadFromStores(prof, prof.mag);
+    this.pouch.set(pouchKey, pouch);
+    this.playerMag.set(g.w.uid, mag + got);
   }
 
+  /** [T]: the next bullet type. Box mags: the next magazine. A tube: the next shell — and if the tube is full, swap the top shell for it (slug swap). */
+  cycleAmmo() {
+    const p = this.player;
+    if (!p || !p.w) return;
+    const types = ammoTypesFor(p.w.def);
+    if (types.length < 2) return;
+    const prof0 = this.prof(p.w, p.s);
+    const cur = prof0.ammoRes;
+    const have = types.filter((t) => t === cur || (G.stores[t] ?? 0) > 0);
+    const next = have[(have.indexOf(cur!) + 1) % have.length];
+    if (!next || next === cur) { this.say(`No other ammunition for the ${WEAPONS[p.w.def].name.toLowerCase()}.`, 2); return; }
+    p.burstLeft = 0;
+    if (this.usesTube(p.w, prof0)) {
+      const m = this.playerMag.get(p.w.uid) ?? 0;
+      const tube = this.tubeOf(p.w, m);
+      p.w.ammoType = next;
+      this.say(`Next shell: ${ammoLabel(next).toLowerCase()}.`, 2);
+      if (m >= prof0.mag && this.playerReload <= 0 && tube.length) {
+        // thumb the top shell out, feed the new one in
+        const out = tube.pop()!;
+        add(out, this.prof(p.w, p.s, out).perShot);
+        this.playerMag.set(p.w.uid, m - 1);
+        this.startReload();
+      } else if (this.playerReload <= 0) this.startReload();
+      return;
+    }
+    const m = this.playerMag.get(p.w.uid) ?? 0;
+    if (cur && m > 0) add(cur, m * prof0.perShot);
+    this.playerMag.set(p.w.uid, 0);
+    p.w.ammoType = next;
+    this.playerReload = 0;
+    this.say(`Loading ${ammoLabel(next).toLowerCase()}.`, 2);
+    this.startReload();
+  }
+
+  /** [B]: the fire selector, where the gun has one. */
+  cycleMode() {
+    const p = this.player;
+    if (!p || !p.w) return;
+    const modes = fireModes(p.w, this.prof(p.w, p.s));
+    if (modes.length < 2) { this.say('No selector on this one.', 1.5); return; }
+    const cur = this.modes.get(p.w.uid) ?? modes[0];
+    const next = modes[(modes.indexOf(cur) + 1) % modes.length];
+    this.modes.set(p.w.uid, next);
+    p.burstLeft = 0;
+    sfx.reload(gunSoundFor(p.w.def).reload, 'close');
+    this.text(this.mouse.x, this.mouse.y - 26, next.toUpperCase(), '#d9c9a0', 11);
+  }
+
+  /** Can the leader shoot right now? (Not ducked, not mid-reload of a box mag, not jammed.) */
   tryFire(click: boolean) {
     const p = this.player;
     if (!p || !p.w || this.done || this.intro > 3.2 || p.burstLeft > 0) return;
-    if (this.hooks.some((h) => h.blockFire?.())) return; // night modules: on a gun nest
-    const prof = this.prof(p.w);
+    const prof = this.eff(p);
     if (!click && !prof.auto) return;
     if (this.playerCd > 0) return;
+    if (this.ducking) return;
+    if (this.jam) {
+      if (click && this.jam.clearing <= 0) { sfx.dry(); this.text(this.mouse.x, this.mouse.y - 24, this.jam.kind === 'barrel' ? 'BARREL — [R]' : 'JAMMED — [R]', '#e0a060', 11); }
+      this.playerCd = 0.2;
+      return;
+    }
     if (this.playerReload > 0) {
       // firing interrupts a shell-by-shell reload
-      if (prof.reloadPerRound && (this.playerMag.get(p.w.uid) ?? 0) > 0) this.playerReload = 0;
+      if (prof.reloadPerRound && (this.playerMag.get(p.w.uid) ?? 0) > 0) { this.playerReload = 0; this.reloadSfx?.cancel(); }
       else return;
     }
     const mag = this.playerMag.get(p.w.uid) ?? 0;
     if (mag <= 0) {
-      sfx.click();
-      this.startReload();
+      sfx.dry();
+      this.startReload('auto');
       this.playerCd = 0.25;
       return;
     }
-    // worn and improvised guns jam
-    if (R.chance(prof.jam)) {
-      this.say(`${p.w.name ?? WEAPONS[p.w.def].name} jammed.`, 1.5);
-      sfx.click();
-      this.playerCd = prof.jamClear;
+    // an LMG run too hot has to have its barrel changed
+    if (swapsBarrel(p.w) && (this.heat.get(p.w.uid) ?? 0) >= heatLimit(prof) * 1.7) {
+      this.jam = { kind: 'barrel', clearing: 0 };
+      this.say('The barrel is glowing. [R] to swap it.', 2.5);
+      sfx.overheat();
       return;
     }
-    this.playerCd = 1 / prof.rof;
+    // malfunctions: never the first shot of the night; worn guns, cold without oil and heat make them likelier
+    if (this.shotsTonight > 0) {
+      const cold = (G.weather === 'cold' || G.weather === 'snow' || this.plan.special === 'crossing') && G.flags.oiledDay !== G.day ? 1.7 : 1;
+      const hot = usesHeat(prof) && (this.heat.get(p.w.uid) ?? 0) > heatLimit(prof) ? 0.015 : 0;
+      if (R.chance(prof.jam * cold + hot)) {
+        const kind: Malfunction = R.chance(realism() === 'hardcore' ? 0.3 : 0.1) ? 'double' : 'tap';
+        this.jam = { kind, clearing: 0 };
+        p.burstLeft = 0;
+        this.say(kind === 'double' ? `${p.w.name ?? WEAPONS[p.w.def].name}: double-feed. [R]` : `${p.w.name ?? WEAPONS[p.w.def].name} jammed. Tap [R].`, 1.8);
+        sfx.jam();
+        this.playerCd = 0.15;
+        return;
+      }
+    }
+    const natural = this.prof(p.w, p.s);
+    if (natural.auto && prof.burst > 1) this.playerCd = prof.burst / natural.rof + 0.14; // burst on an automatic
+    else if (natural.auto && !prof.auto) this.playerCd = Math.max(1 / natural.rof, 0.09); // semi: as fast as the finger
+    else this.playerCd = 1 / prof.rof;
     p.burstLeft = Math.min(prof.burst, mag);
     p.burstT = 0;
     this.playerRound(p, prof);
   }
 
+  /** The leader's current bloom (rad): held for a beat after a shot, then halving every 0.15 s. */
+  bloomNow() { return bloomAfter(this.bloomShot, this.t - this.lastShotT); }
+  /** Is the next shot an aimed one? */
+  aimedNow(prof: FireProfile) { return this.t - this.lastShotT >= aimedDelay(prof) && this.bloomNow() < 0.01 && this.settle <= 0; }
+  /** Where the leader's hand actually points: the crosshair, plus sway (skill), climb (autos) and the shakes. */
+  aimPoint(p: Guard) {
+    const aim = this.aimOf(p);
+    const sw = (1 - Math.min(1, aim)) * 16 * (this.focusing ? 0.5 : 1) * (this.shakeT > 0 ? 1.6 : 1);
+    const f = 0.7 * Math.PI * 2;
+    const sx = (Math.sin(this.t * f) * 0.6 + Math.sin(this.t * f * 0.61 + 1.3) * 0.4) * sw;
+    const sy = (Math.sin(this.t * f * 0.83 + 2.1) * 0.6 + Math.sin(this.t * f * 0.47 + 0.4) * 0.4) * sw;
+    const tremor = this.shakeT > 0 ? R.range(-3, 3) : 0;
+    return { x: this.mouse.x + sx + tremor, y: this.mouse.y + sy - this.climbY + tremor };
+  }
+  aimOf(p: Guard) { return aimFactor(p.s) + (this.rallyT > 0 ? 0.25 : 0) - (p.blind > 0 ? 0.35 : 0); }
+  /** The leader's single-projectile spread and pellet cone right now. */
+  spreadNow(p: Guard, prof: FireProfile) {
+    const aim = this.aimOf(p);
+    const bloom = this.bloomNow();
+    const aimed = this.aimedNow(prof);
+    const hot = usesHeat(prof) && p.w && (this.heat.get(p.w.uid) ?? 0) > heatLimit(prof) ? 1.4 : 1;
+    const k = (aimed ? 0.6 : 1) * (this.focusing ? 0.4 : 1) * hot * (this.shakeT > 0 ? 1.35 : 1) * (this.settle > 0 ? 1 + 1.5 * this.settle / Math.max(0.05, prof.switchTime) : 1) * (p.blind > 0 ? 1.6 : 1);
+    const single = (prof.spread * (1.75 - aim) + bloom) * k;
+    const cone = prof.spread * (0.75 + bloom / 0.08) * (1.3 - 0.3 * Math.min(1.2, aim)) * (aimed ? 0.85 : 1) * (this.focusing ? 0.7 : 1) * hot;
+    return { single, cone, aimed };
+  }
+
   // one round of the leader's trigger pull (bursts call this again, burstGap apart)
-  playerRound(p: Guard, prof: FireProfile) {
+  playerRound(p: Guard, prof0: FireProfile) {
     if (!p.w) { p.burstLeft = 0; return; }
     do {
       const mag = this.playerMag.get(p.w.uid) ?? 0;
       if (mag <= 0) { p.burstLeft = 0; break; }
+      // a tube gun fires whatever shell is on top
+      const tube = this.usesTube(p.w, prof0) ? this.tubeOf(p.w, mag) : null;
+      const top = tube?.pop();
+      const prof = top && top !== prof0.ammoRes ? this.eff(p, top) : prof0;
       this.playerMag.set(p.w.uid, mag - 1);
       p.burstLeft--;
-      const aim = aimFactor(p.s);
       const mz = this.muzzle(p);
-      const base = Math.atan2(this.mouse.y - mz.y, this.mouse.x - mz.x);
-      const spreadA = prof.spread * (1.75 - aim) + this.bloom;
+      const ap = this.aimPoint(p);
+      const base = Math.atan2(ap.y - mz.y, ap.x - mz.x);
+      const sp = this.spreadNow(p, prof);
       // Last Stand: the crosshair is the shot. It goes into the lane under it, and a body
       // standing in front in another lane does not take it.
       const laneY = this.targetLane();
       const li = nearestLane(laneY);
+      this.shotHit = false;
       if (prof.explosive && prof.arc) {
         // lobbed over the front rank: lands at the crosshair's x on the target lane
-        const tx = Math.max(WALL_X + 30, this.mouse.x + (R.next() + R.next() - 1) * spreadA * Math.abs(this.mouse.x - mz.x) * 1.5);
+        const tx = Math.max(WALL_X + 30, ap.x + (R.next() + R.next() - 1) * sp.single * Math.abs(ap.x - mz.x) * 1.5);
         this.lobs.push({ x0: mz.x, y0: mz.y, x1: tx, y1: laneY, t: 0, dur: 0.6, p: prof, g: p });
       } else if (prof.explosive) {
-        const hit = this.castShot(p, mz.x, mz.y, base + (R.next() + R.next() - 1) * spreadA, prof.dmg, 0, prof.knock, false, true, prof, laneY);
+        const hit = this.castShot(p, mz.x, mz.y, base + (R.next() + R.next() - 1) * sp.single, prof.dmg, 0, prof.knock, false, true, prof, laneY);
         this.blast(hit.x, laneY, prof.explosive, prof.knock, p);
       } else for (let i = 0; i < prof.pellets; i++) {
-        const a = base + (R.next() + R.next() - 1) * (prof.pellets > 1 ? prof.spread : spreadA);
+        const a = base + (R.next() + R.next() - 1) * (prof.pellets > 1 ? sp.cone : sp.single);
         // buckshot sprays a little through depth: 25% per pellet into an adjacent lane
         let ly = laneY;
         if (prof.pellets > 1 && R.chance(0.25)) { const adj = LANES[li + (R.chance(0.5) ? 1 : -1)]; if (adj !== undefined) ly = adj; }
         this.castShot(p, mz.x, mz.y, a, prof.dmg, prof.pierce, prof.knock, prof.pellets > 1, true, prof, ly);
       }
-      // the leader fires from the wall: a bipod braces
-      this.bloom = Math.min(0.12, this.bloom + (prof.spread * 0.35 + (prof.auto ? 0.004 : 0.012)) * prof.bloomMul * prof.braceBloomMul);
+      // a headshot streak breaks on three misses running
+      if (this.shotHit) this.misses = 0;
+      else if (++this.misses >= 3) this.streak = 0;
+      // bloom, climb, heat
+      const continuous = this.t - this.lastShotT < Math.max(0.2, 1.5 / prof.rof);
+      this.bloomShot = Math.min(BLOOM_CAP, this.bloomNow() + kickFor(p.w, prof) * (this.focusing ? 0.5 : 1) * (hasTrait(p.s, 'steady') ? 0.75 : 1));
+      this.lastShotT = this.t;
+      this.climbN = continuous ? this.climbN + 1 : 0;
+      const armHurt = p.s.wounds.some((w) => w.part === 'larm' || w.part === 'rarm') ? 1.3 : 1;
+      this.climbY = climbFor(p.w, prof) * Math.min(this.climbN, 10) * armHurt * (this.focusing ? 0.5 : 1) * (this.shakeT > 0 ? 1.5 : 1);
+      if (usesHeat(prof)) {
+        const h = (this.heat.get(p.w.uid) ?? 0) + (p.w.cond < 0.5 ? 1.2 : 1);
+        if (h > heatLimit(prof) && (this.heat.get(p.w.uid) ?? 0) <= heatLimit(prof)) { sfx.overheat(); this.text(p.x + 40, p.y - 120, 'running hot', '#e08a40', 10); }
+        this.heat.set(p.w.uid, h);
+      }
+      if (this.focusing) this.nerve = Math.max(0, this.nerve - 3);
+      this.shotsTonight++;
+      this.firedHard += 1;
       this.roundFired(p, prof, mz, false);
-      this.shake = Math.max(this.shake, (prof.knock / 6) * prof.recoilMul);
+      const pull = prof.dmg * prof.pellets / Math.max(1, ZOMBIES.sleeper.hp);
+      const feel = (prof.auto ? 3.1 : 2.5 + 3.2 * Math.sqrt(pull)) * prof.recoilMul;
+      this.shake = Math.max(this.shake, feel * 0.55);
       G.stats.shots++;
       p.w.cond = Math.max(0.05, p.w.cond - 0.0008);
-    } while (p.burstLeft > 0 && prof.burstGap <= 0);
-    p.burstT = prof.burstGap;
-    if ((this.playerMag.get(p.w.uid) ?? 0) === 0 && p.burstLeft <= 0) this.startReload();
+      const left = this.playerMag.get(p.w.uid) ?? 0;
+      // the last round: a cue in the hand, not a number on the screen
+      if (left === 1 && prof.mag > 2) sfx.impact('metal', { volume: 0.35 });
+      // a bolt short-stroked by shaking hands
+      if (left > 0 && manualAction(p.w, prof) && this.nerve < this.nerveMax * 0.25 && R.chance(0.1)) {
+        this.jam = { kind: 'short', clearing: 0 };
+        p.burstLeft = 0;
+        this.text(p.x + 40, p.y - 120, 'short-stroked — [R]', '#e0a060', 10);
+      }
+    } while (p.burstLeft > 0 && prof0.burstGap <= 0);
+    p.burstT = prof0.burstGap;
+    if ((this.playerMag.get(p.w.uid) ?? 0) === 0 && p.burstLeft <= 0) this.startReload('auto');
   }
 
   // what every round does besides the bullet: flash, noise, brass, smoke, arrows to pick up later
@@ -847,32 +1314,68 @@ export class Battle {
   }
 
   // Ray against the zombies in one lane (±LANE_TOL); returns whether anything was hit, and where it stopped.
+  // Weakspots are tested first, then the head, then the body box, which is split into zones by the
+  // height the ray crosses the body's centre line: torso (top 40%), arms (40–55%), legs (bottom 45%).
   castShot(g: Guard, ox: number, oy: number, ang: number, dmg: number, pierce: number, knock: number, pellet: boolean, isPlayer: boolean, fx: FireProfile | undefined, laneY: number) {
     for (const h of this.hooks) if (h.onShot?.(g, ox, oy, ang, laneY, pellet, isPlayer)) return { hit: true, x: ox, y: oy }; // night modules (propane)
     const dx = Math.cos(ang), dy = Math.sin(ang);
-    const hits: { z: Zombie; t: number; head: boolean }[] = [];
+    const hits: { z: Zombie; t: number; head: boolean; zone: Zone; weak?: WeakKind }[] = [];
+    const circle = (cx: number, cy: number, r: number) => {
+      const hx = cx - ox, hy = cy - oy;
+      const tc = hx * dx + hy * dy;
+      const d2 = hx * hx + hy * hy - tc * tc;
+      return tc > 0 && d2 < r * r ? tc - Math.sqrt(r * r - d2) : -1;
+    };
     for (const z of this.zombies) {
-      if (z.state === 'dying' || (z.emerge !== undefined && z.emerge > 0.25)) continue;
+      if (z.state === 'dying' || (z.emerge !== undefined && z.emerge > 0.25) || z.leap) continue;
       if (Math.abs(z.y - laneY) > LANE_TOL) continue;
       // the guards' strays rarely find a man lying low in the dark behind the crowd
       if (!isPlayer && z.def.ranged && !((z.seen ?? 0) > 0) && R.chance(0.85)) continue;
       const hb = this.hitbox(z);
-      // head circle
-      const hx = hb.hx - ox, hy = hb.hy - oy;
-      const tc = hx * dx + hy * dy;
-      const d2 = hx * hx + hy * hy - tc * tc;
-      if (tc > 0 && d2 < hb.hr * hb.hr) {
-        hits.push({ z, t: tc - Math.sqrt(hb.hr * hb.hr - d2), head: true });
-        continue;
+      // weakspots: small, and worth it
+      let wk: { t: number; kind: WeakKind } | undefined;
+      for (const w of this.weakPts(z)) {
+        const t = circle(w.x, w.y, w.r * (pellet ? 1 : 1.1));
+        if (t >= 0 && (!wk || t < wk.t)) wk = { t, kind: w.kind };
       }
+      if (wk) { hits.push({ z, t: wk.t, head: false, zone: wk.kind === 'knee' ? 'leg' : 'torso', weak: wk.kind }); continue; }
+      // head circle
+      const th = hb.hr > 0 ? circle(hb.hx, hb.hy, hb.hr) : -1;
+      if (th >= 0) { hits.push({ z, t: th, head: true, zone: 'head' }); continue; }
       // body AABB slab test
       const t1 = (hb.x1 - ox) / dx, t2 = (hb.x2 - ox) / dx;
       const t3 = (hb.y1 - oy) / dy, t4 = (hb.y2 - oy) / dy;
       const tmin = Math.max(Math.min(t1, t2), Math.min(t3, t4));
       const tmax = Math.min(Math.max(t1, t2), Math.max(t3, t4));
-      if (tmax >= 0 && tmin <= tmax) hits.push({ z, t: Math.max(0, tmin), head: false });
+      if (tmax >= 0 && tmin <= tmax) {
+        const tc = Math.max(tmin, Math.min(tmax, (z.x - ox) / dx));
+        const yc = oy + dy * tc;
+        const f = (yc - hb.y1) / Math.max(1, hb.y2 - hb.y1);
+        const low = this.isCrawler(z);
+        const zone: Zone = low ? 'torso' : f > 0.55 ? 'leg' : f > 0.4 ? 'arm' : 'torso';
+        hits.push({ z, t: Math.max(0, tmin), head: false, zone });
+      }
     }
     hits.sort((a, b) => a.t - b.t);
+    // a bile glob in the air, if the shot crosses it before any body
+    if (isPlayer && this.globs.length) {
+      for (const b of this.globs) {
+        const gp = this.globPos(b);
+        const t = circle(gp.x, gp.y, pellet ? 11 : 9);
+        if (t >= 0 && t < (hits[0]?.t ?? 1600)) {
+          b.t = b.dur + 1; // gone
+          this.globs = this.globs.filter((x) => x !== b);
+          this.splash(gp.x, gp.y, b.gy0 + (b.gy1 - b.gy0) * gp.k, 1);
+          this.text(gp.x, gp.y - 14, 'POPPED', '#c8c050', 11);
+          this.hitMark = { kind: 'glob', t: 0.2 };
+          this.nerveGain(3);
+          sfx.impact('burst', { volume: 0.4 });
+          this.tracers.push({ x1: ox + dx * 20, y1: oy + dy * 20, x2: gp.x, y2: gp.y, life: 0.07, w: 1.6 });
+          this.shotHit = true;
+          return { hit: true, x: gp.x, y: gp.y };
+        }
+      }
+    }
     if (this.hooks.length) {
       let rt = hits[0]?.t ?? 1600;
       if (!hits.length && dy > 0) { const tg = (laneY - 2 - oy) / dy; if (tg > 0) rt = Math.min(rt, tg); }
@@ -887,9 +1390,11 @@ export class Battle {
     let n = 0;
     for (const h of hits) {
       // sawed-off barrels and the like: half damage past their range
-      const far = fx && h.t > fx.range ? 0.5 : 1;
-      this.damage(h.z, d * far, h.head, knock * far, g, pellet, ox + dx * h.t, oy + dy * h.t, isPlayer, fx);
-      if (isPlayer) G.stats.hits++;
+      let far = fx && h.t > fx.range ? 0.5 : 1;
+      // buckshot loses its bite past the wire (balance.md §8.6)
+      if (pellet) far *= Math.max(0.35, Math.min(1, 1 - ((h.t - 250) / 400) * 0.65));
+      this.damage(h.z, d * far, h.head, knock * far, g, pellet, ox + dx * h.t, oy + dy * h.t, isPlayer, fx, h.zone, h.weak);
+      if (isPlayer) { G.stats.hits++; this.shotHit = true; }
       n++;
       endT = h.t;
       if (n > pierce) break;
@@ -909,32 +1414,152 @@ export class Battle {
     return { hit: n > 0, x: ox + dx * Math.min(endT, 1400), y: oy + dy * Math.min(endT, 1400) };
   }
 
+  /** Low to the ground: a Drag, or one whose legs are gone. */
+  isCrawler(z: Zombie) { return !!z.def.crawl || (!!z.crippled && z.def.id !== 'ferryman'); }
+  /** How far up the corpse pile a climber has come (px). */
+  climbLift(z: Zombie) { return z.climb !== undefined ? (1 - z.climb / 1.4) * this.zh(z) * 0.5 : 0; }
+
   hitbox(z: Zombie) {
     const h = z.def.height * z.scale * ZS;
     const w = z.def.width * z.scale * ZS;
+    const lift = this.climbLift(z);
+    const f = z.flip ? -1 : 1;
+    if (z.crippled && !z.def.crawl && z.def.id !== 'ferryman') {
+      // dragging itself along on its arms: long, low, the head out in front
+      return { x1: z.x - h * 0.42, x2: z.x + h * 0.42, y1: z.y - h * 0.3, y2: z.y, hx: z.x - f * h * 0.4, hy: z.y - h * 0.2, hr: z.headless ? 0 : h * z.def.head * 0.56 };
+    }
     // raiders crouch behind a heap of junk; the lower body is behind it, and ducking drops the rest
     const cover = z.def.ranged && z.state === 'cover';
-    const top = z.y - h + (cover && z.ducked ? h * 0.32 : 0) + (z.emerge ? h * Math.min(1, z.emerge) : 0);
+    const crouch = z.def.leap && (z.windup ?? 0) > 0 ? h * 0.18 : 0;
+    const top = z.y - h - lift + crouch + (cover && z.ducked ? h * 0.32 : 0) + (z.emerge ? h * Math.min(1, z.emerge) : 0);
     const headH = h * z.def.head;
     const crawl = z.def.crawl;
-    const f = z.flip ? -1 : 1;
+    // the skull, not the hair (balance.md §8.7); a climber's head against the sky is easier
+    const hr = z.headless ? 0 : (crawl ? h * 0.3 : headH * 0.56) * (lift > 0 ? 1.4 : 1);
     return {
-      x1: z.x - w / 2, x2: z.x + w / 2, y1: top + (z.headless ? 0 : headH * 0.8), y2: cover ? z.y - h * 0.42 : z.y,
-      hx: z.x - f * w * (crawl ? 0.36 : 0.12), hy: crawl ? z.y - h * 0.62 : top + headH * 0.5, hr: z.headless ? 0 : (crawl ? h * 0.3 : headH * 0.62),
+      x1: z.x - w / 2, x2: z.x + w / 2, y1: top + (z.headless ? 0 : headH * 0.8), y2: cover ? z.y - h * 0.42 : z.y - lift,
+      hx: z.x - f * w * (crawl ? 0.36 : 0.12), hy: crawl ? z.y - h * 0.62 : top + headH * 0.5, hr,
     };
   }
 
-  damage(z: Zombie, dmg: number, head: boolean, knock: number, g: Guard | null, pellet: boolean, px: number, py: number, isPlayer: boolean, fx?: FireProfile) {
+  /** Weakspot circles in world space (none on a crawler, none while it is over the wall). */
+  weakPts(z: Zombie): { kind: WeakKind; x: number; y: number; r: number }[] {
+    const spots = WEAKSPOTS[z.sprite];
+    if (!spots || z.state === 'dying' || (z.crippled && z.def.id !== 'ferryman')) return [];
+    const h = this.zh(z);
+    const im = img(z.sprite);
+    const dw = im ? (im.width / im.height) * h : this.zw(z);
+    const left = z.x - dw / 2;
+    const lift = this.climbLift(z);
+    return spots.filter((s) => !(s.kind === 'knee' && z.crippled)).map((s) => ({
+      kind: s.kind, r: s.r * h,
+      x: z.flip ? z.x + dw / 2 - s.x * dw : left + s.x * dw,
+      y: z.y - h - lift + s.y * h,
+    }));
+  }
+
+  /** Freeze a body for a moment: no walking, no wall damage. */
+  stagger(z: Zombie, s: number) {
+    if (z.def.boss) return;
+    z.stun = Math.max(z.stun, s);
+    // a Buck knocked out of its crouch has to set itself again
+    if (z.def.leap && (z.windup ?? 0) > 0) z.windup = 0.8 + 0.5;
+  }
+  /** The Ferryman: two stagger hits within 1.2 s put it on the ground for 2.5 s, shoved back 60 px. */
+  ferryStagger(z: Zombie, g: Guard | null, isPlayer: boolean) {
+    z.stun = Math.max(z.stun, 0.5);
+    const now = this.t;
+    z.staggers = (z.staggers ?? []).filter((t) => now - t < 1.2);
+    z.staggers.push(now);
+    if (z.staggers.length >= 2 && !(z.down && z.down > 0)) {
+      z.staggers = [];
+      z.down = 2.5;
+      z.x = Math.min(W + 100, z.x + 60);
+      if (z.state === 'wall') z.state = 'walk';
+      this.text(z.x, z.y - this.zh(z) - 12, 'KNOCKED DOWN', '#e0c070', 14);
+      this.shake = Math.max(this.shake, 6);
+      sfx.thud();
+      if (isPlayer) this.nerveGain(8);
+      if (g && !g.s.tales.some((t) => t.startsWith('Knocked a Ferryman'))) tale(g.s, `Knocked a Ferryman off its feet, night ${G.day}.`);
+    }
+  }
+
+  /** Legs gone: it crawls (slower, lower, no lunge, no leap). A Ferryman limps instead. */
+  cripple(z: Zombie, isPlayer: boolean) {
+    if (z.crippled || z.def.crawl || z.def.boss || z.def.ranged) return;
+    z.crippled = true;
+    z.stun = Math.max(z.stun, 0.4);
+    this.text(z.x, z.y - this.zh(z) * 0.5, z.def.id === 'ferryman' ? 'LIMPING' : 'LEGS', '#d0a050', 12);
+    sfx.impact('bone');
+    if (isPlayer && !this.hints.has('legs')) { this.hints.add('legs'); this.say("Legs gone. It'll crawl now — slower, and lower.", 3); }
+    if (z.def.id !== 'ferryman' && z.state === 'wall') z.state = 'walk';
+  }
+
+  damage(z: Zombie, dmg: number, head: boolean, knock: number, g: Guard | null, pellet: boolean, px: number, py: number, isPlayer: boolean, fx?: FireProfile, zone: Zone = head ? 'head' : 'torso', weak?: WeakKind) {
+    if (z.state === 'dying') return;
     let d = dmg;
+    let mark = head ? 'head' : zone === 'leg' ? 'leg' : zone === 'arm' ? 'arm' : 'body';
+    const limb = fx?.limbMul ?? 1;
+    let staggerHit = false;
     if (head) d *= pellet ? 2 : 3;
-    else if (z.def.armor) d = armorDamage(d, z.def.armor, fx?.armorPen ?? 0);
+    else if (weak) {
+      mark = 'weak';
+      if (weak === 'sac') {
+        // the belly goes, here and now: a burst where it stands
+        d = Math.max(d, z.hp + 1);
+        this.text(z.x, z.y - this.zh(z) * 0.6, 'BURST', '#c8a040', 13);
+      } else if (weak === 'neck') d *= 2;
+      else if (weak === 'shoulder') { d *= 2.5; staggerHit = true; this.text(z.x, z.y - this.zh(z) - 6, 'CRIT', '#e0c070', 12); }
+      else if (weak === 'knee') {
+        d *= limb;
+        if (z.def.id === 'ferryman') staggerHit = true;
+        else this.cripple(z, isPlayer);
+      } else if (weak === 'throat') {
+        d *= 1.5;
+        if (z.def.spit) {
+          // the bile in its throat goes everywhere: it chokes, and the ones beside it are burned
+          d *= 1.4;
+          z.spitT = Math.max(z.spitT ?? 0, 3);
+          z.windup = 0;
+          this.splash(px, py, z.y, 1.5);
+          for (const o of this.zombies) if (o !== z && o.state !== 'dying' && Math.abs(o.x - z.x) < 70 && Math.abs(o.lane - z.lane) <= 1) { o.hp -= 18; o.flash = 0.1; if (o.hp <= 0) this.kill(o, g); }
+        } else if (z.def.scream && d >= 20) this.silence(z, g, isPlayer);
+      }
+    } else if (zone === 'leg' || zone === 'arm') {
+      d *= limb;
+      // a Deputy's plate covers the chest and arms; the legs are cloth
+      if (zone === 'arm' && z.def.armor) { d = armorDamage(d, z.def.armor, fx?.armorPen ?? 0); mark = 'plate'; }
+      if (zone === 'leg') {
+        z.legDmg += d;
+        if (z.legDmg >= z.maxHp * 0.35) this.cripple(z, isPlayer);
+      } else {
+        z.armDmg += d;
+        if (!z.disarmed && z.armDmg >= z.maxHp * 0.25 && !z.def.ranged && !z.def.boss) {
+          z.disarmed = true;
+          this.text(z.x, z.y - this.zh(z) * 0.7, 'ARM', '#a8a8a0', 11);
+        }
+      }
+    } else if (z.def.armor) {
+      d = armorDamage(d, z.def.armor, fx?.armorPen ?? 0);
+      if (d < dmg * 0.6) { mark = 'plate'; if (isPlayer && R.chance(0.3)) sfx.impact('armor', { volume: 0.5 }); }
+    }
     if (fx?.incendiary) z.burn = Math.max(z.burn, BURN.time);
+    // a hit ≥ 20 during a Crier's wind-up chokes the keen off
+    if (z.def.scream && (z.windup ?? 0) > 0 && d >= 20) this.silence(z, g, isPlayer);
     z.hp -= d;
     z.flash = 0.08;
+    // stagger (balance.md §8.8): a body hit rolls fireProfile().stagger; one pellet in four rolls
+    if (!head && fx && (!pellet || R.chance(0.25)) && R.chance(fx.stagger)) staggerHit = true;
+    if (head && d >= 60) { if (z.def.id === 'ferryman') { if (d >= 100) staggerHit = true; } else this.stagger(z, 0.6); }
+    if (staggerHit) { if (z.def.id === 'ferryman') this.ferryStagger(z, g, isPlayer); else this.stagger(z, 0.3); }
     const heavy = z.def.id === 'ferryman' || z.def.boss || z.state === 'cover';
-    if (!heavy) z.x += (z.flip ? -1 : 1) * knock * (pellet ? 0.25 : 1) * (head ? 1.4 : 1) * (z.state === 'wall' ? 0.5 : 1);
+    const loop = g?.post === 'loop' ? 1.3 : 1;
+    if (!heavy) z.x += (z.flip ? -1 : 1) * knock * loop * (pellet ? 0.25 : 1) * (head ? 1.4 : 1) * (z.state === 'wall' ? 0.5 : 1);
     z.x = Math.min(z.x, W + 150);
-    if (z.state === 'wall' && knock > 15 && !heavy) z.state = 'walk';
+    if (z.state === 'wall' && knock * loop > 15 && !heavy) z.state = 'walk';
+    // a climber shot in the head drops back onto the pile
+    if (head && z.climb !== undefined && z.hp > 0) { z.climb = undefined; z.state = 'walk'; z.stun = 0.6; }
+    if (isPlayer) this.hitMark = { kind: mark, t: 0.18 };
     // blood (fewer, smaller and darker with Reduce gore)
     this.blood(px, py, head ? 10 : 4, head ? 4.5 : 3, z.y);
     if (z.hp <= 0) {
@@ -945,12 +1570,49 @@ export class Battle {
         if (isPlayer) this.text(z.x, z.y - z.def.height, 'HEADSHOT', '#d9c9a0', 13);
       }
       if (head) { this.res.headshots++; if (isPlayer) G.stats.headshots++; }
+      if (isPlayer) {
+        // a headshot streak banks a Rally
+        if (head) {
+          this.nerveGain(6);
+          if (++this.streak >= 5) {
+            this.streak = 0;
+            if (this.rally < 2) { this.rally++; this.say('Rally ready — [E] to call the line together.', 3); }
+          }
+        } else this.nerveGain(2);
+        sfx.confirm(this.streak || 1);
+        this.feel(fx, true, head);
+      }
       this.kill(z, g);
     } else {
-      sfx.hit();
+      if (isPlayer) { sfx.impact(head ? 'head' : mark === 'plate' ? 'armor' : mark === 'weak' && weak === 'knee' ? 'bone' : 'flesh'); this.feel(fx, false, head); }
+      else sfx.hit();
     }
   }
 
+  /** A Crier choked off mid-keen. */
+  silence(z: Zombie, g: Guard | null, isPlayer: boolean) {
+    if ((z.windup ?? 0) <= 0 && z.screamT > 2) { z.screamT += 3; return; }
+    z.windup = 0;
+    z.screamT = R.range(6, 9);
+    this.text(z.x, z.y - this.zh(z) - 14, 'SILENCED', '#e8dcc0', 14);
+    if (isPlayer) this.nerveGain(10);
+    if (g && !g.s.tales.some((t) => t.startsWith('Shut a Crier up'))) tale(g.s, `Shut a Crier up mid-call, night ${G.day}.`);
+  }
+
+  /** Hitstop and shake by class (balance.md §5): heavy single shots hold the world a beat; autos at most one per 0.15 s. */
+  feel(fx: FireProfile | undefined, kill: boolean, head: boolean) {
+    if (!fx) return;
+    const pull = (fx.dmg * fx.pellets) / Math.max(1, ZOMBIES.sleeper.hp);
+    const base = Math.max(18, Math.min(110, 40 + 45 * Math.log2(Math.max(0.1, pull))));
+    let ms: number;
+    if (fx.auto) {
+      if (!kill || this.t - this.lastHitstop < 0.15) return;
+      ms = head ? 40 : 25;
+    } else ms = kill ? Math.min(110, head ? base + 25 : base + 10) : pull >= 0.8 ? base * 0.55 : 0;
+    if (ms <= 0) return;
+    this.lastHitstop = this.t;
+    this.hitstop = Math.max(this.hitstop, ms / 1000);
+  }
   /** A spray of blood that lands on the ground row `ground` (the actor's lane). */
   blood(x: number, y: number, n: number, size: number, ground: number, spread = 1) {
     const less = reduceGore();
@@ -966,9 +1628,11 @@ export class Battle {
 
   kill(z: Zombie, g: Guard | null) {
     if (z.state === 'dying') return;
+    this.addPile(z);
     z.state = 'dying';
     z.dieT = 0;
-    for (const h of this.hooks) h.onKill?.(z, g); // night modules
+    z.climb = undefined;
+    z.windup = 0;
     if (z.def.ranged) this.raidersDown++;
     else {
       this.res.kills++;
@@ -1011,10 +1675,15 @@ export class Battle {
     if (z.def.burst) {
       sfx.burst();
       for (let i = 0; i < 30; i++) this.particles.push({ x: z.x, y: z.y - 60, vx: R.range(-120, 120), vy: R.range(-140, 20), life: 2.5, max: 2.5, size: R.range(8, 22), color: '#a8862f', kind: 'spore', ground: 0 });
-      if (z.x - WALL_X < 120) {
+      // the kill line: inside 180 px it rots the wall and the pile against it
+      if (z.x - WALL_X < 180 && !z.flip) {
         G.fort.hp = Math.max(0, G.fort.hp - 45);
-        this.say('A Pulper burst against the wall. The planks are rotting through.', 3);
-      }
+        this.pileRot = 3;
+        this.streak = 0;
+        this.nerveHit(10);
+        this.say('A Pulper burst inside the line. The planks are rotting through.', 3);
+        for (const o of this.guards) if (this.standing(o)) addThought(o.s, { id: 'pulper_wall', label: "The smell won't wash off", mood: -3, days: 2 }, 1);
+      } else if (!this.hints.has('pulpfar')) { this.hints.add('pulpfar'); this.text(z.x, z.y - 150, 'burst — clear of the wall', '#c8a040', 11); }
       for (const o of this.zombies) if (o !== z && Math.abs(o.x - z.x) < 110 && o.state !== 'dying') { o.hp -= 30; o.flash = 0.1; if (o.hp <= 0) this.kill(o, null); }
     }
   }
@@ -1053,12 +1722,32 @@ export class Battle {
       for (const o of this.guards) if (o !== g && !o.s.dead) changeOpinion(o.s, g.s, -12);
       return;
     }
+    // the leader's nerve is everyone's: shaking hands on the line spread; a steady one holds the frayed
+    const lowNerve = this.nerve < 25;
+    if (lowNerve && g.panicAt === undefined && !g.mode && R.chance(dt * 0.004 * (1 - attr(g.s, 'courage') / 12))) g.panicAt = this.t + R.range(2, 8);
     if (g.panicAt !== undefined && this.t > g.panicAt && !g.mode) {
-      g.mode = 'panic';
-      this.say(`${first(g.s)} is panicking — firing at shadows.`, 3);
-      log('break', `${displayName(g.s)} panicked on the wall on night ${G.day}, burning through ammunition.`);
+      if (this.nerve > this.nerveMax * 0.6 && R.chance(0.3)) { g.panicAt = undefined; this.text(g.x, g.y - 150, 'steadies', '#9db070', 10); }
+      else {
+        g.mode = 'panic';
+        this.say(`${first(g.s)} is panicking — firing at shadows.`, 3);
+        log('break', `${displayName(g.s)} panicked on the wall on night ${G.day}, burning through ammunition.`);
+      }
     }
-    const prof = this.prof(g.w);
+    if (this.rallyT > 0 && g.mode === 'panic') g.mode = undefined;
+    // the loophole is in their teeth: a Ferryman or a Deputy at the wall reaches through
+    if (g.post === 'loop') {
+      g.holdT += dt;
+      if (g.holdT > 8 && this.zombies.some((z) => z.state === 'wall' && z.lane >= 2 && (z.def.id === 'ferryman' || z.def.id === 'deputy'))) {
+        g.holdT = 0;
+        wound(g.s, 'laceration', R.range(0.1, 0.2), R.pick(['larm', 'rarm']));
+        this.text(g.x, g.y - 150, 'clawed through the loophole', '#d0a080', 10);
+        sfx.hurt();
+        this.checkDown(g, `clawed through the loophole, night ${G.day}`);
+      }
+    }
+    if (g.duck > 0) return;
+    const prof = this.prof(g.w, g.s);
+    const runner = this.guards.some((o) => o.post === 'runner' && o !== g && this.standing(o)) ? 0.65 : 1;
     if (g.reload > 0) {
       g.reload -= dt;
       if (g.reload <= 0) g.mag += this.loadFromStores(prof, prof.mag - g.mag);
@@ -1072,19 +1761,37 @@ export class Battle {
     }
     g.cd -= dt;
     if (g.cd > 0) return;
+    // a runner carries, not shoots — unless something is over the wall
+    if (g.post === 'runner' && !this.zombies.some((z) => (z.state === 'over' || z.state === 'maul') && Math.abs(z.x - g.x) < 200)) { g.cd = 0.5; return; }
     const fog = this.plan.special === 'fog';
+    const roof = g.post === 'roof';
     // guards only engage what they can make out in the dark
-    const range = Math.max((fog ? 640 : 820) + Math.min(3, G.fort.lights) * 130 + (hasTrait(g.s, 'nightowl') ? 120 : 0), g.x + SH * 0.45 + prof.light);
+    const range = Math.max((fog ? 640 : 820) + Math.min(3, G.fort.lights) * 130 + (hasTrait(g.s, 'nightowl') ? 120 : 0) + (roof ? 260 : 0), g.x + SH * 0.45 + prof.light);
+    const marked = this.mark ? this.zombies.find((z) => z.id === this.mark!.id) : undefined;
+    // orders (bloodlust can't hold its fire for long)
+    let order = g.order;
+    if (order === 'hold' && hasTrait(g.s, 'bloodlust') && R.chance(0.25)) { order = 'free'; if (R.chance(0.2)) this.text(g.x, g.y - 150, "couldn't wait", '#d08060', 10); }
     // the road ahead, anything already behind the line, and any rifleman who just showed himself
     let tgt: Zombie | undefined;
     let bp = 1e9;
     for (const z of this.zombies) {
-      if (z.state === 'dying' || (z.emerge !== undefined && z.emerge > 0)) continue;
+      if (z.state === 'dying' || (z.emerge !== undefined && z.emerge > 0) || z.leap) continue;
       if (z.ducked && z.state === 'cover') continue; // nothing to aim at but junk
       const inside = z.state === 'over' || z.state === 'maul';
       const ahead = z.x > g.x + 30 && (z.x < range || (z.seen ?? 0) > 0);
       if (!ahead && !(inside && Math.abs(z.x - g.x) < 280)) continue;
-      const pri = (z.def.scream ? -400 : 0) + (inside ? -800 : 0) + (z.def.ranged ? -120 : 0) + Math.abs(z.x - g.x) + (z.def.burst && z.x < WALL_X + 140 ? 300 : 0);
+      const dw = z.x - WALL_X;
+      // the firestep can't see down to a crawler at the foot of the wall; the roof can't angle down at all
+      if (!inside && g.post !== 'loop' && this.isCrawler(z) && dw < 80) continue;
+      if (!inside && roof && dw < 160) continue;
+      const isMarked = z === marked;
+      if (order === 'hold' && !inside && !isMarked && dw > 220) continue;
+      if (order === 'wall' && !inside && !(z.state === 'wall' || dw < 120)) continue;
+      // never pop a Pulper inside the kill line unless it is already on the planks
+      if ((order === 'wall' || order === 'heads') && z.def.burst && dw < 180 && z.state !== 'wall' && !inside) continue;
+      let pri = (z.def.scream ? -400 : 0) + (inside ? -800 : 0) + (z.def.ranged ? -120 : 0) + (z.def.spit ? -150 : 0) + (z.def.leap && (z.windup ?? 0) > 0 ? -300 : 0) + Math.abs(z.x - g.x) + (z.def.burst && dw < 140 ? 300 : 0);
+      if (order === 'wall') pri = -z.def.dps * 40 + dw + (inside ? -800 : 0);
+      if (isMarked && order !== 'wall') pri -= 2000;
       if (pri < bp) { bp = pri; tgt = z; }
     }
     if (!tgt) { g.face = 1; return; }
@@ -1106,32 +1813,41 @@ export class Battle {
         meleeGuard(this, g);
         return;
       }
-      g.reload = (prof.reloadPerRound ? prof.reload * prof.mag * 0.75 : prof.reload) * 1.15;
+      g.reload = (prof.reloadPerRound ? prof.reload * prof.mag * 0.75 : prof.reload) * 1.15 * runner;
       return;
     }
-    if (R.chance(prof.jam)) { g.cd = prof.jamClear * 1.3; this.text(g.x + 20, g.y - 150, 'jammed', '#c8a070', 10); return; }
+    // stoppages: guards clear their own, by skill (prof folded into jam and jamClear)
+    if (R.chance(prof.jam)) { g.cd = clearTime(prof, g.s, R.chance(0.1) ? 'double' : 'tap') * 1.4 + 0.3; this.text(g.x + 20, g.y - 150, 'jammed', '#c8a070', 10); return; }
     let aim = aimFactor(g.s);
     if (g.mode === 'panic') aim *= 0.4;
     if (g.mode === 'rage') aim = Math.min(1.3, aim + 0.3);
     if (this.sharp > 0) aim = Math.min(1.3, aim + 0.15);
+    if (this.rallyT > 0) aim = Math.min(1.4, aim + 0.25);
+    if (g.blind > 0) aim *= 0.5;
     const lightBonus = Math.min(0.2, G.fort.lights * 0.07);
     const mz = this.muzzle(g);
     const hb = this.hitbox(tgt);
     const dist = Math.hypot(hb.hx - mz.x, hb.hy - mz.y);
-    // aim for the head with probability scaled by skill
-    const goHead = R.chance((0.2 + aim * 0.25) * (tgt.def.ranged ? 0.5 : 1));
-    const ty = goHead ? hb.hy : (hb.y1 + hb.y2) / 2;
-    const tx = goHead ? hb.hx : tgt.x;
-    const err = (prof.spread * 1.2 + (1.15 - aim - lightBonus) * 0.07 + (fog ? 0.04 : 0)) * (1 + dist / 900) * (tgt.def.ranged ? 1.8 : 1) * (0.5 + 0.5 * prof.braceBloomMul);
+    // where on the body: the head by skill (always, on Heads only); the legs of a herd animal or a far Pulper; a weakspot when they know one
+    const heads = order === 'heads';
+    const pHead = heads ? 1 : (0.2 + aim * 0.25) * (tgt.def.ranged ? 0.5 : 1);
+    const pLegs = !heads && ((tgt.def.lunge && !tgt.crippled) || (tgt.def.burst && tgt.x - WALL_X > 300)) ? 0.15 + (hasTrait(g.s, 'gentle') ? 0.15 : 0) : 0;
+    const weak = this.weakPts(tgt);
+    const wantWeak = !heads && weak.length && R.chance(0.08 + aim * 0.12) ? R.pick(weak) : undefined;
+    const roll = R.next();
+    let tx = tgt.x, ty = (hb.y1 + hb.y2) / 2;
+    if (wantWeak) { tx = wantWeak.x; ty = wantWeak.y; }
+    else if (roll < pHead) { tx = hb.hx; ty = hb.hy; }
+    else if (roll < pHead + pLegs) ty = hb.y1 + (hb.y2 - hb.y1) * 0.78;
+    const err = (prof.spread * 1.2 + (1.15 - aim - lightBonus) * 0.07 + (fog ? 0.04 : 0)) * (1 + dist / 900) * (tgt.def.ranged ? 1.8 : 1) * (0.5 + 0.5 * prof.braceBloomMul) * (roof ? 0.8 : 1) * (heads ? 0.85 : 1);
     const base = Math.atan2(ty - mz.y, tx - mz.x);
-    g.cd = (1 / prof.rof) * (prof.auto ? 1.3 : 1.6) * R.range(0.9, 1.25) * (g.mode === 'panic' ? 0.55 : g.mode === 'rage' ? 0.7 : 1);
+    g.cd = (1 / prof.rof) * (prof.auto ? 1.3 : 1.6) * R.range(0.9, 1.25) * (g.mode === 'panic' ? 0.55 : g.mode === 'rage' ? 0.7 : 1) * (heads ? 1.35 : 1) * (this.rallyT > 0 ? 0.75 : 1);
     g.burstLeft = Math.min(prof.burst, g.mag);
     // their shots lock to the target's lane: no rounds wasted on a nearer body in front
     g.burstLane = tgt.y;
     g.burstX = tgt.x;
     this.guardRound(g, prof, base, err);
   }
-
   guardRound(g: Guard, prof: FireProfile, base: number, err: number) {
     if (!g.w) { g.burstLeft = 0; return; }
     const mz = this.muzzle(g);
@@ -1146,7 +1862,7 @@ export class Battle {
         const hit = this.castShot(g, mz.x, mz.y, base + R.gauss(0, err * 0.6), prof.dmg, 0, prof.knock, false, false, prof, g.burstLane);
         this.blast(hit.x, g.burstLane, prof.explosive, prof.knock, g);
       } else for (let i = 0; i < prof.pellets; i++) {
-        const a = base + R.gauss(0, prof.pellets > 1 ? prof.spread * 0.7 : err * 0.6);
+        const a = base + R.gauss(0, prof.pellets > 1 ? prof.spread * 0.7 * (g.post === 'loop' ? 0.8 : 1) : err * 0.6);
         let ly = g.burstLane;
         if (prof.pellets > 1 && R.chance(0.25)) { const adj = LANES[li + (R.chance(0.5) ? 1 : -1)]; if (adj !== undefined) ly = adj; }
         this.castShot(g, mz.x, mz.y, a, prof.dmg, prof.pierce, prof.knock, prof.pellets > 1, false, prof, ly);
@@ -1187,7 +1903,7 @@ export class Battle {
     z.phase += dt;
     z.laneCd -= dt;
     // ease toward the lane's feet (lane hops, or onto a defenders' row behind the wall)
-    if (z.y !== z.ty) {
+    if (z.y !== z.ty && !z.leap) {
       const d = z.ty - z.y;
       z.y += Math.sign(d) * Math.min(Math.abs(d), 40 * dt);
     }
@@ -1201,19 +1917,47 @@ export class Battle {
       if (R.chance(dt * 20)) this.particles.push({ x: z.x + R.range(-15, 15), y: z.y - R.range(10, this.zh(z) * 0.65), vx: 0, vy: -60, life: 0.6, max: 0.6, size: R.range(5, 10), color: '#ffb347', kind: 'fire', ground: 0 });
       if (z.hp <= 0) return this.kill(z, null);
     }
+    // in the air over the wall (a Buck)
+    if (z.leap) {
+      const L = z.leap;
+      L.t += dt;
+      const k = Math.min(1, L.t / L.dur);
+      z.x = L.x0 + (L.x1 - L.x0) * k;
+      z.y = L.y0 + (L.y1 - L.y0) * k;
+      if (k >= 1) {
+        z.leap = undefined;
+        z.state = 'over';
+        z.ty = z.y;
+        z.flip = false;
+        this.shake = Math.max(this.shake, 4);
+        sfx.thud();
+        this.dogBark('the Buck');
+      }
+      return;
+    }
+    // staggered or knocked flat: nothing but the clock
+    if (z.down !== undefined && z.down > 0) { z.down -= dt; return; }
+    if (z.stun > 0) { z.stun -= dt; return; }
     // traps
     if (this.traps > 0 && z.state === 'walk' && z.x < this.trapX && z.x > this.trapX - 40) {
       this.traps--;
       G.fort.traps = Math.max(0, G.fort.traps - 1);
       this.blast(this.trapX, z.y, { radius: 150, dmg: 160 }, 40, null);
     }
-    // crier
+    // crier: a 1.2 s wind-up (head back, a pale ring) before every keen; a solid hit chokes it off
     if (z.def.scream && z.x < W - 20) {
       z.screamT -= dt;
+      if (z.screamT <= 1.2 && !(z.windup && z.windup > 0) && z.screamT > 0) {
+        z.windup = z.screamT;
+        if (!this.hints.has('crier')) { this.hints.add('crier'); this.say('The Crier is drawing breath — hit it now and the keen chokes off.', 3); }
+      }
+      if (z.windup && z.windup > 0) z.windup = Math.max(0, z.screamT);
       if (z.screamT <= 0) {
         z.screamT = R.range(6, 9);
+        z.windup = 0;
         sfx.scream();
         this.text(z.x, z.y - 140, '— keening —', '#c9a95a', 12);
+        if (z.x - WALL_X < 500) this.nerveHit(8);
         for (let i = 0; i < 2; i++) this.spawn(R.chance(0.5) ? 'sleeper' : 'deer');
       }
     }
@@ -1228,10 +1972,18 @@ export class Battle {
     const wire = z.x > WALL_X + 60 && z.x < WALL_X + 60 + 90 * Math.min(3, G.fort.wire) ? 0.55 : 1;
     let speed = z.def.speed * cold * wire;
     if (this.surge > 0 && !z.def.boss && !z.def.ranged) speed *= 1.7;
-    if (z.def.lunge) {
+    if (z.crippled) speed *= z.def.id === 'ferryman' ? 0.5 : 0.35;
+    if (z.def.lunge && !z.crippled) {
       z.lungeT -= dt;
       if (z.lungeT < 0) {
+        // the pant: a stop, breath smoking in the cold — the window to shoot it
         speed *= 0.15;
+        z.pant = (z.pant ?? 0) - dt;
+        if (z.pant <= 0) {
+          z.pant = 0.22;
+          const h = this.zh(z);
+          this.particles.push({ x: z.x - this.zw(z) * 0.3, y: z.y - h * 0.86, vx: R.range(-30, -10), vy: R.range(-14, -4), life: 0.9, max: 0.9, size: R.range(3, 5) * z.scale, color: '#cfd6dc', kind: 'smoke', ground: 0 });
+        }
         if (z.lungeT < -0.8) z.lungeT = R.range(1.2, 2.6);
       }
     }
@@ -1241,18 +1993,60 @@ export class Battle {
       z.flip = true;
       return;
     }
+    // a Biler stops at range and lobs bile over the wall
+    if (z.def.spit && !z.crippled && (z.state === 'walk') && z.stopX !== undefined && z.x <= z.stopX && G.fort.hp > 0) {
+      z.spitT = (z.spitT ?? 3) - dt;
+      if (z.spitT <= 0.7 && !(z.windup && z.windup > 0)) z.windup = 0.7;
+      if (z.windup && z.windup > 0) {
+        z.windup -= dt;
+        if (z.windup <= 0) { z.windup = 0; this.spit(z); z.spitT = R.range(4.5, 6.5); }
+      }
+      if (this.inLane(z)) this.laneLast[z.lane] = z;
+      return;
+    }
+    // a Buck: short of the wall it crouches (eyes flaring) and then clears it, into the guards
+    if (z.def.leap && !z.crippled && !z.leapt && z.state === 'walk' && G.fort.hp > 0 && z.x - wallX(z.lane) < 170) {
+      if (!(z.windup && z.windup > 0)) z.windup = 0.8;
+      z.windup -= dt;
+      if (z.windup <= 0) {
+        z.windup = 0;
+        z.leapt = true;
+        const ts = this.guards.filter((g) => this.standing(g) && !g.safe && g.post !== 'roof');
+        const g = ts.length ? ts.reduce((a, b) => (Math.abs(a.x - WALL_X) < Math.abs(b.x - WALL_X) ? a : b)) : null;
+        const x1 = g ? g.x + 40 : WALL_X - 80;
+        const y1 = g ? g.y + 2 : DEF_LANES[1];
+        z.leap = { x0: z.x, y0: z.y, x1, y1, t: 0, dur: 0.75 };
+        this.say('The Buck clears the wall!', 2.5);
+        sfx.groan();
+      }
+      if (this.inLane(z)) this.laneLast[z.lane] = z;
+      return;
+    }
     if (z.state === 'walk' || z.state === 'wall') {
       this.walkLane(z, speed, cold, dt);
       if (this.inLane(z)) this.laneLast[z.lane] = z;
       return;
     }
+    // up the corpse pile and over the top
+    if (z.climb !== undefined) {
+      z.climb -= dt;
+      if (z.climb <= 0) {
+        z.climb = undefined;
+        z.state = 'over';
+        z.x = wallX(z.lane) - 30;
+        z.ty = DEF_LANES[1] + 2;
+        sfx.thud();
+      }
+      return;
+    }
     if (z.state === 'over') {
       if (z.emerge !== undefined && z.emerge > 0) { z.emerge -= dt; return; }
-      // over the rubble (or up out of the drain) toward the nearest defender
+      // over the rubble (or up out of the drain) toward the nearest defender (the roof is out of reach until the wall has been down a while)
       let tgt: Guard | undefined;
       let best = 1e9;
       for (const g of this.guards) {
         if (g.s.dead || g.fled || g.safe) continue;
+        if (g.post === 'roof' && this.res.wallHeld) continue;
         const d = Math.abs(g.x - z.x);
         if (d < best) { best = d; tgt = g; }
       }
@@ -1274,7 +2068,7 @@ export class Battle {
       z.ty = g.y + 2;
       z.maulT -= dt;
       if (z.maulT <= 0) {
-        z.maulT = R.range(0.9, 1.6) * (z.def.id === 'ferryman' ? 0.7 : 1);
+        z.maulT = R.range(0.9, 1.6) * (z.def.id === 'ferryman' ? 0.7 : 1) * (z.disarmed ? 1.4 : 1);
         this.maul(g, z);
       }
     }
@@ -1297,7 +2091,8 @@ export class Battle {
       const inQueue = queued && z.x <= ahead!.x + 0.45 * Math.max(w, aw) + 2;
       if (!atFace && !inQueue) { z.state = 'walk'; return; }
       const k = this.laneQ[z.lane]++;
-      const dmg = z.def.dps * dt * cold;
+      // no arms: they can only lean on it; no legs: they claw at the bottom
+      const dmg = z.def.dps * dt * cold * (z.disarmed ? 0.4 : 1) * (z.crippled && z.def.id !== 'ferryman' ? 0.6 : 1);
       G.fort.hp = Math.max(0, G.fort.hp - dmg);
       z.wallHit -= dt;
       if (z.wallHit <= 0) {
@@ -1310,6 +2105,15 @@ export class Battle {
       if (G.fort.spikes > 0 && atFace) {
         z.hp -= G.fort.spikes * 3.5 * dt;
         if (z.hp <= 0) { this.kill(z, null); return; }
+      }
+      // the pile is high enough to walk up: the ones at the face climb it
+      if (atFace && !this.isCrawler(z) && !z.def.boss && this.piles[z.lane] >= this.pileLimit() && R.chance(dt * 0.6)) {
+        z.state = 'over';
+        z.climb = 1.4;
+        z.x = wallX(z.lane) + w * 0.3;
+        sfx.impact('wood', { volume: 0.6 });
+        if (!this.hints.has('ramp')) { this.hints.add('ramp'); this.say("They're coming up over the bodies.", 3); }
+        return;
       }
       // a long queue: the back of it looks for a shorter one next door
       if (k >= 3 && z.laneCd <= 0) this.hop(z, w, true);
@@ -1436,7 +2240,8 @@ export class Battle {
     sfx.hurt();
     this.shake = 5;
     const bite = R.chance(z.def.id === 'ferryman' ? 0.2 : 0.38);
-    const w = wound(s, bite ? 'bite' : R.pick(['laceration', 'scratch', 'bruise', z.def.id === 'ferryman' ? 'fracture' : 'laceration']), R.range(0.2, 0.5) * (z.def.id === 'ferryman' ? 1.6 : 1));
+    const w = wound(s, bite ? 'bite' : R.pick(['laceration', 'scratch', 'bruise', z.def.id === 'ferryman' ? 'fracture' : 'laceration']), R.range(0.2, 0.5) * (z.def.id === 'ferryman' ? 1.6 : 1) * (z.disarmed ? 0.6 : 1));
+    if (bite) this.nerveHit(20);
     this.text(g.x + 10, g.y - 150, bite ? 'BITTEN' : w.kind, bite ? '#e05040' : '#d0a080', bite ? 15 : 11);
     if (bite) {
       tale(s, `Bitten on the line, night ${G.day}.`);
@@ -1476,6 +2281,7 @@ export class Battle {
     const wasPlayer = this.player === g;
     killSurvivor(s, cause);
     this.res.deaths.push(first(s));
+    this.nerveHit(35);
     this.say(g.downed ? `They got to ${first(s)}. ${first(s)} is gone.` : `${first(s).toUpperCase()} IS DOWN.`, 6);
     for (const o of this.guards) {
       if (o.s.dead || o.fled || o === g || o.downed) continue;
@@ -1520,8 +2326,8 @@ export class Battle {
       let bd = 170;
       for (const o of this.guards) {
         if (o === g || !this.standing(o) || o.dragging || o === this.player) continue;
-        if (hasTrait(o.s, 'coward') || o.mode === 'panic') continue;
-        const d = Math.abs(o.x - g.x);
+        if (hasTrait(o.s, 'coward') || o.mode === 'panic' || o.post === 'roof') continue;
+        const d = Math.abs(o.x - g.x) * (o.post === 'runner' ? 0.25 : 1); // the runner goes first
         if (d < bd) { bd = d; best = o; }
       }
       if (best) {
@@ -1723,6 +2529,134 @@ export class Battle {
     this.texts.push({ x, y, text, color, size, life: 1.2 });
   }
 
+  // ---------- nerve (research 05 §4) ----------
+  /** Real-time (not slowed by Focus): Focus drains, a quiet wall restores, the wall's damage and the keening wear it down. */
+  tickNerve(dt: number) {
+    if (this.done || this.intro > 0) return;
+    if (this.focusing) {
+      this.nerve -= 20 * dt;
+      if (this.nerve <= 0) this.focusing = false;
+    } else if (!this.zombies.some((z) => z.state === 'wall' || z.state === 'over' || z.state === 'maul')) this.nerve += dt;
+    // every further tenth of the wall lost
+    const f = G.fort.hp / Math.max(1, G.fort.maxHp);
+    if (f < this.wallMark - 0.1) { this.wallMark -= 0.1; this.nerveHit(6); }
+    this.shakeT = Math.max(0, this.shakeT - dt);
+    this.nerve = Math.max(0, Math.min(this.nerveMax, this.nerve));
+  }
+  /** Something rattles the leader. At 0 the hands shake for 5 s. */
+  nerveHit(n: number) {
+    if (this.done) return;
+    const was = this.nerve;
+    this.nerve = Math.max(0, this.nerve - n);
+    if (was > 0 && this.nerve <= 0) {
+      this.shakeT = 5;
+      this.zeroes++;
+      this.focusing = false;
+      const p = this.player;
+      if (p) this.text(p.x, p.y - 170, 'hands shaking', '#d0a040', 12);
+    }
+  }
+  nerveGain(n: number) { this.nerve = Math.min(this.nerveMax, this.nerve + n); }
+
+  // ---------- bile (the Biler) ----------
+  /** Where a glob is now: its arc, and its shadow on the ground. */
+  globPos(b: Glob) {
+    const k = Math.min(1, b.t / b.dur);
+    const x = b.x0 + (b.x1 - b.x0) * k;
+    const y = b.y0 + (b.y1 - b.y0) * k - Math.sin(k * Math.PI) * (150 + Math.abs(b.x1 - b.x0) * 0.18);
+    return { x, y, gy: b.gy0 + (b.gy1 - b.gy0) * k, k };
+  }
+  spit(z: Zombie) {
+    const h = this.zh(z);
+    const mx = z.x - this.zw(z) * 0.45, my = z.y - h * 0.74;
+    const targets = this.guards.filter((g) => this.standing(g) && !g.safe && g.post !== 'roof');
+    let g: Guard | null = null;
+    let x1: number, y1: number, gy1: number;
+    if (targets.length && R.chance(0.55)) {
+      g = R.pick(targets);
+      x1 = g.x + R.range(-8, 8); gy1 = g.y; y1 = g.y - SH * g.sc * 0.62;
+    } else {
+      const li = z.lane;
+      x1 = wallX(li) - R.range(4, 20); gy1 = LANES[li]; y1 = LANES[li] - R.range(50, 90);
+    }
+    const dist = Math.abs(z.x - x1);
+    this.globs.push({ x0: mx, y0: my, x1, y1, gy0: z.y, gy1, t: 0, dur: 1.5 + dist / 900, g, lane: z.lane });
+    sfx.impact('flesh', { volume: 0.5 });
+    this.text(mx, my - 10, 'hrrk', '#b8b050', 10);
+  }
+  updateGlobs(dt: number) {
+    for (const b of this.globs) {
+      b.t += dt;
+      const left = b.dur - b.t;
+      // a guard may see it coming and get down (by courage); the leader ducks on [S]
+      if (b.g && !b.rolled && left < 0.5) {
+        b.rolled = true;
+        if (b.g !== this.player && R.chance(0.2 + attr(b.g.s, 'courage') * 0.05)) { b.g.duck = 0.9; this.text(b.g.x, b.g.y - SH * b.g.sc - 10, 'down!', '#cfc6b0', 10); }
+      }
+      if (b.t < b.dur) continue;
+      const pos = this.globPos(b);
+      this.splash(pos.x, pos.y, b.gy1, 1);
+      const g = b.g;
+      if (g) {
+        const ducked = g === this.player ? this.ducking : g.duck > 0;
+        if (g.s.dead || g.downed || g.fled || ducked) {
+          // over their head and into the yard behind
+          if (ducked) this.text(g.x, g.y - 120, 'over', '#a89c84', 10);
+          continue;
+        }
+        if (R.chance(0.5)) {
+          g.blind = 4;
+          this.text(g.x, g.y - SH * g.sc - 12, 'BILE — eyes', '#c8c050', 12);
+          if (g === this.player) this.nerveHit(6);
+        } else {
+          wound(g.s, 'burn', R.range(0.12, 0.24), R.pick(['head', 'torso', 'larm', 'rarm']));
+          this.text(g.x, g.y - SH * g.sc - 12, 'BILE — burned', '#c8c050', 12);
+          sfx.hurt();
+          this.checkDown(g, `burned by a Biler's bile on the wall, night ${G.day}`);
+        }
+      } else {
+        // the planks rot where it lands
+        G.fort.hp = Math.max(0, G.fort.hp - 16);
+        this.text(b.x1, b.y1 - 20, 'ROT', '#b8b050', 11);
+        sfx.wallHit();
+      }
+    }
+    this.globs = this.globs.filter((b) => b.t < b.dur);
+  }
+  splash(x: number, y: number, ground: number, n: number) {
+    for (let i = 0; i < 10 * n; i++) this.particles.push({ x, y, vx: R.range(-120, 120), vy: R.range(-160, 20), life: 1.2, max: 1.2, size: R.range(2, 4), color: R.pick(['#9a9a3a', '#7c7a26', '#b5a94a']), kind: 'blood', ground: ground + R.range(-4, 4) });
+  }
+
+  // ---------- corpse piles (research 05 §7) ----------
+  /** The mass at which a lane's pile becomes a ramp. */
+  pileLimit() { return 10 + 2 * G.fort.level - this.pileRot; }
+  updatePiles(dt: number) {
+    // fire on a pile against the wall burns it down, and scorches the planks
+    let burning = false;
+    for (const f of this.fires) {
+      if (f.x - f.w / 2 > WALL_X + 120) continue;
+      for (let l = 0; l < 4; l++) {
+        if (this.piles[l] <= 0 || Math.abs(LANES[l] - f.y) > 40) continue;
+        this.piles[l] = Math.max(0, this.piles[l] - dt);
+        burning = true;
+      }
+    }
+    if (burning) {
+      G.fort.hp = Math.max(0, G.fort.hp - 3 * dt);
+      if (!this.hints.has('pileburn')) { this.hints.add('pileburn'); this.say('The pile is burning down — and the planks with it.', 3); }
+    }
+    if (!this.pileWarned && this.piles.some((m) => m >= this.pileLimit() * 0.8)) {
+      this.pileWarned = true;
+      this.say('The bodies are piling against the wall. Soon they can walk up them. (Burn it: a firebomb at the wall.)', 5);
+    }
+  }
+  /** A death close to the wall adds to that lane's pile. */
+  addPile(z: Zombie) {
+    if (z.state === 'over' || z.state === 'maul' || z.flip || z.def.ranged || z.def.boss) return;
+    const d = z.x - wallX(z.lane);
+    if (d > 130) return;
+    this.piles[z.lane] += z.def.mass ?? 1;
+  }
   // ---------------- draw ----------------
   // Layering (docs/research/04 §3.4): baked background → lit asphalt → decals and ground props
   // → darkness pass A (full) → light pools → contact shadows → y-sorted actors → foreground
@@ -1781,6 +2715,7 @@ export class Battle {
       c.fillStyle = '#a33';
       c.fillRect(this.trapX - 2, LANES[2] - 5, 4, 4);
     }
+    this.drawRoadMarks(c);
     for (const h of this.hooks) h.drawGround?.(this, c);
     // the fog lies thickest over the far road
     if (this.plan.special === 'fog') this.drawFog(c, 1);
@@ -1807,6 +2742,7 @@ export class Battle {
     for (const z of this.zombies) list.push({ y: this.sortKey(z), f: () => this.drawZombie(c, z, L) });
     for (const gd of this.guards) if (!gd.s.dead && !gd.fled) list.push({ y: gd.y + (gd.downed ? -0.5 : 0) + gd.homeX * 1e-5, f: () => this.drawGuard(c, gd) });
     list.push({ y: WALL_KEY, f: () => this.drawWall(c) });
+    for (let l = 0; l < 4; l++) if (this.piles[l] >= 0.3) list.push({ y: LANES[l] + 0.5, f: () => this.drawPile(c, l) });
     list.push({ y: 650, f: () => this.drawPoles(c) });
     for (const cv of this.covers) list.push({ y: cv.y, f: () => this.drawCover(c, cv) });
     if (this.dog) list.push({ y: this.dog.y, f: () => this.drawDog(c) });
@@ -1845,6 +2781,7 @@ export class Battle {
       c.fillStyle = '#1a1814';
       c.beginPath(); c.arc(x, y, 5, 0, 7); c.fill();
     }
+    this.drawGlobs(c);
     // tracers
     for (const t of this.tracers) {
       c.strokeStyle = `rgba(255,226,170,${Math.min(1, t.life * 14)})`;
@@ -2104,14 +3041,32 @@ export class Battle {
     // the lantern is at x≈120: the rim falls on the side facing it
     const side = (g.x > 120 ? -2 : 2) * (g.face < 0 ? -1 : 1);
     const body = bakeComposite(g.s.sprite, bh, look, 0, PAD, { rim: [WARM, +((look.rim ?? 0.5) * 0.8).toFixed(2), side, 0] });
+    // the roof nest: a plank deck on the garage roof
+    if (g.post === 'roof') {
+      c.fillStyle = '#2a241c';
+      c.fillRect(g.x - 46, g.y, 92, 7);
+      c.fillStyle = '#1a1612';
+      c.fillRect(g.x - 40, g.y + 7, 5, DEF_LANES[0] - g.y - 7);
+      c.fillRect(g.x + 35, g.y + 7, 5, DEF_LANES[0] - g.y - 7);
+      c.fillStyle = 'rgba(160,130,90,0.35)';
+      c.fillRect(g.x - 46, g.y, 92, 1.5);
+    }
+    // the selected guard: a ring at the feet
+    if (!isP && this.selected() === g) {
+      c.strokeStyle = 'rgba(240,216,144,0.7)';
+      c.lineWidth = 2;
+      c.beginPath(); c.ellipse(g.x, g.y + 1, 30 * g.sc, 7 * g.sc, 0, 0, 7); c.stroke();
+    }
+    const crouch = (isP && this.ducking) || g.duck > 0;
     if (im && body) {
       const k = h / bh;
       const w = (body.cv.width - PAD * 2) * k;
       const lean = g.dragging && g.dragT < 3 ? 0.18 : 0; // hauling backward
       c.save();
-      c.translate(Math.round(g.x - g.face * g.recoil * 3), Math.round(g.y + bob));
+      c.translate(Math.round(g.x - g.face * g.recoil * (isP ? 6 : 3)), Math.round(g.y + bob));
       if (g.face < 0) c.scale(-1, 1);
       if (lean) c.rotate(-lean);
+      if (crouch) c.scale(1, 0.68);
       c.drawImage(body.cv, -w / 2 - PAD * k, -h - PAD * k, body.cv.width * k, body.cv.height * k);
       c.restore();
     }
@@ -2132,6 +3087,7 @@ export class Battle {
     c.textAlign = 'center';
     c.fillStyle = isP ? '#f0d890' : '#cfc6b0';
     c.fillText(first(g.s) + (isP ? ' ◆' : ''), g.x, top - 14);
+    if (!isP) this.drawOrderGlyph(c, g, g.x + c.measureText(first(g.s)).width / 2 + 9, top - 18);
     const hp = Math.max(0, 1 - pain(g.s) / DOWN_PAIN);
     c.fillStyle = 'rgba(0,0,0,0.6)';
     c.fillRect(g.x - 20, top - 9, 40, 4);
@@ -2257,8 +3213,9 @@ export class Battle {
     const k = h / bh;
     const w = (body.cv.width - PAD * 2) * k;
     c.save();
-    let rot = 0, dy = 0;
+    let rot = 0, dy = 0, sx = 0, sy = 1;
     const gait = z.def.speed > 60 ? 9 : 3.2;
+    const crawler = z.crippled && !z.def.crawl && z.def.id !== 'ferryman';
     if (z.state === 'walk' || z.state === 'over' || z.state === 'flee') {
       rot = Math.sin(z.phase * gait) * (z.def.speed > 60 ? 0.05 : 0.04);
       dy = -Math.abs(Math.sin(z.phase * gait)) * (z.def.speed > 60 ? 5 : 2.5) * z.scale;
@@ -2270,9 +3227,23 @@ export class Battle {
       dy = t * h * 0.15;
       c.globalAlpha = 1 - Math.max(0, z.dieT - 0.4) * 5;
     }
+    if (z.stun > 0 && z.state !== 'dying') { rot = 0.05 + Math.sin(this.t * 40) * 0.025; dy = 0; }
+    if (z.down !== undefined && z.down > 0) { rot = 1.05; dy = h * 0.12; }
+    if (z.leap) {
+      const q = Math.min(1, z.leap.t / z.leap.dur);
+      dy = -Math.sin(q * Math.PI) * (130 + 40 * z.scale);
+      rot = -0.5 + q * 0.7;
+    } else if (z.def.leap && (z.windup ?? 0) > 0) {
+      sy = 0.84; // coiled
+      rot = -0.06;
+    }
+    if (z.climb !== undefined) { dy = -this.climbLift(z); rot = -0.25; }
+    if (crawler && z.state !== 'dying') { rot = -1.25; sx = h * 0.42; dy = -w * 0.18; }
     c.translate(Math.round(z.x), Math.round(z.y + dy));
     if (flip) c.scale(-1, 1);
+    if (sx) c.translate(sx, 0);
     c.rotate(rot);
+    if (sy !== 1) c.scale(1, sy);
     // up out of the drain, or down behind cover: only what is above the line shows
     const sink = (z.emerge && z.emerge > 0 ? h * Math.min(1, z.emerge / 0.9) : 0) + (z.state === 'cover' && z.ducked ? h * 0.32 : 0);
     if (sink > 0 || z.emerge !== undefined) {
@@ -2310,7 +3281,24 @@ export class Battle {
       const sh = shadeImg(z.sprite, '#ff7a2a');
       if (sh) c.drawImage(sh, -w / 2, -h, w, h);
     }
+    // the Buck's eyes catch the light as it coils
+    if (z.def.leap && (z.windup ?? 0) > 0) {
+      const ey = EYES[z.sprite];
+      if (ey) {
+        const ex = -w / 2 + ey.x * w, eyy = -h + ey.y * h;
+        const a = 0.45 + 0.55 * (1 - (z.windup ?? 0) / 0.8);
+        c.globalAlpha = 1;
+        c.globalCompositeOperation = 'lighter';
+        const gr = c.createRadialGradient(ex, eyy, 0, ex, eyy, 16 * z.scale);
+        gr.addColorStop(0, `rgba(255,200,90,${a})`);
+        gr.addColorStop(1, 'rgba(255,160,40,0)');
+        c.fillStyle = gr;
+        c.fillRect(ex - 18, eyy - 18, 36, 36);
+        c.globalCompositeOperation = 'source-over';
+      }
+    }
     c.restore();
+    if (z.state !== 'dying') this.drawTells(c, z, lit);
     if (z.name && z.state !== 'dying') {
       c.font = '12px "Special Elite", monospace';
       c.fillStyle = '#c9a95a';
@@ -2319,6 +3307,54 @@ export class Battle {
     }
   }
 
+  /** Weakspots (subtle pulsing ochre/bone, brighter with Focus), the Crier's wind-up ring, the Biler's swelling throat, a marked target. */
+  drawTells(c: CanvasRenderingContext2D, z: Zombie, lit: number) {
+    const h = this.zh(z);
+    const fog = this.fogAlpha(z);
+    if (z.x < W + 10) {
+      const pulse = 0.5 + 0.5 * Math.sin(this.t * 4 + z.id);
+      const a = Math.min(1, (0.24 + 0.16 * pulse) * (this.focusing ? 2.4 : 1) * (0.6 + 0.4 * lit) * fog);
+      for (const w of this.weakPts(z)) {
+        const bone = w.kind === 'knee';
+        c.strokeStyle = bone ? `rgba(232,220,192,${a})` : `rgba(222,168,70,${a * 1.2})`;
+        c.lineWidth = 1.2;
+        c.beginPath(); c.arc(w.x, w.y, w.r * (0.9 + 0.15 * pulse), 0, 7); c.stroke();
+        c.fillStyle = bone ? `rgba(232,220,192,${a * 0.5})` : `rgba(222,168,70,${a * 0.6})`;
+        c.beginPath(); c.arc(w.x, w.y, Math.max(1.2, w.r * 0.28), 0, 7); c.fill();
+      }
+    }
+    // Crier drawing breath: a pale ring growing over its head
+    if (z.def.scream && (z.windup ?? 0) > 0) {
+      const hb = this.hitbox(z);
+      const q = 1 - (z.windup ?? 0) / 1.2;
+      c.strokeStyle = `rgba(225,225,210,${0.25 + q * 0.55})`;
+      c.lineWidth = 2;
+      c.beginPath(); c.arc(hb.hx, hb.hy, 10 + q * 26, 0, 7); c.stroke();
+    }
+    // Biler about to spit: the throat swells yellow
+    if (z.def.spit && (z.windup ?? 0) > 0) {
+      const w = this.weakPts(z)[0];
+      if (w) {
+        const q = 1 - (z.windup ?? 0) / 0.7;
+        c.fillStyle = `rgba(200,190,70,${0.25 + q * 0.4})`;
+        c.beginPath(); c.arc(w.x, w.y, w.r * (1 + q * 0.8), 0, 7); c.fill();
+      }
+    }
+    // a marked target: an ochre bracket
+    if (this.mark && this.mark.id === z.id) {
+      const hb = this.hitbox(z);
+      const x1 = hb.x1 - 6, x2 = hb.x2 + 6, y1 = hb.hy - hb.hr - 6, y2 = hb.y2 + 2, q = 8;
+      c.strokeStyle = 'rgba(222,168,70,0.9)';
+      c.lineWidth = 2;
+      c.beginPath();
+      c.moveTo(x1, y1 + q); c.lineTo(x1, y1); c.lineTo(x1 + q, y1);
+      c.moveTo(x2 - q, y1); c.lineTo(x2, y1); c.lineTo(x2, y1 + q);
+      c.moveTo(x1, y2 - q); c.lineTo(x1, y2); c.lineTo(x1 + q, y2);
+      c.moveTo(x2 - q, y2); c.lineTo(x2, y2); c.lineTo(x2, y2 - q);
+      c.stroke();
+    }
+    void h;
+  }
   drawSnow(c: CanvasRenderingContext2D) {
     c.fillStyle = 'rgba(230,235,240,0.7)';
     for (let i = 0; i < 120; i++) {
@@ -2425,6 +3461,158 @@ export class Battle {
     c.restore();
   }
 
+  /** open circle = free fire, bar = hold fire, dot = heads only, square = protect wall; a post letter beside it */
+  drawOrderGlyph(c: CanvasRenderingContext2D, g: Guard, x: number, y: number) {
+    c.save();
+    c.strokeStyle = c.fillStyle = g.order === 'hold' ? '#c9a95a' : g.order === 'heads' ? '#e8dcc0' : g.order === 'wall' ? '#b08060' : '#9a9282';
+    c.lineWidth = 1.5;
+    if (g.order === 'free') { c.beginPath(); c.arc(x, y, 3.5, 0, 7); c.stroke(); }
+    else if (g.order === 'hold') c.fillRect(x - 4, y - 1.2, 8, 2.6);
+    else if (g.order === 'heads') { c.beginPath(); c.arc(x, y, 3.5, 0, 7); c.stroke(); c.beginPath(); c.arc(x, y, 1.4, 0, 7); c.fill(); }
+    else c.strokeRect(x - 3.5, y - 3.5, 7, 7);
+    if (g.post !== 'step') {
+      c.font = '9px "Special Elite", monospace';
+      c.textAlign = 'left';
+      c.fillStyle = '#a89c84';
+      c.fillText(g.post === 'roof' ? 'roof' : g.post === 'loop' ? 'loophole' : 'runner', x + 7, y + 3);
+    }
+    c.restore();
+  }
+
+  /** On the ground: faint distance pegs, the Pulper kill line, and where bile is about to land. */
+  drawRoadMarks(c: CanvasRenderingContext2D) {
+    c.save();
+    // pegs every 100 px from the wall, so distances are learned
+    c.fillStyle = 'rgba(200,190,160,0.10)';
+    for (let d = 100; d <= 800; d += 100) for (let l = 0; l < 4; l += 3) c.fillRect(wallX(l) + d - 1, LANES[l] + 3, 2, 3);
+    // the kill line: a Pulper must die beyond it
+    if (this.zombies.some((z) => z.def.burst && z.state !== 'dying' && z.x < W)) {
+      c.strokeStyle = `rgba(200,150,60,${0.35 + 0.1 * Math.sin(this.t * 3)})`;
+      c.lineWidth = 2;
+      c.setLineDash([8, 7]);
+      c.beginPath();
+      c.moveTo(wallX(0) + 180, LANES[0] - 6);
+      c.lineTo(wallX(3) + 180, LANES[3] + 8);
+      c.stroke();
+      c.setLineDash([]);
+    }
+    // bile: a shadow running along the ground, and the spot it will land on
+    for (const b of this.globs) {
+      const p = this.globPos(b);
+      const up = Math.max(0, p.gy - p.y);
+      const r = Math.max(4, 10 - up * 0.03);
+      c.fillStyle = `rgba(8,8,6,${0.35 - Math.min(0.2, up * 0.001)})`;
+      c.beginPath(); c.ellipse(p.x, p.gy, r * 1.6, r * 0.45, 0, 0, 7); c.fill();
+      const q = p.k;
+      c.strokeStyle = `rgba(200,190,70,${0.25 + 0.5 * q})`;
+      c.lineWidth = 1.5;
+      c.setLineDash([4, 4]);
+      c.beginPath(); c.ellipse(b.x1, b.gy1 + 1, 22 - 8 * q, 6 - 2 * q, 0, 0, 7); c.stroke();
+      c.setLineDash([]);
+    }
+    c.restore();
+  }
+
+  /** The bodies against the wall in one lane: a heap whose height is its mass. */
+  drawPile(c: CanvasRenderingContext2D, l: number) {
+    const m = this.piles[l];
+    if (m < 0.3) return;
+    const lim = this.pileLimit();
+    const x0 = wallX(l) + 2, y = LANES[l] + 2;
+    const sc = depthScale(LANES[l]);
+    const len = (40 + Math.min(lim, m) * 4) * sc;
+    const ht = Math.min(1.15, m / lim) * 70 * sc;
+    c.save();
+    c.fillStyle = '#16120f';
+    c.beginPath();
+    c.moveTo(x0, y);
+    for (let i = 0; i <= 8; i++) {
+      const t = i / 8;
+      const bump = Math.sin(i * 2.3 + l) * 4 * sc;
+      c.lineTo(x0 + t * len, y - ht * Math.pow(1 - t, 0.7) - bump * (1 - t));
+    }
+    c.lineTo(x0 + len, y);
+    c.closePath();
+    c.fill();
+    // limbs and cloth
+    c.strokeStyle = '#2c241d';
+    c.lineWidth = 3 * sc;
+    for (let i = 0; i < Math.min(7, m); i++) {
+      const t = ((i * 37 + l * 11) % 100) / 100;
+      const px = x0 + t * len * 0.9, py = y - ht * Math.pow(1 - t, 0.7) * 0.7;
+      c.beginPath(); c.moveTo(px, py); c.lineTo(px + 12 * sc * (i % 2 ? 1 : -0.6), py - 7 * sc); c.stroke();
+    }
+    // the gauge, once it starts to matter
+    if (m >= lim * 0.4) {
+      const f = Math.min(1, m / lim);
+      const gx = x0 + 6, gy = y - ht - 12;
+      c.fillStyle = 'rgba(10,9,8,0.6)';
+      c.fillRect(gx, gy, 34, 5);
+      c.fillStyle = f >= 1 ? '#c04030' : f >= 0.8 ? '#c07030' : '#8f7a55';
+      c.fillRect(gx + 1, gy + 1, 32 * f, 3);
+    }
+    c.restore();
+  }
+
+  drawGlobs(c: CanvasRenderingContext2D) {
+    for (const b of this.globs) {
+      const p = this.globPos(b);
+      c.fillStyle = '#a8a040';
+      c.beginPath(); c.arc(p.x, p.y, 6, 0, 7); c.fill();
+      c.fillStyle = 'rgba(230,220,120,0.6)';
+      c.beginPath(); c.arc(p.x - 2, p.y - 2, 2, 0, 7); c.fill();
+      // a dripping tail
+      c.strokeStyle = 'rgba(150,145,50,0.5)';
+      c.lineWidth = 3;
+      c.beginPath(); c.moveTo(p.x, p.y); c.lineTo(p.x + 10, p.y - 4); c.stroke();
+    }
+  }
+
+  /** The next ~20 s of arrivals (research 05 §2): detail by scouting, +10 s with someone on the roof. */
+  drawThreatRibbon(c: CanvasRenderingContext2D) {
+    const tier = intelTier();
+    const look = 20 + (this.guards.some((g) => g.post === 'roof' && this.standing(g)) ? 10 : 0);
+    const x0 = W - 330, x1 = W - 22, y = 22;
+    const up = this.plan.spawns.slice(this.spawnIdx).filter((s) => s.t - this.t < look);
+    c.save();
+    c.fillStyle = 'rgba(10,9,8,0.55)';
+    c.fillRect(x0 - 8, y - 12, x1 - x0 + 16, 30);
+    c.font = '9px "Special Elite", monospace';
+    c.textAlign = 'left';
+    c.fillStyle = '#7d7462';
+    c.fillText(`ROAD ${look}s`, x0 - 4, y - 2);
+    c.strokeStyle = 'rgba(160,150,130,0.25)';
+    c.beginPath(); c.moveTo(x0, y + 8); c.lineTo(x1, y + 8); c.stroke();
+    const glyph: Record<string, [string, string]> = {
+      sleeper: ['·', '#8a8272'], deer: ['D', '#c8b48a'], drag: ['_', '#9a8a6a'], pulper: ['P', '#c8a040'], crier: ['C', '#e8dcc0'],
+      deputy: ['▣', '#8fa6c8'], ferryman: ['F', '#e07050'], leaper: ['B', '#e0a040'], spitter: ['b', '#b8b050'], raider: ['R', '#d06050'],
+      tunneler: ['_', '#9a8a6a'], bellwether: ['☗', '#e0c070'],
+    };
+    let lastPack = '';
+    for (const s of up) {
+      const k = (s.t - this.t) / look;
+      const x = x0 + 40 + k * (x1 - x0 - 40);
+      const special = s.type !== 'sleeper' && s.type !== 'drag';
+      const [g, col] = glyph[s.type] ?? ['?', '#aaa'];
+      if (tier === 0 || (tier === 1 && !special)) {
+        c.fillStyle = 'rgba(150,145,135,0.55)';
+        c.beginPath(); c.arc(x, y + 8, 2, 0, 7); c.fill();
+      } else {
+        c.fillStyle = col;
+        c.font = special ? 'bold 11px "Special Elite", monospace' : '10px "Special Elite", monospace';
+        c.textAlign = 'center';
+        c.fillText(g, x, y + 12);
+      }
+      if (tier >= 2 && s.pack && s.pack !== lastPack) {
+        lastPack = s.pack;
+        c.font = '8px "Special Elite", monospace';
+        c.fillStyle = '#c9a95a';
+        c.textAlign = 'center';
+        c.fillText(s.pack.toUpperCase(), x, y - 2);
+      }
+    }
+    c.restore();
+  }
   drawHud(c: CanvasRenderingContext2D) {
     c.save();
     c.textAlign = 'left';
@@ -2474,12 +3662,25 @@ export class Battle {
       c.fillStyle = v;
       c.fillRect(0, 0, W, H);
     }
-    // weapon
+    // Focus: the world drains of colour; low nerve: the edges close in; bile: a yellow smear
     const p = this.player;
+    if (this.focusing) { c.fillStyle = 'rgba(20,24,30,0.22)'; c.fillRect(0, 0, W, H); }
+    if (this.nerve < this.nerveMax * 0.25 && !this.done) {
+      const beat = 0.5 + 0.5 * Math.sin(this.t * (this.shakeT > 0 ? 9 : 6));
+      const v = c.createRadialGradient(W / 2, H / 2, H * 0.4, W / 2, H / 2, H * 0.95);
+      v.addColorStop(0, 'rgba(60,0,0,0)');
+      v.addColorStop(1, `rgba(60,0,0,${0.18 + 0.12 * beat})`);
+      c.fillStyle = v;
+      c.fillRect(0, 0, W, H);
+    }
+    if (p && p.blind > 0) { c.fillStyle = `rgba(150,140,40,${Math.min(0.3, p.blind * 0.08)})`; c.fillRect(0, 0, W, H); }
+    if (!this.intro) this.drawThreatRibbon(c);
+    // weapon
     if (p && p.w) {
       const def = WEAPONS[p.w.def];
-      const prof = this.prof(p.w);
+      const prof = this.eff(p);
       const icon = img(def.icon);
+      const hard = realism() === 'hardcore';
       c.fillStyle = 'rgba(10,9,8,0.7)';
       c.fillRect(W - 330, H - 92, 310, 74);
       if (icon) {
@@ -2491,29 +3692,73 @@ export class Battle {
       c.fillStyle = '#d9cdb0';
       c.fillText(p.w.name ? `"${p.w.name}"` : def.name, W - 30, H - 70);
       const mag = this.playerMag.get(p.w.uid) ?? 0;
+      const cap = prof.mag;
+      const chamber = hasChamber(p.w, prof) && mag > cap ? 1 : 0;
       c.font = '26px "Special Elite", monospace';
-      c.fillStyle = mag === 0 ? '#c04030' : '#efe2c2';
+      c.fillStyle = mag === 0 ? '#c04030' : mag <= Math.max(1, cap * 0.3) ? '#d09040' : '#efe2c2';
       const reserve = prof.ammoRes ? roundsInStores(prof, G.stores) : '∞';
-      c.fillText(`${mag}`, W - 110, H - 30);
+      const pouch = (this.pouch.get(`${p.w.uid}|${prof.ammoRes}`) ?? []).reduce((a, b) => a + b, 0);
+      if (hard) {
+        // Hardcore: you feel the weight of the gun, you don't count it
+        const f = mag / Math.max(1, cap);
+        c.font = '17px "Special Elite", monospace';
+        c.fillText(mag === 0 ? 'empty' : f >= 0.85 ? 'full' : f >= 0.5 ? 'most' : f >= 0.25 ? 'half' : mag === 1 ? 'last' : 'low', W - 110, H - 30);
+      } else c.fillText(chamber ? `${mag - 1}+1` : `${mag}`, W - 110, H - 30);
       c.font = '14px "Special Elite", monospace';
       c.fillStyle = '#a89c84';
-      c.fillText(`/ ${reserve}`, W - 30, H - 30);
-      // what is in the gun tonight
+      c.fillText(`/ ${reserve}${pouch ? ` +${pouch}` : ''}`, W - 30, H - 30);
+      // what is in the gun tonight; the selector; the tube's shells
       c.font = '11px "Special Elite", monospace';
       c.fillStyle = prof.incendiary ? '#d08040' : '#8f846e';
-      c.fillText(prof.ammoRes ? (AMMO_TYPES[prof.ammoRes]?.short ?? ammoLabel(prof.ammoRes)) : '', W - 30, H - 52);
+      const modes = fireModes(p.w, this.prof(p.w, p.s));
+      const mode = modes.length > 1 ? `  ${(this.modes.get(p.w.uid) ?? modes[0]).toUpperCase()}` : '';
+      c.fillText((prof.ammoRes ? (AMMO_TYPES[prof.ammoRes]?.short ?? ammoLabel(prof.ammoRes)) : '') + mode, W - 30, H - 52);
+      if (this.usesTube(p.w, prof) && !hard) {
+        const tube = this.tubeOf(p.w, mag);
+        const col: Partial<Record<Res, string>> = { shell: '#b04030', shell_slug: '#a0a0a0', shell_fire: '#d08030', shell_flech: '#6080c0' };
+        tube.forEach((r, i) => { c.fillStyle = col[r] ?? '#c9b88a'; c.fillRect(W - 190 + i * 9, H - 60, 7, 10); });
+      }
       if (p.w.cond < 0.4) { c.font = '14px "Special Elite", monospace'; c.fillStyle = '#c08040'; c.fillText('worn', W - 200, H - 30); }
-      // reload bar
+      // reload / clearing bar
       if (this.playerReload > 0) {
-        c.fillStyle = '#d9c9a0';
-        c.fillRect(W - 320, H - 24, 290 * Math.max(0, 1 - this.playerReload / Math.max(0.01, prof.reload)), 3);
+        c.fillStyle = this.reloadKind === 'speed' ? '#d0a050' : '#d9c9a0';
+        c.fillRect(W - 320, H - 24, 290 * Math.max(0, 1 - this.playerReload / Math.max(0.01, prof.reloadPerRound ? prof.reload : this.reloadTotal)), 3);
+      }
+      if (this.jam) {
+        c.font = '13px "Special Elite", monospace';
+        c.fillStyle = '#e0a060';
+        c.fillText(this.jam.clearing > 0 ? 'clearing…' : this.jam.kind === 'barrel' ? 'BARREL HOT — [R] swap' : this.jam.kind === 'double' ? 'DOUBLE-FEED — [R]' : 'JAMMED — tap [R]', W - 30, H - 98);
       }
     }
+    // nerve and rally, bottom left above the key line
+    if (p) {
+      const x = 20, y = 64;
+      c.fillStyle = 'rgba(10,9,8,0.6)';
+      c.fillRect(x, y - 12, 210, 22);
+      const f = this.nerve / Math.max(1, this.nerveMax);
+      c.fillStyle = f < 0.25 ? '#c04030' : f < 0.5 ? '#c09040' : '#9db0a0';
+      c.fillRect(x + 54, y - 4, 100 * f, 6);
+      c.strokeStyle = 'rgba(200,190,160,0.3)';
+      c.strokeRect(x + 54, y - 4, 100, 6);
+      c.font = '10px "Special Elite", monospace';
+      c.textAlign = 'left';
+      c.fillStyle = '#a89c84';
+      c.fillText(this.focusing ? 'FOCUS' : 'nerve', x + 6, y + 3);
+      // the headshot streak as tally marks, then banked rallies
+      c.fillStyle = '#d9c9a0';
+      for (let i = 0; i < this.streak; i++) c.fillRect(x + 160 + i * 4, y - 6, 2, 10);
+      if (this.rally > 0) { c.fillStyle = '#e0c070'; c.fillText(`RALLY ×${this.rally} [E]`, x + 160 + this.streak * 4 + 4, y + 3); }
+      if (this.rallyT > 0) { c.fillStyle = '#e0c070'; c.fillText('RALLY', x + 160, y + 3); }
+    }
     c.textAlign = 'left';
-    c.font = '12px "Special Elite", monospace';
+    c.font = '11px "Special Elite", monospace';
     c.fillStyle = '#a89c84';
     const multiAmmo = !!(p?.w && ammoTypesFor(p.w.def).length > 1);
-    c.fillText(`firebombs ${G.stores.molotov} [F]   ·   [R] reload   [Q]/[1-9] weapon${multiAmmo ? '   [T] ammo' : ''}   [hold Space] hurry   [P] pause`, 20, H - 22);
+    // the full key list early in the night (and when paused); afterwards one short line
+    if (this.t < 30 || this.paused) {
+      c.fillText(`[R] reload (hold: speed) · [Q]/wheel gun${multiAmmo ? ' · [T] ammo' : ''} · [B] selector · RMB focus · [S] duck · [F]/MMB firebomb ${G.stores.molotov}`, 20, H - 24);
+      c.fillText('[1-9]/[Tab] guard · [Z] free [X] hold [C] heads [V] wall (Shift: all) · [Y] post · [M] mark · [E] rally · Space hurry · [P] pause', 20, H - 10);
+    } else c.fillText(`firebombs ${G.stores.molotov} [F]   ·   [R] reload   [S] duck   RMB focus   [P] keys`, 20, H - 12);
     // messages
     c.textAlign = 'center';
     this.messages.forEach((m, i) => {
@@ -2521,22 +3766,59 @@ export class Battle {
       c.fillStyle = `rgba(232,220,192,${Math.min(1, m.life)})`;
       c.fillText(m.text, W / 2, 110 + i * 26);
     });
-    // crosshair: circle sized by real spread
+    // crosshair: circle sized by real spread, at where the hand points
     if (p && p.w && !this.done) {
-      const prof = this.prof(p.w);
+      const prof = this.eff(p);
       const mz = this.muzzle(p);
-      const dist = Math.hypot(this.mouse.x - mz.x, this.mouse.y - mz.y);
-      const spreadA = (prof.pellets > 1 ? prof.spread : prof.spread * (1.75 - aimFactor(p.s))) + this.bloom;
+      const ap = this.aimPoint(p);
+      const dist = Math.hypot(ap.x - mz.x, ap.y - mz.y);
+      const sp = this.spreadNow(p, prof);
+      const spreadA = prof.pellets > 1 ? sp.cone : sp.single;
       const r = Math.max(5, Math.tan(spreadA) * dist);
-      c.strokeStyle = this.playerReload > 0 ? 'rgba(200,120,80,0.8)' : 'rgba(235,225,200,0.85)';
-      c.lineWidth = 1.5;
+      const busy = this.playerReload > 0 || !!this.jam || this.ducking;
+      c.strokeStyle = busy ? 'rgba(200,120,80,0.8)' : sp.aimed ? 'rgba(245,238,215,0.95)' : 'rgba(235,225,200,0.6)';
+      c.lineWidth = sp.aimed ? 2 : 1.2;
+      if (!sp.aimed && !busy) c.setLineDash([3, 3]);
       c.beginPath();
-      c.arc(this.mouse.x, this.mouse.y, r, 0, Math.PI * 2);
+      c.arc(ap.x, ap.y, r, 0, Math.PI * 2);
       c.stroke();
+      c.setLineDash([]);
+      c.lineWidth = 1.5;
       c.beginPath();
       c.moveTo(this.mouse.x - 4, this.mouse.y); c.lineTo(this.mouse.x + 4, this.mouse.y);
       c.moveTo(this.mouse.x, this.mouse.y - 4); c.lineTo(this.mouse.x, this.mouse.y + 4);
       c.stroke();
+      // the climb tick: how far the muzzle has walked up
+      if (this.climbY > 1) {
+        c.strokeStyle = 'rgba(230,180,120,0.8)';
+        c.beginPath(); c.moveTo(ap.x - 6, ap.y); c.lineTo(ap.x + 6, ap.y); c.moveTo(ap.x, ap.y); c.lineTo(ap.x, this.mouse.y); c.stroke();
+      }
+      // heat: an arc on the right of the ring
+      const heat = this.heat.get(p.w.uid) ?? 0;
+      if (usesHeat(prof) && heat > 1) {
+        const hf = Math.min(1, heat / (heatLimit(prof) * (swapsBarrel(p.w) ? 1.7 : 1.3)));
+        c.strokeStyle = hf > 0.6 ? 'rgba(240,110,50,0.9)' : 'rgba(230,170,90,0.7)';
+        c.lineWidth = 2.5;
+        c.beginPath(); c.arc(ap.x, ap.y, r + 6, -0.9, -0.9 + 1.8 * hf); c.stroke();
+      }
+      // nerve: a thin arc on the left half
+      c.strokeStyle = this.nerve < this.nerveMax * 0.25 ? 'rgba(200,70,50,0.8)' : 'rgba(160,180,170,0.5)';
+      c.lineWidth = 2;
+      c.beginPath(); c.arc(ap.x, ap.y, r + 6, Math.PI * 0.6, Math.PI * 0.6 + Math.PI * 0.8 * (this.nerve / Math.max(1, this.nerveMax))); c.stroke();
+      // hit marker, coloured by zone
+      if (this.hitMark && this.hitMark.t > 0) {
+        const col: Record<string, string> = { head: '#f4ecd8', leg: '#d0a050', arm: '#a8a8a0', plate: '#a8c8f0', body: '#d8c8b0', weak: '#f0c060', glob: '#c8c050' };
+        c.strokeStyle = col[this.hitMark.kind] ?? '#ddd';
+        c.lineWidth = this.hitMark.kind === 'head' || this.hitMark.kind === 'weak' ? 2.5 : 1.8;
+        const q = 6 + (0.18 - this.hitMark.t) * 20;
+        c.beginPath();
+        c.moveTo(this.mouse.x - q, this.mouse.y - q); c.lineTo(this.mouse.x - q / 2, this.mouse.y - q / 2);
+        c.moveTo(this.mouse.x + q, this.mouse.y - q); c.lineTo(this.mouse.x + q / 2, this.mouse.y - q / 2);
+        c.moveTo(this.mouse.x - q, this.mouse.y + q); c.lineTo(this.mouse.x - q / 2, this.mouse.y + q / 2);
+        c.moveTo(this.mouse.x + q, this.mouse.y + q); c.lineTo(this.mouse.x + q / 2, this.mouse.y + q / 2);
+        c.stroke();
+        if (this.hitMark.kind === 'weak') { c.beginPath(); c.arc(this.mouse.x, this.mouse.y, q + 3, 0, 7); c.stroke(); }
+      }
     }
     if (this.intro > 0) {
       c.fillStyle = `rgba(0,0,0,${Math.min(1, this.intro / 1.5) * 0.85})`;
@@ -2582,6 +3864,44 @@ export class Battle {
       const m = g === pl ? this.playerMag.get(g.w.uid) ?? 0 : g.mag;
       if (prof.ammoRes) add(prof.ammoRes, m * prof.perShot);
     }
+    // partial magazines in the pouch, and shells in a tube, go back in the stores as rounds
+    for (const [key, mags] of this.pouch) {
+      const res = key.split('|')[1] as Res;
+      const w = G.weapons.find((x) => x.uid === key.split('|')[0]);
+      const n = mags.reduce((a, b) => a + b, 0);
+      if (w && res && n > 0) add(res, n * this.prof(w, undefined, res).perShot);
+    }
+    // dropped magazines: picked out of the snow at first light if the wall held (never on Hardcore)
+    const drop = Object.entries(this.dropped) as [Res, number][];
+    if (drop.length) {
+      if (r.wallHeld && realism() !== 'hardcore') {
+        for (const [k, v] of drop) add(k, v);
+        r.lines.push(`Picked ${this.droppedMags} dropped magazine${this.droppedMags > 1 ? 's' : ''} back out of the snow under the wall.`);
+      } else r.lines.push(`${this.droppedMags} magazine${this.droppedMags > 1 ? 's' : ''} dropped over the wall ${r.wallHeld ? 'are trampled into the mud' : 'went with the wall'}.`);
+    }
+    // dawn salvage: brass, nails and buckles picked off the road (balance.md §8.10)
+    if (r.wallHeld && r.kills > 0) {
+      const sc = Math.round(r.kills * 0.12);
+      if (sc > 0) { add('scrap', sc); r.lines.push(`${sc} scrap in brass, nails and buckles picked off the road.`); }
+    }
+    // the pile: half of it is still against the wall tomorrow night unless somebody clears it
+    const carry = this.piles.map((m) => Math.round(m * 0.5 * 10) / 10);
+    if (carry.some((m) => m > 0.5)) {
+      G.flags.pileCarry = JSON.stringify(carry);
+      const tot = carry.reduce((a, b) => a + b, 0);
+      if (tot > 6) r.lines.push(`The bodies against the wall are still there. Somebody will have to burn them, or they'll be a ramp tomorrow night.`);
+    } else delete G.flags.pileCarry;
+    // the leader: kept their head, or came apart
+    const L = this.guards.find((g) => g.s.isLeader && !g.s.dead);
+    if (L) {
+      if (this.nerve >= this.nerveMax * 0.6) addThought(L.s, { id: 'kept_head', label: 'Kept my head out there', mood: 4, days: 2 }, 1);
+      if (this.zeroes >= 3) addThought(L.s, { id: 'shaking_hands', label: "Hands won't stop shaking", mood: -5, days: 3 }, 1);
+    }
+    // posts and orders are remembered for tomorrow
+    const posts: Record<string, Post> = {}, orders: Record<string, Order> = {};
+    for (const g of this.guards) if (!g.s.isLeader && !g.s.dead) { posts[g.s.id] = g.post; orders[g.s.id] = g.order; }
+    G.flags.posts = JSON.stringify(posts);
+    G.flags.orders = JSON.stringify(orders);
     // guns the leader picked up and put down again
     for (const [uid, m] of this.playerMag) {
       const w = held.has(uid) ? undefined : G.weapons.find((x) => x.uid === uid);

@@ -16,7 +16,7 @@ export interface WeakSpot { kind: WeakKind; x: number; y: number; r: number }
 export const WEAKSPOTS: Record<string, WeakSpot[]> = {
   z_bloater: [{ kind: 'sac', x: 0.42, y: 0.4, r: 0.075 }],
   z_riot: [{ kind: 'neck', x: 0.42, y: 0.17, r: 0.03 }],
-  z_brute: [{ kind: 'shoulder', x: 0.62, y: 0.09, r: 0.045 }, { kind: 'knee', x: 0.38, y: 0.74, r: 0.04 }, { kind: 'knee', x: 0.7, y: 0.74, r: 0.04 }],
+  z_brute: [{ kind: 'shoulder', x: 0.66, y: 0.12, r: 0.045 }, { kind: 'knee', x: 0.3, y: 0.82, r: 0.04 }, { kind: 'knee', x: 0.72, y: 0.82, r: 0.04 }],
   z_shrieker: [{ kind: 'throat', x: 0.33, y: 0.16, r: 0.032 }],
   z_runner: [{ kind: 'knee', x: 0.24, y: 0.69, r: 0.04 }, { kind: 'knee', x: 0.73, y: 0.74, r: 0.04 }],
   z_runner2: [{ kind: 'knee', x: 0.5, y: 0.66, r: 0.04 }, { kind: 'knee', x: 0.86, y: 0.8, r: 0.04 }],
