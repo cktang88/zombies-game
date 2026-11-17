@@ -50,7 +50,7 @@ export interface Stance {
 /** The far (support) arm passes behind the torso, its forearm runs under the gun, its hand wraps the
  * fore-end in front of the gun; the trigger arm and hand are over everything. Head before the gun:
  * the stock covers the jaw (cheek weld seen from the right). */
-const LONG: Slot[] = ['fLeg', 'fUA', 'slung', 'torso', 'nLeg', 'head', 'fFA', 'fH', 'gun', 'nShadow', 'nUA', 'nFA', 'nH'];
+const LONG: Slot[] = ['fLeg', 'fUA', 'fFA', 'slung', 'torso', 'nLeg', 'head', 'fH', 'gun', 'nShadow', 'nUA', 'nFA', 'nH'];
 /** Two-handed pistol: the far arm reaches out behind the near one; the support hand cups the grip behind it. */
 const PISTOL: Slot[] = ['fLeg', 'fUA', 'slung', 'torso', 'nLeg', 'head', 'fFA', 'fH', 'gun', 'nShadow', 'nUA', 'nFA', 'nH'];
 /** Bow: the bow hand is the far (left) one, the right hand draws the string to the cheek. */
@@ -70,7 +70,7 @@ export const STANCES: Record<StanceId, Stance> = {
   // a shotgun is fought more aggressively: more lean into the recoil, a bit lower
   shotgun: S('shotgun', { lean: 0.16, height: 0.945, feet: [-0.22, 0.25], recoilLean: 0.012, recoilBack: 0.2 }),
   // short stock: the same weld, the gun sits a little higher and closer
-  smg: S('smg', { lean: 0.14, pocket: [-2, 22] }), // a short (folded) stock: pushed out to a real length of pull
+  smg: S('smg', { lean: 0.14, pocket: [-2, 40] }), // a short (folded) stock: pushed out to a real length of pull
   // hip fire (LMG): butt tucked under the armpit, gun at the belt line, wide and low, leaning into it
   hip: S('hip', { lean: 0.24, leanAim: 0.15, height: 0.93, feet: [-0.26, 0.26], headAim: 0.4, cheek: false, pocket: [-50, 18], farSh: 0.05, lowAngle: 0.45, lowDrop: 4, recoilLean: 0.006, recoilBack: 0.25 }),
   // two-handed pistol (isosceles seen from the side: both arms out, slight forward lean, head erect)
