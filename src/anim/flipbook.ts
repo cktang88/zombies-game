@@ -6,13 +6,13 @@
 // is baked into the frame, so a frame costs one full rig draw into a small canvas, once.
 import type { Rig } from './rig';
 
-export const FLIP_FRAMES = 16;
+export const FLIP_FRAMES = 12;
 export interface Frame { c: HTMLCanvasElement; ox: number; oy: number; s: number }
 const cache = new Map<string, Frame>();
 const templates = new Map<string, Rig>();
 let makeTemplate: ((spriteId: string, style: string, gait: string) => Rig) | null = null;
 export function setTemplateFactory(f: (spriteId: string, style: string, gait: string) => Rig) { makeTemplate = f; }
-let bytes = 0;
+let bytes = 0, bakeMs = 0, bakes = 0;
 /** Frames are dropped (oldest first) above this many bytes of canvas. */
 export let FLIP_BUDGET = 96 * 1024 * 1024;
 export function setFlipBudget(b: number) { FLIP_BUDGET = b; }
@@ -30,6 +30,7 @@ export function flipFrame(rig: Rig, scale: number): Frame | null {
   let t = templates.get(tk);
   if (!t) { t = makeTemplate(rig.spriteId, rig.style.id, gait); templates.set(tk, t); }
   if (!t.asset) return null;
+  const t0 = performance.now();
   t.speedPx = moving ? 30 : 0;
   t.moving = moving ? 1 : 0;
   t.phase = moving ? (f + 0.5) / FLIP_FRAMES : 0;
@@ -49,6 +50,7 @@ export function flipFrame(rig: Rig, scale: number): Frame | null {
   t.draw(x, ox, oy, sb, 1);
   fr = { c, ox, oy, s: sb };
   cache.set(key, fr);
+  bakeMs += performance.now() - t0; bakes++;
   bytes += c.width * c.height * 4;
   if (bytes > FLIP_BUDGET) {
     // a Map iterates in insertion order: drop the oldest frames
@@ -60,4 +62,4 @@ export function flipFrame(rig: Rig, scale: number): Frame | null {
   }
   return fr;
 }
-export const flipbookStats = () => ({ frames: cache.size, templates: templates.size, mb: +(bytes / 1048576).toFixed(1) });
+export const flipbookStats = () => ({ frames: cache.size, templates: templates.size, mb: +(bytes / 1048576).toFixed(1), bakes, bakeMs: Math.round(bakeMs) });

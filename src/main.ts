@@ -28,6 +28,7 @@ import { takeSpent } from './night/traps';
 import { EMPLACEMENTS, parseEmplacements, stringifyEmplacements, type Post } from './data/emplacements';
 import { crewPlan } from './night/emplacements';
 import { level } from './sim/survivors';
+import { SITES } from './data/world';
 import { buildingLevel } from './sim/day';
 import { add } from './state';
 const WALL_X = 372; // the battle's wall face (night/battle.ts)
@@ -643,6 +644,9 @@ function openLedger() {
   roll: () => { G.pendingEvent = rollIncident(); day(); return G.pendingEvent?.id ?? null; },
   addSurvivor: () => { const s = makeSurvivor(); s.arrivedDay = 1; G.survivors.push(s); return s.id; },
   crossing: () => crossing(false),
+  /** tests: a fresh game straight to a night (day n; 23 = the Crossing) or a daylight run */
+  night: (dayN = 1, mode?: string) => { clearSave(); newGame(mode); G.day = dayN; G.nextNight = planNight(); night(); },
+  run: (site?: string) => { clearSave(); newGame(); run(site ?? SITES[0].id); },
   ending: (kind: string) => { G.flags.ending = kind; G.flags.endWent ??= JSON.stringify(living().map((s) => s.id)); epilogue(); },
 };
 

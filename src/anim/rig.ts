@@ -126,7 +126,7 @@ export class Rig {
   /** the head is gone (blown off): never drawn */
   hideHead = false;
   /** per-look atlases set by the game each frame (lane grade, variant tint, light): null = plain */
-  skin: { atlas: CanvasImageSource; dark: CanvasImageSource } | null = null;
+  skin: { atlas: CanvasImageSource; dark: CanvasImageSource; grow?: number } | null = null;
   /** ink outline stamped under the body: a dilated silhouette atlas grown by `grow` atlas px */
   outline: { src: CanvasImageSource; grow: number } | null = null;
   /** rim band: a silhouette atlas offset by (dx, dy) display px, drawn between outline and body */
@@ -714,37 +714,37 @@ export class Rig {
   }
 
   private drawBody(ctx: CanvasRenderingContext2D, as: RigAsset) {
-    const atlas = this.skin?.atlas ?? as.atlas, dark = this.skin?.dark ?? as.dark;
+    const atlas = this.skin?.atlas ?? as.atlas, dark = this.skin?.dark ?? as.dark, gw = this.skin?.grow ?? 0;
     // far side
-    this.part(ctx, dark, F_TH, 'thigh');
-    this.part(ctx, dark, F_SN, 'shin');
-    this.part(ctx, dark, F_FT, 'foot');
-    this.part(ctx, dark, F_UA, 'upperArm');
-    this.part(ctx, dark, F_FA, 'forearm');
+    this.part(ctx, dark, F_TH, 'thigh', false, 0, 0, gw);
+    this.part(ctx, dark, F_SN, 'shin', false, 0, 0, gw);
+    this.part(ctx, dark, F_FT, 'foot', false, 0, 0, gw);
+    this.part(ctx, dark, F_UA, 'upperArm', false, 0, 0, gw);
+    this.part(ctx, dark, F_FA, 'forearm', false, 0, 0, gw);
     if (this.gunState === 'slung' && this.gun && this.weaponId && this.anchors?.hold !== 'melee') this.drawSlung(ctx);
     // trunk
-    this.part(ctx, atlas, TORSO, 'torso');
-    if (!this.hideHead) this.part(ctx, atlas, HEAD, 'head', this.headFlip > 0.5);
-    this.part(ctx, atlas, N_TH, 'thigh');
-    this.part(ctx, atlas, N_SN, 'shin');
-    this.part(ctx, atlas, N_FT, 'foot');
+    this.part(ctx, atlas, TORSO, 'torso', false, 0, 0, gw);
+    if (!this.hideHead) this.part(ctx, atlas, HEAD, 'head', this.headFlip > 0.5, 0, 0, gw);
+    this.part(ctx, atlas, N_TH, 'thigh', false, 0, 0, gw);
+    this.part(ctx, atlas, N_SN, 'shin', false, 0, 0, gw);
+    this.part(ctx, atlas, N_FT, 'foot', false, 0, 0, gw);
     if (this.gunVisible && this.anchors?.hold !== 'melee') this.drawGun(ctx);
     // far (trigger) hand wraps the grip: in front of the gun
-    this.part(ctx, this.weaponId && this.kind === 'survivor' && this.gunState === 'held' ? atlas : dark, F_H, this.handF);
+    this.part(ctx, this.weaponId && this.kind === 'survivor' && this.gunState === 'held' ? atlas : dark, F_H, this.handF, false, 0, 0, gw);
     if (this.fprop) this.drawProp(ctx, this.fprop, this.palmFX, this.palmFY, this.rhoF);
     if (this.anchors?.hold === 'bow' && this.gunVisible) this.drawString(ctx);
     // contact shadow of the near arm (skipped on small bodies: invisible there), then the arm
-    if (this.ds > 0.42) {
+    if (this.ds > 0.42 && this.kind === 'survivor') {
       ctx.globalAlpha = this.baseAlpha * 0.28;
       this.part(ctx, as.shadow, N_UA, 'upperArm', false, 2.5, 3);
       this.part(ctx, as.shadow, N_FA, 'forearm', false, 2.5, 3);
       ctx.globalAlpha = this.baseAlpha;
     }
-    this.part(ctx, atlas, N_UA, 'upperArm');
-    this.part(ctx, atlas, N_FA, 'forearm');
+    this.part(ctx, atlas, N_UA, 'upperArm', false, 0, 0, gw);
+    this.part(ctx, atlas, N_FA, 'forearm', false, 0, 0, gw);
     if (this.magState === 'hand' && this.gun?.mag) this.drawMagInHand(ctx);
     if (this.prop) this.drawProp(ctx, this.prop, this.palmNX, this.palmNY, this.rhoN);
-    this.part(ctx, atlas, N_H, this.handN);
+    this.part(ctx, atlas, N_H, this.handN, false, 0, 0, gw);
     if (this.gunVisible && this.anchors?.hold === 'melee') this.drawGun(ctx);
   }
 

@@ -17,7 +17,7 @@
 // Setting: ui/settings animationSetting() 'rigged' | 'classic'. rigsOn() also honours the
 // automatic fallback to Classic (parts that fail to load, or frames consistently > 25 ms for
 // 3 s while the rigs carry a real share of the frame) — logged once.
-import { createRig, CLIPS, SPRITE_RIGS, STYLES, gradedAtlas, silAtlas, outlineAtlas, getRig, loadRig, flipbookStats, type Clip, type Rig } from '../anim';
+import { createRig, CLIPS, SPRITE_RIGS, STYLES, gradedAtlas, silAtlas, getRig, loadRig, flipbookStats, type Clip, type Rig } from '../anim';
 import type { DeathKind } from '../anim';
 import { animationSetting, reduceGore } from '../ui/settings';
 import { sfx, gunSoundFor, type ReloadStage } from '../audio';
@@ -46,13 +46,14 @@ export function animFallback(reason: string) {
   fallback = reason;
   console.warn(`[anim] rigged animation off, using Classic: ${reason}`);
 }
-type Dbg = { noFallback?: boolean; frameMs: number; rigMs: number; fullRigs: number; lodRigs: number; ragdolls: number };
-const dbg: Dbg = { frameMs: 0, rigMs: 0, fullRigs: 0, lodRigs: 0, ragdolls: 0 };
+type Dbg = { upd: number; drawFull: number; drawLod: number; noFallback?: boolean; frameMs: number; rigMs: number; fullRigs: number; lodRigs: number; ragdolls: number; acc: { n: number; frame: number; rig: number; max: number } };
+const dbg: Dbg = { upd: 0, drawFull: 0, drawLod: 0, frameMs: 0, rigMs: 0, fullRigs: 0, lodRigs: 0, ragdolls: 0, acc: { n: 0, frame: 0, rig: 0, max: 0 } };
 /** debug handle for tests: globalThis.__anim */
 (globalThis as unknown as { __anim: unknown }).__anim = {
   dbg,
   state: () => ({ setting: animationSetting(), on: rigsOn(), fallback, loadOk, loadBad, ...flipbookStats(), ...dbg }),
   reset: () => { fallback = null; },
+  resetAcc: () => { dbg.acc = { n: 0, frame: 0, rig: 0, max: 0 }; dbg.upd = 0; dbg.drawFull = 0; dbg.drawLod = 0; },
 };
 function noteLoad(sprite: string, ok: boolean) {
   if (ok) loadOk++;
@@ -71,6 +72,7 @@ class FrameWatch {
     const dt = this.last ? now - this.last : 0;
     this.last = now;
     dbg.frameMs = dbg.frameMs * 0.9 + dt * 0.1;
+    if (dt > 0 && dt < 250) { dbg.acc.n++; dbg.acc.frame += dt; dbg.acc.rig += rigMs; dbg.acc.max = Math.max(dbg.acc.max, dt); }
     dbg.rigMs = dbg.rigMs * 0.9 + rigMs * 0.1;
     if (dt <= 0 || dt > 250) { this.slowFor = 0; return; } // a hitch or a background tab: not "consistently"
     if (dt > 25 && rigMs > dt * 0.25) this.slowFor += dt; else this.slowFor = 0;
@@ -153,12 +155,14 @@ function applyLook(rig: Rig, L: LookSpec, scale: number, facing: number) {
   const filter = `brightness(${(L.look.b * vb).toFixed(3)}) saturate(${L.look.s.toFixed(3)})`;
   const tints: [string, number][] = [[FOG_TINT, L.look.fog], [tint, ta]];
   if (shade) tints.push([DARK, 0.35]);
-  rig.skin = { atlas: gradedAtlas(a, key, filter, tints), dark: gradedAtlas(a, key, filter, tints, true) };
-  const grow = L.look.outline > 0 ? Math.max(1, Math.round(L.look.outline / Math.max(0.2, scale))) : 0;
-  rig.outline = grow ? { src: outlineAtlas(a, grow), grow: Math.min(6, grow) } : null;
-  // rim: world-space offset (the rig flips its own offsets by facing)
-  rig.rim = L.rimA > 0 ? { src: silAtlas(a, L.rimColor), dx: L.rimDx * facing, dy: L.rimDy, alpha: L.rimA } : null;
-  rig.lookKey = `${key}|${grow}|${L.rimColor}|${L.rimA}|${L.rimDx * facing}|${L.rimDy}`;
+  // the ink outline lives in the atlas copy (a dilated silhouette under every part): no extra pass
+  const grow = L.look.outline > 0 ? Math.min(6, Math.max(1, Math.round(L.look.outline / Math.max(0.2, scale)))) : 0;
+  rig.skin = { atlas: gradedAtlas(a, key, filter, tints, false, grow), dark: gradedAtlas(a, key, filter, tints, true, grow), grow };
+  rig.outline = null;
+  // rim: world-space offset (the rig flips its own offsets by facing); the faint cool moon rim of
+  // the far, unlit lanes is left out on full rigs (a whole extra pass for a 15% band)
+  rig.rim = L.rimA > 0.3 ? { src: silAtlas(a, L.rimColor), dx: L.rimDx * facing, dy: L.rimDy, alpha: L.rimA } : null;
+  rig.lookKey = `${key}|${grow}|${rig.rim ? `${L.rimColor}|${L.rimA}|${L.rimDx * facing}|${L.rimDy}` : ''}`;
 }
 
 // ------------------------------------------------------------------ battle
@@ -244,7 +248,11 @@ export class BattleActors implements BattleHook {
     const order = [...this.zs.entries()].filter(([, r]) => r.rig.kind === 'turned');
     const byId = new Map(b.zombies.map((z) => [z.id, z]));
     order.sort((p, q) => (byId.get(p[0])?.x ?? 0) - (byId.get(q[0])?.x ?? 0));
-    order.forEach(([id, r], i) => { const z = byId.get(id); r.rig.lod = i >= FULL_RIGS && !(z && z.def.boss); });
+    order.forEach(([id, r], i) => {
+      const z = byId.get(id);
+      r.rig.lod = i >= FULL_RIGS && !(z && z.def.boss);
+      r.rig.autoIdle = !r.rig.lod; // idles and twitches only where they can be seen (they'd force the full rig)
+    });
     for (const g of b.guards) {
       if (g.s.dead || g.fled) { this.gs.delete(g.s.id); continue; }
       const r = this.gr(g);
@@ -260,6 +268,7 @@ export class BattleActors implements BattleHook {
     while (this.corpses.length > MAX_RAGDOLLS) { const cp = this.corpses.shift()!; this.bake(cp); }
     dbg.ragdolls = this.corpses.length;
     this.rigMs += performance.now() - t0;
+    dbg.upd += performance.now() - t0;
   }
 
   private driveTurned(z: Zombie, r: ZR, dt: number) {
@@ -532,6 +541,8 @@ export class BattleActors implements BattleHook {
     r.swingT = dur + 0.1;
     r.rig.play(Math.random() < 0.7 ? 'chop' : 'sweep', { duration: dur });
   }
+  /** The rig draws this defender (melee.ts skips its stand-in weapon bar). */
+  drawsGuard(g: Guard) { return rigsOn() && !!this.gs.get(g.s.id)?.rig.ready; }
   /** The gun muzzle as the rig holds it (null: Classic). */
   muzzle(g: Guard): { x: number; y: number } | null {
     if (!rigsOn()) return null;
@@ -589,8 +600,8 @@ export class BattleActors implements BattleHook {
     const rimA = look.rim ?? 0.5;
     const s = Math.round(depthScale(LANES[lane]) * 4) / 2;
     applyLook(rig, lit
-      ? { look, variant: z.variant, lit: true, rimColor: WARM, rimA: +(rimA * 0.85).toFixed(2), rimDx: -s, rimDy: 0 }
-      : { look, variant: z.variant, lit: false, rimColor: COOL, rimA: +(rimA * 0.6).toFixed(2), rimDx: 1.5, rimDy: -1.5 }, scale, facing);
+      ? { look, variant: rig.lod ? 0 : z.variant, lit: true, rimColor: WARM, rimA: +(rimA * 0.85).toFixed(2), rimDx: -s, rimDy: 0 }
+      : { look, variant: rig.lod ? 0 : z.variant, lit: false, rimColor: COOL, rimA: +(rimA * 0.6).toFixed(2), rimDx: 1.5, rimDy: -1.5 }, scale, facing);
     rig.lodScale = (z.def.crawl ? ZOMBIES.sleeper.height : z.def.height) * ZS * depthScale(LANES[lane]) / (rig.asset?.meta.height ?? 240);
     // a muzzle flash nearby or the crosshair on it: a warm edge; burning: an orange wash
     const edge = (flash ? 0.3 : 0) + (b.hover === z ? 0.35 : 0);
@@ -628,8 +639,9 @@ export class BattleActors implements BattleHook {
       c.globalCompositeOperation = 'source-over';
     }
     if (clip) c.restore();
-    this.rigMs += performance.now() - t0;
-    if (rig.lod && rig.actions.length === 0) dbg.lodRigs++; else dbg.fullRigs++;
+    const dt = performance.now() - t0;
+    this.rigMs += dt;
+    if (rig.lod && rig.actions.length === 0 && !rig.overlay) { dbg.lodRigs++; dbg.drawLod += dt; } else { dbg.fullRigs++; dbg.drawFull += dt; }
     return true;
   }
 

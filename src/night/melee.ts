@@ -177,7 +177,7 @@ export class Melee implements BattleHook {
     const p = this.b.player;
     if (!p || this.swing || this.cd > 0) return true;
     const sw = this.startSwing(p, true);
-    if (sw) { this.swing = sw; this.swings++; }
+    if (sw) { this.swing = sw; this.swings++; this.b.actors?.onSwing(p, sw.wind, sw.item?.def); }
     return true;
   }
 
@@ -240,6 +240,7 @@ export class Melee implements BattleHook {
     const sw = this.startSwing(g, false);
     if (!sw) { g.cd = 2; return; }
     g.recoil = 1;
+    this.b.actors?.onSwing(g, 0.12, sw.item?.def);
     this.land(sw, false);
     g.cd = sw.wind + prof.recovery * (sw.tired ? 1.5 : 1) + 0.15;
   }
@@ -248,7 +249,7 @@ export class Melee implements BattleHook {
   sorted(c: CanvasRenderingContext2D): SortedDraw[] {
     const out: SortedDraw[] = [];
     const p = this.b.player;
-    if (this.swing && p) {
+    if (this.swing && p && !this.b.actors?.drawsGuard(p)) {
       const sw = this.swing;
       out.push({ y: 701.5, f: () => {
         // the weapon raised over the wall top: a dark bar swinging down through the wind-up

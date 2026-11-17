@@ -104,13 +104,15 @@ export function skinCanvas(a: RigAsset, key: string, make: (src: CanvasImageSour
   return c;
 }
 /** Graded copy of the atlas (and of its darkened far-limb copy): brightness/saturation, then flat tints. */
-export function gradedAtlas(a: RigAsset, key: string, filter: string, tints: [string, number][], far = false): HTMLCanvasElement {
-  return skinCanvas(a, `g|${far ? 1 : 0}|${key}`, (_src, w, h, x) => {
+export function gradedAtlas(a: RigAsset, key: string, filter: string, tints: [string, number][], far = false, ink = 0): HTMLCanvasElement {
+  return skinCanvas(a, `g|${far ? 1 : 0}|${ink}|${key}`, (_src, w, h, x) => {
     x.filter = filter;
     x.drawImage(far ? a.dark : a.atlas, 0, 0);
     x.filter = 'none';
     x.globalCompositeOperation = 'source-atop';
     for (const [col, al] of tints) if (al > 0) { x.globalAlpha = al; x.fillStyle = col; x.fillRect(0, 0, w, h); }
+    // an ink line round every part, under it (draw these parts with grow = ink)
+    if (ink > 0) { x.globalCompositeOperation = 'destination-over'; x.globalAlpha = 1; x.drawImage(outlineAtlas(a, ink), 0, 0); }
   });
 }
 /** Flat-colour silhouette of every part (rim bands, hit edges). */

@@ -1,3 +1,4 @@
+/// <reference lib="dom" />
 // Headless check that ragdoll deaths end lying flat (not kneeling / sitting upright).
 // npx tsx tools/ragdoll-check.ts [sprite...]   (exit code 1 if any body settles upright)
 import { readFileSync } from 'node:fs';
