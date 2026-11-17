@@ -823,6 +823,7 @@ export class Battle {
     this.zombies = this.zombies.filter((z) => !(z.state === 'dying' && z.dieT > 0.6) && !(z.state === 'flee' && z.x > W + 140));
     this.updateParticles(dt);
     if (this.vfx.quality !== fxQuality()) this.vfx.setQuality(fxQuality());
+    this.vfx.glWanted = webglFx(); // the Settings toggle applies mid-night, like Effects quality
     this.vfx.update(dt);
     for (const f of this.fires) {
       f.life -= dt;

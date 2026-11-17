@@ -818,6 +818,7 @@ export class Vfx {
 
   /** Normal-blend effects: smoke, dust, blood, debris, brass, arrows, rockets. Draw after the actors. */
   drawNormal(c: CanvasRenderingContext2D) {
+    BATCH = null; // a frame that threw mid-batch must not leave rot() feeding a GL batch nobody flushes
     const t0 = performance.now();
     const P = this.P, S = this.S;
     const m = c.getTransform();
@@ -961,6 +962,7 @@ export class Vfx {
 
   /** Additive light: flashes, tracers, sparks, fire, glows. Draw after the darkness, before the vignette. */
   drawAdd(c: CanvasRenderingContext2D) {
+    BATCH = null;
     const t0 = performance.now();
     const P = this.P, S = this.S;
     const m = c.getTransform();
