@@ -184,6 +184,25 @@ console.log('  heir ->', runIncident('heir', 0).slice(0, 100));
 check(G.weapons.some((w) => w.name?.endsWith('Hymnal') && w.kills === 31), 'heirloom gun arrived');
 console.log('  heir text:', living()[living().length - 1].tales.join(' '), '| boons:', boonLines.length);
 
+// Peltier's tarp: attachments and odd ammunition
+newGame('siege', 55);
+G.day = 5; G.stores.food = 200; G.stores.fuel = 200; G.stores.meds = 200; G.stores.light = 999;
+let specials = 0;
+const trader = INCIDENTS.find((i) => i.id === 'trader')!;
+for (let i = 0; i < 40; i++) {
+  const ev = trader.make()!;
+  const si = ev.choices.findIndex((c) => c.effect === 's');
+  if (si < 0) continue;
+  const before = (G.modStock ?? []).length + G.stores.shell_slug + G.stores.rifle_ap + G.stores.shell_fire + G.stores.r556;
+  const out = resolveEvent(ev, si);
+  const after = (G.modStock ?? []).length + G.stores.shell_slug + G.stores.rifle_ap + G.stores.shell_fire + G.stores.r556;
+  check(after > before, `trader special gave nothing: ${out}`);
+  if (!specials) console.log('tarp:', ev.choices[si].label, '—', out.slice(0, 60));
+  specials++;
+}
+check(specials > 5, `trader specials offered ${specials}/40`);
+console.log(`trader specials bought: ${specials}/40; bench mods ${(G.modStock ?? []).map((m) => m.def).join(',')}`);
+
 const ids = INCIDENTS.map((i) => i.id);
 console.log(`\nincidents: ${ids.length} total; exercised ${fired.size}: ${[...fired.entries()].map(([k, v]) => `${k}×${v}`).join(' ')}`);
 console.log('never fired:', ids.filter((i) => !fired.has(i)).join(', ') || '(none)');

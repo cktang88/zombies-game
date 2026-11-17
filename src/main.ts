@@ -383,6 +383,7 @@ function openLedger() {
 // debug handle for story testing: roll today's incident now, or force an ending screen
 (globalThis as unknown as { __story: object }).__story = {
   roll: () => { G.pendingEvent = rollIncident(); day(); return G.pendingEvent?.id ?? null; },
+  crossing: () => crossing(false),
   ending: (kind: string) => { G.flags.ending = kind; G.flags.endWent ??= JSON.stringify(living().map((s) => s.id)); epilogue(); },
 };
 
