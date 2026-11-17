@@ -9,7 +9,7 @@ import { rollIncident, resolveEvent, returnsTick } from './sim/events';
 import { Battle, W, H, type NightResult } from './night/battle';
 import { Expedition, type ExpeditionResult } from './night/expedition';
 import { living, displayName, first } from './sim/survivors';
-import { setMuted, muted, sfx } from './audio';
+import { setMuted, muted, sfx, music } from './audio';
 
 const app = document.getElementById('app')!;
 let report: string[] = [];
@@ -18,6 +18,7 @@ let battle: Battle | null = null;
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 function title() {
+  music('title');
   const saved = loadSave();
   app.innerHTML = `<div class="title" style="background-image:linear-gradient(rgba(8,8,10,.35),rgba(8,8,10,.92)),url(${spriteUrl('bg_sky')})">
     <div class="tbox">
@@ -57,6 +58,7 @@ function title() {
 }
 
 function day() {
+  music('day');
   G.phase = 'day';
   app.onclick = null;
   app.onchange = null;
@@ -130,6 +132,7 @@ function dusk() {
 }
 
 function night() {
+  music('night');
   G.phase = 'night';
   app.onclick = null;
   app.onchange = null;
