@@ -2,7 +2,7 @@
 // Headless check that ragdoll deaths end lying flat (not kneeling / sitting upright).
 // npx tsx tools/ragdoll-check.ts [sprite...]   (exit code 1 if any body settles upright)
 import { readFileSync } from 'node:fs';
-import { createRig, loadRig } from '../src/anim';
+import { createRig, loadRig, QuadRig } from '../src/anim';
 import type { RigAsset, RigMeta } from '../src/anim/assets';
 import type { DieOpts } from '../src/anim/ragdoll';
 
@@ -41,6 +41,27 @@ for (const id of sprites) {
     if (r.t < 2.6) natural++; // came to rest on its own (not the 2.6 s cap)
     if (!ok) bad++;
     console.log(`${id.padEnd(12)} ${c.name.padEnd(10)} upright ${up.toFixed(2)} seat ${seat.toFixed(2)} t ${t.toFixed(2)} slide ${(r.x[0] / g.legLen).toFixed(2)} ${ok ? '' : '  <-- NOT FLAT'}`);
+  }
+}
+// quadrupeds (src/anim/quad.ts): the trunk ends on the road, whatever gait it died in
+{
+  const meta = JSON.parse(readFileSync('public/sprites/parts/dog.json', 'utf8')) as RigMeta;
+  const asset = { meta, atlas: null, dark: null, shadow: null, flash: null, skins: new Map() } as unknown as RigAsset;
+  for (const c of cases) for (const v of [0, 120, 260]) {
+    const rig = new QuadRig('dog', 3);
+    rig.attach(asset);
+    rig.setSpeed(c.speed ?? v);
+    for (let i = 0; i < 40; i++) rig.update(1 / 60);
+    rig.die({ impulse: c.impulse, at: c.at === 'head' ? 'head' : c.at === 'legN' ? 'legs' : 'torso', calm: c.calm });
+    let t = 0;
+    while (!rig.settled && t < 4) { rig.update(1 / 60); t += 1 / 60; }
+    const r = rig.ragdoll!, L = rig.geo!.legLen;
+    const seat = -Math.min(r.y[0], r.y[1]) / L; // the higher of hips / chest over the road
+    const ok = seat < 0.35;
+    n++; tSum += t;
+    if (r.t < 2.6) natural++;
+    if (!ok) bad++;
+    console.log(`${'dog'.padEnd(12)} ${(c.name + '@' + v).padEnd(14)} trunk ${seat.toFixed(2)} t ${t.toFixed(2)} ${ok ? '' : '  <-- NOT DOWN'}`);
   }
 }
 console.log(`${natural}/${n} came to rest on their own (the rest hit the 2.6 s cap); mean ${(tSum / n).toFixed(2)} s`);

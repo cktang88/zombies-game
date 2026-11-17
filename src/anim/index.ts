@@ -11,3 +11,4 @@ export { measureArms, ARM_TARGETS, type ArmReport } from './armcheck';
 
 /** Display scale for a rig drawn `heightPx` tall (rigs are authored 240 units tall). */
 export const rigScale = (heightPx: number) => heightPx / 240;
+export { QuadRig, QuadRagdoll, QUAD_SPEEDS, type QuadGait, type QuadAction, type QuadDieOpts } from './quad';
