@@ -23,7 +23,7 @@ import type { BattleHook } from './hook';
 import { installModules } from './modules';
 import { meleeGuard } from './melee';
 // ---- end night modules ----
-import { depthScale, bakeSprite, bakeComposite, bakeEdge, bakeLayer, bakeGround, fgStrip, shadowEllipse, type Look } from './render';
+import { depthScale, VARIANTS, bakeSprite, bakeComposite, bakeEdge, bakeLayer, bakeGround, fgStrip, shadowEllipse, type Look } from './render';
 import { drawProp, drawGunBase, drawGunPart, has, propW } from './props';
 import { QuadRig } from '../anim'; // the dog's quadruped rig
 import { BattleActors } from './actors'; // rigged bodies (src/anim): drawing, deaths, corpses
@@ -63,9 +63,27 @@ export const LOOK: Look[] = [
   { b: 0.9, s: 0.88, fog: 0.06, outline: 1.5, rim: 0.5 },
   { b: 1, s: 1, fog: 0, outline: 2, rim: 0.65 },
 ];
+/**
+ * The Turned's own grade (critique #1): the Last Stand value order, light-to-mid grey-green bodies
+ * with a dark ink line on a dark road, so every one can be counted and its head picked out. Lifted
+ * well above the lane look the ground and props take, desaturated toward grey-green, then hazed
+ * (a light, cool haze, not the dark fog tint: the far lanes recede by flattening, not by going
+ * black). Ink is ~display px round the whole silhouette, heavier near.
+ */
+export const TURNED_LOOK: Look[] = [
+  { b: 1.5, s: 0.5, fog: 0.3, haze: '#76838f', outline: 1.2, rim: 0.6 },
+  { b: 1.6, s: 0.55, fog: 0.25, haze: '#7c8990', outline: 1.5, rim: 0.7 },
+  { b: 1.7, s: 0.6, fog: 0.2, haze: '#86928a', outline: 2, rim: 0.8 },
+  { b: 1.8, s: 0.62, fog: 0.17, haze: '#8f9a88', outline: 2.4, rim: 0.9 },
+];
+/** The defenders: a touch below the Turned in value and contrast (they stand back, behind the wall). */
+export const GUARD_LOOK: Look[] = [
+  { b: 0.88, s: 0.8, fog: 0.1, outline: 2, rim: 0.4 },
+  { b: 0.92, s: 0.85, fog: 0.06, outline: 2.2, rim: 0.45 },
+];
 const CORPSE: Look = { b: 0.45, s: 0.6, fog: 0, outline: 0 };
 const PAD = 3; // transparent margin of every battle bake, so the layers line up
-const WARM = '#f0c98a', COOL = '#8fa6c8', DARK = '#0a0b10';
+const WARM = '#f0c98a', COOL = '#8fa6c8', DARK = '#0a0b10', MOON = '#c9d6e4';
 
 export interface Zombie {
   id: number;
@@ -881,7 +899,7 @@ export class Battle {
     const z: Zombie = {
       id: this.nextId++, def, sprite, x: darkX ? R.range(darkX, 1150) : W + R.range(30, 120), y, rise: darkX ? 1.2 : undefined, hp: def.hp * hpMul, maxHp: def.hp * hpMul, state: 'walk',
       phase: R.range(0, 10), flash: 0, slow: 0, burn: 0, dieT: 0, maulT: 0, lungeT: R.range(1, 3), screamT: R.range(3, 6), scale: depthScale(y) * jit, wallHit: 0, name,
-      lane, ty: y, jit, variant: R.int(0, 2), laneCd: 1, blocked: 0, stun: 0, legDmg: 0, armDmg: 0,
+      lane, ty: y, jit, variant: R.int(0, VARIANTS - 1), laneCd: 1, blocked: 0, stun: 0, legDmg: 0, armDmg: 0,
     };
     const w = this.zw(z);
     // heads alternate in x as well as y: stand off from the neighbours, never on top of the one ahead
@@ -896,7 +914,7 @@ export class Battle {
       if (!moved) break;
     }
     // never the same sprite and variant as a neighbour within 120px in this or an adjacent lane
-    for (let k = 0; k < 3 && this.zombies.some((o) => o.sprite === sprite && o.variant === z.variant && Math.abs(o.x - z.x) < 120 && Math.abs(o.lane - lane) <= 1); k++) z.variant = (z.variant + 1) % 3;
+    for (let k = 0; k < 3 && this.zombies.some((o) => o.sprite === sprite && o.variant === z.variant && Math.abs(o.x - z.x) < 120 && Math.abs(o.lane - lane) <= 1); k++) z.variant = (z.variant + 1) % VARIANTS;
     if (def.tunnel) {
       // up out of the storm drain, behind the wall
       z.x = DRAIN_X + R.range(-8, 8);
@@ -3000,7 +3018,7 @@ export class Battle {
       const dh = heights.get(sp) ?? 120;
       LANES.forEach((L, lane) => {
         const bh = Math.round(dh * ZS * depthScale(L));
-        for (let v = 0; v < 3; v++) for (const lit of [false, true]) this.prebake.push(() => { this.zLook(sp, bh, lane, v, false, lit); });
+        for (let v = 0; v < VARIANTS; v++) for (const lit of [false, true]) this.prebake.push(() => { this.zLook(sp, bh, lane, v, false, lit); });
       });
     }
   }
@@ -3691,12 +3709,12 @@ export class Battle {
   // The two baked looks of a crowd body in a lane: lit (a warm key rim on the side facing
   // the line) and dark (a thin cool moon rim, and 35% toward a near-silhouette).
   zLook(sprite: string, bh: number, lane: number, variant: number, flip: boolean, lit: boolean) {
-    const look = LOOK[lane];
+    const look = TURNED_LOOK[lane];
     const rimA = look.rim ?? 0.5;
     const s = Math.round(depthScale(LANES[lane]) * 4) / 2; // 2px × scale, to the half pixel
     return lit
       ? bakeComposite(sprite, bh, look, variant, PAD, { rim: [WARM, +(rimA * 0.85).toFixed(2), flip ? s : -s, 0] })
-      : bakeComposite(sprite, bh, look, variant, PAD, { shade: [DARK, 0.35], rim: [COOL, +(rimA * 0.6).toFixed(2), flip ? -1.5 : 1.5, -1.5] });
+      : bakeComposite(sprite, bh, look, variant, PAD, { rim: [MOON, +(rimA * 0.7).toFixed(2), flip ? s : -s, -1] });
   }
 
   /** In fog the far ones fade into it (by x), the far lanes sooner. 1 on a clear night. */

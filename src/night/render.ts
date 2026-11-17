@@ -21,9 +21,11 @@ export function canvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderin
 
 // ---------- actor bakes ----------
 /** Per-lane look: brightness, saturation, fog tint (source-atop α), outline px, rim α. */
-export interface Look { b: number; s: number; fog: number; outline: number; rim?: number }
-/** Crowd variants: [tint colour, tint α, brightness]. 0 neutral, 1 cold, 2 sickly. */
-export const VARIANT_TINT: [string, number, number][] = [['#000', 0, 1], ['#5a6f8c', 0.1, 0.92], ['#8a8a4a', 0.08, 1.06]];
+export interface Look { b: number; s: number; fog: number; outline: number; rim?: number; haze?: string }
+/** Crowd variants: [tint colour, tint α, brightness]. 0 neutral, 1 cold, 2 sickly, 3 bruised, 4 pale.
+ * Wide enough that two of the same sprite side by side read as two people (critique #13). */
+export const VARIANT_TINT: [string, number, number][] = [['#000', 0, 1], ['#5a6f8c', 0.14, 0.92], ['#8a8a4a', 0.12, 1.06], ['#6e4a3c', 0.13, 0.9], ['#c8ccc0', 0.12, 1.12]];
+export const VARIANTS = VARIANT_TINT.length;
 export const FOG_TINT = '#1b2333';
 export const OUTLINE = '#050608';
 
@@ -58,7 +60,7 @@ export function bakeSprite(
   x.drawImage(im, pad, pad, w, h);
   x.filter = 'none';
   x.globalCompositeOperation = 'source-atop';
-  if (look.fog) { x.globalAlpha = look.fog; x.fillStyle = FOG_TINT; x.fillRect(0, 0, cv.width, cv.height); }
+  if (look.fog) { x.globalAlpha = look.fog; x.fillStyle = look.haze ?? FOG_TINT; x.fillRect(0, 0, cv.width, cv.height); }
   if (ta) { x.globalAlpha = ta; x.fillStyle = tint; x.fillRect(0, 0, cv.width, cv.height); }
   const b = { cv, pad, h };
   cache.set(key, b);
@@ -159,7 +161,7 @@ export function bakeComposite(
   x.drawImage(im, pad, pad, w, h);
   x.filter = 'none';
   x.globalCompositeOperation = 'source-atop';
-  if (look.fog) { x.globalAlpha = look.fog; x.fillStyle = FOG_TINT; x.fillRect(0, 0, cv.width, cv.height); }
+  if (look.fog) { x.globalAlpha = look.fog; x.fillStyle = look.haze ?? FOG_TINT; x.fillRect(0, 0, cv.width, cv.height); }
   if (ta) { x.globalAlpha = ta; x.fillStyle = tint; x.fillRect(0, 0, cv.width, cv.height); }
   if (o.shade) { x.globalAlpha = o.shade[1]; x.fillStyle = o.shade[0]; x.fillRect(0, 0, cv.width, cv.height); }
   x.globalCompositeOperation = 'source-over';

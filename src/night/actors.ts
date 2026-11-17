@@ -27,9 +27,9 @@ import { VARIANT_TINT, FOG_TINT, depthScale, type Look } from './render';
 import { panOf } from './gunfx';
 import type { BattleHook, SortedDraw } from './hook';
 import type { Battle, Zombie, Guard } from './battle';
-import { LANES, DEF_LANES, LOOK, wallX, nearestLane } from './battle';
+import { LANES, DEF_LANES, LOOK, TURNED_LOOK, GUARD_LOOK, wallX, nearestLane } from './battle';
 
-const WARM = '#f0c98a', COOL = '#8fa6c8', DARK = '#0a0b10', BURN = '#ff7a2a';
+const WARM = '#f0c98a', COOL = '#8fa6c8', DARK = '#0a0b10', BURN = '#ff7a2a', MOON = '#c9d6e4';
 const ZS = 1.3; // battle.ts actor scale for the Turned
 const SH = 158; // survivor display height
 const FULL_RIGS = 40; // Turned drawn with the full rig; the rest use the flipbook unless acting
@@ -183,9 +183,9 @@ function applyLook(rig: Rig, L: LookSpec, scale: number, facing: number) {
   if (!a) return;
   const [tint, ta, vb] = VARIANT_TINT[L.variant] ?? VARIANT_TINT[0];
   const shade = L.shade ?? !L.lit;
-  const key = `${L.look.b}|${L.look.s}|${L.look.fog}|${L.variant}|${shade ? 1 : 0}`;
+  const key = `${L.look.b}|${L.look.s}|${L.look.fog}|${L.look.haze ?? ''}|${L.variant}|${shade ? 1 : 0}`;
   const filter = `brightness(${(L.look.b * vb).toFixed(3)}) saturate(${L.look.s.toFixed(3)})`;
-  const tints: [string, number][] = [[FOG_TINT, L.look.fog], [tint, ta]];
+  const tints: [string, number][] = [[L.look.haze ?? FOG_TINT, L.look.fog], [tint, ta]];
   if (shade) tints.push([DARK, 0.35]);
   // the ink outline lives in the atlas copy (a dilated silhouette under every part): no extra pass
   const grow = L.look.outline > 0 ? Math.min(6, Math.max(1, Math.round(L.look.outline / Math.max(0.2, scale)))) : 0;
@@ -670,12 +670,15 @@ export class BattleActors implements BattleHook {
     const facing: 1 | -1 = z.flip ? 1 : -1;
     const [L, flash] = b.lightAt(z.x, z.y - h * 0.6, env);
     const lit = flash || L > 0.22;
-    const look = LOOK[lane];
+    // the Turned's own grade (battle TURNED_LOOK): mid-value bodies, never shaded toward black;
+    // the rim sits inside the ink line on the side facing the lamps (barricade, left): a light
+    // edge, then the ink, then the road. Lit: the warm key; dark: the cool moon / lamp spill.
+    const look = TURNED_LOOK[lane];
     const rimA = look.rim ?? 0.5;
-    const s = Math.round(depthScale(LANES[lane]) * 4) / 2;
+    const d = +(look.outline * 0.5).toFixed(1);
     applyLook(rig, lit
-      ? { look, variant: rig.lod ? 0 : z.variant, lit: true, rimColor: WARM, rimA: +(rimA * 0.85).toFixed(2), rimDx: -s, rimDy: 0 }
-      : { look, variant: rig.lod ? 0 : z.variant, lit: false, rimColor: COOL, rimA: +(rimA * 0.6).toFixed(2), rimDx: 1.5, rimDy: -1.5 }, scale, facing);
+      ? { look, variant: z.variant, lit: true, shade: false, rimColor: WARM, rimA: +(rimA * 0.9).toFixed(2), rimDx: -d, rimDy: 0 }
+      : { look, variant: z.variant, lit: false, shade: false, rimColor: MOON, rimA: +(rimA * 0.75).toFixed(2), rimDx: -d, rimDy: -d * 0.5 }, scale, facing);
     rig.lodScale = (z.def.crawl ? ZOMBIES.sleeper.height : z.def.height) * ZS * depthScale(LANES[lane]) / (rig.asset?.meta.height ?? 240);
     // a muzzle flash nearby or the crosshair on it: a warm edge; burning: an orange wash
     const edge = (flash ? 0.3 : 0) + (b.hover === z ? 0.35 : 0);
@@ -726,9 +729,11 @@ export class BattleActors implements BattleHook {
     if (!r || !r.rig.ready) return false;
     const t0 = performance.now();
     const rig = r.rig;
-    const look = LOOK[g.y >= DEF_LANES[1] ? 3 : 2];
+    const look = GUARD_LOOK[g.y >= DEF_LANES[1] ? 1 : 0];
     const scale = (SH * g.sc) / 240;
-    applyLook(rig, { look, variant: 0, lit: true, shade: false, rimColor: WARM, rimA: +((look.rim ?? 0.5) * 0.8).toFixed(2), rimDx: g.x > 120 ? -2 : 2, rimDy: 0 }, scale, g.face);
+    // a warm lantern rim inside the ink line (never past it: the old 2 px offset covered the ink and read as a brown halo)
+    const d = +(look.outline * 0.45).toFixed(1);
+    applyLook(rig, { look, variant: 0, lit: true, shade: false, rimColor: WARM, rimA: look.rim ?? 0.4, rimDx: g.x > 120 ? -d : d, rimDy: 0 }, scale, g.face);
     rig.overlay = null;
     rig.draw(c, g.x, g.y, scale, g.face, undefined, this.cam);
     rig.hasDrawn = true;
@@ -749,8 +754,10 @@ export class BattleActors implements BattleHook {
       // bakeCorpse brightness 0.55 / saturate 0.7 at 92%; the 35% shade tint folded in: 0.55 x 0.65), both drawn over darkness pass A, so it
       // neither pops darker nor lighter when it settles into the road (4 steps: shared atlases)
       const k = Math.min(1, Math.round((cp.t / 0.9) * 4) / 4);
-      const L0 = LOOK[cp.lane];
-      const look = k > 0 ? { ...L0, b: +(L0.b * (1 - 0.64 * k)).toFixed(3), s: +(L0.s * (1 - 0.3 * k)).toFixed(3) } : L0;
+      // (from the living Turned's own lifted grade, TURNED_LOOK: the dead go down into the road's value)
+      const L0 = LOOK[cp.lane], T = TURNED_LOOK[cp.lane];
+      const look = k >= 1 ? { ...L0, b: +(L0.b * 0.36).toFixed(3), s: +(L0.s * 0.7).toFixed(3) }
+        : { ...T, b: +(T.b + (L0.b * 0.36 - T.b) * k).toFixed(3), s: +(T.s + (L0.s * 0.7 - T.s) * k).toFixed(3) };
       applyLook(cp.rig, { look, variant: 0, lit: false, shade: false, rimColor: COOL, rimA: 0, rimDx: 0, rimDy: 0 }, cp.scale, cp.facing);
       cp.rig.overlay = null;
       const ga = c.globalAlpha;
