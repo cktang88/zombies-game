@@ -233,7 +233,7 @@ export function openSettings(host: HTMLElement = document.body, onClose?: () => 
 
   const slider = (k: 'master' | 'music' | 'sfx' | 'ambience', label: string) => {
     const s = getSettings();
-    return `<label class="set-row"><span>${label}</span><input type="range" min="0" max="100" step="5" data-k="${k}" value="${Math.round(s[k] * 100)}" aria-label="${label} volume"><output>${Math.round(s[k] * 100)}</output></label>`;
+    return `<label class="set-row"><span>${label}</span><input type="range" min="0" max="100" step="5" data-k="${k}" value="${Math.round(s[k] * 100)}" style="--p:${Math.round(s[k] * 100)}%" aria-label="${label} volume"><output>${Math.round(s[k] * 100)}</output></label>`;
   };
   const check = (k: keyof Settings, label: string, note: string, on: boolean) =>
     `<label class="set-row check"><input type="checkbox" data-k="${k}" ${on ? 'checked' : ''}><span>${label}<small>${note}</small></span></label>`;
@@ -351,6 +351,7 @@ export function openSettings(host: HTMLElement = document.body, onClose?: () => 
       setSetting(k as 'master' | 'music' | 'sfx' | 'ambience', +t.value / 100);
       const o = t.parentElement?.querySelector('output');
       if (o) o.textContent = t.value;
+      t.style.setProperty('--p', `${t.value}%`);
     } else if (t.type === 'checkbox') {
       setSetting(k as 'muted', t.checked);
     }
