@@ -24,12 +24,22 @@ interface Manifest {
   iconPrefix: string;
   sprites: SpriteSpec[];
 }
+// Extra manifests (tools/sprites-*.json) may hold only `sprites` and inherit the rest.
+type Partial2 = Partial<Manifest> & { sprites: SpriteSpec[] };
 interface ORResponse {
   choices?: { message?: { images?: { image_url?: { url?: string } }[] } }[];
   usage?: { cost?: number };
 }
 
+// Read tools/sprites.json first, then every other tools/sprites*.json; each sprite keeps
+// its own manifest's prompt prefixes (falling back to the base manifest's).
+const files = fs.readdirSync(path.join(ROOT, 'tools')).filter((f) => /^sprites.*\.json$/.test(f)).sort((a, b) => (a === 'sprites.json' ? -1 : b === 'sprites.json' ? 1 : a.localeCompare(b)));
 const manifest: Manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'tools/sprites.json'), 'utf8'));
+const owner = new Map<SpriteSpec, Manifest>();
+for (const f of files) {
+  const m = f === 'sprites.json' ? manifest : { ...manifest, ...(JSON.parse(fs.readFileSync(path.join(ROOT, 'tools', f), 'utf8')) as Partial2) };
+  for (const s of m.sprites) owner.set(s, m);
+}
 const RAW = path.join(ROOT, 'tools/.cache/raw');
 const OUT = path.join(ROOT, 'public/sprites');
 fs.mkdirSync(RAW, { recursive: true });
@@ -82,9 +92,10 @@ async function processOne(s: SpriteSpec): Promise<number> {
   if (!force && !reprocess && fs.existsSync(out) && !only.length) return 0;
   let cost = 0;
   if (force || !fs.existsSync(raw)) {
+    const m = owner.get(s) ?? manifest;
     const prompt = s.key === false
-      ? `${manifest.bgPrefix} ${s.prompt}`
-      : `${s.kind === 'icon' ? manifest.iconPrefix : manifest.prefix} ${s.prompt} ${manifest.suffix}`;
+      ? `${m.bgPrefix} ${s.prompt}`
+      : `${s.kind === 'icon' ? m.iconPrefix : m.prefix} ${s.prompt} ${m.suffix}`;
     const g = await generate(prompt);
     fs.writeFileSync(raw, g.buf);
     cost = g.cost;
@@ -104,7 +115,7 @@ async function processOne(s: SpriteSpec): Promise<number> {
   return cost;
 }
 
-const list = manifest.sprites.filter((s) => !only.length || only.includes(s.id));
+const list = [...owner.keys()].filter((s) => !only.length || only.includes(s.id));
 let total = 0;
 const queue = [...list];
 await Promise.all(Array.from({ length: 5 }, async () => {

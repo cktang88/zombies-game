@@ -1,0 +1,148 @@
+{
+  "sprites": [
+    {
+      "id": "icon_m1911",
+      "height": 96,
+      "prompt": "a blued steel M1911 .45 semi-automatic pistol with checkered wooden grips, side view, pointing right, muzzle on the right side.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_mp93",
+      "height": 96,
+      "prompt": "a compact black burst-fire machine pistol with a folding front grip and extended magazine, side view, pointing right, muzzle on the right side.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_r22rifle",
+      "height": 96,
+      "prompt": "a light .22 rimfire farm rifle with a plain birch wood stock and a small rotary magazine, side view, pointing right, muzzle on the right side.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_coachgun",
+      "height": 96,
+      "prompt": "a side-by-side double-barrel coach shotgun with short barrels, exposed hammers and a dark walnut stock, side view, pointing right, muzzle on the right side.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_snake410",
+      "height": 96,
+      "prompt": "a small stainless single-shot .410 shotgun with a black synthetic stock, side view, pointing right, muzzle on the right side.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_pipegun",
+      "height": 96,
+      "prompt": "a crude improvised pipe shotgun made from two steel plumbing pipes, a wooden two-by-four stock and hose clamps, side view, pointing right, muzzle on the right side.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_autoshotgun",
+      "height": 96,
+      "prompt": "a black semi-automatic riot shotgun with a tube magazine and a pistol-grip stock, side view, pointing right, muzzle on the right side.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_lever",
+      "height": 96,
+      "prompt": "a lever-action .30-30 rifle with a worn pale wooden stock and brass bead sight, side view, pointing right, muzzle on the right side.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_scoped",
+      "height": 96,
+      "prompt": "a scoped .308 precision hunting rifle with a long telescopic sight, olive synthetic stock and bipod, side view, pointing right, muzzle on the right side.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_muzzle",
+      "height": 96,
+      "prompt": "a long black-powder muzzleloader rifle with a wooden stock, brass fittings and a ramrod under the barrel, side view, pointing right, muzzle on the right side.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_ar15",
+      "height": 96,
+      "prompt": "a black civilian AR-15 semi-automatic rifle with a red-dot sight, side view, pointing right, muzzle on the right side.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_lmg",
+      "height": 96,
+      "prompt": "a heavy belt-fed light machine gun with a bipod and an olive drab ammunition box, side view, pointing right, muzzle on the right side.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_bow",
+      "height": 80,
+      "prompt": "a camouflage compound hunting bow lying flat horizontally with an arrow nocked, arrow tip pointing right, wide horizontal composition.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_crossbow",
+      "height": 96,
+      "prompt": "a homemade crossbow with steel leaf-spring limbs, a winch crank and a walnut stock, side view, pointing right, muzzle on the right side.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_flaregun",
+      "height": 96,
+      "prompt": "an orange plastic flare pistol with a fat short barrel, side view, pointing right, muzzle on the right side.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_rivet",
+      "height": 96,
+      "prompt": "a heavy improvised pneumatic rivet gun connected by a hose to a small welding gas bottle, with a pistol grip, side view, pointing right, muzzle on the right side.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_r22",
+      "height": 80,
+      "prompt": "a small open cardboard box of tiny .22 rimfire cartridges.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_shells",
+      "height": 80,
+      "prompt": "a handful of red plastic 12-gauge shotgun shells with brass bases.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_slug",
+      "height": 80,
+      "prompt": "three 12-gauge shotgun shells next to a single heavy lead rifled slug.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_dragon",
+      "height": 80,
+      "prompt": "a 12-gauge shotgun shell with a burning orange flame spurting out of its open end.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_r556",
+      "height": 80,
+      "prompt": "a green-tip 5.56 rifle magazine full of brass cartridges.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_ball",
+      "height": 80,
+      "prompt": "a powder horn, a small pouch and a few round lead musket balls.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_bolts",
+      "height": 80,
+      "prompt": "a bundle of three crossbow bolts with steel broadhead tips and fletching.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_flares",
+      "height": 80,
+      "prompt": "two fat orange 12-gauge flare shells.",
+      "kind": "icon"
+    }
+  ]
+}
