@@ -20,7 +20,7 @@ import { drawProp, drawGunPart, drawGunBase, gunReach, has, propW } from './prop
 const WALL_X = 372;
 const ROOF_Y = 506; // the scaffold's deck
 const FIRESTEP_Y = 688; // the near defenders' row, behind the barricade
-const SCAFFOLD_DECK = 0.2; // emp_scaffold: the deck's height as a fraction from the sprite's top
+const SCAFFOLD_DECK = 0.15; // emp_scaffold: the deck's height as a fraction from the sprite's top
 /** "the MG nest", "the swivel deer rifle" */
 const lc = (name: string) => name.replace(/^[A-Z](?=[a-z])/, (m) => m.toLowerCase());
 const PROFILE_GUN: Record<string, string> = { mgnest: 'lmg', swivel: 'hunting', flamer: 'flaregun', nailturret: 'nailer' };
@@ -419,7 +419,8 @@ export class Emplacements implements BattleHook {
     if (roofs.length) out.push({ y: ROOF_Y - 1, f: () => this.drawScaffold(c, roofs) });
     for (const m of this.mounts) {
       // firestep guns sit on the barricade top, in front of it; roof guns on the scaffold deck
-      const y = !m.def.crew ? 700 + 1 : m.post === 'roof' ? ROOF_Y + 0.5 : 701.2;
+      // the nail turret's stand stands behind the barricade (its seat and gun clear the top) when drawn from sprites
+      const y = !m.def.crew ? (has('emp_nail_base') ? 699.5 : 700 + 1) : m.post === 'roof' ? ROOF_Y + 0.5 : 701.2;
       out.push({ y, f: () => this.drawGun(c, m) });
     }
     return out;
@@ -515,11 +516,11 @@ export class Emplacements implements BattleHook {
     const key = m.def.id;
     if (!has(`emp_${key === 'mgnest' ? 'mg' : key === 'swivel' ? 'rifle' : key === 'flamer' ? 'flamer' : 'nail'}_gun`)) return false;
     const footY = !m.def.crew ? 704 : m.post === 'roof' ? ROOF_Y - 2 : 600;
-    if (m.post === 'firestep' && m.def.crew && has('emp_firestep')) drawProp(c, 'emp_firestep', m.px - 2, footY + 6, 22, undefined, { w: 54 });
+    if (m.post === 'firestep' && m.def.crew && key !== 'mgnest' && has('emp_firestep')) drawProp(c, 'emp_firestep', m.px - 2, footY + 6, 22, undefined, { w: 54 });
     if (!drawGunBase(c, key, m.px, m.py, footY)) return false;
     // condition: a worn gun reads darker and flatter (baked in steps; no per-frame filter)
     const worn = Math.round((m.item ? 1 - m.item.cond : 0) * 4) / 4;
-    const look = { b: 1 - worn * 0.3, s: 1 - worn * 0.45, fog: 0, outline: 0 };
+    const look = { b: 1.2 - worn * 0.35, s: 1 - worn * 0.45, fog: 0, outline: 0 }; // a touch bright: it reads against the night
     if (!drawGunPart(c, key, m.px, m.py, m.ang, 1, look)) return false;
     const reach = gunReach(key, 1, 50);
     c.save();

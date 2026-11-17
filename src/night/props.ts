@@ -53,21 +53,22 @@ export function drawProp(
  * image (x from the left, y from the top), `len` the display width at scale 1, `muz` the
  * muzzle as a fraction of the width.
  */
-export const GUN_PART: Record<string, { id: string; len: number; piv: [number, number]; muz: number; base: string; top: number; minH: number }> = {
-  // base sprite: drawn from the pivot down to the post's foot; its pintle sits `top` (fraction
-  // of its height) below its top edge; at least `minH` px tall
-  mgnest: { id: 'emp_mg_gun', len: 76, piv: [0.42, 0.62], muz: 1, base: 'emp_mg_base', top: 0.12, minH: 34 },
-  swivel: { id: 'emp_rifle_gun', len: 72, piv: [0.45, 0.55], muz: 1, base: 'emp_rifle_base', top: 0.06, minH: 30 },
-  flamer: { id: 'emp_flamer_gun', len: 58, piv: [0.3, 0.6], muz: 1, base: 'emp_flamer_base', top: 0.1, minH: 40 },
-  nailturret: { id: 'emp_nail_gun', len: 48, piv: [0.4, 0.7], muz: 1, base: 'emp_nail_base', top: 0.18, minH: 40 },
+export const GUN_PART: Record<string, { id: string; len: number; piv: [number, number]; muz: number; base: string; bx: number; top: number; minH: number; maxH?: number }> = {
+  // base sprite: drawn from the pivot down to the post's foot; its pintle sits `bx` across and
+  // `top` (fractions) below its top edge; at least `minH` px tall. Measured off the sprites.
+  mgnest: { id: 'emp_mg_gun', len: 88, piv: [0.39, 0.47], muz: 1, base: 'emp_mg_base', bx: 0.49, top: 0.1, minH: 40 },
+  swivel: { id: 'emp_rifle_gun', len: 80, piv: [0.45, 0.55], muz: 1, base: 'emp_rifle_base', bx: 0.6, top: 0.05, minH: 30 },
+  flamer: { id: 'emp_flamer_gun', len: 62, piv: [0.36, 0.5], muz: 1, base: 'emp_flamer_base', bx: 0.73, top: 0.05, minH: 46 },
+  nailturret: { id: 'emp_nail_gun', len: 50, piv: [0.49, 0.38], muz: 1, base: 'emp_nail_base', bx: 0.45, top: 0.06, minH: 40, maxH: 80 },
 };
 
 /** The base under a gun: its pintle at (px, py), its foot on footY. False when missing. */
 export function drawGunBase(c: CanvasRenderingContext2D, key: string, px: number, py: number, footY: number, look: Look = NEAR): boolean {
   const g = GUN_PART[key];
   if (!g || !img(g.base)) return false;
-  const h = Math.max(g.minH, (footY - py) / (1 - g.top));
-  return drawProp(c, g.base, px, py, h, look, { ay: g.top });
+  // (a capped stand stops short of footY: the nail turret's foot is behind the barricade)
+  const h = Math.min(g.maxH ?? 1e9, Math.max(g.minH, (footY - py) / (1 - g.top)));
+  return drawProp(c, g.base, px, py, h, look, { ax: g.bx, ay: g.top });
 }
 
 /** Draw a gun part rotated about its pivot at (px, py). False when the image is missing. */

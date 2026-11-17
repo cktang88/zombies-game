@@ -753,7 +753,7 @@ export class Traps implements BattleHook {
         // the generated puddle across every lane; burning, it reads scorched; a moon sheen on top
         for (let l = 0; l < 4; l++) {
           const y = LANES[l] + 2, s = depthScale(y);
-          drawProp(c, 'trap_oil', tr.x + (l - 1.5) * 4, y + 6 * s, 16 * s, LOOK[l], { w: hw * 2 * (0.92 + l * 0.03), b: tr.on ? 0.6 : 1, flip: l % 2 === 1 });
+          drawProp(c, 'trap_oil', tr.x + (l - 1.5) * 4, y + 4 * s, 9 * s, LOOK[l], { w: hw * 2 * (0.92 + l * 0.03), b: tr.on ? 0.6 : 1, flip: l % 2 === 1, alpha: 0.85 });
           c.strokeStyle = `rgba(160,180,215,${0.2 + 0.1 * Math.sin(tr.tick * 1.3 + l)})`;
           c.lineWidth = 1.2;
           c.beginPath(); c.ellipse(tr.x - hw * 0.25, y - 1, hw * 0.4, 3 * s, 0, Math.PI * 1.1, Math.PI * 1.9); c.stroke();
@@ -942,10 +942,12 @@ export class Traps implements BattleHook {
     const fall = tr.drop * 100 * s;
     if (has('trap_gallows') && has('trap_door')) {
       // the gallows arm reaches over the lane; the door hangs off its pulley, then drops and tips
-      const gh = 190 * s;
-      drawProp(c, 'trap_gallows', wx - 6, y + 2, gh, LOOK[tr.lane], { ax: 0.25 });
+      // trap_gallows: post at 0.15 of its width, pulley at (0.55, 0.19); sized so the pulley hangs over the lane
       const pulleyX = wx + 16, pulleyY = top - 30 * s;
-      if (tr.drop <= 0) { c.strokeStyle = '#2a241d'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(pulleyX, pulleyY); c.lineTo(pulleyX, top + 2); c.stroke(); }
+      const gh = (y + 2 - pulleyY) / (1 - 0.19);
+      const gw = (gh * 176) / 380;
+      drawProp(c, 'trap_gallows', pulleyX - (0.55 - 0.15) * gw, y + 2, gh, LOOK[tr.lane], { ax: 0.15 });
+      if (tr.drop <= 0) { c.strokeStyle = '#2a241d'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(pulleyX, pulleyY + 4 * s); c.lineTo(pulleyX, top + 2); c.stroke(); }
       drawProp(c, 'trap_door', pulleyX, top + fall, 40 * s, LOOK[tr.lane], { ay: 0, rot: tr.drop * 0.5 });
       return;
     }

@@ -3204,10 +3204,11 @@ export class Battle {
   drawWireLane(c: CanvasRenderingContext2D, lane: number) {
     const s = depthScale(LANES[lane]);
     if (has('fort_wire')) {
-      // one belt segment per lane per section, staggered a little so the rows don't stack
+      // two rows of belt (the far-middle and near lanes) per section; the others are covered by them
+      if (lane !== 1 && lane !== 3) return;
       for (let k = 0; k < Math.min(3, G.fort.wire); k++) {
         const x0 = WALL_X + 60 + k * 90 + (LANES[3] - LANES[lane]) * 0.12;
-        drawProp(c, 'fort_wire', x0 + 40, LANES[lane] + 2, 44 * s, LOOK[lane], { w: 86, flip: (lane + k) % 2 === 1 });
+        drawProp(c, 'fort_wire', x0 + 40 + (lane === 1 ? 12 : 0), LANES[lane] + 2, 46 * s, LOOK[lane], { w: 86, flip: (lane + k) % 2 === 1 });
       }
       return;
     }
@@ -3247,10 +3248,10 @@ export class Battle {
       }
       // spikes, a row per lane, on each lane's face
       if (G.fort.spikes > 0 && has('fort_spikes')) {
-        const rows = Math.min(5, G.fort.spikes);
-        for (let i = 0; i < rows * 3; i++) {
-          const lane = i % 4, row = Math.floor(i / 4);
-          drawProp(c, 'fort_spikes', wallX(lane) + 4, LANES[lane] - 30 - row * 10, 15, LOOK[lane], { ax: 0, w: 40, rot: -0.12 });
+        // a rail per lane on its face, up to three rows as the upgrades stack
+        const rows = Math.min(3, Math.ceil(G.fort.spikes / 2));
+        for (let row = 0; row < rows; row++) for (let lane = 0; lane < 4; lane += row === 1 ? 2 : 1) {
+          drawProp(c, 'fort_spikes', wallX(lane) + 2, LANES[lane] - 34 - row * 16, 18, LOOK[lane], { ax: 0, w: 44, rot: -0.1 });
         }
       } else for (let i = 0; i < Math.min(5, G.fort.spikes) * 3; i++) {
         c.strokeStyle = '#4a3f35';
