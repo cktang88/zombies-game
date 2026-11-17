@@ -151,7 +151,10 @@ export class Rig {
   /** the head is gone (blown off): never drawn */
   hideHead = false;
   /** per-look atlases set by the game each frame (lane grade, variant tint, light): null = plain */
-  skin: { atlas: CanvasImageSource; dark: CanvasImageSource; grow?: number } | null = null;
+  /** atlas/dark carry a per-part ink line (used for the near arm, which must read over the body);
+   * plain/plainDark have none: everything else is inked once, round the whole silhouette (`outline`),
+   * so knees, neck and elbows show no seam lines */
+  skin: { atlas: CanvasImageSource; dark: CanvasImageSource; grow?: number; plain?: CanvasImageSource; plainDark?: CanvasImageSource } | null = null;
   /** lane grade + ink width for the held weapon (set with skin): the gun is baked to match the body */
   gunLook: GunLook | null = null;
   /** ink outline stamped under the body: a dilated silhouette atlas grown by `grow` atlas px */
@@ -876,25 +879,27 @@ export class Rig {
   get layers(): Slot[] { return this.swap ? this.stance.layers : STANCES.free.layers; }
 
   private drawBody(ctx: CanvasRenderingContext2D, as: RigAsset) {
-    const atlas = this.skin?.atlas ?? as.atlas, dark = this.skin?.dark ?? as.dark, gw = this.skin?.grow ?? 0;
+    const inked = this.skin?.atlas ?? as.atlas, gw = this.skin?.grow ?? 0;
+    const atlas = this.skin?.plain ?? inked, dark = this.skin?.plainDark ?? this.skin?.dark ?? as.dark;
+    const pg = this.skin?.plain ? 0 : gw; // un-inked parts need no source padding
     const melee = this.anchors?.hold === 'melee';
     // the support role's props (mag, shell, round, speedloader) ride the hand on its physical side
     const supFar = this.swap;
     for (const slot of this.layers) switch (slot) {
       case 'fLeg':
-        this.part(ctx, dark, F_TH, 'thigh', false, 0, 0, gw); this.part(ctx, dark, F_SN, 'shin', false, 0, 0, gw); this.part(ctx, dark, F_FT, 'foot', false, 0, 0, gw);
+        this.part(ctx, dark, F_TH, 'thigh', false, 0, 0, pg); this.part(ctx, dark, F_SN, 'shin', false, 0, 0, pg); this.part(ctx, dark, F_FT, 'foot', false, 0, 0, pg);
         break;
       case 'nLeg':
-        this.part(ctx, atlas, N_TH, 'thigh', false, 0, 0, gw); this.part(ctx, atlas, N_SN, 'shin', false, 0, 0, gw); this.part(ctx, atlas, N_FT, 'foot', false, 0, 0, gw);
+        this.part(ctx, atlas, N_TH, 'thigh', false, 0, 0, pg); this.part(ctx, atlas, N_SN, 'shin', false, 0, 0, pg); this.part(ctx, atlas, N_FT, 'foot', false, 0, 0, pg);
         break;
-      case 'torso': this.part(ctx, atlas, TORSO, 'torso', false, 0, 0, gw); break;
-      case 'head': if (!this.hideHead) this.part(ctx, atlas, HEAD, 'head', this.headFlip > 0.5, 0, 0, gw); break;
-      case 'fUA': this.part(ctx, dark, F_UA, 'upperArm', false, 0, 0, gw); break;
-      case 'fFA': this.part(ctx, dark, F_FA, 'forearm', false, 0, 0, gw); break;
+      case 'torso': this.part(ctx, atlas, TORSO, 'torso', false, 0, 0, pg); break;
+      case 'head': if (!this.hideHead) this.part(ctx, atlas, HEAD, 'head', this.headFlip > 0.5, 0, 0, pg); break;
+      case 'fUA': this.part(ctx, dark, F_UA, 'upperArm', false, 0, 0, pg); break;
+      case 'fFA': this.part(ctx, dark, F_FA, 'forearm', false, 0, 0, pg); break;
       case 'fH':
         this.handProps(ctx, supFar);
         // bare-handed the far hand is in shade; holding a gun without the swap (Turned never do) it wraps the grip
-        this.part(ctx, dark, F_H, this.farHand, false, 0, 0, gw);
+        this.part(ctx, dark, F_H, this.farHand, false, 0, 0, pg);
         break;
       case 'nShadow':
         // contact shadow of the near arm (skipped on small bodies: invisible there)
@@ -905,11 +910,11 @@ export class Rig {
           ctx.globalAlpha = this.baseAlpha;
         }
         break;
-      case 'nUA': this.part(ctx, atlas, N_UA, 'upperArm', false, 0, 0, gw); break;
-      case 'nFA': this.part(ctx, atlas, N_FA, 'forearm', false, 0, 0, gw); break;
+      case 'nUA': this.part(ctx, inked, N_UA, 'upperArm', false, 0, 0, gw); break;
+      case 'nFA': this.part(ctx, inked, N_FA, 'forearm', false, 0, 0, gw); break;
       case 'nH':
         this.handProps(ctx, !supFar);
-        this.part(ctx, atlas, N_H, this.nearHand, false, 0, 0, gw);
+        this.part(ctx, inked, N_H, this.nearHand, false, 0, 0, gw);
         break;
       case 'gun': if (this.gunVisible && !melee) this.drawGun(ctx); break;
       case 'melee': if (this.gunVisible && melee) this.drawGun(ctx); break;
@@ -1041,9 +1046,11 @@ export class Rig {
     if (k !== 1 || thin !== 1) { ctx.rotate(m.rest); ctx.scale(k, thin); ctx.rotate(-m.rest); }
     // forearms end at the wrist: the source painting's own hand (a glove, a fist) was cut into the
     // forearm part, and the hand library draws the real one, so cut the art off just past the wrist
-    const fa = i === N_FA || i === F_FA;
+    // upper arms likewise end at the elbow: the sleeve block cut past it jutted out as a square corner
+    const fa = i === N_FA || i === F_FA || i === N_UA || i === F_UA;
     if (fa) {
-      const L = Math.hypot(m.tx - m.px, m.ty - m.py) + 3 + grow;
+      const ua = i === N_UA || i === F_UA;
+      const L = Math.hypot(m.tx - m.px, m.ty - m.py) + (ua ? 7 : 3) + grow;
       ctx.save();
       ctx.rotate(m.rest);
       ctx.beginPath(); ctx.rect(-4000, -4000, 4000 + L, 8000);

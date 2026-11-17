@@ -17,7 +17,7 @@
 // Setting: ui/settings animationSetting() 'rigged' | 'classic'. rigsOn() also honours the
 // automatic fallback to Classic (parts that fail to load, or frames consistently > 25 ms for
 // 3 s while the rigs carry a real share of the frame) — logged once.
-import { createRig, CLIPS, SPRITE_RIGS, STYLES, gradedAtlas, silAtlas, getRig, loadRig, flipbookStats, type Clip, type Rig } from '../anim';
+import { createRig, CLIPS, SPRITE_RIGS, STYLES, gradedAtlas, outlineAtlas, silAtlas, getRig, loadRig, flipbookStats, type Clip, type Rig } from '../anim';
 import type { DeathKind } from '../anim';
 import { animationSetting, reduceGore } from '../ui/settings';
 import { sfx, gunSoundFor, type ReloadStage } from '../audio';
@@ -189,10 +189,14 @@ function applyLook(rig: Rig, L: LookSpec, scale: number, facing: number) {
   if (shade) tints.push([DARK, 0.35]);
   // the ink outline lives in the atlas copy (a dilated silhouette under every part): no extra pass
   const grow = L.look.outline > 0 ? Math.min(6, Math.max(1, Math.round(L.look.outline / Math.max(0.2, scale)))) : 0;
-  rig.skin = { atlas: gradedAtlas(a, key, filter, tints, false, grow), dark: gradedAtlas(a, key, filter, tints, true, grow), grow };
+  rig.skin = {
+    atlas: gradedAtlas(a, key, filter, tints, false, grow), dark: gradedAtlas(a, key, filter, tints, true, grow), grow,
+    // un-inked copies: the body is inked once round its whole silhouette (rig.outline), not per part
+    plain: grow ? gradedAtlas(a, key, filter, tints, false, 0) : undefined, plainDark: grow ? gradedAtlas(a, key, filter, tints, true, 0) : undefined,
+  };
   // the held gun gets the same grade and ink (baked once per look and size: anim/assets bakedIcon)
   if (rig.weaponId) rig.gunLook = { key, filter, tints, ink: L.look.outline > 0 ? L.look.outline : 1 };
-  rig.outline = null;
+  rig.outline = grow ? { src: outlineAtlas(a, grow), grow } : null;
   // rim: world-space offset (the rig flips its own offsets by facing); the faint cool moon rim of
   // the far, unlit lanes is left out on full rigs (a whole extra pass for a 15% band)
   rig.rim = L.rimA > 0.3 ? { src: silAtlas(a, L.rimColor), dx: L.rimDx * facing, dy: L.rimDy, alpha: L.rimA } : null;

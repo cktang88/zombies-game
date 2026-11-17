@@ -1,5 +1,5 @@
 // Anim lab: dev page for the cutout bone rig (animlab.html).
-import { createRig, QuadRig, gradedAtlas, loadAllGuns, loadRig, measureArms, SPRITE_RIGS, type Rig } from './anim';
+import { createRig, QuadRig, gradedAtlas, outlineAtlas, loadAllGuns, loadRig, measureArms, SPRITE_RIGS, type Rig } from './anim';
 import { WEAPONS } from './data/weapons';
 import { spriteUrl } from './assets';
 import { ZOMBIES, sizeVar } from './data/zombies';
@@ -446,7 +446,8 @@ function closeupRender(step = false) {
       const filter = `brightness(${look.b}) saturate(${look.s})`;
       const tints: [string, number][] = [['#1b2333', look.fog]];
       const grow = Math.min(6, Math.max(1, Math.round(look.outline / Math.max(0.2, s))));
-      a.rig.skin = { atlas: gradedAtlas(as, key, filter, tints, false, grow), dark: gradedAtlas(as, key, filter, tints, true, grow), grow };
+      a.rig.skin = { atlas: gradedAtlas(as, key, filter, tints, false, grow), dark: gradedAtlas(as, key, filter, tints, true, grow), grow, plain: gradedAtlas(as, key, filter, tints, false, 0), plainDark: gradedAtlas(as, key, filter, tints, true, 0) };
+      a.rig.outline = { src: outlineAtlas(as, grow), grow };
       (a.rig as unknown as { gunLook: unknown }).gunLook = { key, filter, tints, ink: look.outline };
     }
     if (step) { closeupAim(a); a.rig.update(1 / 60); }
