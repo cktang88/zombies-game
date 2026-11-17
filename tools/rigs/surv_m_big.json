@@ -2,6 +2,7 @@
   "id": "surv_m_big",
   "source": "surv_m_big__riga",
   "height": 240,
+  "aimUnits": { "smg": "unit_surv_m_big_smg" },
   "joints": {
     "headTop": [
       701,
