@@ -4,6 +4,7 @@ import { ZOMBIES, type ZombieDef } from '../data/zombies';
 import { WEAPONS, fireProfile, ammoTypesFor, ammoLabel, AMMO_TYPES, armorDamage, roundsInStores, shotSound, BURN, FLARE_LIGHT, MODS, wearMods, blastDamage, type FireProfile } from '../data/weapons';
 import { SITES, RES_LABEL, type Site } from '../data/world';
 import { img, flashImg, shadeImg } from '../assets';
+import { depthScale, canvas, bakeSprite, bakeLayer, bakeGround, fgStrip, type Look, type Baked } from './render';
 import { sfx, wind } from '../audio';
 import { aimFactor, first, displayName, wound, pain, killSurvivor, tale, addThought, skillOf, makeSurvivor } from '../sim/survivors';
 
@@ -14,54 +15,18 @@ const GROUND = 664;
 const SH = 158;
 const ZS = 1.3;
 // Depth (docs/research/04 §3.8): three walking lanes, perspective scale, y-sort by feet.
-const HORIZON = 330;
 const LANES = [640, 664, 688]; // feet y, far → near; the player walks the middle lane
 const LANE_TOL = 16;
-const depthScale = (y: number) => (y - HORIZON) / (GROUND - HORIZON);
 // per-lane bake look (by day: a lighter version of the night table)
-const LANE_LOOK = [
+const LANE_LOOK: Look[] = [
   { b: 0.86, s: 0.78, fog: 0.12, outline: 1 },
   { b: 0.95, s: 0.9, fog: 0.05, outline: 1.5 },
   { b: 1, s: 1, fog: 0, outline: 2 },
 ];
-const VARIANT_TINT: [string, number, number][] = [['#000', 0, 1], ['#5a6f8c', 0.1, 0.92], ['#8a8a4a', 0.08, 1.06]];
-
-function canvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
-  const cv = document.createElement('canvas');
-  cv.width = Math.max(1, Math.ceil(w));
-  cv.height = Math.max(1, Math.ceil(h));
-  return [cv, cv.getContext('2d')!];
-}
 
 // Baked zombie: outline stamps + lane grade + fog + variant tint, at the lane's display size.
-// Filters are used here, at bake time only — never per frame.
-interface Baked { cv: HTMLCanvasElement; pad: number; h: number }
-const zCache = new Map<string, Baked>();
 function bakeZ(sprite: string, h: number, lane: number, variant: number, kin: boolean): Baked | null {
-  const key = `${sprite}|${Math.round(h)}|${lane}|${variant}|${kin ? 1 : 0}`;
-  const hit = zCache.get(key);
-  if (hit) return hit;
-  const im = img(sprite);
-  if (!im) return null;
-  const look = LANE_LOOK[lane];
-  const w = (im.width / im.height) * h;
-  const pad = Math.ceil(look.outline) + 1;
-  const [cv, x] = canvas(w + pad * 2, h + pad * 2);
-  const sil = shadeImg(sprite, '#050608');
-  if (sil) for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2;
-    x.drawImage(sil, pad + Math.cos(a) * look.outline, pad + Math.sin(a) * look.outline, w, h);
-  }
-  const [tint, ta, vb] = VARIANT_TINT[variant];
-  x.filter = `brightness(${(look.b * vb * (kin ? 0.8 : 1)).toFixed(3)}) saturate(${(look.s * (kin ? 0.4 : 1)).toFixed(3)})`;
-  x.drawImage(im, pad, pad, w, h);
-  x.filter = 'none';
-  x.globalCompositeOperation = 'source-atop';
-  if (look.fog) { x.globalAlpha = look.fog; x.fillStyle = '#1b2333'; x.fillRect(0, 0, cv.width, cv.height); }
-  if (ta) { x.globalAlpha = ta; x.fillStyle = tint; x.fillRect(0, 0, cv.width, cv.height); }
-  const b = { cv, pad, h };
-  zCache.set(key, b);
-  return b;
+  return bakeSprite(sprite, h, LANE_LOOK[lane], variant, kin ? { b: 0.8, s: 0.4 } : {});
 }
 
 // Searched spots: a baked darker copy drawn opaque (no translucent box, no per-frame filter).
@@ -85,25 +50,6 @@ interface BgBake { far: HTMLCanvasElement; mid: HTMLCanvasElement }
 let bgBakes: { day: BgBake; dusk: BgBake } | null = null;
 let groundC: HTMLCanvasElement | null = null;
 let fgC: HTMLCanvasElement | null = null;
-function bakeLayer(id: string, w: number, h: number, filter: string, fog: string, fogA: number, mirror: boolean): HTMLCanvasElement {
-  const [cv, x] = canvas(mirror ? w * 2 : w, h);
-  const im = img(id);
-  if (im) {
-    x.filter = filter;
-    x.drawImage(im, 0, 0, w, h);
-    if (mirror) { x.save(); x.translate(w * 2, 0); x.scale(-1, 1); x.drawImage(im, 0, 0, w, h); x.restore(); }
-    x.filter = 'none';
-  }
-  // atmospheric lift: thickest over the far street band
-  const g = x.createLinearGradient(0, 0, 0, h);
-  g.addColorStop(0, `${fog}00`);
-  g.addColorStop(0.5, `${fog}${Math.round(fogA * 255).toString(16).padStart(2, '0')}`);
-  g.addColorStop(0.72, `${fog}${Math.round(fogA * 255).toString(16).padStart(2, '0')}`);
-  g.addColorStop(0.85, `${fog}${Math.round(fogA * 0.4 * 255).toString(16).padStart(2, '0')}`);
-  x.fillStyle = g;
-  x.fillRect(0, 0, cv.width, h);
-  return cv;
-}
 function bakeBackgrounds() {
   if (bgBakes || !img('bg_far') || !img('bg_mid')) return;
   bgBakes = {
@@ -117,31 +63,9 @@ function bakeBackgrounds() {
     },
   };
   // ground plane: dark asphalt, speckle, faint ruts along the lanes (tiles every 256px)
-  const [gc, g] = canvas(W + 256, H - 596);
-  const grd = g.createLinearGradient(0, 0, 0, gc.height);
-  grd.addColorStop(0, 'rgba(22,23,26,0.2)');
-  grd.addColorStop(0.25, 'rgba(22,23,26,0.6)');
-  grd.addColorStop(1, 'rgba(12,12,14,0.85)');
-  g.fillStyle = grd;
-  g.fillRect(0, 0, gc.width, gc.height);
-  for (let i = 0; i < 900; i++) {
-    g.fillStyle = Math.random() < 0.5 ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.12)';
-    g.fillRect((i * 97.13) % gc.width, 20 + ((i * 53.7) % (gc.height - 20)), 2, 1);
-  }
-  g.fillStyle = 'rgba(200,200,210,0.05)';
-  for (const ly of LANES) for (let x0 = 0; x0 < gc.width; x0 += 64) g.fillRect(x0 + (ly % 7), ly - 596 + 2, 40, 2);
-  groundC = gc;
+  groundC = bakeGround(W + 256, H - 596, 596, LANES);
   // foreground strip: near-black weeds, kerb rubble, a tyre (tiles every 2560px)
-  const [fc, f] = canvas(2560, 40);
-  f.fillStyle = '#07080b';
-  f.globalAlpha = 0.9;
-  for (let x0 = 0; x0 < 2560; x0 += 6 + ((x0 * 7) % 11)) {
-    const hh = 6 + ((x0 * 13) % 17);
-    f.beginPath(); f.moveTo(x0, 40); f.lineTo(x0 + 2 + ((x0 * 3) % 5), 40 - hh); f.lineTo(x0 + 5, 40); f.fill();
-  }
-  for (let x0 = 90; x0 < 2560; x0 += 230 + ((x0 * 17) % 190)) { f.beginPath(); f.ellipse(x0, 36, 14 + (x0 % 13), 7, 0, 0, 7); f.fill(); }
-  for (const tx of [700, 1900]) { f.beginPath(); f.ellipse(tx, 30, 22, 12, 0, 0, 7); f.fill(); }
-  fgC = fc;
+  fgC = fgStrip();
 }
 
 interface EZ {
