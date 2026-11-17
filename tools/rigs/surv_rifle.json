@@ -2,6 +2,7 @@
   "id": "surv_rifle",
   "source": "surv_rifle__riga",
   "height": 240,
+  "aimUnits": { "ar15": "unit_surv_rifle_ar15" },
   "joints": {
     "headTop": [
       718,

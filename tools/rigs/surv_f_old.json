@@ -2,6 +2,7 @@
   "id": "surv_f_old",
   "source": "surv_f_old__riga",
   "height": 240,
+  "aimUnits": { "hunting": "unit_surv_f_old_hunting" },
   "joints": {
     "headTop": [
       702,

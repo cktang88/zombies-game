@@ -12,7 +12,7 @@
 //   5 solve        analytic 2-bone IK for arms (elbow down) and legs (knee forward)
 // Death hands the pose to a Verlet ragdoll (ragdoll.ts) seeded with the pose's velocities
 // plus the killing hit's impulse; once it settles the caller bakes it into the ground.
-import { bakedIcon, getGun, getRig, loadGun, loadRig, type BakedIcon, type GunAsset, type GunLook, type KitDraw, type PartMeta, type RigAsset } from './assets';
+import { bakedIcon, getGun, getRig, loadGun, loadRig, type BakedIcon, type GunAsset, type GunLook, type KitDraw, type PartMeta, type RigAsset, type UnitDraw } from './assets';
 import { CLIPS, RELOADS, type Clip, type Key, type TKey } from './clips';
 import { GAITS, applyGait, jitterGait, strideScale, cycleLen, type Gait } from './gait';
 import { clamp, ease, ik2, lerp, lerpAngle, rng, wrapAngle } from './math';
@@ -115,6 +115,10 @@ export class Rig {
   aimAngle = 0;
   /** closed-loop aim trim: keeps the barrel itself on the aim point (the solve aims from the shoulder) */
   aimCorr = 0;
+  /** aim unit in use this frame (assets.ts UnitDraw: torso + head + arms + gun drawn as one piece), and
+   * its rotation from the drawing's own angle; null = the rigged arms and the gun icon */
+  unit: UnitDraw | null = null;
+  unitRot = 0;
   /** closed-loop hip height: px the pelvis is raised so the straighter knee sits at a natural soft bend */
   legTrim = 0;
   recoil = 0; recoilV = 0;
@@ -473,11 +477,22 @@ export class Rig {
       ch.lean -= this.recoil * st.recoilLean;
       ch.px -= this.recoil * st.recoilBack;
     }
+    // aim unit (a rig json with `aimUnits`, docs/research/14 §3): while the gun is up, one drawing of
+    // the torso, head, arms, hands and gun turns as a piece to the aim (±35° of its drawn angle). Its
+    // shoulder pocket rides the torso, and the torso turns with it, so the whole unit pivots on the
+    // hips like the trunk does and the rig's own hips, legs and gait carry on underneath.
+    const U = this.asset!.meta.units?.[this.weaponId ?? ''];
+    this.unit = U && holding && this.gun && raise > 0.5 && ch.ready < 0.5 && this.gunState === 'held' ? U : null;
     // ---- trunk
     const crouchDrop = ch.crouch * g.legLen * 0.5;
     const pelX = ch.px, pelY = ch.py + crouchDrop - this.legTrim;
     const tiltA = -Math.PI / 2 + ch.tilt;
-    const T = tiltA + ch.lean;
+    let T = tiltA + ch.lean;
+    if (this.unit) {
+      const u = this.unit, u0 = Math.atan2(u.neck[1] - u.pelvis[1], u.neck[0] - u.pelvis[0]);
+      this.unitRot = clamp(wrapAngle(aim - u.bore), -0.61, 0.61) - this.recoil * st.recoilLean * 2;
+      T = u0 + this.unitRot;
+    }
     const ux = Math.cos(T), uy = Math.sin(T), vx = -uy, vy = ux;
     const pux = Math.cos(tiltA), puy = Math.sin(tiltA), pvx = -puy, pvy = pux;
     const J = this.jx, K = this.jy, A = this.ja;
@@ -552,6 +567,16 @@ export class Rig {
       this.ga = lerpAngle(gAimA + ch.gunTilt * 0.3, rA, rw) - this.recoil * 0.03;
       this.gx = lerp(gX, rX, rw) - Math.cos(this.ga) * this.recoil * 0.9;
       this.gy = lerp(gY, rY, rw) - Math.sin(this.ga) * this.recoil * 0.9;
+      if (this.unit) {
+        // the drawn gun: the muzzle from the unit, the gun frame along its barrel (muzzleWorld, flashes, casings)
+        const u = this.unit, c = Math.cos(this.unitRot), s = Math.sin(this.unitRot);
+        const mx = u.muzzle[0] - u.pelvis[0], my = u.muzzle[1] - u.pelvis[1];
+        const kick = this.recoil * 0.9;
+        this.ga = this.unitRot + u.bore;
+        const wx = pelX + mx * c - my * s - Math.cos(this.ga) * kick, wy = pelY + mx * s + my * c - Math.sin(this.ga) * kick;
+        this.gx = wx - (muz[0] * Math.cos(this.ga) - muz[1] * Math.sin(this.ga));
+        this.gy = wy - (muz[0] * Math.sin(this.ga) + muz[1] * Math.cos(this.ga));
+      }
       // the barrel, not the shoulder, onto the aim point: measure the bore line's miss and trim next frame
       if (this.hasAim && rw < 0.05 && aimW > 0.95 && a!.hold !== 'bow') {
         const lx = ((this.aimWX - this.dx) * this.df) / this.ds, ly = (this.aimWY - this.dy) / this.ds;
@@ -564,12 +589,12 @@ export class Rig {
           err = Math.atan2(Math.sin(err), Math.cos(err));
           // turning the gun about the shoulder also swings the muzzle, which moves the target's
           // bearing from it by about r/d as much again: scale the gain so a near target can't ring
-          const r = Math.hypot(mx - shX, my - shY);
+          const r = this.unit ? Math.hypot(mx - pelX, my - pelY) : Math.hypot(mx - shX, my - shY);
           this.aimCorr = clamp(this.aimCorr + (err * 0.8) / (1 + r / d), -0.45, 0.45);
         } else this.aimCorr *= 0.9;
       } else this.aimCorr *= 0.9;
       // cheek weld: the head drops onto the comb of the stock; what it can't reach, the gun comes up to
-      if (st.cheek && raise > 0.01 && a!.butt) this.cheekWeld(loc(a!.butt), muz, gun.combY !== undefined ? loc([a!.butt[0], gun.combY]) : null, raise);
+      if (st.cheek && raise > 0.01 && a!.butt && !this.unit) this.cheekWeld(loc(a!.butt), muz, gun.combY !== undefined ? loc([a!.butt[0], gun.combY]) : null, raise);
       // default hand targets
       const gp = (p: [number, number], dx = 0, dy = 0) => this.gunPt(loc(p), dx, dy);
       if (a!.hold === 'bow') {
@@ -888,7 +913,15 @@ export class Rig {
     const melee = this.anchors?.hold === 'melee';
     // the support role's props (mag, shell, round, speedloader) ride the hand on its physical side
     const supFar = this.swap;
-    for (const slot of this.layers) switch (slot) {
+    const unit = this.unit;
+    for (const slot of this.layers) {
+    // an aim unit replaces the head, both arms, both hands and the gun (it is drawn in the head's slot)
+    if (unit) {
+      if (slot === 'head') { this.part(ctx, atlas, TORSO, unit.part, false, 0, 0, pg); continue; }
+      if (slot === 'gun') { if (this.flashMuzzle > 0) this.drawFlash(ctx); continue; }
+      if (slot === 'fUA' || slot === 'fFA' || slot === 'fH' || slot === 'nShadow' || slot === 'nUA' || slot === 'nFA' || slot === 'nH') continue;
+    }
+    switch (slot) {
       case 'fLeg':
         this.part(ctx, dark, F_TH, 'thigh', false, 0, 0, pg); this.part(ctx, dark, F_SN, 'shin', false, 0, 0, pg); this.part(ctx, dark, F_FT, 'foot', false, 0, 0, pg);
         break;
@@ -924,6 +957,7 @@ export class Rig {
       case 'slung': if (this.gunState === 'slung' && this.gun && this.weaponId && !melee) this.drawSlung(ctx); break;
       case 'string': if (this.anchors?.hold === 'bow' && this.gunVisible) this.drawString(ctx); break;
     }
+    }
   }
   /** What the hand on this physical side carries, drawn under its fingers: the support role's mag /
    * prop when `support`, else the trigger role's prop (an arrow from the quiver). */
@@ -936,8 +970,11 @@ export class Rig {
 
   /** Every body part from one flat atlas (outline, rim, flash), offset by (ox, oy) rig units. */
   private drawSil(ctx: CanvasRenderingContext2D, src: CanvasImageSource, ox: number, oy: number, grow: number) {
+    const unit = this.unit;
+    if (unit) this.part(ctx, src, TORSO, unit.part, false, ox, oy, grow);
     for (let i = 0; i < PART_COUNT; i++) {
       if (i === HEAD && this.hideHead) continue;
+      if (unit && (i === HEAD || i === N_UA || i === N_FA || i === N_H || i === F_UA || i === F_FA || i === F_H)) continue;
       this.part(ctx, src, i, i === N_H ? this.nearHand : i === F_H ? this.farHand : PART_NAMES[i], i === HEAD && this.headFlip > 0.5, ox, oy, grow);
     }
   }
@@ -1142,7 +1179,11 @@ export class Rig {
       ctx.fillStyle = '#b08a3e';
       for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.arc(5, i * 2, 0.9, 0, Math.PI * 2); ctx.fill(); }
     }
-    if (this.flashMuzzle > 0) {
+    if (this.flashMuzzle > 0) this.drawFlash(ctx);
+  }
+  private drawFlash(ctx: CanvasRenderingContext2D) {
+    const a = this.anchors!;
+    {
       const [mx, my] = this.gunPt([(a.muzzle[0] - a.grip[0]) * this.gk * (a.flip ? -1 : 1), (a.muzzle[1] - a.grip[1]) * this.gk]);
       this.setGunXf(ctx, mx, my, this.ga, 1);
       ctx.fillStyle = 'rgba(255,214,120,0.95)';

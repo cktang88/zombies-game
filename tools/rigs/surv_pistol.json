@@ -2,6 +2,7 @@
   "id": "surv_pistol",
   "source": "surv_pistol__riga",
   "height": 240,
+  "aimUnits": { "revolver": "unit_surv_pistol_revolver" },
   "joints": {
     "headTop": [
       648,

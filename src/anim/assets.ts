@@ -23,7 +23,15 @@ export interface RigMeta {
   kit?: string | { near: string; far: string };
   /** filled at load from `kit`: the drawings per side, as atlas parts named kitN<i> / kitF<i> */
   kitArms?: { near: KitDraw[]; far: KitDraw[] };
+  /** aim units (docs/research/14 §3, tools/cut-unit.ts): weapon id → unit_<name> drawing of the torso,
+   * head, both arms, hands and gun in the firing pose, drawn instead of those parts while aiming */
+  aimUnits?: Record<string, string>;
+  /** filled at load from `aimUnits`: weapon id → the drawing (an atlas part named unit_<weapon>) */
+  units?: Record<string, UnitDraw>;
 }
+/** One aim unit: its pelvis, neck and muzzle inside the drawing (rig units, from its top-left) and
+ * the barrel's angle in the drawing. */
+export interface UnitDraw { part: string; pelvis: [number, number]; neck: [number, number]; muzzle: [number, number]; bore: number }
 /** One kit drawing: its elbow bend (deg, forearm turned up from a level upper arm) and its
  * shoulder / elbow / wrist inside the drawing (rig units, from the drawing's top-left). */
 export interface KitDraw { part: string; bend: number; s: [number, number]; e: [number, number]; wr: [number, number] }
@@ -132,6 +140,33 @@ async function withKit(im: HTMLImageElement, meta: RigMeta): Promise<HTMLCanvasE
   meta.kitArms = arms;
   return c;
 }
+/** The atlas with the rig's aim unit drawings stacked under it, as parts unit_<weapon>. */
+async function withUnits(im: CanvasImageSource & { width: number; height: number }, meta: RigMeta): Promise<HTMLCanvasElement | null> {
+  const got: [string, UnitDraw & { im: HTMLImageElement }][] = [];
+  for (const [weapon, n] of Object.entries(meta.aimUnits!)) {
+    const r = await fetch(`${base()}sprites/parts/${n}.json`).catch(() => null);
+    const uim = r?.ok ? await loadImage(`${base()}sprites/parts/${n}.png`) : null;
+    if (!r?.ok || !uim) continue;
+    const j = (await r.json()) as Omit<UnitDraw, 'part'>;
+    got.push([weapon, { ...j, part: `unit_${weapon}`, im: uim }]);
+  }
+  if (!got.length) return null;
+  const c = document.createElement('canvas');
+  c.width = Math.max(im.width, ...got.map(([, u]) => u.im.width));
+  c.height = im.height + got.reduce((s, [, u]) => s + u.im.height, 0);
+  const x = c.getContext('2d')!;
+  x.drawImage(im, 0, 0);
+  let y = im.height;
+  meta.units = {};
+  for (const [weapon, u] of got) {
+    x.drawImage(u.im, 0, y);
+    const len = Math.hypot(u.neck[0] - u.pelvis[0], u.neck[1] - u.pelvis[1]);
+    meta.parts[u.part] = { x: 0, y, w: u.im.width, h: u.im.height, px: u.pelvis[0], py: u.pelvis[1], tx: u.neck[0], ty: u.neck[1], rest: Math.atan2(u.neck[1] - u.pelvis[1], u.neck[0] - u.pelvis[0]), len };
+    meta.units[weapon] = { part: u.part, pelvis: u.pelvis, neck: u.neck, muzzle: u.muzzle, bore: u.bore };
+    y += u.im.height;
+  }
+  return c;
+}
 function repack(im: CanvasImageSource, meta: RigMeta): HTMLCanvasElement {
   const names = Object.keys(meta.parts).sort((a, b) => meta.parts[b].h - meta.parts[a].h);
   const W = 640;
@@ -213,6 +248,7 @@ export function loadRig(id: string): Promise<RigAsset | null> {
         let raw: CanvasImageSource | null = await loadImage(`${base()}sprites/parts/${id}.png`);
         if (!raw) throw new Error('no atlas');
         if (meta.kit) raw = (await withKit(raw as HTMLImageElement, meta)) ?? raw;
+        if (meta.aimUnits) raw = (await withUnits(raw as HTMLCanvasElement, meta)) ?? raw;
         // re-pack with a transparent gutter round every part, so the dilated (outline) and
         // offset (rim) silhouettes of a part never pick up its neighbour
         const im = repack(raw, meta);
