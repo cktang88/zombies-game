@@ -268,6 +268,8 @@ newGame('siege', 2024);
 const boonLines = applyBoons();
 check(G.fort.maxHp === 360 && !!G.flags.dog && G.buildings.some((b) => b.id === 'workbench' && b.level === 2), 'boons applied');
 G.day = 6;
+// two names are inscribed and the heir is picked at random: meet both
+console.log('  heir ->', runIncident('heir', 0).slice(0, 100));
 console.log('  heir ->', runIncident('heir', 0).slice(0, 100));
 check(G.weapons.some((w) => w.name?.endsWith('Hymnal') && w.kills === 31), 'heirloom gun arrived');
 console.log('  heir text:', living()[living().length - 1].tales.join(' '), '| boons:', boonLines.length);
