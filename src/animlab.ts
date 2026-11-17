@@ -47,11 +47,21 @@ let deer: Actor, ferry: Actor;
 const sleepers: Actor[] = [];
 let walking = false;
 let weapon = 'ar15';
+// survivor art: every surv_* sprite with a part atlas (tools/rigs/surv_*.json); ?surv=<id> picks one
+const SURVIVORS = ['surv_rifle', 'surv_pistol', 'surv_shotgun', 'surv_smg', 'surv_idle', 'surv_f_old', 'surv_f_mid', 'surv_m_mid',
+  'surv_m_young', 'surv_f_native', 'surv_m_old', 'surv_m_big', 'surv_f_young'];
+let survSprite = SURVIVORS.includes(params.get('surv') ?? '') ? params.get('surv')! : 'surv_rifle';
+function setSurvivor(id: string) {
+  survSprite = id;
+  void loadImg(id);
+  surv.rig = createRig('survivor', id, { onEvent: (n) => log(`survivor: ${n}`) });
+  surv.rig.setWeapon(weapon);
+}
 
 function scaleOf(a: Actor) { return a.h / (a.rig.asset?.meta.height ?? 240); }
 
 function setup() {
-  surv = { rig: createRig('survivor', 'surv_rifle', { onEvent: (n) => log(`survivor: ${n}`) }), x: 220, y: GROUND, h: 270, facing: 1, vx: 0 };
+  surv = { rig: createRig('survivor', survSprite, { onEvent: (n) => log(`survivor: ${n}`) }), x: 220, y: GROUND, h: 270, facing: 1, vx: 0 };
   surv.rig.setWeapon(weapon);
   actors.push(surv);
   const walks = ['limpDrag', 'stiffLurch', 'headLoll', 'dangle'];
@@ -74,6 +84,11 @@ function ui() {
   const bar = (title: string) => { const d = document.createElement('div'); d.className = 'bar'; d.innerHTML = `<b>${title}</b>`; root.appendChild(d); return d; };
   const btn = (d: HTMLElement, label: string, fn: () => void) => { const b = document.createElement('button'); b.textContent = label; b.onclick = fn; d.appendChild(b); return b; };
   const s1 = bar('Survivor');
+  const who = document.createElement('select');
+  for (const id of SURVIVORS) { const o = document.createElement('option'); o.value = id; o.textContent = id.replace('surv_', ''); who.appendChild(o); }
+  who.value = survSprite;
+  who.onchange = () => setSurvivor(who.value);
+  s1.appendChild(who);
   const sel = document.createElement('select');
   const ids = ['service9', 'm1911', 'revolver', 'mp93', 'smg', 'ar15', 'carbine', 'lmg', 'hunting', 'scoped', 'lever', 'r22', 'pump', 'autoshot', 'coach', 'snake410', 'pipe', 'compound', 'crossbow', 'law', 'm79', 'pipemortar', 'flaregun', 'muzzle', 'nailer', 'rivet', 'hatchet'];
   for (const id of ids) { const o = document.createElement('option'); o.value = id; o.textContent = WEAPONS[id]?.name ?? id; sel.appendChild(o); }
@@ -367,11 +382,11 @@ if (params.has('gallery')) (async () => {
   requestAnimationFrame(galleryFrame);
 })();
 else (async () => {
-  await Promise.all([loadImg('bg_mid'), loadImg('surv_rifle'), loadImg('z_shambler'), loadImg('z_runner'), loadImg('z_brute'),
+  await Promise.all([loadImg('bg_mid'), loadImg('surv_rifle'), loadImg(survSprite), loadRig(survSprite), loadImg('z_shambler'), loadImg('z_runner'), loadImg('z_brute'),
     loadRig('surv_rifle'), loadRig('z_shambler'), loadRig('z_runner'), loadRig('z_brute'), loadAllGuns()]);
   setup();
   ui();
-  (window as unknown as { __lab: unknown }).__lab = { surv: () => surv, sleepers, deer: () => deer, ferry: () => ferry, fire, reload, kill, setWeapon: (id: string) => { weapon = id; surv.rig.setWeapon(id); }, setWalking: (v: boolean) => { walking = v; }, aim: (x: number, y: number) => { mouseX = x; mouseY = y; }, step, render, reset, debug: (v: boolean) => { DEBUG = v; } };
+  (window as unknown as { __lab: unknown }).__lab = { surv: () => surv, sleepers, deer: () => deer, ferry: () => ferry, fire, reload, kill, setWeapon: (id: string) => { weapon = id; surv.rig.setWeapon(id); }, setSurvivor, setWalking: (v: boolean) => { walking = v; }, aim: (x: number, y: number) => { mouseX = x; mouseY = y; }, step, render, reset, debug: (v: boolean) => { DEBUG = v; } };
   if (BENCH) bench();
   else requestAnimationFrame(frame);
 })();
