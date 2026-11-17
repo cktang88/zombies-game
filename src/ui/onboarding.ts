@@ -2,29 +2,40 @@
 // Progress is remembered in localStorage under 'vessey-onboarding-v1'
 // (a step number, or 'done'). resetHints() brings them back.
 
+import { tip, ico } from './kit';
+
 const KEY = 'vessey-onboarding-v1';
 
-export interface Hint { target: string; title: string; text: string }
+/** short: the one line on the note; text: the full explanation, on hover / long press of the (?) */
+export interface Hint { target: string; icon: string; title: string; short: string; text: string }
 
 export const HINTS: Hint[] = [
   {
     target: '.people',
+    icon: 'job_guard',
     title: 'Everyone gets one job',
+    short: 'Pick a job for each person. Skills set the output.',
     text: 'Pick a job for each person in the house. Their skills decide how much gets done; the line under each job is what to expect. Hurt, sulking or catatonic people can\'t work.',
   },
   {
     target: '.center',
+    icon: 'job_craft',
     title: 'The workshop needs hands',
+    short: 'Queue ammo, traps and repairs; someone must work the bench.',
     text: 'Queue ammunition, traps and repairs here, and build machinery to unlock more. Nothing in the queue moves unless somebody is assigned to the Workshop job.',
   },
   {
     target: '.run',
+    icon: 'job_scavenge',
     title: 'Or go yourself',
+    short: 'Lead a daylight run down one street. Back before dark.',
     text: 'The leader can lead a run in daylight: walk one street, search doors and cars, and come back off the left edge before dark. More loot than scavenging, at your own risk.',
   },
   {
     target: '.dusk',
+    icon: 'st_time',
     title: 'Then, dusk',
+    short: 'Go to the wall [Enter]. Aim for the head.',
     text: 'When the jobs are set, go to the wall (or press Enter). The day\'s work resolves, and the night comes up the road. Aim for the head. The ? button has the controls.',
   },
 ];
@@ -77,8 +88,8 @@ export function hintHtml(): string {
   return `<aside class="hint" role="note" aria-live="polite" aria-labelledby="hint-h">
     <div class="hint-clip" aria-hidden="true"></div>
     <div class="hint-n">${s + 1} / ${HINTS.length}</div>
-    <h3 id="hint-h">${h.title}</h3>
-    <p>${h.text}</p>
+    <h3 id="hint-h">${ico(h.icon)}${h.title}</h3>
+    <p>${h.short}<span class="qi"${tip(h.text)} aria-label="More">?</span></p>
     <div class="hint-b"><button class="mini" data-act="hint-skip">Don't show these</button><button data-act="hint-next">${s + 1 === HINTS.length ? 'Got it' : 'Next ›'}</button></div>
   </aside>`;
 }
