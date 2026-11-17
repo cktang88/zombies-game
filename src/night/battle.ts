@@ -5,7 +5,7 @@ import { WEAPONS } from '../data/weapons';
 import { img, flashImg, shadeImg } from '../assets';
 import { sfx, wind } from '../audio';
 import {
-  living, canFight, aimFactor, first, displayName, wound, pain, killSurvivor, tale, addThought, hasTrait, changeOpinion, leader, byId, isBitten, breakThresholds,
+  living, canFight, aimFactor, first, displayName, wound, pain, killSurvivor, tale, addThought, hasTrait, changeOpinion, byId, isBitten, breakThresholds,
   moodBreakdown, their, them, grantTitle,
 } from '../sim/survivors';
 
@@ -15,8 +15,8 @@ const LANE_TOP = 616, LANE_BOT = 690;
 const SURV_Y = 664;
 const ZS = 1.3; // global actor scale for the Turned
 const SH = 158; // survivor display height
-const DRAIN_X = 26; // storm drain grate behind the line
-const SAFE_X = 34; // where the downed are dragged to
+const DRAIN_X = 74; // storm drain grate behind the line
+const SAFE_X = 70; // where the downed are dragged to
 const DOWN_PAIN = 1.45; // pain at which a mauled guard goes down
 
 interface Zombie {
@@ -171,7 +171,7 @@ export class Battle {
     this.ammoStart = { light: G.stores.light, shell: G.stores.shell, rifle: G.stores.rifle, scrap: G.stores.scrap, molotov: G.stores.molotov };
     this.res = { kills: 0, deaths: [], wallHeld: true, wallLost: 0, ammoUsed: {}, killsBy: {}, headshots: 0, lines: [], fell: false };
     this.setupGuards();
-    if (G.flags.dog) this.dog = { x: 300, y: SURV_Y + 14, barkT: 0, cd: 0, name: typeof G.flags.dog === 'string' ? G.flags.dog : 'The dog' };
+    if (G.flags.dog) this.dog = { x: 228, y: SURV_Y + 22, barkT: 0, cd: 0, name: typeof G.flags.dog === 'string' ? G.flags.dog : 'The dog' };
     for (let i = 0; i < Math.min(2, G.fort.turrets ?? 0); i++) this.turrets.push({ x: WALL_X - 20 - i * 46, y: 560 - i * 14, cd: 1, flash: 0, ang: 0 });
     const turning = G.flags.turningTonight as string | undefined;
     if (turning && byId(turning) && !byId(turning)!.dead) this.turnAt = this.duration * R.range(0.25, 0.6);
@@ -208,6 +208,7 @@ export class Battle {
     this.guards.sort((a, b) => a.y - b.y);
   }
 
+  lastPlayer?: Guard;
   get player(): Guard | undefined {
     return this.guards.find((g) => g.s.isLeader && this.standing(g)) ?? this.guards.find((g) => this.standing(g));
   }
@@ -408,7 +409,7 @@ export class Battle {
     };
     if (def.tunnel) {
       // up out of the storm drain, behind the wall
-      z.x = DRAIN_X;
+      z.x = DRAIN_X + R.range(-8, 8);
       z.y = SURV_Y + R.range(4, 18);
       z.scale = 1;
       z.state = 'over';
@@ -471,6 +472,7 @@ export class Battle {
   // ---------- shooting ----------
   updatePlayer(dt: number) {
     const p = this.player;
+    this.lastPlayer = p;
     if (!p || !p.w) return;
     this.playerCd -= dt;
     const def = WEAPONS[p.w.def];
@@ -581,7 +583,9 @@ export class Battle {
     const dx = Math.cos(ang), dy = Math.sin(ang);
     const hits: { z: Zombie; t: number; head: boolean }[] = [];
     for (const z of this.zombies) {
-      if (z.state === 'dying') continue;
+      if (z.state === 'dying' || (z.emerge !== undefined && z.emerge > 0.25)) continue;
+      // the guards' strays rarely find a man lying low in the dark behind the crowd
+      if (!isPlayer && z.def.ranged && !((z.seen ?? 0) > 0) && R.chance(0.85)) continue;
       const hb = this.hitbox(z);
       // head circle
       const hx = hb.hx - ox, hy = hb.hy - oy;
@@ -778,15 +782,22 @@ export class Battle {
     let tgt: Zombie | undefined;
     let bp = 1e9;
     for (const z of this.zombies) {
-      if (z.state === 'dying') continue;
+      if (z.state === 'dying' || (z.emerge !== undefined && z.emerge > 0)) continue;
+      if (z.ducked && z.state === 'cover') continue; // nothing to aim at but junk
       const inside = z.state === 'over' || z.state === 'maul';
-      const ahead = z.x > g.x + 30 && (z.x < range || (z.seen ?? 0) > 0 || (z.def.boss && z.x < W - 30));
+      const ahead = z.x > g.x + 30 && (z.x < range || (z.seen ?? 0) > 0);
       if (!ahead && !(inside && Math.abs(z.x - g.x) < 280)) continue;
-      const pri = (z.def.scream ? -400 : 0) + (inside ? -800 : 0) + (z.def.ranged ? -250 : 0) + Math.abs(z.x - g.x) + (z.def.burst && z.x < WALL_X + 140 ? 300 : 0);
+      const pri = (z.def.scream ? -400 : 0) + (inside ? -800 : 0) + (z.def.ranged ? -120 : 0) + Math.abs(z.x - g.x) + (z.def.burst && z.x < WALL_X + 140 ? 300 : 0);
       if (pri < bp) { bp = pri; tgt = z; }
     }
     if (!tgt) { g.face = 1; return; }
-    g.face = tgt.x < g.x + 30 ? -1 : 1;
+    const face = tgt.x < g.x + 30 ? -1 : 1;
+    if (face !== g.face) {
+      // turning on something behind you takes a moment
+      g.face = face;
+      g.cd = R.range(0.5, 0.9);
+      return;
+    }
     if (g.mag <= 0) {
       if (def.ammo && G.stores[def.ammo] < this.ammoPer(def)) {
         // out of ammunition: hatchets and fence pickets at the wall
@@ -817,10 +828,10 @@ export class Battle {
     const hb = this.hitbox(tgt);
     const dist = Math.hypot(hb.hx - mz.x, hb.hy - mz.y);
     // aim for the head with probability scaled by skill
-    const goHead = R.chance(0.2 + aim * 0.25);
+    const goHead = R.chance((0.2 + aim * 0.25) * (tgt.def.ranged ? 0.5 : 1));
     const ty = goHead ? hb.hy : (hb.y1 + hb.y2) / 2;
     const tx = goHead ? hb.hx : tgt.x;
-    const err = (def.spread * 1.2 + (1.15 - aim - lightBonus) * 0.07 + (fog ? 0.04 : 0)) * (1 + dist / 900);
+    const err = (def.spread * 1.2 + (1.15 - aim - lightBonus) * 0.07 + (fog ? 0.04 : 0)) * (1 + dist / 900) * (tgt.def.ranged ? 1.8 : 1);
     const base = Math.atan2(ty - mz.y, tx - mz.x);
     for (let i = 0; i < def.pellets; i++) {
       const a = base + R.gauss(0, def.pellets > 1 ? def.spread * 0.7 : err * 0.6);
@@ -1074,8 +1085,7 @@ export class Battle {
     this.say(`${first(s).toUpperCase()} IS DOWN. Somebody get to ${them(s)}.`, 5);
     this.slowmo = Math.max(this.slowmo, 0.8);
     this.shake = Math.max(this.shake, 6);
-    const wasPlayer = this.guards.find((x) => x.s.isLeader && !x.s.dead && !x.fled) === g;
-    if (wasPlayer) {
+    if (this.lastPlayer === g) {
       const np = this.player;
       if (np) this.say(`${first(np.s)} takes up the line.`, 4);
     }
@@ -1085,6 +1095,7 @@ export class Battle {
     const s = g.s;
     if (s.dead) return;
     for (const o of this.guards) if (o.dragging === g) o.dragging = undefined;
+    const wasPlayer = this.player === g;
     killSurvivor(s, cause);
     this.res.deaths.push(first(s));
     this.say(g.downed ? `They got to ${first(s)}. ${first(s)} is gone.` : `${first(s).toUpperCase()} IS DOWN.`, 6);
@@ -1099,8 +1110,8 @@ export class Battle {
     }
     this.slowmo = 1.5;
     G.flags.lastDeathDay = G.day;
-    const nl = leader();
-    if (nl && this.player?.s !== nl) this.say(`${first(nl)} takes up the line.`, 4);
+    const np = this.player;
+    if (wasPlayer && np) this.say(`${first(np.s)} takes up the line.`, 4);
   }
 
   updateDowned(dt: number) {
@@ -1226,7 +1237,8 @@ export class Battle {
     const d = this.dog!;
     d.cd -= dt;
     d.barkT = Math.max(0, d.barkT - dt);
-    if (d.barkT > 0 && R.chance(dt * 3)) this.text(d.x + 18, d.y - 64, R.pick(['bark', 'bark bark', 'growl']), '#bfb39a', 10);
+    // one word at a time, not a pile of them
+    if (d.barkT > 0 && d.barkT < 1.1 && !this.texts.some((t) => t.x === d.x + 18)) this.text(d.x + 18, d.y - 64, R.pick(['bark', 'growl']), '#bfb39a', 10);
   }
 
   explode(x: number, r: number, dmg: number) {
@@ -1387,6 +1399,7 @@ export class Battle {
     } });
     list.sort((a, b) => a.y - b.y);
     for (const d of list) d.f();
+    for (const gd of this.guards) if (gd.downed && !gd.s.dead && !gd.fled) this.drawDownedLabel(c, gd);
     // particles
     for (const p of this.particles) {
       const a = Math.max(0, p.life / p.max);
@@ -1490,7 +1503,7 @@ export class Battle {
     c.beginPath();
     c.ellipse(DRAIN_X, SURV_Y + 14, 40, 8, 0, 0, Math.PI * 2);
     c.fill();
-    c.strokeStyle = open ? '#3a3632' : '#4a4540';
+    c.strokeStyle = open ? '#6a645c' : '#7a7468';
     c.lineWidth = 2;
     // the grate, shoved aside when something comes up
     const gx = open ? DRAIN_X + 34 : DRAIN_X;
@@ -1614,10 +1627,10 @@ export class Battle {
       line -= 12;
     }
     if (g.moodle && !g.mode) {
-      c.font = 'italic 10px "Crimson Text", Georgia, serif';
+      c.font = 'italic 12px "Crimson Text", Georgia, serif';
       const tw = c.measureText(g.moodle).width;
       c.fillStyle = 'rgba(8,8,10,0.55)';
-      c.fillRect(g.x - tw / 2 - 4, line - 9, tw + 8, 12);
+      c.fillRect(g.x - tw / 2 - 4, line - 10, tw + 8, 13);
       c.fillStyle = g.moodleC;
       c.fillText(g.moodle, g.x, line);
     }
@@ -1637,17 +1650,20 @@ export class Battle {
       c.translate(g.x, g.y - w * 0.5 + 6);
       c.rotate(-Math.PI / 2);
       c.drawImage(im, -w / 2, -h / 2, w, h);
-      c.globalAlpha = 0.35;
+      c.globalAlpha = 0.2;
       const sh = shadeImg(g.s.sprite, '#0a0b10');
       if (sh) c.drawImage(sh, -w / 2, -h / 2, w, h);
       c.restore();
     }
+  }
+
+  drawDownedLabel(c: CanvasRenderingContext2D, g: Guard) {
     c.font = '11px "Special Elite", monospace';
     c.textAlign = 'center';
     c.fillStyle = '#cfc6b0';
-    const lh = im ? (im.width / im.height) * h : 60;
+    const lh = 46;
     c.fillText(first(g.s), g.x, g.y - lh - 8);
-    let st = g.safe ? 'down · behind the line' : 'DOWN';
+    let st = g.safe ? 'down' : 'DOWN';
     if (!g.safe && g.mauledT > 0) st = 'DOWN · they are on ' + them(g.s);
     c.fillStyle = g.safe ? '#a8a08a' : '#e05040';
     c.fillText(st, g.x, g.y - lh - 22);

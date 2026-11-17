@@ -62,17 +62,17 @@ export const ZOMBIES: Record<string, ZombieDef> = {
   },
   // ---- night specials: never in the random pool ----
   tunneler: {
-    id: 'tunneler', name: 'Drag', sprites: ['z_crawler'], hp: 40, speed: 26, dps: 0, cost: 0.8, minDay: 999,
+    id: 'tunneler', name: 'Drag', sprites: ['z_crawler'], hp: 55, speed: 30, dps: 0, cost: 0.8, minDay: 999,
     head: 0.45, width: 90, height: 42, crawl: true, tunnel: true, special: true,
     lore: 'The storm drains run under Ferry Road to the river. Some of them came up the pipe.',
   },
   raider: {
-    id: 'raider', name: 'County man', sprites: ['z_raider', 'z_raider2'], hp: 75, speed: 70, dps: 0, cost: 3, minDay: 999,
+    id: 'raider', name: 'County man', sprites: ['z_raider', 'z_raider2'], hp: 90, speed: 70, dps: 0, cost: 3, minDay: 999,
     head: 0.16, width: 46, height: 122, ranged: true, special: true,
     lore: 'Deputy jackets off the dead, and the habit of taking. The County wants what you have.',
   },
   bellwether: {
-    id: 'bellwether', name: 'The Bellwether', sprites: ['z_bellwether'], hp: 1500, speed: 12, dps: 30, cost: 0, minDay: 999,
+    id: 'bellwether', name: 'The Bellwether', sprites: ['z_bellwether'], hp: 1800, speed: 12, dps: 30, cost: 0, minDay: 999,
     head: 0.11, width: 84, height: 200, armor: 5, boss: true, toll: true, special: true,
     lore: 'Somebody rang the All Saints\' bell for forty minutes the night it began. Nobody would say who. Now you know.',
   },
