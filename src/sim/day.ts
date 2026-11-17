@@ -319,7 +319,7 @@ export function dawnTick(): string[] {
       s.breakState.days--;
       if (s.breakState.days <= 0) {
         if (s.breakState.kind === 'wander') {
-          if (R.chance(0.7)) {
+          if (R.chance(0.8)) {
             out.push(`${first(s)} came back at first light. Muddy, silent, alive.`);
             if (R.chance(0.2)) wound(s, 'bite', 0.3, R.pick(['larm', 'rarm', 'lleg']));
           } else {
@@ -406,7 +406,7 @@ function breaksTick(): string[] {
       }
       continue;
     }
-    const p = [0, 0.3, 0.6, 0.9][tier];
+    const p = [0, 0.2, 0.45, 0.8][tier];
     if (!R.chance(p)) continue;
     // resolve: Darkest-Dungeon-style turn from breaking to standing
     const partner = closeTo(s).length > 0;
@@ -421,7 +421,7 @@ function breaksTick(): string[] {
       ? [{ k: 'sulk', w: 3 }, { k: 'binge', w: 2 }, { k: 'lash', w: hasTrait(s, 'abrasive') ? 4 : 1.5 }, { k: 'drink', w: hasTrait(s, 'drinker') ? 5 : G.stores.liquor > 0 ? 1 : 0 }]
       : tier === 2
         ? [{ k: 'catatonic', w: 2 }, { k: 'wander', w: 2 }, { k: 'smash', w: 1.2 }, { k: 'hidebite', w: isBitten(s) ? 5 : 0 }]
-        : [{ k: 'wander', w: 2 }, { k: 'desert', w: 2 }, { k: 'catatonic', w: 1.5 }, { k: 'endit', w: hasTrait(s, 'fragile') || hasTrait(s, 'grim') ? 1 : 0.3 }];
+        : [{ k: 'wander', w: 2 }, { k: 'desert', w: living().length >= 3 ? 2 : 0 }, { k: 'catatonic', w: 1.5 }, { k: 'endit', w: hasTrait(s, 'fragile') || hasTrait(s, 'grim') ? 1 : 0.3 }];
     const k = R.weighted(options, (o) => o.w)!.k;
     const name = first(s);
     switch (k) {

@@ -34,11 +34,11 @@ export function campWealth() {
 export function threatPoints(day = G.day) {
   const p = persona();
   const ramp = 0.55 + 0.45 * Math.min(1, Math.max(0, (day - 2) / 12));
-  const base = 10 + 7.5 * Math.pow(day, 1.12);
-  const wealth = Math.min(60, Math.sqrt(campWealth()) * 0.9);
+  const base = 10 + 6 * Math.pow(day, 1.02);
+  const wealth = Math.min(35, Math.sqrt(campWealth()) * 0.7);
   const pawns = living().filter(canFight).length * 3;
   const adapt = G.director.tension; // -20..40
-  const adaptF = adapt < 0 ? 0.6 + 0.4 * ((adapt + 20) / 20) : 1 + 0.35 * (adapt / 40);
+  const adaptF = adapt < 0 ? 0.6 + 0.4 * ((adapt + 20) / 20) : 1 + 0.22 * (adapt / 40);
   const { phase } = cyclePos(day);
   const jitter = R.range(p.jitter[0], p.jitter[1]);
   let pts = (base + wealth + pawns) * ramp * adaptF * phase * jitter * p.diff;

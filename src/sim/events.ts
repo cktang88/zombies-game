@@ -104,7 +104,7 @@ export const INCIDENTS: Incident[] = [
     weight: () => (pop() < 7 && G.day > 4 ? popIntent() * 0.5 : 0),
     make: () => {
       const a = makeSurvivor({ age: R.int(30, 55) });
-      const b = makeSurvivor({ age: R.int(17, 24), name: undefined });
+      const b = makeSurvivor({ age: R.int(17, 24) });
       b.name = `${b.name.split(' ')[0]} ${a.name.split(' ').slice(1).join(' ')}`;
       return {
         id: 'family', title: 'A parent and a child',
@@ -475,8 +475,7 @@ export const INCIDENTS: Incident[] = [
 ];
 
 export function rollIncident(): PendingEvent | null {
-  const quiet = G.day <= 1;
-  if (quiet) return null;
+  if (G.day <= 1 || !living().length) return null;
   const pool = INCIDENTS.filter((i) => (G.director.cooldowns[i.id] ?? 0) <= G.day);
   const forced = pool.find((i) => i.weight() >= 8);
   const pick = forced ?? (R.chance(0.7) ? R.weighted(pool, (i) => i.weight()) : undefined);

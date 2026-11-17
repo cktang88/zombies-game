@@ -121,7 +121,7 @@ export function pain(s: Survivor) {
 
 export interface MoodPart { label: string; v: number }
 export function moodBreakdown(s: Survivor): MoodPart[] {
-  const parts: MoodPart[] = [{ label: 'Baseline: the end of the world', v: 40 }];
+  const parts: MoodPart[] = [{ label: 'Baseline: the end of the world', v: 46 }];
   for (const t of s.traits) if (TRAITS[t].mood) parts.push({ label: TRAITS[t].name, v: TRAITS[t].mood! });
   if (s.hunger < 0.1) parts.push({ label: 'Starving', v: -25 });
   else if (s.hunger < 0.35) parts.push({ label: 'Hungry', v: -10 });
