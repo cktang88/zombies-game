@@ -279,6 +279,17 @@ export function selectedAmmo(w: WeaponItem): Res | null {
   return w.ammoType && ammoTypesFor(w.def).includes(w.ammoType) ? w.ammoType : d.ammo;
 }
 
+/** Which existing procedural shot sound (sfx.shot kind) a gun should use. */
+export function shotSound(defId: string): string {
+  const d = WEAPONS[defId];
+  if (!d) return 'service9';
+  if (d.caliber === 'nails' || d.caliber === 'bolt' || d.caliber === 'r22') return 'nailer';
+  if (d.caliber === 'shot' || d.caliber === 'flare') return 'pump';
+  if (d.caliber === 'rifle' || d.caliber === 'ball') return 'hunting';
+  if (d.auto) return 'smg';
+  return defId;
+}
+
 /** Body-hit damage against armour (Deputies). armorPen 1 = full damage. */
 export function armorDamage(dmg: number, armor: number | undefined, armorPen: number): number {
   if (!armor) return dmg;

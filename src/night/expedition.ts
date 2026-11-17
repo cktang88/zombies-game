@@ -1,7 +1,7 @@
 import type { Survivor, Res, WeaponItem } from '../types';
 import { G, R, log, add, newWeapon, findDoc } from '../state';
 import { ZOMBIES, type ZombieDef } from '../data/zombies';
-import { WEAPONS } from '../data/weapons';
+import { WEAPONS, fireProfile, ammoTypesFor, ammoLabel, AMMO_TYPES, armorDamage, roundsInStores, shotSound, BURN, FLARE_LIGHT, type FireProfile } from '../data/weapons';
 import { SITES, RES_LABEL, type Site } from '../data/world';
 import { img, flashImg, shadeImg } from '../assets';
 import { sfx, wind } from '../audio';
@@ -16,7 +16,7 @@ const ZS = 1.3;
 
 interface EZ {
   def: ZombieDef; sprite: string; x: number; y: number; hp: number; state: 'sleep' | 'walk' | 'grab' | 'dying' | 'kin';
-  phase: number; flash: number; dieT: number; grabT: number; dir: number; headless?: boolean; lungeT: number;
+  phase: number; flash: number; dieT: number; grabT: number; dir: number; headless?: boolean; lungeT: number; burn?: number;
 }
 interface Spot { x: number; searched: boolean; kind: 'door' | 'car' | 'shed' | 'body' | 'kin'; label: string; loot: number; survivor?: boolean }
 interface P { x: number; y: number; vx: number; vy: number; life: number; color: string; size: number; g: number }
@@ -41,6 +41,11 @@ export class Expedition {
   keys = new Set<string>();
   mouse = { x: 900, y: 500, down: false };
   mag: number;
+  magRes: Res | null = null; // bullet type currently in the magazine
+  burstLeft = 0;
+  burstT = 0;
+  spent: Partial<Record<Res, number>> = {};
+  glows: { x: number; y: number; life: number; max: number }[] = [];
   reload = 0;
   cd = 0;
   bloom = 0;
@@ -71,14 +76,15 @@ export class Expedition {
     this.onEnd = onEnd;
     this.len = 3600 + Math.round(this.site.risk * 2400);
     this.daylight = 150;
-    this.mag = this.w ? WEAPONS[this.w.def].mag : 0;
+    this.mag = this.w ? this.prof()!.mag : 0;
+    this.magRes = this.w ? this.prof()!.ammoRes : null;
     this.build();
     this.kh = (e) => this.key(e, true);
     this.ku = (e) => this.key(e, false);
     this.bind();
     wind(true);
     this.say(`${this.site.name}. ${this.site.desc}`, 6);
-    this.say('[A/D] walk · [E] search · [Space] shove · back to the left edge before dark.', 8);
+    this.say(`[A/D] walk · [E] search · [Space] shove${this.w && ammoTypesFor(this.w.def).length > 1 ? ' · [T] switch ammo' : ''} · back to the left edge before dark.`, 8);
   }
 
   build() {
@@ -131,6 +137,7 @@ export class Expedition {
     if (down) this.keys.add(k); else this.keys.delete(k);
     if (!down) return;
     if (k === 'r') this.startReload();
+    if (k === 't') this.cycleAmmo();
     if (k === ' ') { this.shove(); e.preventDefault(); }
   }
 
@@ -194,7 +201,13 @@ export class Expedition {
       this.reload -= dt;
       if (this.reload <= 0) this.doReload();
     }
-    if (this.mouse.down && this.w && WEAPONS[this.w.def].auto) this.fire(false);
+    if (this.burstLeft > 0) {
+      this.burstT -= dt;
+      if (this.burstT <= 0) this.shootRound();
+    }
+    if (this.mouse.down && this.w && this.prof()!.auto) this.fire(false);
+    for (const g of this.glows) g.life -= dt;
+    this.glows = this.glows.filter((g) => g.life > 0);
     // daylight
     this.daylight -= dt;
     if (this.daylight < 0 && R.chance(dt * 0.6)) {
@@ -223,6 +236,13 @@ export class Expedition {
   updZ(z: EZ, dt: number) {
     z.flash = Math.max(0, z.flash - dt);
     if (z.state === 'dying') { z.dieT += dt; return; }
+    if (z.burn && z.burn > 0) {
+      z.burn -= dt;
+      z.hp -= BURN.dps * dt;
+      if (z.state === 'sleep' || z.state === 'kin') z.state = 'walk';
+      if (R.chance(dt * 18)) this.parts.push({ x: z.x + R.range(-12, 12), y: z.y - R.range(20, z.def.height), vx: R.range(-20, 20), vy: R.range(-260, -120), life: 0.5, color: R.pick(['#ff9a3a', '#ffcf6a', '#d8501c']), size: R.range(2, 4), g: GROUND + 40 });
+      if (z.hp <= 0) { this.kill(z); return; }
+    }
     z.phase += dt;
     if (z.state === 'kin') return;
     const d = this.px - z.x;
@@ -270,24 +290,55 @@ export class Expedition {
     }
   }
 
+  prof(): FireProfile | null {
+    return this.w ? fireProfile(this.w) : null;
+  }
+
+  // [T]: next bullet type for this caliber; unloads the magazine back into stores
+  cycleAmmo() {
+    if (!this.w) return;
+    const types = ammoTypesFor(this.w.def);
+    if (types.length < 2) return;
+    const cur = this.prof()!.ammoRes;
+    const have = types.filter((t) => t === cur || (G.stores[t] ?? 0) > 0);
+    const next = have[(have.indexOf(cur!) + 1) % have.length];
+    if (!next || next === cur) { this.say(`No other ammunition for the ${WEAPONS[this.w.def].name.toLowerCase()}.`, 2); return; }
+    this.unload();
+    this.w.ammoType = next;
+    this.say(`Loading ${ammoLabel(next).toLowerCase()}.`, 2);
+    this.reload = 0;
+    this.startReload();
+  }
+
+  unload() {
+    if (!this.w || !this.magRes || this.mag <= 0) { this.mag = 0; return; }
+    add(this.magRes, this.mag * this.prof()!.perShot);
+    this.mag = 0;
+  }
+
   startReload() {
     if (!this.w || this.reload > 0) return;
-    const def = WEAPONS[this.w.def];
-    if (this.mag >= def.mag) return;
-    const per = def.ammo === 'scrap' ? 0.05 : 1;
-    if (def.ammo && G.stores[def.ammo] < per) { this.say('No ammunition. Shove [Space] and run.', 2); sfx.click(); return; }
-    this.reload = def.reload;
+    const p = this.prof()!;
+    if (this.magRes !== p.ammoRes) this.unload();
+    if (this.mag >= p.mag) return;
+    if (roundsInStores(p, G.stores) < 1) { this.say(`No ${ammoLabel(p.ammoRes).toLowerCase()}. ${ammoTypesFor(this.w.def).length > 1 ? '[T] switch ammo, or shove' : 'Shove [Space]'} and run.`, 2); sfx.click(); return; }
+    const armHurt = this.s.wounds.some((w) => w.part === 'larm' || w.part === 'rarm') ? 1.35 : 1;
+    this.reload = p.reload * armHurt;
     sfx.reload();
   }
 
   doReload() {
     if (!this.w) return;
-    const def = WEAPONS[this.w.def];
-    const per = def.ammo === 'scrap' ? 0.05 : 1;
-    const need = def.mag - this.mag;
-    const got = def.ammo ? Math.min(need, Math.floor(G.stores[def.ammo] / per + 1e-6)) : need;
-    if (def.ammo) add(def.ammo, -got * per);
+    const p = this.prof()!;
+    const need = p.reloadPerRound ? 1 : p.mag - this.mag;
+    const got = Math.min(need, roundsInStores(p, G.stores));
+    if (p.ammoRes) add(p.ammoRes, -got * p.perShot);
     this.mag += got;
+    this.magRes = p.ammoRes;
+    if (p.reloadPerRound) {
+      sfx.shell();
+      if (got > 0 && this.mag < p.mag) this.startReload();
+    }
   }
 
   muzzle() {
@@ -295,24 +346,54 @@ export class Expedition {
   }
 
   fire(click: boolean) {
-    if (!this.w || this.cd > 0 || this.reload > 0 || this.searching) return;
-    const def = WEAPONS[this.w.def];
-    if (!click && !def.auto) return;
+    if (!this.w || this.cd > 0 || this.searching || this.burstLeft > 0) return;
+    const p = this.prof()!;
+    if (!click && !p.auto) return;
+    if (this.reload > 0) {
+      // a one-at-a-time reload can be interrupted by firing
+      if (p.reloadPerRound && this.mag > 0) this.reload = 0;
+      else return;
+    }
     if (this.mag <= 0) { sfx.click(); this.startReload(); this.cd = 0.25; return; }
-    this.mag--;
-    this.cd = 1 / def.rof;
-    const mz = this.muzzle();
-    const base = Math.atan2(this.mouse.y - mz.y, this.mouse.x - mz.x);
-    const spreadA = def.spread * (1.75 - aimFactor(this.s)) + this.bloom;
-    for (let i = 0; i < def.pellets; i++) this.ray(mz.x + this.cam, mz.y, base + (R.next() + R.next() - 1) * (def.pellets > 1 ? def.spread : spreadA), def.dmg, def.pierce, def.knock, def.pellets > 1);
-    this.bloom = Math.min(0.12, this.bloom + def.spread * 0.35 + 0.01);
-    this.shake = Math.max(this.shake, def.knock / 7);
-    this.noise = Math.min(4, this.noise + def.noise);
-    sfx.shot(def.id);
-    if (this.mag === 0) this.startReload();
+    this.cd = 1 / p.rof;
+    if (R.chance(p.jam)) {
+      this.say(`${this.w.name ?? WEAPONS[this.w.def].name} jammed.`, 1.5);
+      sfx.click();
+      this.cd = 0.9;
+      return;
+    }
+    this.burstLeft = p.burst;
+    this.shootRound();
   }
 
-  ray(ox: number, oy: number, a: number, dmg: number, pierce: number, knock: number, pellet: boolean) {
+  // one round of a trigger pull (bursts call this again after burstGap; gap 0 = all at once)
+  shootRound() {
+    if (!this.w) { this.burstLeft = 0; return; }
+    const p = this.prof()!;
+    do {
+      if (this.mag <= 0 || this.burstLeft <= 0) { this.burstLeft = 0; break; }
+      this.burstLeft--;
+      this.mag--;
+      if (p.ammoRes) this.spent[p.ammoRes] = (this.spent[p.ammoRes] ?? 0) + p.perShot;
+      const mz = this.muzzle();
+      const base = Math.atan2(this.mouse.y - mz.y, this.mouse.x - mz.x);
+      const spreadA = p.spread * (1.75 - aimFactor(this.s)) + this.bloom;
+      for (let i = 0; i < p.pellets; i++) this.ray(mz.x + this.cam, mz.y, base + (R.next() + R.next() - 1) * (p.pellets > 1 ? p.spread : spreadA), p, p.pellets > 1);
+      this.bloom = Math.min(0.12, this.bloom + p.spread * 0.35 / Math.max(1, p.burst) + 0.01);
+      this.shake = Math.max(this.shake, p.knock * (p.pellets > 1 ? p.pellets * 0.25 : 1) / 7);
+      this.noise = Math.min(4, this.noise + p.noise);
+      G.stats.shots++;
+      this.w.cond = Math.max(0.05, this.w.cond - 0.0008);
+      if (p.smoke) for (let i = 0; i < 14; i++) this.parts.push({ x: mz.x + this.cam + this.face * R.range(0, 60), y: mz.y + R.range(-14, 14), vx: this.face * R.range(20, 110), vy: R.range(-240, -120), life: R.range(0.5, 0.9), color: R.pick(['rgba(200,196,186,0.35)', 'rgba(160,156,150,0.3)']), size: R.range(8, 18), g: mz.y + 40 });
+      sfx.shot(shotSound(this.w.def));
+    } while (this.burstLeft > 0 && p.burstGap <= 0);
+    if (this.burstLeft > 0) this.burstT = p.burstGap;
+    if (this.mag === 0 && this.burstLeft === 0) this.startReload();
+  }
+
+  ray(ox: number, oy: number, a: number, p: FireProfile, pellet: boolean) {
+    const { pierce, knock, armorPen } = p;
+    const dmg = p.dmg;
     const dx = Math.cos(a), dy = Math.sin(a);
     const hits: { z: EZ; t: number; head: boolean }[] = [];
     for (const z of this.zs) {
@@ -333,7 +414,7 @@ export class Expedition {
     let end = 1500, n = 0, d = dmg;
     for (const h of hits) {
       const z = h.z;
-      let dd = h.head ? d * (pellet ? 2 : 3) : z.def.armor ? Math.max(d * 0.15, d - z.def.armor) : d;
+      let dd = h.head ? d * (pellet ? 2 : 3) : armorDamage(d, z.def.armor, armorPen);
       if (z.state === 'kin') {
         dd *= 1;
         this.lines.push(`${first(this.s)} shot the Kin at ${this.site.name}.`);
@@ -341,6 +422,7 @@ export class Expedition {
       }
       z.hp -= dd;
       z.flash = 0.08;
+      if (p.incendiary) z.burn = BURN.time;
       if (z.state === 'sleep' || z.state === 'kin') z.state = 'walk';
       z.x += Math.sign(dx) * knock * (pellet ? 0.25 : 1);
       if (z.state === 'grab' && knock > 15) z.state = 'walk';
@@ -355,6 +437,7 @@ export class Expedition {
       d *= 0.7;
     }
     this.tracers.push({ x1: ox + dx * 20, y1: oy + dy * 20, x2: ox + dx * end, y2: oy + dy * end, life: 0.07 });
+    if (p.flare && (!pellet || R.chance(0.2))) this.glows.push({ x: ox + dx * Math.min(end, 1100), y: Math.min(GROUND, oy + dy * Math.min(end, 1100)), life: pellet ? 1.5 : FLARE_LIGHT.time, max: pellet ? 1.5 : FLARE_LIGHT.time });
   }
 
   kill(z: EZ) {
@@ -415,6 +498,11 @@ export class Expedition {
       log('death', `${displayName(this.s)} went to ${this.site.name} and did not come back. Whatever they carried is out there still.`);
       for (const [k, v] of Object.entries(this.loot)) add(k as Res, -(v ?? 0));
     } else {
+      const rec = this.prof()?.recoverable ?? 0;
+      for (const [k, v] of Object.entries(this.spent)) {
+        const back = Math.floor((v ?? 0) * (AMMO_TYPES[k as Res]?.recoverable ?? rec));
+        if (back > 0) { add(k as Res, back); this.lines.push(`${first(this.s)} pulled ${back} ${ammoLabel(k as Res).toLowerCase()} back out of the dead.`); }
+      }
       const total = Object.values(this.loot).reduce((a, b) => a + (b ?? 0), 0);
       if (total > 40) tale(this.s, `Came back from ${this.site.name} loaded down.`);
       log('event', `${displayName(this.s)} led a run to ${this.site.name} and came back.`);
@@ -499,6 +587,15 @@ export class Expedition {
       c.strokeStyle = `rgba(255,226,170,${t.life * 12})`;
       c.lineWidth = 1.5;
       c.beginPath(); c.moveTo(t.x1 - this.cam, t.y1); c.lineTo(t.x2 - this.cam, t.y2); c.stroke();
+    }
+    for (const gl of this.glows) {
+      const k = Math.min(1, gl.life / gl.max * 3) * (0.85 + Math.sin(this.t * 31 + gl.x) * 0.15);
+      const r = FLARE_LIGHT.r * (gl.max > 2 ? 1 : 0.4);
+      const rg = c.createRadialGradient(gl.x - this.cam, gl.y, 2, gl.x - this.cam, gl.y, r);
+      rg.addColorStop(0, `rgba(255,120,60,${0.55 * k})`);
+      rg.addColorStop(1, 'rgba(255,90,40,0)');
+      c.fillStyle = rg;
+      c.fillRect(gl.x - this.cam - r, gl.y - r, r * 2, r * 2);
     }
     c.restore();
     this.hud();
@@ -604,13 +701,16 @@ export class Expedition {
     c.fillText(loot ? `carrying: ${loot}` : 'carrying nothing yet', 20, H - 20);
     if (this.w) {
       const def = WEAPONS[this.w.def];
+      const p = this.prof()!;
+      const left = roundsInStores(p, G.stores);
       c.textAlign = 'right';
       c.font = '20px "Special Elite", monospace';
       c.fillStyle = this.mag ? '#efe2c2' : '#c04030';
-      c.fillText(`${this.mag} / ${def.ammo ? Math.floor(G.stores[def.ammo] / (def.ammo === 'scrap' ? 0.05 : 1)) : '∞'}`, W - 20, H - 20);
+      c.fillText(`${this.mag} / ${Number.isFinite(left) ? left : '∞'}`, W - 20, H - 20);
       c.font = '12px "Special Elite", monospace';
       c.fillStyle = '#a89c84';
-      c.fillText(this.reload > 0 ? 'reloading…' : def.name, W - 20, H - 46);
+      const multi = ammoTypesFor(this.w.def).length > 1;
+      c.fillText(this.reload > 0 ? 'reloading…' : `${def.name} · ${ammoLabel(p.ammoRes).toLowerCase()}${multi ? ' [T]' : ''}`, W - 20, H - 46);
     }
     c.textAlign = 'center';
     this.msgs.forEach((m, i) => {
@@ -620,10 +720,10 @@ export class Expedition {
     });
     // crosshair
     if (this.w) {
-      const def = WEAPONS[this.w.def];
+      const p = this.prof()!;
       const mz = this.muzzle();
       const dist = Math.hypot(this.mouse.x - mz.x, this.mouse.y - mz.y);
-      const r = Math.max(5, Math.tan((def.pellets > 1 ? def.spread : def.spread * (1.75 - aimFactor(this.s))) + this.bloom) * dist);
+      const r = Math.max(5, Math.tan((p.pellets > 1 ? p.spread : p.spread * (1.75 - aimFactor(this.s))) + this.bloom) * dist);
       c.strokeStyle = 'rgba(235,225,200,0.85)';
       c.lineWidth = 1.5;
       c.beginPath(); c.arc(this.mouse.x, this.mouse.y, r, 0, 7); c.stroke();
