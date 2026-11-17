@@ -219,6 +219,7 @@ export function finishRecipe(id: string, by?: Survivor): string {
     case 'light': G.fort.lights++; break;
     case 'turret': G.fort.turrets = (G.fort.turrets ?? 0) + 1; break;
     case 'trap': G.fort.traps++; break;
+    case 'duffel': G.flags.duffel = true; break;
     case 'armor': G.flags.armorStock = ((G.flags.armorStock as number) ?? 0) + 1; break;
     case 'repair': {
       const w = [...G.weapons].sort((a, b) => a.cond - b.cond)[0];

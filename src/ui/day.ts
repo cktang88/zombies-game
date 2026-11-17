@@ -221,6 +221,16 @@ function detailHtml(s: Survivor) {
   </div>`;
 }
 
+// Companion for a run (expedition.ts reads G.flags.runMate); they give up their day's work.
+function runMateSelect(l: Survivor) {
+  const mates = living().filter((s) => s !== l && canWork(s) && !s.breakState);
+  if (!mates.length) return '';
+  const cur = G.flags.runMate as string | undefined;
+  return `<select data-act="runmate" title="Take one along: they shoot, carry 6 more, and can drag you home. They do no other work today.">
+    <option value="">— go alone —</option>
+    ${mates.map((s) => `<option value="${s.id}" ${cur === s.id ? 'selected' : ''}>with ${esc(first(s))}${s.weapon ? '' : ' (unarmed)'}</option>`).join('')}</select>`;
+}
+
 function runHtml() {
   const l = living().find((s) => s.isLeader);
   if (!l) return '';
@@ -230,6 +240,7 @@ function runHtml() {
   return `<div class="run"><h3>Lead a run yourself</h3>
     <p class="dim">${esc(first(l))} goes alone, on foot, in daylight. More loot than a scavenging job, and you choose the risks. ${esc(first(l))} will do no other work today.</p>
     <select data-act="runsite">${sites.map((x) => `<option value="${x.id}">${x.name} — ${x.risk < 0.2 ? 'low' : x.risk < 0.4 ? 'some' : x.risk < 0.6 ? 'high' : 'grave'} risk</option>`).join('')}</select>
+    ${runMateSelect(l)}
     <button data-act="run">Go ›</button></div>`;
 }
 
@@ -460,6 +471,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
   root.onchange = (e) => {
     const t = e.target as HTMLSelectElement;
     if (t.dataset.act === 'runsite') return;
+    if (t.dataset.act === 'runmate') { if (t.value) G.flags.runMate = t.value; else delete G.flags.runMate; return; }
     if (t.dataset.act === 'mod') {
       const w = G.weapons.find((x) => x.uid === t.dataset.w);
       G.modStock ??= [];

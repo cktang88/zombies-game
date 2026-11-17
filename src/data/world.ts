@@ -60,7 +60,7 @@ export interface Recipe {
   gives?: Partial<Record<Res, number>>;
   weapon?: string;
   mod?: string; // MODS key: an attachment goes onto the bench (G.modStock)
-  special?: 'spikes' | 'wire' | 'light' | 'trap' | 'armor' | 'molotov' | 'liquor' | 'fortify' | 'repair' | 'turret';
+  special?: 'spikes' | 'wire' | 'light' | 'trap' | 'armor' | 'molotov' | 'liquor' | 'fortify' | 'repair' | 'turret' | 'duffel';
   desc: string;
 }
 
@@ -81,6 +81,7 @@ export const RECIPES: Recipe[] = [
   { id: 'ammo_bolt', name: 'Broadheads ×12', needs: 'workbench', cost: { wood: 3, scrap: 1, cloth: 1 }, work: 3, gives: { bolt: 12 }, desc: 'Dowel shafts, heads ground from saw teeth. For bows and crossbows.' },
   { id: 'ammo_bolt_fire', name: 'Fire bolts ×8', needs: 'still', cost: { wood: 2, fuel: 1, cloth: 1 }, work: 2, gives: { bolt_fire: 8 }, desc: 'Rag-wrapped, still-fuel soaked. They burn, and they do not come back.' },
   { id: 'ammo_flare', name: 'Flare shells ×4', needs: 'still', cost: { fuel: 2, scrap: 1, parts: 1 }, work: 3, gives: { flare: 4 }, desc: 'Road-flare composition packed into 12-gauge hulls.' },
+  { id: 'duffel', name: 'Duffel bag', needs: 'workbench', cost: { cloth: 6 }, work: 3, special: 'duffel', desc: 'A canvas duffel for runs: +4 pack slots for whoever leads them. One is enough.' },
   // --- attachments (go onto the bench; fit them in the armory) ---
   { id: 'mod_suppressor', name: 'Oil-filter suppressor', needs: 'workbench', cost: { scrap: 3, parts: 1 }, work: 3, mod: 'suppressor', desc: 'A truck oil filter on a threaded adapter. Quiet, for a few nights.' },
   { id: 'mod_flashlight', name: 'Duct-taped flashlight', needs: 'workbench', cost: { parts: 2, cloth: 1 }, work: 2, mod: 'flashlight', desc: 'A Maglite taped under the barrel. Lights a cone down the road at night.' },

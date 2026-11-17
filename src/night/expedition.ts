@@ -5,11 +5,29 @@ import { WEAPONS, fireProfile, ammoTypesFor, ammoLabel, AMMO_TYPES, armorDamage,
 import { SITES, RES_LABEL, type Site } from '../data/world';
 import { img, flashImg, shadeImg } from '../assets';
 import { sfx, wind } from '../audio';
-import { aimFactor, first, displayName, wound, pain, killSurvivor, tale, addThought, skillOf, makeSurvivor } from '../sim/survivors';
+import { aimFactor, first, displayName, wound, pain, killSurvivor, tale, addThought, skillOf, makeSurvivor, byId, canWork, changeOpinion } from '../sim/survivors';
 
 // A daylight scavenging run you play yourself: walk right through the street,
 // search doorways, and get back to the left edge before dark.
+// Push-your-luck (docs/research/06 #3): a 12-slot pack, three depth zones that pay
+// more and hold more of them, noise heat that sends stragglers between you and home,
+// a pickup you can hotwire deep in, and drop/leave items. Companion runs (#8): one
+// survivor can come along, shoot, carry, be downed, and drag the leader home.
 const W = 1280, H = 720;
+const PACK_CAP = 12, DUFFEL = 4, MATE_CAP = 6;
+const ZONE_LOOT = [1, 1.5, 2.2];
+const ZONE_DENS = [1, 1.6, 2.4];
+const ZONE_NAMES = ['the near houses', 'past the rail crossing', 'beyond the four-way stop'];
+const RUN_YIELD = 0.22; // per-search loot scale: clearing the whole street ≈ 2–2.4× a scavenging job (before the pack cap)
+// how many of a resource fit in one pack slot (bulky things take more room)
+const STACK: Partial<Record<Res, number>> = {
+  food: 6, wood: 4, scrap: 8, parts: 4, meds: 3, fuel: 3, cloth: 6, liquor: 2, molotov: 2,
+  light: 20, light_hp: 20, r22: 50, shell: 8, shell_slug: 8, shell_flech: 8, shell_fire: 8, rifle: 12, rifle_sp: 12, rifle_ap: 12,
+  r556: 30, ball: 15, bolt: 12, bolt_fire: 8, flare: 4, rocket: 1, g40: 3, g40_buck: 3, pipebomb: 2,
+};
+type PackItem = { kind: 'res'; res: Res; n: number } | { kind: 'gun'; def: string; cond: number } | { kind: 'mod'; def: string; cond: number };
+const itemSlots = (it: PackItem) => (it.kind === 'gun' ? 3 : it.kind === 'mod' ? 1 : Math.ceil(it.n / (STACK[it.res] ?? 5)));
+const itemLabel = (it: PackItem) => (it.kind === 'gun' ? WEAPONS[it.def].name.toLowerCase() : it.kind === 'mod' ? MODS[it.def].name.toLowerCase() : `${it.n} ${RES_LABEL[it.res].toLowerCase()}`);
 const GROUND = 664;
 const SH = 158;
 const ZS = 1.3;
@@ -146,10 +164,10 @@ function bakeBackgrounds() {
 
 interface EZ {
   def: ZombieDef; sprite: string; x: number; y: number; hp: number; state: 'sleep' | 'walk' | 'grab' | 'dying' | 'kin';
-  phase: number; flash: number; dieT: number; grabT: number; dir: number; headless?: boolean; lungeT: number; burn?: number;
+  phase: number; flash: number; dieT: number; grabT: number; dir: number; headless?: boolean; lungeT: number; burn?: number; grabWho?: 'p' | 'm';
   id: number; lane: number; sc: number; variant: number;
 }
-interface Spot { x: number; searched: boolean; kind: 'door' | 'car' | 'shed' | 'body' | 'kin'; label: string; loot: number; survivor?: boolean }
+interface Spot { x: number; searched: boolean; kind: 'door' | 'car' | 'shed' | 'body' | 'kin' | 'cache' | 'truck' | 'drop'; label: string; loot: number; survivor?: boolean; zone: number; items?: PackItem[] }
 interface P { x: number; y: number; vx: number; vy: number; life: number; color: string; size: number; g: number }
 
 export interface ExpeditionResult { loot: Partial<Record<Res, number>>; weapons: string[]; died: boolean; found?: Survivor; lines: string[] }
@@ -165,6 +183,7 @@ export class Expedition {
   cam = 0;
   t = 0;
   daylight: number;
+  dayMax = 150;
   zs: EZ[] = [];
   spots: Spot[] = [];
   parts: P[] = [];
@@ -195,6 +214,25 @@ export class Expedition {
   last = 0;
   shoveCd = 0;
   noise = 0;
+  heat = 0; // persistent noise: stragglers come up behind you
+  strayT = 20;
+  pack: PackItem[] = [];
+  sel = 0;
+  zoneB: [number, number] = [0, 0];
+  // companion
+  mate: Survivor | null = null;
+  mateW: WeaponItem | null = null;
+  mateX = 0;
+  mateMag = 0;
+  mateCd = 0;
+  mateReload = 0;
+  mateDown = 0; // >0: downed, bleeding-out seconds left
+  reviveT = 0;
+  rescued = false;
+  // leader downed
+  downed = 0; // >0: seconds before the mate must reach the leader
+  dragging = false;
+  shooter: 'p' | 'm' = 'p';
   onEnd: (r: ExpeditionResult) => void;
   kh: (e: KeyboardEvent) => void;
   ku: (e: KeyboardEvent) => void;
@@ -208,16 +246,29 @@ export class Expedition {
     this.site = SITES.find((x) => x.id === siteId)!;
     this.onEnd = onEnd;
     this.len = 3600 + Math.round(this.site.risk * 2400);
-    this.daylight = 150;
+    this.daylight = typeof G.flags.runDaylight === 'number' ? Math.max(30, G.flags.runDaylight as number) : 150;
+    this.dayMax = this.daylight;
+    // a companion chosen on the day screen (G.flags.runMate = survivor id)
+    const mate = typeof G.flags.runMate === 'string' ? byId(G.flags.runMate as string) : undefined;
+    delete G.flags.runMate;
+    if (mate && mate !== s && !mate.dead && canWork(mate)) {
+      this.mate = mate;
+      mate.job = 'rest';
+      this.mateW = G.weapons.find((x) => x.uid === mate.weapon) ?? null;
+      this.mateMag = this.mateW ? fireProfile(this.mateW).mag : 0;
+      this.mateX = this.px - 60;
+    }
     this.mag = this.w ? this.prof()!.mag : 0;
     this.magRes = this.w ? this.prof()!.ammoRes : null;
     this.build();
     this.kh = (e) => this.key(e, true);
     this.ku = (e) => this.key(e, false);
     this.bind();
+    (globalThis as unknown as { __EX: Expedition }).__EX = this; // debug handle (tests)
     wind(true);
     this.say(`${this.site.name}. ${this.site.desc}`, 6);
-    this.say(`[A/D] walk · [E] search · [Space] shove${this.w && ammoTypesFor(this.w.def).length > 1 ? ' · [T] switch ammo' : ''} · back to the left edge before dark.`, 8);
+    this.say(`[A/D] walk · [E] search · [Space] shove${this.w && ammoTypesFor(this.w.def).length > 1 ? ' · [T] ammo' : ''} · [Tab]/[G] pick & drop from the pack · home is the left edge.`, 8);
+    if (this.mate) this.say(`${first(this.mate)} comes along. ${first(this.mate)} carries ${MATE_CAP} more and watches your back.`, 6);
   }
 
   build() {
@@ -231,22 +282,54 @@ export class Expedition {
       shed: ['a tool shed', 'an ice-fishing shanty', 'a woodpile'],
       body: ['a body in a hunting jacket', 'a body in scrubs', 'a body by the mailbox'],
       kin: ['a kitchen window'],
+      cache: ['a locked cabinet'], truck: ['a pickup'], drop: ['what you left'],
     };
+    this.zoneB = [Math.round(this.len * 0.38), Math.round(this.len * 0.7)];
     for (let x = 520; x < this.len - 200; x += R.range(300, 520)) {
+      if (Math.abs(x - this.zoneB[0]) < 90 || Math.abs(x - this.zoneB[1]) < 90 || Math.abs(x - (this.zoneB[1] + 160)) < 140) continue;
       const kind: Spot['kind'] = R.chance(G.day > 3 ? 0.12 : 0) ? 'kin' : R.pick(kinds);
-      this.spots.push({ x, searched: false, kind, label: R.pick(labels[kind]), loot: fullness * R.range(0.5, 1.3) });
+      this.spots.push({ x, searched: false, kind, label: R.pick(labels[kind]), loot: fullness * R.range(0.5, 1.3), zone: this.zoneOf(x) });
     }
+    // zone 3 always has a cache (slow, loud), and a pickup you can hotwire out of here
+    const cx = Math.round(R.range(this.zoneB[1] + 420, this.len - 260));
+    this.spots.push({ x: cx, searched: false, kind: 'cache', label: R.pick(['a locked gun cabinet', 'a pharmacy cage', 'a deer-camp footlocker']), loot: fullness, zone: 2 });
+    this.spots.push({ x: this.zoneB[1] + 160, searched: false, kind: 'truck', label: 'a pickup with keys gone', loot: 0, zone: 2 });
+    this.spots.sort((a, b) => a.x - b.x);
     const doors = this.spots.filter((s) => s.kind === 'door');
     if (doors.length && R.chance(this.site.survivorChance * 1.6)) R.pick(doors).survivor = true;
-    const n = Math.round(6 + this.site.risk * 22 + G.day * 0.5);
+    const n = Math.round((6 + this.site.risk * 22 + G.day * 0.5) * 1.15);
     for (let i = 0; i < n; i++) {
       const pool = Object.values(ZOMBIES).filter((z) => z.minDay <= G.day && z.id !== 'ferryman' && z.id !== 'crier');
       const def = R.weighted(pool, (z) => (z.id === 'sleeper' ? 6 : z.id === 'drag' ? 1.5 : z.id === 'deer' ? 1.2 : 0.6))!;
-      this.zs.push(this.mk(def, R.range(700, this.len - 60), R.chance(0.7) ? 'sleep' : 'walk'));
+      // denser the deeper you go
+      const zw = ZONE_DENS.map((d, i) => d * ((i === 0 ? this.zoneB[0] - 700 : i === 1 ? this.zoneB[1] - this.zoneB[0] : this.len - 60 - this.zoneB[1])));
+      const zi = R.weighted([0, 1, 2], (i) => Math.max(0, zw[i]))!;
+      const lo = [700, this.zoneB[0], this.zoneB[1]][zi], hi = [this.zoneB[0], this.zoneB[1], this.len - 60][zi];
+      this.zs.push(this.mk(def, R.range(lo, hi), R.chance(0.7) ? 'sleep' : 'walk'));
     }
   }
 
   zid = 0;
+  zoneOf(x: number) { return x < this.zoneB[0] ? 0 : x < this.zoneB[1] ? 1 : 2; }
+  cap() { return PACK_CAP + (G.flags.duffel ? DUFFEL : 0) + (this.mate ? MATE_CAP : 0); }
+  slots() { return this.pack.reduce((a, it) => a + itemSlots(it), 0); }
+  toPack(it: PackItem) {
+    if (it.kind === 'res') {
+      const ex = this.pack.find((p) => p.kind === 'res' && p.res === it.res) as { n: number } | undefined;
+      if (ex) { ex.n += it.n; return; }
+    }
+    this.pack.push(it);
+  }
+  dropSelected() {
+    if (!this.pack.length || this.downed) return;
+    this.sel = Math.min(this.sel, this.pack.length - 1);
+    const it = this.pack.splice(this.sel, 1)[0];
+    const near = this.spots.find((s) => s.kind === 'drop' && Math.abs(s.x - this.px) < 50);
+    if (near) near.items!.push(it);
+    else this.spots.push({ x: this.px, searched: false, kind: 'drop', label: 'what you left', loot: 0, zone: this.zoneOf(this.px), items: [it] });
+    this.say(`Left ${itemLabel(it)} on the road.`, 2);
+    sfx.thud();
+  }
   mk(def: ZombieDef, x: number, state: EZ['state']): EZ {
     const lane = R.int(0, 2);
     const y = LANES[lane] + R.range(-2, 2);
@@ -295,6 +378,8 @@ export class Expedition {
     if (!down) return;
     if (k === 'r') this.startReload();
     if (k === 't') this.cycleAmmo();
+    if (k === 'tab') { this.sel = this.pack.length ? (this.sel + 1) % this.pack.length : 0; e.preventDefault(); }
+    if (k === 'g') this.dropSelected();
     if (k === ' ') { this.shove(); e.preventDefault(); }
   }
 
@@ -333,9 +418,11 @@ export class Expedition {
     this.cd -= dt;
     this.shoveCd -= dt;
     const legHurt = this.s.wounds.filter((w) => w.part === 'lleg' || w.part === 'rleg').reduce((a, w) => a + w.severity, 0) + (this.s.scars.some((x) => x.label.includes('leg')) ? 0.6 : 0);
-    const speed = 150 * Math.max(0.35, 1 - legHurt * 0.5);
-    const grabbed = this.zs.some((z) => z.state === 'grab');
-    if (!grabbed && !this.searching) {
+    const over = Math.max(0, this.slots() - this.cap());
+    const speed = 150 * Math.max(0.35, 1 - legHurt * 0.5) * Math.max(0.45, 1 - over * 0.07);
+    const grabbed = this.zs.some((z) => z.state === 'grab' && z.grabWho !== 'm');
+    if (this.downed > 0 || this.dragging) this.updDowned(dt);
+    else if (!grabbed && !this.searching) {
       if (this.keys.has('a') || this.keys.has('arrowleft')) { this.px -= speed * dt; this.face = -1; }
       if (this.keys.has('d') || this.keys.has('arrowright')) { this.px += speed * dt; this.face = 1; }
     }
@@ -343,16 +430,38 @@ export class Expedition {
     this.px = Math.max(20, Math.min(this.len - 40, this.px));
     this.cam += (this.px - W * 0.35 - this.cam) * Math.min(1, dt * 5);
     this.cam = Math.max(0, Math.min(this.len - W, this.cam));
+    // revive a downed companion: hold [E] beside them
+    const mateNear = this.mate && this.mateDown > 0 && Math.abs(this.mateX - this.px) < 70;
+    if (mateNear && this.keys.has('e') && !this.downed) {
+      this.reviveT += dt;
+      if (this.reviveT >= 2.5) this.reviveMate();
+    } else this.reviveT = 0;
     // search
-    const near = this.spots.find((s) => !s.searched && Math.abs(s.x - this.px) < 60);
-    if (this.keys.has('e') && near && !this.searching) { this.searching = near; this.searchT = 0; }
+    const near = mateNear ? undefined : this.spots.find((s) => !s.searched && Math.abs(s.x - this.px) < 60);
+    if (this.keys.has('e') && near && !this.searching && !this.downed) {
+      if (near.kind === 'truck' && (G.stores.fuel < 2 || G.stores.parts < 1)) this.say('It would take 2 fuel and a part to start it. The house does not have them.', 2.5);
+      else { this.searching = near; this.searchT = 0; }
+    }
     if (this.searching) {
-      if (!this.keys.has('e') || Math.abs(this.searching.x - this.px) > 70 || grabbed) this.searching = null;
+      if (!this.keys.has('e') || Math.abs(this.searching.x - this.px) > 70 || grabbed || this.downed) this.searching = null;
       else {
-        this.searchT += dt * (0.7 + skillOf(this.s, 'scavenging') * 0.06);
-        if (this.searchT >= 2.5) this.finishSearch(this.searching);
+        const helper = this.mate && !this.mateDown && Math.abs(this.mateX - this.searching.x) < 140 ? skillOf(this.mate, 'scavenging') * 0.05 : 0;
+        this.searchT += dt * (0.7 + skillOf(this.s, 'scavenging') * 0.06 + helper);
+        if (this.searchT >= this.searchTime(this.searching)) this.finishSearch(this.searching);
       }
     }
+    // noise heat: persists, and brings stragglers up the road behind you
+    this.heat = Math.max(0, this.heat - dt * 0.015);
+    if (this.heat >= 2 && this.px > 600) {
+      this.strayT -= dt * (this.heat / 2);
+      if (this.strayT <= 0) {
+        this.strayT = 20;
+        const x = Math.max(60, this.px - R.range(450, 750));
+        this.zs.push(this.mk(R.chance(0.7) ? ZOMBIES.sleeper : ZOMBIES.deer, x, 'walk'));
+        this.say('Something is coming up the road behind you.', 2.5);
+      }
+    }
+    if (this.mate) this.updMate(dt);
     // reload / fire
     if (this.reload > 0) {
       this.reload -= dt;
@@ -362,7 +471,7 @@ export class Expedition {
       this.burstT -= dt;
       if (this.burstT <= 0) this.shootRound();
     }
-    if (this.mouse.down && this.w && this.prof()!.auto) this.fire(false);
+    if (this.mouse.down && this.w && this.prof()!.auto && !this.downed) this.fire(false);
     for (const l of this.lobs) { l.t += dt; if (l.t >= l.dur) this.explode(l.x1, l.y1, l.p); }
     this.lobs = this.lobs.filter((l) => l.t < l.dur);
     for (const g of this.glows) g.life -= dt;
@@ -381,6 +490,7 @@ export class Expedition {
     // noise wakes sleepers
     if (this.noise > 0) {
       for (const z of this.zs) if (z.state === 'sleep' && Math.abs(z.x - this.px) < this.noise * 260) z.state = 'walk';
+      this.heat = Math.min(6, this.heat + this.noise * dt * 0.05);
       this.noise = Math.max(0, this.noise - dt * 3);
     }
     for (const p of this.parts) { p.life -= dt; p.vy += 900 * dt; p.x += p.vx * dt; p.y += p.vy * dt; if (p.y > p.g) p.life = 0; }
@@ -389,7 +499,7 @@ export class Expedition {
     this.tracers = this.tracers.filter((t) => t.life > 0);
     for (const m of this.msgs) m.life -= dt;
     this.msgs = this.msgs.filter((m) => m.life > 0);
-    if (this.px <= 22 && this.t > 2 && (this.keys.has('a') || this.keys.has('arrowleft'))) this.finish(false);
+    if (this.px <= 22 && this.t > 2 && !this.downed && (this.dragging || this.keys.has('a') || this.keys.has('arrowleft'))) this.finish(false);
   }
 
   updZ(z: EZ, dt: number) {
@@ -404,7 +514,11 @@ export class Expedition {
     }
     z.phase += dt;
     if (z.state === 'kin') return;
-    const d = this.px - z.x;
+    // go for whoever is nearer: the leader or the companion
+    const mateUp = this.mate && this.mateX;
+    const who: 'p' | 'm' = z.state === 'grab' ? z.grabWho ?? 'p' : mateUp && Math.abs(this.mateX - z.x) < Math.abs(this.px - z.x) ? 'm' : 'p';
+    const tx = who === 'm' ? this.mateX : this.px;
+    const d = tx - z.x;
     if (z.state === 'sleep') {
       if (Math.abs(d) < 110 || (this.daylight < 0 && R.chance(dt * 0.3))) { z.state = 'walk'; if (R.chance(0.5)) sfx.groan(); }
       return;
@@ -414,10 +528,12 @@ export class Expedition {
       let sp = z.def.speed * 0.9;
       if (z.def.lunge) { z.lungeT -= dt; if (z.lungeT < 0) { sp *= 0.15; if (z.lungeT < -0.8) z.lungeT = R.range(1.2, 2.6); } }
       z.x += z.dir * sp * dt;
-      if (Math.abs(d) < 34) { z.state = 'grab'; z.grabT = 0.8; this.say('Grabbed!', 1.5); }
+      if (Math.abs(d) < 34) { z.state = 'grab'; z.grabWho = who; z.grabT = 0.8; this.say(who === 'm' ? `${first(this.mate!)} is grabbed!` : 'Grabbed!', 1.5); }
     } else if (z.state === 'grab') {
       if (Math.abs(d) > 60) { z.state = 'walk'; return; }
       z.grabT -= dt;
+      if (z.grabT <= 0 && who === 'm') { z.grabT = R.range(1.1, 1.7); this.hurtMate(z); return; }
+      if (z.grabT <= 0 && this.downed > 0) { z.grabT = R.range(1.1, 1.7); this.downed -= 2.5; sfx.hurt(); return; }
       if (z.grabT <= 0) {
         z.grabT = R.range(1.1, 1.7);
         const bite = R.chance(0.3);
@@ -427,13 +543,150 @@ export class Expedition {
         for (let i = 0; i < 6; i++) this.parts.push({ x: this.px, y: GROUND - 90, vx: R.range(-120, 120), vy: R.range(-160, 0), life: 1, color: '#5e1410', size: 3, g: GROUND });
         this.say(bite ? `${first(this.s)} is BITTEN.` : `${wd.kind}.`, 2.5);
         if (bite) tale(this.s, `Bitten at ${this.site.name}, out on a run.`);
-        if (pain(this.s) > 1.45) this.finish(true, `torn apart at ${this.site.name} by ${z.def.name === 'Sleeper' ? 'Sleepers' : `a ${z.def.name}`}`);
+        if (pain(this.s) > 1.45) this.leaderDown(`torn apart at ${this.site.name} by ${z.def.name === 'Sleeper' ? 'Sleepers' : `a ${z.def.name}`}`);
       }
     }
   }
 
+  // ---------- downed & dragged / companion ----------
+  downCause = '';
+  leaderDown(cause: string) {
+    if (this.mate && !this.mateDown && !this.downed && !this.dragging) {
+      this.downed = 10;
+      this.downCause = cause;
+      this.searching = null;
+      this.say(`${first(this.s)} is DOWN. ${first(this.mate)} is coming.`, 4);
+      sfx.hurt();
+      return;
+    }
+    if (this.downed || this.dragging) return;
+    this.finish(true, cause);
+  }
+
+  updDowned(dt: number) {
+    if (!this.mate) return;
+    if (!this.dragging) {
+      this.downed -= dt;
+      if (this.mateDown) this.downed -= dt; // nobody coming
+      if (Math.abs(this.mateX - this.px) < 40 && !this.mateDown) {
+        this.dragging = true;
+        this.downed = 0;
+        this.say(`${first(this.mate)} gets ${first(this.s)} by the collar and starts pulling. The pack stays behind.`, 4);
+        // drag means the leader's pack is dropped where they fell; only the mate's share comes home
+        let keep = 0;
+        const kept: PackItem[] = [];
+        for (const it of this.pack) { if (keep + itemSlots(it) <= MATE_CAP) { kept.push(it); keep += itemSlots(it); } }
+        const left = this.pack.filter((it) => !kept.includes(it));
+        if (left.length) this.spots.push({ x: this.px, searched: false, kind: 'drop', label: 'the dropped pack', loot: 0, zone: this.zoneOf(this.px), items: left });
+        this.pack = kept;
+      } else if (this.downed <= 0) this.finish(true, this.downCause);
+      return;
+    }
+    // dragging home
+    if (this.mateDown) { this.finish(true, this.downCause); return; }
+    const grabbedM = this.zs.some((z) => z.state === 'grab' && z.grabWho === 'm');
+    if (!grabbedM) { this.px -= 70 * dt; this.mateX = this.px - 30; }
+    this.face = -1;
+  }
+
+  hurtMate(z: EZ) {
+    const m = this.mate!;
+    if (this.mateDown) { this.mateDown -= 3; sfx.hurt(); return; }
+    const bite = R.chance(0.3);
+    wound(m, bite ? 'bite' : R.pick(['laceration', 'scratch', 'bruise']), R.range(0.18, 0.4));
+    sfx.hurt();
+    this.say(bite ? `${first(m)} is BITTEN.` : `${first(m)} is hurt.`, 2.5);
+    if (bite) tale(m, `Bitten at ${this.site.name}, out on a run with ${first(this.s)}.`);
+    if (pain(m) > 1.45) {
+      this.mateDown = 15;
+      z.state = 'walk';
+      this.say(`${first(m)} is DOWN. Get to ${first(m)} and hold [E].`, 4);
+    }
+  }
+
+  reviveMate() {
+    const m = this.mate!;
+    this.mateDown = 0;
+    this.reviveT = 0;
+    this.say(`${first(this.s)} hauls ${first(m)} back onto ${m.sex === 'm' ? 'his' : 'her'} feet.`, 3);
+    changeOpinion(m, this.s, 15);
+    addThought(m, { id: 'saved', label: `${first(this.s)} pulled me out`, mood: 5, days: 4, about: this.s.id }, 1);
+    tale(this.s, `Got ${first(m)} back on ${m.sex === 'm' ? 'his' : 'her'} feet at ${this.site.name}.`);
+  }
+
+  mateProf(): FireProfile | null {
+    return this.mateW ? fireProfile(this.mateW) : null;
+  }
+
+  updMate(dt: number) {
+    const m = this.mate!;
+    if (this.mateDown > 0) {
+      this.mateDown -= dt;
+      if (this.mateDown <= 0) this.mateDies(`bled out on the road at ${this.site.name}`);
+      return;
+    }
+    if (this.dragging) return;
+    const grabbed = this.zs.some((z) => z.state === 'grab' && z.grabWho === 'm');
+    const target = this.downed > 0 ? this.px - 30 : this.px - this.face * 60;
+    if (!grabbed) {
+      const step = (this.downed > 0 ? 190 : 165) * dt;
+      this.mateX += Math.max(-step, Math.min(step, target - this.mateX));
+    }
+    // shoot: the nearest awake one, a little slower to react than the leader
+    const p = this.mateProf();
+    this.mateCd -= dt;
+    if (this.mateReload > 0) {
+      this.mateReload -= dt;
+      if (this.mateReload <= 0 && p) {
+        const got = Math.min(p.mag - this.mateMag, roundsInStores(p, G.stores));
+        if (p.ammoRes) add(p.ammoRes, -got * p.perShot);
+        this.mateMag += got;
+      }
+      return;
+    }
+    let tz: EZ | null = null;
+    for (const z of this.zs) {
+      if (z.state === 'dying' || z.state === 'sleep' || z.state === 'kin') continue;
+      const d = Math.abs(z.x - this.mateX);
+      if (d < 620 && (!tz || d < Math.abs(tz.x - this.mateX))) tz = z;
+    }
+    if (!tz || this.mateCd > 0) return;
+    if (!p || (this.mateMag <= 0 && roundsInStores(p, G.stores) < 1)) {
+      // no gun or no ammo: shove what is close
+      if (Math.abs(tz.x - this.mateX) < 55) { tz.x += Math.sign(tz.x - this.mateX) * 70; tz.hp -= 8; if (tz.state === 'grab') tz.state = 'walk'; this.mateCd = 1; sfx.thud(); if (tz.hp <= 0) { this.shooter = 'm'; this.kill(tz); this.shooter = 'p'; } }
+      return;
+    }
+    if (this.mateMag <= 0) { this.mateReload = p.reloadPerRound ? p.reload * p.mag : p.reload; return; }
+    if (p.explosive && (Math.abs(tz.x - this.mateX) < p.explosive.radius * 1.3 || Math.abs(tz.x - this.px) < p.explosive.radius)) return;
+    this.mateCd = 1 / p.rof + R.range(0.05, 0.25);
+    const k = depthScale(LANES[0]);
+    const ox = this.mateX + Math.sign(tz.x - this.mateX) * SH * 0.45 * k, oy = LANES[0] - SH * 0.68 * k;
+    const ty = tz.y - this.zh(tz) * (0.8 + R.range(-0.15, 0.1));
+    const base = Math.atan2(ty - oy, tz.x - ox);
+    const spreadA = p.spread * (1.75 - aimFactor(m));
+    this.shooter = 'm';
+    for (let b = 0; b < p.burst && this.mateMag > 0; b++) {
+      this.mateMag--;
+      if (p.explosive) this.explode(tz.x, tz.y, p);
+      else for (let i = 0; i < p.pellets; i++) this.ray(ox, oy, base + (R.next() + R.next() - 1) * (p.pellets > 1 ? p.spread : spreadA), p, p.pellets > 1, tz.y);
+    }
+    this.shooter = 'p';
+    this.noise = Math.min(4, this.noise + p.noise * 0.7);
+    if (this.mateW) this.mateW.cond = Math.max(0.05, this.mateW.cond - 0.0008);
+    sfx.shot(shotSound(this.mateW!.def), true);
+  }
+
+  mateDies(cause: string) {
+    const m = this.mate!;
+    killSurvivor(m, cause);
+    log('death', `${displayName(m)} went out with ${displayName(this.s)} to ${this.site.name} and did not come back.`);
+    this.lines.push(`${first(m)} did not make it home.`);
+    this.mate = null;
+    this.mateDown = 0;
+  }
+
   shove() {
-    if (this.shoveCd > 0) return;
+    if (this.shoveCd > 0 || this.downed > 0 || this.dragging) return;
     this.shoveCd = 0.8;
     sfx.thud();
     for (const z of this.zs) {
@@ -505,7 +758,7 @@ export class Expedition {
   }
 
   fire(click: boolean) {
-    if (!this.w || this.cd > 0 || this.searching || this.burstLeft > 0) return;
+    if (!this.w || this.cd > 0 || this.searching || this.burstLeft > 0 || this.downed > 0 || this.dragging) return;
     const p = this.prof()!;
     if (!click && !p.auto) return;
     if (this.reload > 0) {
@@ -555,6 +808,7 @@ export class Expedition {
       this.bloom = Math.min(0.12, this.bloom + (p.spread * 0.35 / Math.max(1, p.burst) + 0.01) * p.bloomMul);
       this.shake = Math.max(this.shake, p.knock * (p.pellets > 1 ? p.pellets * 0.25 : 1) / 7 * p.recoilMul);
       this.roundsFired++;
+      this.heat = Math.min(6, this.heat + p.noise * 0.12);
       this.noise = Math.min(4, this.noise + p.noise);
       G.stats.shots++;
       this.w.cond = Math.max(0.05, this.w.cond - 0.0008);
@@ -571,6 +825,7 @@ export class Expedition {
     sfx.boom();
     this.shake = Math.max(this.shake, 16);
     this.noise = 4;
+    this.heat = Math.min(6, this.heat + 1);
     this.glows.push({ x, y: y - 20, life: 0.6, max: 0.6 });
     for (let i = 0; i < 40; i++) this.parts.push({ x: x + R.range(-20, 20), y: y - R.range(0, 40), vx: R.range(-380, 380), vy: R.range(-520, -80), life: R.range(0.4, 1.1), color: R.pick(['#ffb347', '#ff7a2a', '#3a3530', '#5a524a', '#e8d090']), size: R.range(2, 6), g: y + 6 });
     for (const z of this.zs) {
@@ -589,7 +844,7 @@ export class Expedition {
       wound(this.s, 'burn', 0.25 + 0.3 * (1 - d / (ex.radius * 0.45)));
       sfx.hurt();
       this.say('Too close!', 2);
-      if (pain(this.s) > 1.45) this.finish(true, `caught in a blast of their own at ${this.site.name}`);
+      if (pain(this.s) > 1.45) this.leaderDown(`caught in a blast of their own at ${this.site.name}`);
     }
   }
 
@@ -647,21 +902,45 @@ export class Expedition {
 
   kill(z: EZ) {
     if (z.state === 'dying') return;
+    const wasOn = z.state === 'grab' ? z.grabWho : undefined;
     z.state = 'dying';
     z.dieT = 0;
-    this.s.kills++;
     G.stats.kills++;
-    if (this.w) this.w.kills++;
+    if (this.shooter === 'm' && this.mate) {
+      this.mate.kills++;
+      if (this.mateW) this.mateW.kills++;
+      if (wasOn === 'p' && !this.rescued) {
+        this.rescued = true;
+        changeOpinion(this.s, this.mate, 15);
+        addThought(this.s, { id: 'saved', label: `${first(this.mate)} pulled me out`, mood: 5, days: 4, about: this.mate.id }, 1);
+        tale(this.mate, `Shot one off ${first(this.s)} at ${this.site.name}.`);
+        this.say(`${first(this.mate)} shot it off you.`, 2.5);
+      }
+    } else {
+      this.s.kills++;
+      if (this.w) this.w.kills++;
+    }
+  }
+
+  searchTime(sp: Spot) {
+    return sp.kind === 'cache' ? 6 : sp.kind === 'truck' ? 4 : sp.kind === 'drop' ? 0.8 : 2.5;
   }
 
   finishSearch(sp: Spot) {
     sp.searched = true;
     this.searching = null;
     sfx.ui();
-    this.noise = Math.min(4, this.noise + 0.5);
+    if (sp.kind === 'drop') {
+      for (const it of sp.items ?? []) this.toPack(it);
+      this.spots = this.spots.filter((x) => x !== sp);
+      this.say('Picked it back up.', 1.5);
+      return;
+    }
+    if (sp.kind === 'truck') { this.driveOut(); return; }
+    this.noise = Math.min(4, this.noise + (sp.kind === 'cache' ? 3 : 0.5));
+    this.heat = Math.min(6, this.heat + (sp.kind === 'cache' ? 1.5 : 0.25));
     if (sp.kind === 'kin') {
-      add('food', 6);
-      this.loot.food = (this.loot.food ?? 0) + 6;
+      this.toPack({ kind: 'res', res: 'food', n: 6 });
       this.say('One of them sits at the table with its hands folded. You take the pantry and do not look at it.', 5);
       addThought(this.s, { id: 'kin_pantry', label: 'Robbed a house with one of them still sitting at the table', mood: -4, days: 3 }, 1);
       return;
@@ -673,28 +952,42 @@ export class Expedition {
       return;
     }
     const got: string[] = [];
-    const mult = sp.loot * (0.6 + skillOf(this.s, 'scavenging') * 0.08) * (sp.kind === 'car' ? 0.6 : sp.kind === 'body' ? 0.5 : 1) * 0.55;
+    const mult = sp.loot * (0.6 + skillOf(this.s, 'scavenging') * 0.08) * (sp.kind === 'car' ? 0.6 : sp.kind === 'body' ? 0.5 : sp.kind === 'cache' ? 3 : 1) * RUN_YIELD * ZONE_LOOT[sp.zone];
     for (const [k, v] of Object.entries(this.site.loot)) {
       if (!R.chance(0.65)) continue;
       const n = Math.round((v ?? 0) * mult * R.range(0.5, 1.5));
-      if (n > 0) { add(k as Res, n); this.loot[k as Res] = (this.loot[k as Res] ?? 0) + n; got.push(`${n} ${RES_LABEL[k as Res].toLowerCase()}`); }
+      if (n > 0) { this.toPack({ kind: 'res', res: k as Res, n }); got.push(`${n} ${RES_LABEL[k as Res].toLowerCase()}`); }
     }
     if (sp.kind !== 'car' && R.chance(0.22)) {
       const d = findDoc();
       if (d) { got.push(`papers: "${d.title}"`); this.lines.push(`Found papers: ${d.title}. (Town tab)`); }
     }
-    if (this.site.mods?.length && R.chance(0.14 * sp.loot)) {
+    const cache = sp.kind === 'cache';
+    if (this.site.mods?.length && R.chance(cache ? 0.6 : 0.14 * sp.loot * ZONE_LOOT[sp.zone])) {
       const md = R.pick(this.site.mods);
-      (G.modStock ??= []).push({ uid: uid('m'), def: md, cond: R.range(0.6, 1) });
+      this.toPack({ kind: 'mod', def: md, cond: R.range(0.6, 1) });
       got.push(`a ${MODS[md].name.toLowerCase()}`);
     }
-    if (R.chance(this.site.weaponChance * 0.5 * sp.loot)) {
+    if (R.chance(cache ? 0.7 : this.site.weaponChance * 0.5 * sp.loot * ZONE_LOOT[sp.zone])) {
       const wd = R.pick(this.site.weapons);
-      newWeapon(wd, R.range(0.5, 1));
-      this.weapons.push(wd);
+      this.toPack({ kind: 'gun', def: wd, cond: R.range(0.5, 1) });
       got.push(`a ${WEAPONS[wd].name.toLowerCase()}`);
     }
+    if (this.slots() > this.cap()) got.push('— the pack is overfull, you are slowed ([Tab]/[G] to leave something)');
     this.say(got.length ? `${sp.label[0].toUpperCase() + sp.label.slice(1)}: ${got.join(', ')}.` : `${sp.label[0].toUpperCase() + sp.label.slice(1)}: nothing. Somebody got here first.`, 3.5);
+  }
+
+  // the pickup: costs fuel and a part, makes a racket, and carries everything you left on the road
+  driveOut() {
+    add('fuel', -2);
+    add('parts', -1);
+    sfx.boom();
+    this.noise = 4;
+    for (const sp of this.spots) if (sp.kind === 'drop') for (const it of sp.items ?? []) this.toPack(it);
+    this.lines.push(`${first(this.s)} hotwired a pickup at ${this.site.name} and drove it home with everything in the bed.`);
+    tale(this.s, `Hotwired a pickup at ${this.site.name} and drove home loaded.`);
+    if (this.mate && this.mateDown > 0) { this.mateDown = 0; this.lines.push(`${first(this.mate)} rode home in the bed.`); }
+    this.finish(false);
   }
 
   finish(died: boolean, cause?: string) {
@@ -703,11 +996,32 @@ export class Expedition {
     this.destroy();
     const stockKey = `stock_${this.site.id}`;
     G.flags[stockKey] = ((G.flags[stockKey] as number) ?? this.site.stock) - 1;
+    if (this.mate && this.mateDown > 0) this.mateDies(`left on the road at ${this.site.name}, still breathing`);
     if (died) {
       killSurvivor(this.s, cause ?? `on a run to ${this.site.name}`);
       log('death', `${displayName(this.s)} went to ${this.site.name} and did not come back. Whatever they carried is out there still.`);
-      for (const [k, v] of Object.entries(this.loot)) add(k as Res, -(v ?? 0));
+      if (this.mate) {
+        this.lines.push(`${first(this.mate)} came back alone.`);
+        tale(this.mate, `Came back alone from ${this.site.name}.`);
+      }
     } else {
+      // empty the pack into the house
+      for (const it of this.pack) {
+        if (it.kind === 'res') { add(it.res, it.n); this.loot[it.res] = (this.loot[it.res] ?? 0) + it.n; }
+        else if (it.kind === 'gun') { newWeapon(it.def, it.cond); this.weapons.push(it.def); this.lines.push(`Brought home a ${WEAPONS[it.def].name.toLowerCase()}.`); }
+        else { (G.modStock ??= []).push({ uid: uid('m'), def: it.def, cond: it.cond }); this.lines.push(`Brought home a ${MODS[it.def].name.toLowerCase()}.`); }
+      }
+      if (this.dragging && this.mate) {
+        changeOpinion(this.s, this.mate, 20);
+        addThought(this.s, { id: 'dragged_home', label: `${first(this.mate)} dragged me home`, mood: 8, days: 6, about: this.mate.id }, 1);
+        tale(this.mate, `Dragged ${first(this.s)} home from ${this.site.name}.`);
+        tale(this.s, `Went down at ${this.site.name}; ${first(this.mate)} dragged ${this.s.sex === 'm' ? 'him' : 'her'} home.`);
+        log('tale', `${displayName(this.mate)} dragged ${displayName(this.s)} home from ${this.site.name}.`);
+        this.lines.push(`${first(this.mate)} dragged ${first(this.s)} home by the collar. Most of the pack is still out there.`);
+      } else if (this.mate) {
+        changeOpinion(this.s, this.mate, 4);
+        changeOpinion(this.mate, this.s, 4);
+      }
       if (this.w) for (const l of wearMods(this.w, this.roundsFired)) this.lines.push(l);
       const rec = this.prof()?.recoverable ?? 0;
       for (const [k, v] of Object.entries(this.spent)) {
@@ -716,7 +1030,7 @@ export class Expedition {
       }
       const total = Object.values(this.loot).reduce((a, b) => a + (b ?? 0), 0);
       if (total > 40) tale(this.s, `Came back from ${this.site.name} loaded down.`);
-      log('event', `${displayName(this.s)} led a run to ${this.site.name} and came back.`);
+      log('event', `${displayName(this.s)} led a run to ${this.site.name}${this.mate ? ` with ${displayName(this.mate)}` : ''} and came back.`);
     }
     this.onEnd({ loot: this.loot, weapons: this.weapons, died, found: died ? undefined : this.found, lines: this.lines });
   }
@@ -727,7 +1041,7 @@ export class Expedition {
     c.save();
     if (this.shake) c.translate(R.range(-this.shake, this.shake), R.range(-this.shake, this.shake));
     bakeBackgrounds();
-    const dusk = Math.max(0, Math.min(1, 1 - this.daylight / 150));
+    const dusk = Math.max(0, Math.min(1, 1 - this.daylight / Math.min(150, this.dayMax)));
     if (bgBakes) {
       // far: slow parallax; mid: baked with its mirrored copy (3200 wide), tiled
       for (const [bk, al] of [[bgBakes.day, 1], [bgBakes.dusk, dusk]] as [BgBake, number][]) {
@@ -751,7 +1065,7 @@ export class Expedition {
       c.fillText('← home', 30 - this.cam, 420);
     }
     // contact shadows: one path, one fill (spots, zombies, player, follower)
-    const SPR: Record<Spot['kind'], [string, number]> = { door: ['obj_door', 200], car: ['obj_car', 120], shed: ['obj_shed', 190], body: ['obj_body', 44], kin: ['obj_kin', 175] };
+    const SPR: Record<Spot['kind'], [string, number]> = { door: ['obj_door', 200], car: ['obj_car', 120], shed: ['obj_shed', 190], body: ['obj_body', 44], kin: ['obj_kin', 175], cache: ['obj_shed', 205], truck: ['obj_car', 140], drop: ['obj_body', 20] };
     c.fillStyle = 'rgba(0,0,0,0.45)';
     c.beginPath();
     for (const sp of this.spots) {
@@ -776,24 +1090,47 @@ export class Expedition {
       const x = sp.x - this.cam;
       if (x < -250 || x > W + 250) continue;
       const [id, h] = SPR[sp.kind];
+      if (sp.kind === 'drop') {
+        c.fillStyle = '#4a3a26';
+        c.beginPath(); c.ellipse(x, GROUND - 10, 18, 12, 0, 0, 7); c.fill();
+        c.fillStyle = '#2a2016'; c.fillRect(x - 3, GROUND - 26, 6, 8);
+        if (Math.abs(sp.x - this.px) < 60) { c.font = '13px "Special Elite", monospace'; c.fillStyle = '#efe2c2'; c.textAlign = 'center'; c.fillText(`[E] pick up: ${(sp.items ?? []).map(itemLabel).join(', ')}`, x, GROUND - 40); c.textAlign = 'left'; }
+        continue;
+      }
       const cv = bakeSpot(id, h, sp.searched);
       if (cv) c.drawImage(cv, Math.round(x - cv.width / 2), GROUND - h + (sp.kind === 'body' ? 6 : 4));
       if (!sp.searched && Math.abs(sp.x - this.px) < 60) {
         c.font = '13px "Special Elite", monospace';
         c.fillStyle = '#efe2c2';
         c.textAlign = 'center';
-        c.fillText(`[E] search ${sp.label}`, x, GROUND - h - 14);
+        c.fillText(sp.kind === 'truck' ? '[E] hotwire the pickup and drive home (2 fuel, 1 part; loud)' : `[E] search ${sp.label}${sp.kind === 'cache' ? ' (slow, loud)' : ''}`, x, GROUND - h - 14);
         c.textAlign = 'left';
       } else if (!sp.searched) {
         c.fillStyle = 'rgba(232,200,120,0.7)';
         c.beginPath(); c.arc(x, GROUND - h - 10, 3, 0, 7); c.fill();
       }
     }
+    // zone landmarks: a post and a sign at each boundary
+    this.zoneB.forEach((bx, i) => {
+      const x = bx - this.cam;
+      if (x < -200 || x > W + 200) return;
+      c.fillStyle = '#16130f';
+      c.fillRect(x - 4, GROUND - 230, 8, 232);
+      c.fillRect(x - 70, GROUND - 236, 140, 34);
+      c.font = '12px "Special Elite", monospace';
+      c.fillStyle = '#d8c89a';
+      c.textAlign = 'center';
+      c.fillText(ZONE_NAMES[i + 1], x, GROUND - 222);
+      c.fillStyle = '#b0502c';
+      c.fillText(`loot ×${ZONE_LOOT[i + 1]} · more of them`, x, GROUND - 208);
+      c.textAlign = 'left';
+    });
     // actors, y-sorted by feet (id epsilon breaks ties)
     const list: { y: number; f: () => void }[] = [];
     for (const z of this.zs) list.push({ y: z.y + z.id * 1e-4, f: () => this.drawZ(z) });
     list.push({ y: GROUND + 0.5, f: () => this.drawP() });
-    if (this.found) list.push({ y: LANES[0] + 0.5, f: () => this.drawFollower() });
+    if (this.found) list.push({ y: LANES[0] + 0.4, f: () => this.drawFollower() });
+    if (this.mate) list.push({ y: LANES[0] + 0.6, f: () => this.drawMate() });
     list.sort((a, b) => a.y - b.y);
     for (const l of list) l.f();
     // foreground strip at 1.3x camera speed
@@ -850,15 +1187,43 @@ export class Expedition {
     const bob = moving ? -Math.abs(Math.sin(this.t * 9)) * 4 : 0;
     c.save();
     c.translate(x, GROUND + bob);
+    if (this.downed > 0 || this.dragging) c.rotate(1.45);
     c.scale(this.face, 1);
     c.drawImage(im, -w / 2, -h, w, h);
     c.restore();
+    if (this.downed > 0) {
+      c.font = '13px "Special Elite", monospace'; c.fillStyle = '#c04030'; c.textAlign = 'center';
+      c.fillText(`DOWN — ${Math.ceil(this.downed)}s`, x, GROUND - 70); c.textAlign = 'left';
+    }
     if (this.searching) {
       c.fillStyle = 'rgba(0,0,0,0.6)';
       c.fillRect(x - 30, GROUND - h - 22, 60, 6);
       c.fillStyle = '#d9c9a0';
-      c.fillRect(x - 30, GROUND - h - 22, 60 * Math.min(1, this.searchT / 2.5), 6);
+      c.fillRect(x - 30, GROUND - h - 22, 60 * Math.min(1, this.searchT / this.searchTime(this.searching)), 6);
     }
+  }
+
+  drawMate() {
+    const c = this.c;
+    const m = this.mate!;
+    const im = img(m.sprite);
+    if (!im) return;
+    const h = SH, w = (im.width / im.height) * h;
+    const k = depthScale(LANES[0]);
+    const x = Math.round(this.mateX - this.cam);
+    c.save();
+    c.translate(x, LANES[0]);
+    if (this.mateDown > 0) { c.rotate(-1.45); c.globalAlpha = 0.9; }
+    const tz = this.zs.find((z) => z.state !== 'dying' && z.state !== 'sleep' && Math.abs(z.x - this.mateX) < 620);
+    c.scale((tz ? Math.sign(tz.x - this.mateX) || 1 : this.face) * k, k);
+    c.drawImage(im, -w / 2, -h, w, h);
+    c.restore();
+    c.font = '11px "Special Elite", monospace';
+    c.textAlign = 'center';
+    c.fillStyle = this.mateDown > 0 ? '#c04030' : '#c9b27a';
+    c.fillText(this.mateDown > 0 ? `${first(m)} — DOWN ${Math.ceil(this.mateDown)}s · hold [E]` : first(m), x, LANES[0] - h * k - 8);
+    if (this.reviveT > 0) { c.fillStyle = '#d9c9a0'; c.fillRect(x - 30, LANES[0] - h * k - 4, 60 * Math.min(1, this.reviveT / 2.5), 4); }
+    c.textAlign = 'left';
   }
 
   fx = 0;
@@ -867,7 +1232,7 @@ export class Expedition {
     const f = this.found!;
     const im = img(f.sprite);
     if (!im) return;
-    const target = this.px - this.face * 70;
+    const target = this.px - this.face * (this.mate ? 120 : 70);
     this.fx = this.fx ? this.fx + (target - this.fx) * 0.05 : target;
     const h = SH, w = (im.width / im.height) * h;
     const k = depthScale(LANES[0]);
@@ -921,7 +1286,7 @@ export class Expedition {
     c.fillStyle = 'rgba(0,0,0,0.6)';
     c.fillRect(20, 40, 200, 8);
     c.fillStyle = dl > 40 ? '#c9b27a' : '#b0502c';
-    c.fillRect(20, 40, 200 * (dl / 150), 8);
+    c.fillRect(20, 40, 200 * (dl / this.dayMax), 8);
     c.font = '11px "Special Elite", monospace';
     c.fillStyle = '#a89c84';
     c.fillText(this.daylight > 0 ? 'daylight left' : 'DUSK — get home', 228, 48);
@@ -936,9 +1301,35 @@ export class Expedition {
     c.fillStyle = '#d9c9a0';
     c.fillRect(W / 2 - 150 + 300 * (this.px / this.len) - 2, 20, 4, 12);
     for (const sp of this.spots) { c.fillStyle = sp.searched ? '#555' : '#c9b27a'; c.fillRect(W / 2 - 150 + 300 * (sp.x / this.len), 25, 2, 2); }
-    const loot = Object.entries(this.loot).map(([k, v]) => `${v} ${RES_LABEL[k as Res].toLowerCase()}`).join(', ');
-    c.fillStyle = '#c9b27a';
-    c.fillText(loot ? `carrying: ${loot}` : 'carrying nothing yet', 20, H - 20);
+    // heat & zone
+    c.fillStyle = 'rgba(0,0,0,0.6)';
+    c.fillRect(20, 68, 200, 6);
+    c.fillStyle = this.heat >= 2 ? '#c04030' : '#8a7a5a';
+    c.fillRect(20, 68, 200 * Math.min(1, this.heat / 6), 6);
+    c.fillStyle = '#a89c84';
+    c.fillText(this.heat >= 2 ? 'NOISE — they are following you' : 'noise', 228, 74);
+    c.fillText(`zone ${this.zoneOf(this.px) + 1}: ${ZONE_NAMES[this.zoneOf(this.px)]}`, 20, 90);
+    for (const bx of this.zoneB) { c.fillStyle = '#b0502c'; c.fillRect(W / 2 - 150 + 300 * (bx / this.len) - 1, 18, 2, 14); }
+    if (this.mate) {
+      const mh = Math.max(0, 1 - pain(this.mate) / 1.45);
+      c.fillStyle = 'rgba(0,0,0,0.6)'; c.fillRect(20, 98, 120, 5);
+      c.fillStyle = this.mateDown ? '#c04030' : '#9db070'; c.fillRect(20, 98, 120 * mh, 5);
+      c.fillStyle = '#a89c84'; c.fillText(`${first(this.mate)}${this.mateW ? ` · ${this.mateMag}` : ' · unarmed'}`, 148, 104);
+    }
+    // the pack
+    const used = this.slots(), cap = this.cap();
+    c.font = '12px "Special Elite", monospace';
+    c.fillStyle = used > cap ? '#c04030' : '#c9b27a';
+    c.fillText(`pack ${used}/${cap}${used > cap ? ' — OVERLOADED, slowed' : ''}${this.pack.length ? '  [Tab] pick · [G] leave it' : ''}`, 20, H - 40);
+    let px = 20;
+    this.pack.forEach((it, i) => {
+      const t = `${itemLabel(it)} (${itemSlots(it)})`;
+      c.fillStyle = i === this.sel % Math.max(1, this.pack.length) ? '#efe2c2' : '#8a7e66';
+      if (i === this.sel % Math.max(1, this.pack.length)) c.fillRect(px - 2, H - 16, c.measureText(t).width + 4, 1);
+      c.fillText(t, px, H - 20);
+      px += c.measureText(t).width + 12;
+    });
+    if (!this.pack.length) { c.fillStyle = '#8a7e66'; c.fillText('empty', 20, H - 20); }
     if (this.w) {
       const def = WEAPONS[this.w.def];
       const p = this.prof()!;
