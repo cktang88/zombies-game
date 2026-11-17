@@ -500,7 +500,97 @@ const drawGun: Clip = {
   ev: [[0.05, 'draw'], [0.85, 'ready']],
 };
 
+// ---- hit reactions for the Turned (night/impact.ts tiers). Stretched to the simulation's
+// stun / down time; every fall clip ends standing (the get-up is part of it), x stays with the
+// simulation's slide (no px), py only for lying low.
+/** Stagger B: knocked back on the heels, arms windmilling for balance. */
+const staggerB: Clip = {
+  id: 'staggerB', dur: 0.8, fadeIn: 0.04,
+  num: {
+    lean: [[0, 0.1], [0.18, -0.55, 'out'], [0.45, -0.2], [0.7, 0.25], [1, 0.1]], crouch: [[0, 0], [0.5, 0.12], [1, 0]],
+    nSh: [[0, 1.0], [0.2, 2.9], [0.45, 0.2], [0.7, 2.2], [1, 1.0]], fSh: [[0, 0.9], [0.25, -0.6], [0.5, 2.6], [0.75, 0.4], [1, 0.9]],
+    nEl: [[0, 0.3], [0.3, 0.9], [0.6, 0.2], [1, 0.3]], fEl: [[0, 0.3], [0.4, 1.0], [1, 0.3]],
+    head: [[0, 0], [0.15, -0.7], [0.5, 0.25], [1, 0]], nFx: [[0, 6], [0.25, -14], [0.6, -4], [1, 4]], fFx: [[0, -8], [0.45, -24], [1, -10]],
+  },
+  ev: [[0.25, 'step'], [0.5, 'step']],
+};
+/** Stagger C: the hit turns the shoulders, a dip, a lurch to recover. */
+const staggerC: Clip = {
+  id: 'staggerC', dur: 0.7, fadeIn: 0.04,
+  num: {
+    lean: [[0, 0.1], [0.15, -0.25, 'out'], [0.5, 0.45], [1, 0.1]], crouch: [[0, 0], [0.3, 0.22], [0.7, 0.05], [1, 0]], tilt: [[0, 0], [0.2, -0.12], [0.6, 0.08], [1, 0]],
+    nSh: [[0, 1.1], [0.2, 0.2], [0.55, 1.8], [1, 1.1]], fSh: [[0, 1.0], [0.25, 2.2], [0.6, 0.6], [1, 1.0]],
+    head: [[0, 0], [0.12, -0.6], [0.4, 0.55], [0.75, 0.1], [1, 0]], nFx: [[0, 6], [0.35, -6], [1, 6]], fFx: [[0, -8], [0.2, -18], [0.6, -12], [1, -8]],
+  },
+  ev: [[0.35, 'step']],
+};
+/** Dropped to the near knee (a leg hit): hand to the road, then up. */
+const kneeDrop: Clip = {
+  id: 'kneeDrop', dur: 1.3, fadeIn: 0.04, fadeOut: 0.15,
+  num: {
+    crouch: [[0, 0], [0.14, 0.62, 'in'], [0.66, 0.58], [0.9, 0.15, 'inout'], [1, 0]], lean: [[0, 0.1], [0.14, 0.62], [0.5, 0.45], [0.75, 0.55], [1, 0.1]],
+    nFx: [[0, 6], [0.12, 26], [0.75, 26], [1, 6]], fFx: [[0, -8], [0.14, -34], [0.72, -34], [1, -8]],
+    head: [[0, 0], [0.14, 0.5], [0.5, 0.15], [0.7, -0.25], [1, 0]],
+    nSh: [[0, 1.0], [0.14, 0.5], [0.66, 0.5], [1, 1.0]], fSh: [[0, 0.9], [0.14, 1.6], [0.6, 1.2], [1, 0.9]], fEl: [[0, 0.3], [0.2, 0.9], [1, 0.3]],
+  },
+  n: [[0, null], [0.14, GR(30, 0, 'open', 0.3)], [0.62, GR(30, 0, 'open', 0.3)], [0.85, null]],
+  ev: [[0.14, 'thud'], [0.7, 'getUp']],
+};
+/** Knees buckle on both sides: kneeling, swaying, then up (a hard body hit). */
+const kneelSway: Clip = {
+  id: 'kneelSway', dur: 1.5, fadeIn: 0.04, fadeOut: 0.15,
+  num: {
+    crouch: [[0, 0], [0.16, 0.85, 'in'], [0.68, 0.82], [0.9, 0.2, 'inout'], [1, 0]], lean: [[0, 0.1], [0.16, 0.25], [0.35, -0.12], [0.52, 0.3], [0.7, 0.6], [1, 0.1]],
+    nFx: [[0, 6], [0.16, -22], [0.72, -22], [1, 6]], fFx: [[0, -8], [0.16, -30], [0.72, -30], [1, -8]],
+    head: [[0, 0], [0.16, 0.7], [0.4, -0.3], [0.6, 0.6], [1, 0]],
+    nSh: [[0, 1.0], [0.16, 0.1], [0.6, 0.25], [0.8, 1.6], [1, 1.0]], fSh: [[0, 0.9], [0.16, 0.0], [0.6, 0.2], [0.8, 1.4], [1, 0.9]],
+  },
+  ev: [[0.16, 'thud'], [0.72, 'getUp']],
+};
+/** Pitched forward onto hands and knees, then pushed back up. */
+const fallFront: Clip = {
+  id: 'fallFront', dur: 1.9, fadeIn: 0.04, fadeOut: 0.15,
+  num: {
+    lean: [[0, 0.1], [0.14, 0.9, 'in'], [0.22, 1.38], [0.62, 1.3], [0.78, 0.9], [0.9, 0.35], [1, 0.1]],
+    crouch: [[0, 0], [0.22, 0.95, 'in'], [0.66, 0.95], [0.84, 0.6], [1, 0]], py: [[0, 0], [0.22, 14], [0.62, 14], [0.8, 0], [1, 0]],
+    nFx: [[0, 6], [0.22, -36], [0.66, -36], [0.84, 0], [1, 6]], fFx: [[0, -8], [0.22, -48], [0.66, -48], [0.84, -16], [1, -8]],
+    head: [[0, 0], [0.22, -0.7], [0.55, -0.4], [0.8, 0.2], [1, 0]],
+  },
+  n: [[0, null], [0.16, GR(62, 2, 'open', 0.2), 'out'], [0.66, GR(60, 2, 'open', 0.2)], [0.86, null]],
+  f: [[0, null], [0.2, GR(46, 2, 'open', 0.3), 'out'], [0.62, GR(46, 2, 'open', 0.3)], [0.84, null]],
+  ev: [[0.2, 'thud'], [0.7, 'getUp']],
+};
+/** Flat on the back, a roll to the side and up on an elbow (a variant of knockdown). */
+const fallBack: Clip = {
+  id: 'fallBack', dur: 2.2, fadeIn: 0.04, fadeOut: 0.15,
+  num: {
+    lean: [[0, 0.05], [0.16, -0.95, 'in'], [0.26, -1.5], [0.55, -1.45], [0.66, -0.6], [0.78, 0.7], [0.9, 0.35], [1, 0.1]],
+    crouch: [[0, 0], [0.24, 0.97, 'in'], [0.68, 0.97], [0.84, 0.6], [1, 0]], py: [[0, 0], [0.26, 16], [0.62, 16], [0.8, 0], [1, 0]],
+    nSh: [[0, 1.2], [0.16, 2.9], [0.3, 2.5], [0.55, 2.2], [0.66, 0.4], [0.8, 0.9], [1, 1.1]], fSh: [[0, 1.1], [0.16, 2.4], [0.3, 2.7], [0.6, 1.7], [0.75, -0.3], [1, 1.0]],
+    nEl: [[0, 0.3], [0.3, 0.1], [0.6, 1.4], [1, 0.3]],
+    head: [[0, 0], [0.2, 0.7], [0.4, 0.3], [0.62, -0.4], [0.8, 0.2], [1, 0]],
+    nFx: [[0, 6], [0.26, 44], [0.58, 40], [0.72, 22], [0.86, 4], [1, 6]], fFx: [[0, -8], [0.26, 30], [0.58, 36], [0.74, -2], [1, -8]],
+    nFy: [[0, 0], [0.2, -18], [0.32, 0], [1, 0]], fFy: [[0, 0], [0.24, -10], [0.34, 0], [1, 0]],
+  },
+  ev: [[0.26, 'thud'], [0.66, 'getUp']],
+};
+/** A running body (Deer) taken off its feet: goes over forward with its momentum, scrambles up. */
+const tumble: Clip = {
+  id: 'tumble', dur: 1.8, fadeIn: 0.03, fadeOut: 0.15,
+  num: {
+    lean: [[0, 0.3], [0.1, 1.2, 'in'], [0.2, 1.6], [0.32, 1.2], [0.6, 1.25], [0.8, 0.6], [1, 0.2]],
+    crouch: [[0, 0], [0.18, 0.9, 'in'], [0.66, 0.92], [0.86, 0.4], [1, 0]], py: [[0, 0], [0.2, 18], [0.6, 16], [0.8, 0], [1, 0]],
+    tilt: [[0, 0], [0.16, 0.3], [0.3, -0.15], [0.5, 0], [1, 0]],
+    nSh: [[0, 1.0], [0.12, 2.6], [0.3, 0.6], [0.6, 0.4], [0.82, 1.4], [1, 1.0]], fSh: [[0, 0.9], [0.14, 2.8], [0.32, 1.9], [0.62, 0.3], [1, 0.9]],
+    head: [[0, 0], [0.18, -0.6], [0.4, 0.4], [0.7, -0.2], [1, 0]],
+    nFx: [[0, 6], [0.2, -50], [0.62, -40], [0.82, -6], [1, 6]], fFx: [[0, -8], [0.18, -30], [0.6, -54], [0.84, -14], [1, -8]],
+    nFy: [[0, 0], [0.12, -26], [0.22, 0], [1, 0]],
+  },
+  ev: [[0.2, 'thud'], [0.72, 'getUp']],
+};
+
 export const CLIPS: Record<string, Clip> = Object.fromEntries([
+  staggerB, staggerC, kneeDrop, kneelSway, fallFront, fallBack, tumble,
   reloadMag(true), reloadMag(false), reloadPistol(true), reloadPistol(false), shellIn, pump, reloadBolt, boltCycle, leverCycle, reloadRevolver,
   reloadBreak, nockBow, reloadCrossbow, reloadMuzzle, reloadTube, chop, sweep, rummage, hitHead, hitTorso, hitLeg, hitArm, twitch,
   claw, grabBite, pound, lunge, pantStop, smash, grabDrag, stagger, knockdown, climb, idleSniff, idleSway, idleTurn, keen, retch, vault, toll, burstWindup,

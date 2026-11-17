@@ -343,7 +343,7 @@ function galleryFrame(now: number) {
   last = now;
   galleryStep(dt);
   galleryRender();
-  requestAnimationFrame(galleryFrame);
+  if (params.has('still')) galleryRender(); else requestAnimationFrame(galleryFrame); // ?still: driven by __gal.step only
 }
 function galleryStep(dt: number) {
   for (const a of gal) {
@@ -433,7 +433,7 @@ else if (params.has('gallery')) (async () => {
   await Promise.all([...ids.map(loadImg), ...ids.map(loadRig), loadAllGuns()]);
   gallerySetup();
   (window as unknown as { __gal: unknown }).__gal = galApi;
-  requestAnimationFrame(galleryFrame);
+  if (params.has('still')) galleryRender(); else requestAnimationFrame(galleryFrame); // ?still: driven by __gal.step only
 })();
 else (async () => {
   await Promise.all([loadImg('bg_mid'), loadImg('surv_rifle'), loadImg(survSprite), loadRig(survSprite), loadImg('z_shambler'), loadImg('z_runner'), loadImg('z_brute'),

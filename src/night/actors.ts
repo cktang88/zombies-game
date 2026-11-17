@@ -140,6 +140,18 @@ function clips(): Record<string, Clip> {
   return extra;
 }
 const clip = (id: string): Clip | string => clips()[id] ?? id;
+/** The clip for an impact reaction (variants by the reaction's seed). */
+function reactClip(tier: string, kind: string, seed: number): Clip | string | null {
+  if (tier === 'stagger') return [clip('stagger'), 'staggerB', 'staggerC'][seed % 3];
+  if (tier !== 'stumble' && tier !== 'knockdown') return null;
+  switch (kind) {
+    case 'knee': return ['kneeDrop', 'kneelSway', 'kneeDrop'][seed % 3];
+    case 'front': return 'fallFront';
+    case 'tumble': return 'tumble';
+    case 'back': return seed % 2 ? 'fallBack' : clip('knockdown');
+    default: return null; // a Drag slides on its belly
+  }
+}
 
 // reload / action events → the per-stage foley (audio/foley reloadPlan stages)
 const STAGE: Record<string, ReloadStage> = {
@@ -192,6 +204,8 @@ interface Hit { zone: 'head' | 'torso' | 'arm' | 'leg'; dx: number; dy: number; 
 interface ZR {
   rig: Rig; px: number; v: number; stun: number; down: number; wind: number; crip: boolean; state: string;
   attack: string | null; gap: number; tolled: boolean; pant: boolean; seen: number; hit?: Hit; react?: Hit; ready: boolean; flash: number;
+  /** start time of the last impact reaction played (impact.ts) */
+  rt0?: number;
 }
 interface GR { rig: Rig; weapon: string | null; px: number; v: number; aimX: number; aimY: number; reload: number; wounds: number; perRound?: { empty: boolean; finish: boolean }; swingT: number }
 interface Corpse { rig: Rig; x: number; y: number; scale: number; facing: 1 | -1; lane: number; t: number; snap?: Zombie; pileM: number; id: number }
@@ -329,6 +343,18 @@ export class BattleActors implements BattleHook {
     }
     // ---- knocked flat (Ferryman), staggered
     const down = z.down ?? 0;
+    // ---- impact reactions (impact.ts): stagger / stumble / knockdown variants, each ending standing
+    const rx = z.react;
+    if (rx && rx.t0 !== r.rt0) {
+      r.rt0 = rx.t0;
+      const pick = reactClip(rx.tier, rx.kind, rx.seed);
+      if (pick && !(z.crippled && def.id !== 'ferryman')) {
+        const v = 0.92 + ((rx.seed >> 3) % 9) * 0.02; // no two bodies go down on the same beat
+        rig.stop('stagger'); rig.stop('staggerInPlace');
+        rig.play(pick, { duration: rx.tier === 'stagger' ? clamp(rx.dur * 1.9 * v, 0.4, 1.0) : Math.max(0.7, rx.dur * v) });
+        r.down = down; r.stun = z.stun;
+      }
+    }
     if (down > r.down + 0.2) rig.play(clip('knockdown'), { duration: Math.max(1.2, down / 0.72) });
     r.down = down;
     if (z.stun > r.stun + 0.05 && down <= 0 && !rig.isPlaying('buckle')) rig.play(clip('stagger'), { duration: clamp(z.stun * 1.8, 0.35, 0.9) });
