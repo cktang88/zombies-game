@@ -43,6 +43,13 @@ export const LANES = [604, 628, 655, 685];
 /** Two rows of defenders behind the wall. */
 export const DEF_LANES = [662, 688];
 export const GROUND_TOP = 596, GROUND_BOT = 704;
+/** Moods said in full even when shared (battle drawGuardLabels); the rest collapse to a glyph when two or more share one. */
+const MOOD_ACUTE = new Set(['in agony']);
+const MOOD_GLYPH: Record<string, string> = {
+  starving: '∅', hungry: '°', exhausted: 'Z', tired: 'z', 'in pain': '+', feverish: '≈', 'needs a drink': '¬', freezing: '*',
+  grieving: '†', haunted: '§', shaken: '!', bitter: '#', heartsick: '♡', troubled: '?', low: '↓',
+};
+const moodGlyph = (w: string) => MOOD_GLYPH[w] ?? w[0];
 const LANE_TOL = 16; // a shot only finds bodies within this many px of its lane's feet
 const WALL_KEY = 700; // the barricade's sort key: in front of every walking lane
 /** 0 far … 1 near. */
@@ -3517,8 +3524,12 @@ export class Battle {
     const hovered = gs.find((g) => Math.abs(mx - g.x) < 22 * g.sc && my < g.y && my > g.y - SH * g.sc - 30);
     c.save();
     c.textAlign = 'center';
-    type Lab = { g: Guard; x: number; top: number; name: string; l: number; r: number; lines: { t: string; c: string; moodle?: boolean }[]; full: boolean; y0: number; y1: number };
+    type Lab = { g: Guard; x: number; top: number; name: string; l: number; r: number; lines: { t: string; c: string; moodle?: boolean }[]; full: boolean; y0: number; y1: number; glyph?: string };
     const labs: Lab[] = [];
+    // a mood two or more guards share is a glyph by each bar and one legend line; a lone or acute one is said in full
+    const shared = new Map<string, number>();
+    for (const g of gs) if (g.moodle && !g.mode && !MOOD_ACUTE.has(g.moodle)) shared.set(g.moodle, (shared.get(g.moodle) ?? 0) + 1);
+    const legend: string[] = [];
     for (const g of gs) {
       const isP = g === this.player;
       c.font = '11px "Special Elite", monospace';
@@ -3528,12 +3539,19 @@ export class Battle {
       else if (g.mode) lines.push({ t: g.mode === 'panic' ? 'panicking' : 'enraged', c: g.mode === 'panic' ? '#d0a040' : '#e05040' });
       else if (g.reload > 0 || (isP && this.playerReload > 0)) lines.push({ t: 'reloading', c: '#d9c9a0' });
       if (isBitten(g.s) && !g.s.wounds.some((w) => w.hidden)) lines.push({ t: 'bitten', c: '#b8862f' });
-      if (g.moodle && !g.mode) lines.push({ t: g.moodle, c: g.moodleC, moodle: true });
+      let glyph: string | undefined;
+      if (g.moodle && !g.mode) {
+        if ((shared.get(g.moodle) ?? 0) >= 2) {
+          glyph = moodGlyph(g.moodle);
+          const key = `${glyph} ${g.moodle}`;
+          if (!legend.includes(key)) legend.push(key);
+        } else lines.push({ t: g.moodle, c: g.moodleC, moodle: true });
+      }
       // the box: the name centred on the guard, the order glyph (and the post word) to its right
       const nw = c.measureText(name).width;
       let r = nw / 2 + (isP ? 3 : 14);
       if (!isP && g.post !== 'step') { c.font = '9px "Special Elite", monospace'; r += 7 + c.measureText(g.post === 'roof' ? 'roof' : g.post === 'loop' ? 'loophole' : 'runner').width; }
-      labs.push({ g, x: g.x, top: g.y - SH * g.sc, name, l: -Math.max(22, nw / 2 + 3), r: Math.max(22, r), lines, full: false, y0: 0, y1: 0 });
+      labs.push({ g, x: g.x, top: g.y - SH * g.sc, name, l: -Math.max(22, nw / 2 + 3), r: Math.max(glyph ? 32 : 22, r), lines, full: false, y0: 0, y1: 0, glyph });
     }
     // the important ones first: they keep their place, the rest step around them
     const pri = (l: Lab) => (l.g === this.player ? 0 : l.g === hovered ? 1 : l.g === sel ? 2 : 3 + (DEF_LANES[1] - l.g.y) * 0.01);
@@ -3582,6 +3600,13 @@ export class Battle {
       c.fillRect(x - 20, top - 9, 40, 4);
       c.fillStyle = hp > 0.5 ? '#9db070' : hp > 0.25 ? '#d0a040' : '#c04030';
       c.fillRect(x - 20, top - 9, 40 * hp, 4);
+      if (l.glyph) {
+        c.font = '11px "Special Elite", monospace';
+        c.textAlign = 'left';
+        c.fillStyle = g.moodleC;
+        c.fillText(l.glyph, x + 23, top - 4);
+        c.textAlign = 'center';
+      }
       if (!l.full) continue;
       let line = top - 26;
       for (const q of l.lines) {
@@ -3595,6 +3620,16 @@ export class Battle {
         c.fillText(q.t, x, line);
         line -= 12;
       }
+    }
+    // the legend for the shared moods: one line above the key lines, bottom left
+    if (legend.length) {
+      c.textAlign = 'left';
+      c.font = 'italic 12px "Crimson Text", Georgia, serif';
+      const t = legend.join('   ·   ');
+      c.fillStyle = 'rgba(8,8,10,0.6)';
+      c.fillRect(14, H - 54, c.measureText(t).width + 12, 15);
+      c.fillStyle = '#b8ad94';
+      c.fillText(t, 20, H - 43);
     }
     c.restore();
   }
