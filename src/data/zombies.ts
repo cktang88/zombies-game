@@ -20,12 +20,12 @@ export interface ZombieDef {
 
 export const ZOMBIES: Record<string, ZombieDef> = {
   sleeper: {
-    id: 'sleeper', name: 'Sleeper', sprites: ['z_shambler', 'z_shambler2'], hp: 70, speed: 32, dps: 6, cost: 1, minDay: 1,
+    id: 'sleeper', name: 'Sleeper', sprites: ['z_shambler', 'z_shambler2', 'z_mill', 'z_hunter', 'z_manor', 'z_church'], hp: 70, speed: 32, dps: 6, cost: 1, minDay: 1,
     head: 0.17, width: 46, height: 120,
     lore: 'They stand for hours like they\'re waiting on a shift whistle. Don\'t wake a Sleeper.',
   },
   deer: {
-    id: 'deer', name: 'Deer', sprites: ['z_runner'], hp: 45, speed: 95, dps: 5, cost: 1.6, minDay: 2,
+    id: 'deer', name: 'Deer', sprites: ['z_runner', 'z_runner2'], hp: 45, speed: 95, dps: 5, cost: 1.6, minDay: 2,
     head: 0.17, width: 48, height: 118, lunge: true,
     lore: 'The young ones, the recent ones. They spook like deer, and they come back like deer.',
   },

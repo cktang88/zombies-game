@@ -271,6 +271,31 @@
       "id": "obj_kin",
       "height": 230,
       "prompt": "A grey-skinned dead elderly woman in a floral housedress sitting very still on a kitchen chair at a small kitchen table with a cold plate of food, hands folded, eerie and sad, side view facing left."
+    },
+    {
+      "id": "z_mill",
+      "height": 240,
+      "prompt": "A shambling zombie, a dead paper mill worker in a dented yellow hard hat, ear defenders around the neck, grey coveralls stained orange-brown, grey mottled skin, slack jaw, one arm reaching forward, walking to the left, facing left."
+    },
+    {
+      "id": "z_hunter",
+      "height": 240,
+      "prompt": "A shambling zombie, a dead deer hunter in a torn blaze orange vest and camo jacket, a bite wound on the neck, grey mottled skin, clouded eyes, arms reaching forward, walking to the left, facing left."
+    },
+    {
+      "id": "z_manor",
+      "height": 240,
+      "prompt": "A shambling zombie, a dead elderly man in striped pajamas and a bathrobe with a nursing home wristband, bare feet, grey skin, thin white hair, arms reaching forward, walking to the left, facing left."
+    },
+    {
+      "id": "z_church",
+      "height": 240,
+      "prompt": "A shambling zombie, a dead middle-aged woman in a torn church dress and cardigan with a rosary around her wrist, one shoe, grey mottled skin, blood down the chin, walking to the left, facing left."
+    },
+    {
+      "id": "z_runner2",
+      "height": 240,
+      "prompt": "A fast recently turned zombie, a young man in a torn high school letterman jacket, grey skin, ochre-yellow eyes, mouth open, sprinting hunched forward to the left, facing left."
     }
   ],
   "iconPrefix": "Single game inventory icon of an object (no people, no hands, no characters), centered, mature graphic-novel cel-shaded style, thick black ink outlines, two-tone hard shadows, gritty worn texture, muted desaturated palette with a sparing accent colour, realistic not cartoony."
