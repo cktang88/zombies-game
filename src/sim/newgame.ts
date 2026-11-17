@@ -15,6 +15,7 @@ export function newGame(mode = 'siege', seed = freshSeed()): GameState {
     survivors: [],
     graves: [],
     weapons: [],
+    melee: [],
     buildings: [{ id: 'workbench', level: 1 }],
     fort: { hp: 300, maxHp: 300, level: 0, spikes: 0, wire: 0, lights: 0, traps: 0 },
     craftQueue: [],
@@ -48,6 +49,8 @@ export function newGame(mode = 'siege', seed = freshSeed()): GameState {
   const w2 = newWeapon('revolver', 0.7);
   const w3 = newWeapon('pump', 0.8);
   a.weapon = w1.uid; b.weapon = w2.uid; c.weapon = w3.uid;
+  G.melee!.push({ uid: 'k0', def: 'hatchet', cond: 0.9, kills: 0 }, { uid: 'k00', def: 'crowbar', cond: 1, kills: 0 });
+  a.melee = 'k0';
   a.job = 'repair'; b.job = 'scavenge'; c.job = 'farm';
   nextWeather();
   G.weather = 'clear';

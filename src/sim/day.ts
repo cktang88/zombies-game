@@ -394,6 +394,7 @@ export function finishRecipe(id: string, by?: Survivor): string {
   const who = by ? first(by) : 'Someone';
   if (r.gives) for (const [k, v] of Object.entries(r.gives)) add(k as Res, v ?? 0);
   if (r.mod) (G.modStock ??= []).push({ uid: uid('m'), def: r.mod, cond: 1 });
+  if (r.melee) (G.melee ??= []).push({ uid: uid('k'), def: r.melee, cond: 1, kills: 0 });
   if (r.weapon) {
     const w = newWeapon(r.weapon, 0.9);
     if (by && R.chance(0.25 + by.skills.crafting * 0.03)) {
@@ -415,6 +416,11 @@ export function finishRecipe(id: string, by?: Survivor): string {
     case 'turret': G.fort.turrets = (G.fort.turrets ?? 0) + 1; break;
     case 'trap': G.fort.traps++; break;
     case 'duffel': G.flags.duffel = true; break;
+    case 'repairMelee': {
+      const k = [...(G.melee ?? [])].sort((a, b) => a.cond - b.cond)[0];
+      if (k) k.cond = Math.min(1, k.cond + 0.5);
+      break;
+    }
     case 'armor': G.flags.armorStock = ((G.flags.armorStock as number) ?? 0) + 1; break;
     case 'repair': {
       const w = [...G.weapons].sort((a, b) => a.cond - b.cond)[0];
