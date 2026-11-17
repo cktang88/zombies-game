@@ -45,3 +45,22 @@ export const STYLES: Record<string, Style> = {
   spitter: { id: 'spitter', walks: ['headLoll', 'waddle'], attacks: ['retch'], idles: ['retch', 'idleSway'], deaths: ['ragdoll'], special: ['retch'], wall: 'pound', mass: 1.1, stiff: 0.2, friction: 0.8 },
 };
 
+/** How each body sprite is rigged: rig kind, STYLES key and (the living) the gun it carries.
+ * Turned styles match the ZombieDef ids in src/data/zombies.ts; raiders are survivor rigs.
+ * Every part atlas is 240 rig units tall (z_brute 300); z_crawler is a prone rig cut at
+ * standing-body scale, so draw it with the scale of a standing Sleeper, not its 42 px box. */
+export interface SpriteRig { kind: 'survivor' | 'turned'; style: string; weapon?: string }
+export const SPRITE_RIGS: Record<string, SpriteRig> = {
+  z_shambler: { kind: 'turned', style: 'sleeper' }, z_shambler2: { kind: 'turned', style: 'sleeper' },
+  z_mill: { kind: 'turned', style: 'sleeper' }, z_hunter: { kind: 'turned', style: 'sleeper' },
+  z_manor: { kind: 'turned', style: 'sleeper' }, z_church: { kind: 'turned', style: 'sleeper' },
+  z_runner: { kind: 'turned', style: 'deer' }, z_runner2: { kind: 'turned', style: 'deer' },
+  z_crawler: { kind: 'turned', style: 'drag' },
+  z_bloater: { kind: 'turned', style: 'pulper' }, z_shrieker: { kind: 'turned', style: 'crier' },
+  z_riot: { kind: 'turned', style: 'deputy' }, z_brute: { kind: 'turned', style: 'ferryman' },
+  z_leaper: { kind: 'turned', style: 'leaper' }, z_spitter: { kind: 'turned', style: 'spitter' },
+  z_bellwether: { kind: 'turned', style: 'bellwether' },
+  z_raider: { kind: 'survivor', style: 'raider', weapon: 'lever' },
+  z_raider2: { kind: 'survivor', style: 'raider', weapon: 'pump' },
+};
+

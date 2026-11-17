@@ -77,16 +77,6 @@
       "id": "z_raider2__riga",
       "ref": "z_raider2",
       "prompt": "The same bearded man from the reference image in a rigging pose for 2D skeletal animation, WITHOUT any weapon: strict side profile facing right, torso upright, both arms held straight out forward at shoulder height (the far arm hidden exactly behind the near arm), hands open and empty, legs in a wide walking stride so the two legs are clearly separated with a gap between them, full body head to boots."
-    },
-    {
-      "id": "z_raider__hands",
-      "ref": "z_raider",
-      "prompt": "A sheet of six separate bare hands of the man in the reference image, side view, laid out apart in a row with wide magenta gaps: 1 right hand closed around an invisible pistol grip, 2 left hand cupped as if supporting a rifle fore-end from below, 3 open relaxed hand, 4 closed fist, 5 hand pinching a small object between thumb and fingers, 6 open hand palm forward. Each hand ends at the wrist with a short bit of jacket cuff. No weapons, no objects."
-    },
-    {
-      "id": "z_raider2__hands",
-      "ref": "z_raider2",
-      "prompt": "A sheet of six separate bare hands of the man in the reference image, side view, laid out apart in a row with wide magenta gaps: 1 right hand closed around an invisible pistol grip, 2 left hand cupped as if supporting a rifle fore-end from below, 3 open relaxed hand, 4 closed fist, 5 hand pinching a small object between thumb and fingers, 6 open hand palm forward. Each hand ends at the wrist with a short bit of jacket cuff. No weapons, no objects."
     }
   ]
 }

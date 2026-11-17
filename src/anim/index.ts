@@ -3,7 +3,7 @@ export { createRig, Rig, type RigKind, type PlayOpts, type CreateOpts } from './
 export { loadRig, loadGun, loadAllGuns, getRig, getGun } from './assets';
 export { CLIPS, RELOADS, type Clip } from './clips';
 export { GAITS, type Gait } from './gait';
-export { STYLES, type Style } from './styles';
+export { STYLES, SPRITE_RIGS, type Style, type SpriteRig } from './styles';
 export { WEAPON_ANCHORS, anchorsFor, type WeaponAnchors } from './weaponAnchors';
 export type { DieOpts, DeathKind } from './ragdoll';
 

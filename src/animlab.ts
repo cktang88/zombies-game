@@ -1,5 +1,5 @@
 // Anim lab: dev page for the cutout bone rig (animlab.html).
-import { createRig, loadAllGuns, loadRig, type Rig } from './anim';
+import { createRig, loadAllGuns, loadRig, SPRITE_RIGS, type Rig } from './anim';
 import { WEAPONS } from './data/weapons';
 import { spriteUrl } from './assets';
 
@@ -299,8 +299,74 @@ async function bench() {
   requestAnimationFrame(frame);
 }
 
+// ---------------------------------------------------------------- gallery (?gallery)
+// Every rigged body sprite (SPRITE_RIGS) in two rows, walking in place on its own style.
+// `__gal` drives it from a test script: play a clip on all, kill all, toggle walking.
+const gal: Actor[] = [];
+let galWalk = true;
+function gallerySetup() {
+  actors.length = 0; gal.length = 0;
+  const ids = Object.keys(SPRITE_RIGS);
+  const per = Math.ceil(ids.length / 2);
+  ids.forEach((id, i) => {
+    const sr = SPRITE_RIGS[id];
+    const row = Math.floor(i / per), col = i % per;
+    const rig = createRig(sr.kind, id, { style: sr.style, seed: 31 + i * 101 });
+    if (sr.weapon) { rig.setWeapon(sr.weapon); rig.aimAt(0, 0); }
+    const big = sr.style === 'ferryman' ? 1.2 : sr.style === 'bellwether' ? 1.45 : 1;
+    const a: Actor = { rig, x: 70 + col * 128 + (row ? 40 : 0), y: row ? 610 : 295, h: 190 * big, facing: -1, vx: 0, label: id.replace('z_', '') };
+    rig.autoIdle = false;
+    rig.onEvent = (n, r) => log(`${r.spriteId}: ${n}`);
+    actors.push(a); gal.push(a);
+  });
+}
+function galleryFrame(now: number) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  galleryStep(dt);
+  galleryRender();
+  requestAnimationFrame(galleryFrame);
+}
+function galleryStep(dt: number) {
+  for (const a of gal) {
+    const sr = SPRITE_RIGS[a.rig.spriteId];
+    if (sr.weapon && !a.rig.dead) a.rig.aimAt(a.x - 300, a.y - a.h * 0.6);
+    // walk in place: the ground scrolls under it at the gait's natural pace
+    a.rig.setSpeed(galWalk && !a.rig.dead ? (a.rig.crawling ? 14 : sr.style === 'deer' ? 70 : sr.kind === 'survivor' ? 45 : 26) * (a.h / 190) : 0);
+    a.rig.update(dt);
+  }
+}
+function galleryRender() {
+  ctx.fillStyle = '#8fa0a6'; ctx.fillRect(0, 0, W, H);
+  for (const gy of [295, 610]) { ctx.fillStyle = '#4a4436'; ctx.fillRect(0, gy, W, 14); }
+  for (const a of gal) {
+    const s = a.h / (a.rig.asset?.meta.height ?? 240);
+    a.rig.draw(ctx, a.x, a.y, s, a.facing, images.get(a.rig.spriteId));
+    if (DEBUG) a.rig.drawSkeleton(ctx);
+    ctx.fillStyle = 'rgba(240,235,220,0.9)'; ctx.font = '11px system-ui'; ctx.fillText(a.label ?? '', a.x - 24, a.y + 12);
+  }
+}
+const galApi = {
+  actors: gal,
+  play: (clip: string, which?: string[]) => gal.forEach((a) => { if (!which || which.includes(a.rig.spriteId)) { a.rig.stop(); a.rig.play(clip); } }),
+  attack: () => gal.forEach((a) => { a.rig.stop(); const st = a.rig.style; a.rig.play(SPRITE_RIGS[a.rig.spriteId].weapon ? 'pump' : st.attacks[0]); }),
+  fire: () => gal.forEach((a) => { if (SPRITE_RIGS[a.rig.spriteId].weapon) a.rig.fire(1.5); }),
+  kill: (kind: K = 'shotgun') => gal.forEach((a) => { if (!a.rig.dead) a.rig.die({ worldImpulse: { x: kind === 'explosion' ? 300 : 200, y: kind === 'explosion' ? -380 : -120 }, at: 'torso', kind, authored: false }); }),
+  walk: (v: boolean) => { galWalk = v; },
+  reset: () => gallerySetup(),
+  debug: (v: boolean) => { DEBUG = v; },
+  step: (n: number) => { for (let i = 0; i < n; i++) galleryStep(1 / 60); galleryRender(); },
+};
+
 // ---------------------------------------------------------------- boot
-(async () => {
+if (params.has('gallery')) (async () => {
+  const ids = Object.keys(SPRITE_RIGS);
+  await Promise.all([...ids.map(loadImg), ...ids.map(loadRig), loadAllGuns()]);
+  gallerySetup();
+  (window as unknown as { __gal: unknown }).__gal = galApi;
+  requestAnimationFrame(galleryFrame);
+})();
+else (async () => {
   await Promise.all([loadImg('bg_mid'), loadImg('surv_rifle'), loadImg('z_shambler'), loadImg('z_runner'), loadImg('z_brute'),
     loadRig('surv_rifle'), loadRig('z_shambler'), loadRig('z_runner'), loadRig('z_brute'), loadAllGuns()]);
   setup();
