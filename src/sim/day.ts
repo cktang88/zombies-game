@@ -4,7 +4,7 @@ import { SITES, RECIPES, RES_LABEL } from '../data/world';
 import { WEAPONS } from '../data/weapons';
 import {
   living, first, displayName, workMult, skillOf, addThought, wound, canWork, rel, changeOpinion, setBond, hasTrait,
-  computeMood, breakThresholds, killSurvivor, pain, they, their, tale, isBitten, PART_NAMES, closeTo, them,
+  computeMood, breakThresholds, killSurvivor, pain, they, their, tale, isBitten, PART_NAMES, closeTo, them, checkTitles,
 } from './survivors';
 
 export interface DayReport { lines: string[] }
@@ -333,6 +333,7 @@ export function dawnTick(): string[] {
     }
   }
   out.push(...breaksTick());
+  for (const s of living()) checkTitles(s);
   return out;
 }
 

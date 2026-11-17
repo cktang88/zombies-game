@@ -5,7 +5,7 @@ import { WEAPONS } from '../data/weapons';
 import { img, flashImg, shadeImg } from '../assets';
 import { sfx, wind } from '../audio';
 import {
-  living, canFight, aimFactor, first, displayName, wound, pain, killSurvivor, tale, addThought, hasTrait, changeOpinion, leader, byId, isBitten,
+  living, canFight, aimFactor, first, displayName, wound, pain, killSurvivor, tale, addThought, hasTrait, changeOpinion, leader, byId, isBitten, breakThresholds,
 } from '../sim/survivors';
 
 export const W = 1280, H = 720;
@@ -52,6 +52,8 @@ interface Guard {
   fled: boolean;
   aimAt?: { x: number; y: number };
   recoil: number;
+  mode?: 'panic' | 'rage';
+  panicAt?: number;
 }
 
 interface Particle { x: number; y: number; vx: number; vy: number; life: number; max: number; size: number; color: string; kind: 'blood' | 'spark' | 'smoke' | 'fire' | 'spore' | 'shell' | 'chunk'; ground: number }
@@ -116,6 +118,7 @@ export class Battle {
   keyHandler: (e: KeyboardEvent) => void;
   slowmo = 0;
   intro = 4;
+  oldFaceBy?: string;
 
   constructor(canvas: HTMLCanvasElement, plan: NightPlan, onEnd: (r: NightResult) => void) {
     this.canvas = canvas;
@@ -154,6 +157,11 @@ export class Battle {
       this.guards.push({ s, w, x: slots[i], y: SURV_Y + (i % 2) * 8 - (i >= 4 ? 30 : 0), cd: R.range(0, 1), mag: w ? WEAPONS[w.def].mag : 0, reload: 0, kills: 0, flash: 0, fled: false, recoil: 0 });
     });
     for (const g of this.guards) if (g.w) this.playerMag.set(g.w.uid, WEAPONS[g.w.def].mag);
+    // the frayed may come apart on the wall tonight
+    for (const g of this.guards) {
+      const th = breakThresholds(g.s);
+      if (!g.s.isLeader && g.s.mood < th.minor && R.chance(g.s.mood < th.major ? 0.6 : 0.3)) g.panicAt = R.range(15, 60);
+    }
     this.guards.sort((a, b) => a.y - b.y);
   }
 
@@ -269,7 +277,7 @@ export class Battle {
     this.bloom = Math.max(0, this.bloom - dt * 0.12);
     // spawns
     while (this.spawnIdx < this.plan.spawns.length && this.plan.spawns[this.spawnIdx].t <= this.t) {
-      this.spawn(this.plan.spawns[this.spawnIdx].type);
+      this.spawn(this.plan.spawns[this.spawnIdx].type, false, this.plan.spawns[this.spawnIdx].name);
       this.spawnIdx++;
     }
     // noise draws stragglers
@@ -326,7 +334,7 @@ export class Battle {
     }
   }
 
-  spawn(type: string, straggler = false) {
+  spawn(type: string, straggler = false, name?: string) {
     const def = ZOMBIES[type];
     if (!def) return;
     const y = R.range(LANE_TOP, LANE_BOT);
@@ -334,8 +342,15 @@ export class Battle {
     const hpMul = 1 + Math.max(0, G.day - 8) * 0.03;
     this.zombies.push({
       id: this.nextId++, def, sprite: R.pick(def.sprites), x: W + R.range(30, 120), y, hp: def.hp * hpMul, maxHp: def.hp * hpMul, state: 'walk',
-      phase: R.range(0, 10), flash: 0, slow: 0, burn: 0, dieT: 0, maulT: 0, lungeT: R.range(1, 3), screamT: R.range(3, 6), scale, wallHit: 0,
+      phase: R.range(0, 10), flash: 0, slow: 0, burn: 0, dieT: 0, maulT: 0, lungeT: R.range(1, 3), screamT: R.range(3, 6), scale, wallHit: 0, name,
     });
+    if (name) {
+      const of = G.flags.oldFace ? JSON.parse(G.flags.oldFace as string) as { name: string; by: string } : null;
+      const by = of ? byId(of.by) : undefined;
+      this.say(by && !by.dead ? `${first(by)}: "That's ${name}. Oh God, that's ${name}."` : `Someone says a name in the dark: ${name}.`, 6);
+      delete G.flags.oldFace;
+      this.oldFaceBy = of?.by;
+    }
     if (straggler && R.chance(0.3)) this.say('Your shooting carries. More are coming up the road.', 3);
     if (R.chance(0.15)) sfx.groan();
   }
@@ -569,7 +584,18 @@ export class Battle {
         tale(g.s, `Dropped a Ferryman on night ${G.day}.`);
         log('tale', `${displayName(g.s)} put down a Ferryman${g.w ? ` with ${g.w.name ? `"${g.w.name}"` : `the ${WEAPONS[g.w.def].name.toLowerCase()}`}` : ''}.`);
       }
-      if (z.name) {
+      if (z.name && this.oldFaceBy && !this.guards.some((x) => x.s.dead && first(x.s) === z.name)) {
+        const by = byId(this.oldFaceBy);
+        if (by && by === g.s) {
+          tale(g.s, `Put down ${z.name} with ${g.s.sex === 'm' ? 'his' : 'her'} own hands, on night ${G.day}.`);
+          addThought(g.s, { id: 'oldface_self', label: `I did it myself. ${z.name}.`, mood: -10, days: 8 }, 1);
+          log('tale', `${displayName(g.s)} put down ${z.name} on night ${G.day}. Wouldn't let anybody else do it.`);
+        } else if (by && !by.dead) {
+          addThought(by, { id: 'oldface_other', label: `${first(g.s)} shot ${z.name}`, mood: -8, days: 6 }, 1);
+          changeOpinion(by, g.s, R.chance(0.5) ? 10 : -15);
+          log('event', `${displayName(g.s)} shot ${z.name}, who ${first(by)} used to know.`);
+        }
+      } else if (z.name) {
         tale(g.s, `Was the one who put down ${z.name}, after ${z.name} turned.`);
         addThought(g.s, { id: 'shot_friend', label: `I shot what was left of ${z.name}`, mood: -14, days: 8 }, 1);
         log('tale', `${displayName(g.s)} put down what was left of ${z.name}.`);
@@ -597,6 +623,11 @@ export class Battle {
       log('break', `${displayName(g.s)} fled the wall on night ${G.day}.`);
       for (const o of this.guards) if (o !== g && !o.s.dead) changeOpinion(o.s, g.s, -12);
       return;
+    }
+    if (g.panicAt !== undefined && this.t > g.panicAt && !g.mode) {
+      g.mode = 'panic';
+      this.say(`${first(g.s)} is panicking — firing at shadows.`, 3);
+      log('break', `${displayName(g.s)} panicked on the wall on night ${G.day}, burning through ammunition.`);
     }
     const def = WEAPONS[g.w.def];
     if (g.reload > 0) {
@@ -631,7 +662,9 @@ export class Battle {
       return;
     }
     g.mag--;
-    const aim = aimFactor(g.s);
+    let aim = aimFactor(g.s);
+    if (g.mode === 'panic') aim *= 0.4;
+    if (g.mode === 'rage') aim = Math.min(1.3, aim + 0.3);
     const lightBonus = Math.min(0.2, G.fort.lights * 0.07);
     const mz = this.muzzle(g);
     const hb = this.hitbox(tgt);
@@ -646,7 +679,7 @@ export class Battle {
       const a = base + R.gauss(0, def.pellets > 1 ? def.spread * 0.7 : err * 0.6);
       this.castShot(g, mz.x, mz.y, a, def.dmg * (0.85 + g.w.cond * 0.15), def.pierce, def.knock, def.pellets > 1, false);
     }
-    g.cd = (1 / def.rof) * (def.auto ? 1.3 : 1.6) * R.range(0.9, 1.25);
+    g.cd = (1 / def.rof) * (def.auto ? 1.3 : 1.6) * R.range(0.9, 1.25) * (g.mode === 'panic' ? 0.55 : g.mode === 'rage' ? 0.7 : 1);
     g.recoil = 1;
     g.flash = 0.06;
     this.noise += def.noise * 0.7;
@@ -759,6 +792,15 @@ export class Battle {
       killSurvivor(s, `pulled down behind the wall ${by}, night ${G.day}`);
       this.res.deaths.push(first(s));
       this.say(`${first(s).toUpperCase()} IS DOWN.`, 6);
+      for (const o of this.guards) {
+        if (o.s.dead || o.fled || o === g) continue;
+        const r = o.s.rel[s.id];
+        if (r && (r.bond === 'lover' || r.bond === 'spouse' || r.bond === 'parent' || r.bond === 'child' || r.bond === 'sibling' || r.opinion > 50)) {
+          o.mode = 'rage';
+          this.say(`${first(o.s)} screams ${first(s)}'s name and keeps firing.`, 5);
+          tale(o.s, `Kept firing after ${first(s)} fell, night ${G.day}.`);
+        }
+      }
       this.slowmo = 1.5;
       G.flags.lastDeathDay = G.day;
       if (s.isLeader === false && this.player?.s === s) { /* control passes */ }
@@ -1048,6 +1090,10 @@ export class Battle {
     if (g.reload > 0 || (isP && this.playerReload > 0)) {
       c.fillStyle = '#d9c9a0';
       c.fillText('reloading', g.x, g.y - h - 26);
+    }
+    if (g.mode) {
+      c.fillStyle = g.mode === 'panic' ? '#d0a040' : '#e05040';
+      c.fillText(g.mode === 'panic' ? 'panicking' : 'enraged', g.x, g.y - h - 26);
     }
     if (isBitten(g.s) && !g.s.wounds.some((w) => w.hidden)) {
       c.fillStyle = '#b8862f';

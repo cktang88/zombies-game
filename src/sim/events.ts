@@ -472,6 +472,127 @@ export const INCIDENTS: Incident[] = [
       return 'The smoke went east.';
     },
   },
+  {
+    id: 'oldface',
+    weight: () => (G.day > 4 && !G.flags.oldFace ? 0.7 : 0),
+    make: () => {
+      const s = lowestSpotlight();
+      const rel = R.pick(['brother', 'sister', 'ex-husband', 'ex-wife', 'old foreman', 'son', 'daughter', 'best friend from the mill', 'neighbor', 'AA sponsor']);
+      const female = /sister|wife|daughter/.test(rel);
+      const nm = R.pick(female ? ['Jen', 'Annika', 'Kay', 'Lorna', 'Mae', 'Tess', 'Ivy'] : ['Ray', 'Duane', 'Kyle', 'Lyle', 'Arne', 'Tom', 'Wes']);
+      G.flags.oldFace = JSON.stringify({ name: nm, by: s.id });
+      tale(s, `Saw ${their(s)} ${rel} ${nm} among the Turned.`);
+      return {
+        id: 'oldface', title: 'A face on the road',
+        text: `${first(s)} came in white as paper. Down by the river road, in the crowd of them shuffling toward town: ${their(s)} ${rel}, ${nm}. Same coat. Same walk.\n\n"${R.pick(['He\'ll come here. He always came here.', 'If she comes up the road tonight, I\'ll do it. Nobody else.', 'Don\'t you dare make me watch.', 'I owed them money. Isn\'t that stupid. That\'s what I thought of.'])}"`,
+        data: { s: s.id },
+        choices: [{ label: 'Tonight, then', effect: 'ok' }],
+      };
+    },
+    resolve: (_c, d) => {
+      const s = byId(d.s as string)!;
+      addThought(s, { id: 'saw_kin', label: 'Saw someone I loved among them', mood: -10, days: 5 }, 1);
+      return 'The road is very long from here to the river.';
+    },
+  },
+  {
+    id: 'fire',
+    weight: () => (G.day > 3 && (G.weather === 'cold' || G.weather === 'snow' || G.weather === 'clear') ? 0.45 : 0.1),
+    make: () => {
+      const s = lowestSpotlight();
+      return {
+        id: 'fire', title: 'Fire in the woodshed',
+        text: `A stovepipe cracked in the night and the woodshed went up. ${first(s)} is already running at it with a wet blanket. Half the timber is in there.`,
+        data: { s: s.id },
+        choices: [{ label: 'Everyone fights it', hint: 'Save the wood. Someone may get burned.', effect: 'fight' }, { label: 'Let it burn', hint: 'Lose the timber. Nobody gets hurt.', effect: 'let' }],
+      };
+    },
+    resolve: (c, d) => {
+      const s = byId(d.s as string)!;
+      if (c === 1) { add('wood', -Math.round(G.stores.wood * 0.6)); log('event', 'The woodshed burned. We watched it go.'); return 'It burned down to the stone footing.'; }
+      add('wood', -Math.round(G.stores.wood * 0.2));
+      if (R.chance(0.45)) {
+        wound(s, 'burn', R.range(0.2, 0.45), R.pick(['larm', 'rarm', 'torso']));
+        tale(s, 'Went into the burning woodshed with a wet blanket.');
+        log('tale', `${displayName(s)} went into the burning woodshed and came out with the timber, and burns.`);
+        return `${first(s)} got burned dragging planks out. We saved most of it.`;
+      }
+      return 'Bucket line from the rain barrel. We saved most of it.';
+    },
+  },
+  {
+    id: 'quiet',
+    weight: () => (G.day > 7 && !G.flags.quietMet ? 0.5 : 0),
+    make: () => ({
+      id: 'quiet', title: 'One of the Quiet',
+      text: 'A man walks up the road in broad daylight, right through a knot of Sleepers, and none of them turn. He is smeared head to foot in grey-orange sludge from the mill ponds. He stops at our wall and speaks very softly.\n\n"They\'re listening. When you go quiet, they go quiet. We could teach you. You don\'t have to shoot them. You don\'t have to shoot anyone ever again."',
+      choices: [
+        { label: 'Listen to him', hint: 'He might know something. He might be mad.', effect: 'listen' },
+        { label: 'Put a round over his head', effect: 'scare' },
+      ],
+    }),
+    resolve: (c) => {
+      G.flags.quietMet = true;
+      if (c === 0) {
+        for (const s of living()) if (hasTrait(s, 'faithful') || hasTrait(s, 'gentle')) addThought(s, { id: 'quiet_hope', label: 'Maybe there is another way', mood: 6, days: 4 }, 1);
+        log('lore', 'A man of the Quiet came to the wall and talked for an hour about listening. He left a jar of pond sludge on the gatepost. Nobody touched it.');
+        G.flags.quietJar = true;
+        return 'He left a jar of the sludge on the gatepost. "For when you\'re ready."';
+      }
+      log('lore', 'We ran off one of the Quiet. He walked back through the Sleepers like a man crossing a church.');
+      return 'He did not flinch. He walked back the way he came, through them, untouched.';
+    },
+  },
+  {
+    id: 'parish',
+    weight: () => (G.day > 3 && G.stores.meds >= 2 ? 0.6 : 0),
+    make: () => ({
+      id: 'parish', title: 'A note from the Parish',
+      text: 'Pinned to the gate under a rock, in Pastor Engvall\'s careful hand:\n\n"To whoever holds the Haugen place. Gene Halvorsen needs insulin and we have nine children with the croup. If you have any medicine at all, leave it at the Legion hall steps. God sees it. So do I. — R.E."',
+      choices: [
+        { label: 'Leave 2 medicine at the Legion steps', effect: 'give' },
+        { label: 'We need it ourselves', effect: 'keep' },
+      ],
+    }),
+    resolve: (c) => {
+      if (c === 0) {
+        add('meds', -2);
+        G.flags.parish = ((G.flags.parish as number) ?? 0) + 1;
+        for (const s of living()) addThought(s, { id: 'charity', label: 'We helped the Parish', mood: hasTrait(s, 'faithful') || hasTrait(s, 'kind') ? 8 : 3, days: 5 }, 1);
+        log('event', 'We left medicine on the Legion hall steps for the Parish.');
+        return 'The next morning there is a loaf of bread on our gatepost, wrapped in a dish towel.';
+      }
+      for (const s of living()) if (hasTrait(s, 'kind') || hasTrait(s, 'faithful')) addThought(s, { id: 'refused_parish', label: 'We let the Parish children cough', mood: -6, days: 4 }, 1);
+      return 'Nobody mentions the note again.';
+    },
+  },
+  {
+    id: 'wedding',
+    weight: () => (living().some((a) => Object.values(a.rel).some((r) => r.bond === 'lover')) && G.day > 6 ? 1.2 : 0),
+    make: () => {
+      const a = living().find((x) => Object.entries(x.rel).some(([id, r]) => r.bond === 'lover' && byId(id) && !byId(id)!.dead));
+      if (!a) return null;
+      const bId = Object.entries(a.rel).find(([id, r]) => r.bond === 'lover' && byId(id) && !byId(id)!.dead)![0];
+      const b = byId(bId)!;
+      return {
+        id: 'wedding', title: 'A wedding, of sorts',
+        text: `${first(a)} and ${first(b)} want to make it official. No license, no church that's still standing. ${R.pick(['A ring made from a ferry cable shackle.', 'Rings cut from a brass shell casing.', 'A ring of copper wire, twisted three times.'])}\n\nSomeone would need to say the words.`,
+        data: { a: a.id, b: b.id },
+        choices: [{ label: 'Hold the wedding tonight before dusk', hint: 'Uses 4 food and the liquor. Everyone\'s spirits rise.', effect: 'yes' }, { label: 'Not now. Not like this.', effect: 'no' }],
+      };
+    },
+    resolve: (c, d) => {
+      const a = byId(d.a as string)!, b = byId(d.b as string)!;
+      if (c === 1) { addThought(a, { id: 'nowedding', label: 'They said not now', mood: -6, days: 4 }, 1); addThought(b, { id: 'nowedding', label: 'They said not now', mood: -6, days: 4 }, 1); return 'Maybe after the ice.'; }
+      add('food', -Math.min(4, G.stores.food)); add('liquor', -Math.min(2, G.stores.liquor));
+      setBond(a, b, 'spouse');
+      for (const s of living()) addThought(s, { id: 'wedding', label: `${first(a)} and ${first(b)} got married`, mood: s === a || s === b ? 20 : 8, days: 6 }, 1);
+      tale(a, `Married ${first(b)} in the front room on ${G.day < 23 ? 'a November afternoon' : 'a December afternoon'}, in the middle of the end of the world.`);
+      tale(b, `Married ${first(a)} in the front room with the boards still on the windows.`);
+      log('tale', `${displayName(a)} and ${displayName(b)} were married in the front room of the house on Ferry Road. ${R.pick(['Someone played a harmonica badly.', 'The dog wore a bow made of a dish towel.', 'Everybody cried, even the ones who said they wouldn\'t.', 'For an hour nobody looked at the windows.'])}`);
+      return 'For an hour nobody looked at the windows.';
+    },
+  },
 ];
 
 export function rollIncident(): PendingEvent | null {

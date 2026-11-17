@@ -97,6 +97,11 @@ export function planNight(): NightPlan {
   if (special === 'crossing') {
     for (let i = 0; i < 3; i++) spawns.push({ type: 'ferryman', t: duration * (0.5 + i * 0.15) });
   }
+  // someone from a survivor's past walks up the road tonight
+  if (G.flags.oldFace) {
+    const of = JSON.parse(G.flags.oldFace as string) as { name: string; by: string };
+    spawns.push({ type: 'sleeper', t: duration * R.range(0.3, 0.7), name: of.name });
+  }
   spawns.sort((a, b) => a.t - b.t);
   return { points: pts, label, special, spawns };
 }

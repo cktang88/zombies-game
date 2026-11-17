@@ -71,6 +71,7 @@ export interface Survivor {
   isLeader: boolean;
   dead?: { day: number; cause: string; epitaph: string };
   tales: string[]; // short memorable things they did
+  titles?: string[]; // earned epithets
 }
 
 export interface WeaponDef {
@@ -151,5 +152,5 @@ export interface NightPlan {
   points: number;
   label: string;
   special?: string; // fog, horde, rain, siren...
-  spawns: { type: string; t: number; y?: number }[];
+  spawns: { type: string; t: number; y?: number; name?: string }[];
 }

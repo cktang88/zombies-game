@@ -21,6 +21,7 @@ export const PART_NAMES: Record<BodyPart, string> = {
 };
 
 export function displayName(s: Survivor) {
+  if (s.titles?.length && s.titles.length > 0 && !s.nick) return `${s.name}, ${s.titles[s.titles.length - 1]}`;
   return s.nick ? `${s.name.split(' ')[0]} "${s.nick}" ${s.name.split(' ').slice(1).join(' ')}` : s.name;
 }
 export function first(s: Survivor) {
@@ -299,4 +300,24 @@ function defaultEpitaph(s: Survivor) {
 export function tale(s: Survivor, text: string) {
   s.tales.push(text);
   if (s.tales.length > 8) s.tales.shift();
+}
+
+export function grantTitle(s: Survivor, t: string) {
+  s.titles ??= [];
+  if (s.titles.includes(t)) return false;
+  s.titles.push(t);
+  log('tale', `${s.name} has earned a name around the house: "${t}".`);
+  return true;
+}
+
+// Kill-count and deed titles, checked at dawn
+export function checkTitles(s: Survivor) {
+  if (s.kills >= 50) grantTitle(s, 'the Butcher of Ferry Road');
+  else if (s.kills >= 20) grantTitle(s, 'Steady on the Wall');
+  if (s.scars.some((x) => x.label.startsWith('lost'))) grantTitle(s, s.scars.find((x) => x.label.includes('arm')) ? 'One-Arm' : 'Peg');
+  if (s.tales.filter((t) => t.startsWith('Bitten')).length >= 2) grantTitle(s, 'Twice-Bitten');
+  if (s.tales.some((t) => t.startsWith('Held the line alone'))) grantTitle(s, 'Gatekeeper');
+  if (s.tales.some((t) => t.startsWith('Dropped a Ferryman'))) grantTitle(s, 'Ferryman\'s Fee');
+  if (s.tales.some((t) => t.startsWith('Took') && t.includes('bone saw'))) grantTitle(s, 'Sawbones');
+  if (s.daysSurvived >= 20) grantTitle(s, 'Old Hand');
 }
