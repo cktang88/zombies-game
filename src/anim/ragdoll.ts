@@ -55,6 +55,8 @@ export class Ragdoll {
   /** fall-flat bias (collapse()): ±1 = the side the trunk is tipped toward, 0 = none */
   tip = 0;
   private torsoL = 1;
+  private fx = new Float32Array(RAGDOLL_POINTS);
+  private fy = new Float32Array(RAGDOLL_POINTS);
 
   constructor(public mass: number, public stiffT: number, public friction: number, public gravity = 1350) {}
 
@@ -163,9 +165,12 @@ export class Ragdoll {
     if (this.settled) return;
     this.t += dt;
     const sub = 2, h = dt / sub;
-    let maxMove = 0;
+    const x0 = this.fx, y0 = this.fy;
+    x0.set(this.x); y0.set(this.y);
+    // late in the fall the body loses energy faster (contacts and joint limits fighting the
+    // ground otherwise keep ankles and wrists buzzing on the spot and the body never sleeps)
+    const damp = 0.996;
     for (let s = 0; s < sub; s++) {
-      const damp = 0.996;
       for (let i = 0; i < RAGDOLL_POINTS; i++) {
         const vx = (this.x[i] - this.ox[i]) * damp, vy = (this.y[i] - this.oy[i]) * damp;
         this.ox[i] = this.x[i]; this.oy[i] = this.y[i];
@@ -181,9 +186,20 @@ export class Ragdoll {
         for (const l of this.limits) this.solveLimit(l, l.relax ? Math.max(musc, relax) : musc);
         this.collide();
       }
-      for (let i = 0; i < RAGDOLL_POINTS; i++) maxMove = Math.max(maxMove, Math.abs(this.x[i] - this.ox[i]) + Math.abs(this.y[i] - this.oy[i]));
     }
-    this.still = maxMove < 0.6 ? this.still + dt : 0;
+    // settling: late in the fall, whatever lies on the road loses its velocity (ankles and
+    // wrists caught between a joint limit and the ground otherwise buzz on the spot for
+    // seconds); limbs still in the air keep falling
+    const sleep = clamp((this.t - 1.2) / 0.6, 0, 1) * 0.6;
+    if (sleep > 0) for (let i = 0; i < RAGDOLL_POINTS; i++) {
+      if (this.y[i] < -14) continue;
+      this.ox[i] += (this.x[i] - this.ox[i]) * sleep;
+      this.oy[i] += (this.y[i] - this.oy[i]) * sleep;
+    }
+    // net movement over the whole step (in-step jitter that goes nowhere doesn't count)
+    let maxMove = 0;
+    for (let i = 0; i < RAGDOLL_POINTS; i++) maxMove = Math.max(maxMove, Math.abs(this.x[i] - x0[i]) + Math.abs(this.y[i] - y0[i]));
+    this.still = maxMove < 1.0 * dt * 60 ? this.still + dt : 0;
     if ((this.still > 0.3 && this.t > 0.6) || this.t > 2.6) this.settled = true;
   }
 
@@ -200,6 +216,8 @@ export class Ragdoll {
       if (Math.abs(kx) > 0.2 * this.torsoL) this.tip = -Math.sign(kx);
     }
     const seat = -this.y[P_PELVIS] / this.torsoL;
+    // the nudges fade out late: one that hasn't worked by now only slides the body along the
+    // road (ankles creeping) and keeps it from ever sleeping
     const a = h * h;
     if (up > 0.2) {
       // a pure torque on the trunk (top one way, hips the other) so the body doesn't slide
@@ -207,9 +225,10 @@ export class Ragdoll {
       for (const i of [P_NECK, P_HEADBASE, P_HEAD, P_SH, P_FSH]) this.x[i] += f;
       for (const i of [P_PELVIS, P_NHIP, P_FHIP]) this.x[i] -= f * 5 / 3;
     }
-    if (seat > 0.3) {
+    const late = clamp((2.0 - this.t) / 0.5, 0, 1);
+    if (seat > 0.3 && late > 0) {
       // propped up on the knees (or sitting on the heels): the hips sink, the legs straighten out
-      const k = Math.min(3, seat * 2);
+      const k = Math.min(3, seat * 2) * late;
       for (const i of [P_PELVIS, P_NHIP, P_FHIP]) this.y[i] += 1400 * k * a;
       for (const i of [P_NKNEE, P_FKNEE]) this.y[i] += 400 * k * a;
       // thighs swing out in line with the trunk (away from the head)

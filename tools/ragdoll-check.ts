@@ -18,7 +18,7 @@ const cases: (DieOpts & { name: string; speed?: number })[] = [
   { name: 'shotgun', impulse: { x: -600, y: -200 }, at: 'torso', kind: 'shotgun' },
   { name: 'walking', impulse: { x: -50, y: 0 }, speed: 40 },
 ];
-let bad = 0;
+let bad = 0, natural = 0, n = 0, tSum = 0;
 for (const id of sprites) {
   await loadRig(id); // fails in node (no fetch base): attach the atlas meta by hand
   const meta = JSON.parse(readFileSync(`public/sprites/parts/${id}.json`, 'utf8')) as RigMeta;
@@ -37,9 +37,12 @@ for (const id of sprites) {
     const up = (r.y[0] - r.y[1]) / g.torsoLen; // pelvis below neck: 1 standing, 0 flat
     const seat = -r.y[0] / g.legLen; // pelvis height over the ground
     const ok = up < 0.45 && seat < 0.45;
+    n++; tSum += t;
+    if (r.t < 2.6) natural++; // came to rest on its own (not the 2.6 s cap)
     if (!ok) bad++;
     console.log(`${id.padEnd(12)} ${c.name.padEnd(10)} upright ${up.toFixed(2)} seat ${seat.toFixed(2)} t ${t.toFixed(2)} slide ${(r.x[0] / g.legLen).toFixed(2)} ${ok ? '' : '  <-- NOT FLAT'}`);
   }
 }
+console.log(`${natural}/${n} came to rest on their own (the rest hit the 2.6 s cap); mean ${(tSum / n).toFixed(2)} s`);
 console.log(bad ? `${bad} not flat` : 'all flat');
 process.exit(bad ? 1 : 0);
