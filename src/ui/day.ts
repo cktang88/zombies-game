@@ -20,7 +20,7 @@ import { calendar } from '../sim/calendar';
 import { persona, forecast, threatPoints } from '../sim/director';
 import { sfx, music, stinger, distant } from '../audio';
 import { openSettings } from './settings';
-import { is } from './keys';
+import { is, keyLabel, keyOf } from './keys';
 import { openHelp } from './help';
 import { hintHtml, markHintTarget, nextHint, skipHints } from './onboarding';
 import { threadsHtml } from '../sim/threads';
@@ -640,7 +640,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
         ${threadsHtml()}
         <div class="weather">The Weather: <b>${persona().name}</b><br><span class="dim">Tonight feels like ${tp > 60 ? 'a long one' : tp > 30 ? 'a bad one' : 'any other night'}.${heat ? ` The stove will want ${heat} fuel.` : ''}</span></div>
         ${runHtml()}
-        <button class="dusk" data-act="dusk">${duskArmed && stale.length ? 'Yesterday\'s jobs are marked. Go anyway ›' : 'Go to the wall at dusk ›'}<small>Enter</small></button>
+        <button class="dusk" data-act="dusk">${duskArmed && stale.length ? 'Yesterday\'s jobs are marked. Go anyway ›' : 'Go to the wall at dusk ›'}<small>${esc(keyLabel(keyOf('day.dusk')))}</small></button>
       </section>
     </main>
     ${G.pendingEvent ? `<div class="overlay"><div class="modal event">
