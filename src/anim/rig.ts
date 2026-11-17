@@ -110,6 +110,8 @@ export class Rig {
   aimAngle = 0;
   /** closed-loop aim trim: keeps the barrel itself on the aim point (the solve aims from the shoulder) */
   aimCorr = 0;
+  /** closed-loop hip height: px the pelvis is raised so the straighter knee sits at a natural soft bend */
+  legTrim = 0;
   recoil = 0; recoilV = 0;
   flashT = 0;
   private lastFlashT = -9;
@@ -452,7 +454,7 @@ export class Rig {
     }
     // ---- trunk
     const crouchDrop = ch.crouch * g.legLen * 0.5;
-    const pelX = ch.px, pelY = ch.py + crouchDrop;
+    const pelX = ch.px, pelY = ch.py + crouchDrop - (this.kind === 'survivor' ? this.legTrim : 0);
     const tiltA = -Math.PI / 2 + ch.tilt;
     const T = tiltA + ch.lean;
     const ux = Math.cos(T), uy = Math.sin(T), vx = -uy, vy = ux;
@@ -471,6 +473,15 @@ export class Rig {
     // ---- legs
     this.solveLeg(N_TH, N_SN, N_FT, ch.nFx, ch.nFy, ch.nHip, ch.nKnee, ch.nAnk, tiltA);
     this.solveLeg(F_TH, F_SN, F_FT, ch.fFx, ch.fFy, ch.fHip, ch.fKnee, ch.fAnk, tiltA);
+    // standing and walking people stand on nearly straight legs (knee ~7° soft standing, ~10° at
+    // mid-stance walking): the stance/gait heights are guesses against each rig's own bone lengths,
+    // so measure the straighter knee and trim the hips toward it (not while a clip crouches on purpose)
+    if (this.kind === 'survivor' && ch.footIK > 0.5 && ch.crouch < 0.05) {
+      const bend = (t: number, s2: number) => Math.abs(Math.atan2(Math.sin(A[s2] - A[t]), Math.cos(A[s2] - A[t])));
+      const b = Math.min(bend(N_TH, N_SN), bend(F_TH, F_SN));
+      const want = 0.12 + 0.06 * this.moving;
+      this.legTrim = clamp(this.legTrim + (b - want) * g.legLen * 0.12, -0.04 * g.legLen, 0.16 * g.legLen);
+    }
     // ---- weapon placement
     this.gunVisible = false;
     let defN: HandT = null, defF: HandT = null;

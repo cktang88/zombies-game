@@ -30,7 +30,7 @@ export interface Gait {
 }
 
 const G = (id: string, o: Partial<Gait>): Gait => ({
-  id, stride: 0.55, lift: 0.12, duty: 0.6, height: 0.985, bob: 2, lean: 0.05, sway: 0.02, headTilt: 0, headSway: 0.02,
+  id, stride: 0.72, lift: 0.1, duty: 0.6, height: 0.985, bob: 2, lean: 0.05, sway: 0.02, headTilt: 0, headSway: 0.02,
   armN: 0.15, armF: 0.1, elN: 0.25, elF: 0.3, armSwing: 0.3, armLag: 0, limp: 0, drag: 0, stiff: 0, lurch: 0, speedMul: 1, ...o,
 });
 
@@ -38,7 +38,7 @@ const G = (id: string, o: Partial<Gait>): Gait => ({
 export const GAITS: Record<string, Gait> = {
   walk: G('walk', {}),
   run: G('run', { stride: 0.95, lift: 0.3, duty: 0.42, height: 0.965, bob: 4, lean: 0.22, armSwing: 0.8, elN: 1.3, elF: 1.3 }),
-  aimWalk: G('aimWalk', { stride: 0.45, lift: 0.09, duty: 0.65, height: 0.97, bob: 1, lean: 0.04 }),
+  aimWalk: G('aimWalk', { stride: 0.62, lift: 0.08, duty: 0.65, height: 0.97, bob: 1, lean: 0.04 }),
   // Sleepers
   limpDrag: G('limpDrag', { stride: 0.42, lift: 0.08, duty: 0.68, height: 0.975, bob: 3, lean: 0.18, sway: 0.08, headTilt: 0.35, headSway: 0.08, armN: 1.2, armF: 0.9, elN: 0.25, elF: 0.4, armSwing: 0.12, armLag: 0.6, limp: 0.85, drag: 0.8, lurch: 0.5 }),
   stiffLurch: G('stiffLurch', { stride: 0.5, lift: 0.04, duty: 0.62, height: 1.0, bob: 5, lean: -0.04, sway: 0.12, headTilt: -0.15, headSway: 0.05, armN: 1.45, armF: 1.35, elN: 0.05, elF: 0.1, armSwing: 0.06, stiff: 1, lurch: 0.3 }),
