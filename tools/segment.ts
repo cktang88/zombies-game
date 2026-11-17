@@ -39,6 +39,8 @@ interface RigSrc {
   sprite?: boolean;
   /** an arm kit (public/sprites/parts/kit_<name>.png/.json, tools/cut-sheet.ts) replacing the cut arms */
   kit?: string | { near: string; far: string };
+  /** aim units (public/sprites/parts/unit_<name>.png/.json, tools/cut-unit.ts): weapon id → unit name */
+  aimUnits?: Record<string, string>;
 }
 /**
  * Alternate hand poses from a generated hands sheet (connected components, left to right).
@@ -374,6 +376,7 @@ async function segment(rig: RigSrc) {
     id: rig.id,
     height: rig.height,
     ground: +((bot - O[1]) * s).toFixed(2), // sole y below the pelvis
+    ...(rig.aimUnits ? { aimUnits: rig.aimUnits } : {}), // aim units (tools/cut-unit.ts): arms + gun drawn as one
     ...(rig.kit ? { kit: rig.kit } : {}), // arm kit (tools/cut-sheet.ts): angle-swap sleeve drawings
     joints: Object.fromEntries(Object.entries(J).map(([k, v]) => [k, rel(v)])),
     parts: Object.fromEntries(place.map(({ c, x, y }) => [c.name, { x, y, w: c.w, h: c.h, px: r2(c.pivot[0]), py: r2(c.pivot[1]), tx: r2(c.tip[0]), ty: r2(c.tip[1]), rest: r2(c.rest), len: r2(c.len), ...(c.grip ? { gx: r2(c.grip[0]), gy: r2(c.grip[1]) } : {}) }])),

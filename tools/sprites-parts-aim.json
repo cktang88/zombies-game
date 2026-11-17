@@ -1,0 +1,25 @@
+{
+  "model": "google/gemini-3.1-flash-lite-image",
+  "style": "Drawn exactly in the style of the character image: mature graphic-novel cel-shading, a thick confident uniform black ink outline round the whole figure, two-tone hard-edged shadows, muted desaturated palette, realistic adult proportions. The gun is drawn in the SAME ink line and flat cel-shading as the body, not a photo.",
+  "key": "Isolated on a perfectly flat solid pure magenta #FF00FF background, no cast shadow, no text, no labels, no border, nothing else.",
+  "parts": [
+    {
+      "id": "aim_surv_rifle_ar15",
+      "ref": "aimref_surv_rifle",
+      "guide": "tools/rigs/src/aimguide_surv_rifle_ar15.png",
+      "prompt": "The FIRST image is a pose template: flat grey shapes and a gun on magenta. The SECOND image is the character. Paint the bearded man in the dark brown waxed field jacket and scarf from the second image as ONE single drawing exactly over the template, keeping the template's exact position, size, angles, framing and aspect ratio: the grey torso and head become the character's own torso and head (same clothes, same face and hair), the light grey arm is the character's RIGHT arm (near the camera) and the dark grey arm is his LEFT arm (far side), and the gun is the same black AR-15 carbine at exactly the same place and size. A correct shouldered rifle firing pose: the butt of the stock pressed into the pocket of the right shoulder, the cheek resting on the top of the stock, head tilted down, eye behind the sight; the right hand wraps the pistol grip, index finger on the trigger, right elbow down and out; the left arm reaches forward under the gun and the left hand cups the fore-end from below, the left arm mostly hidden behind the gun and body; torso leaning slightly forward into the gun. Upper body only: the figure ends at the hips at the bottom of the grey torso shape, NO legs. Strict side view, the camera on the character's right, facing right."
+    },
+    {
+      "id": "aim_surv_f_old_hunting",
+      "ref": "aimref_surv_f_old",
+      "guide": "tools/rigs/src/aimguide_surv_f_old_hunting.png",
+      "prompt": "The FIRST image is a pose template: flat grey shapes and a gun on magenta. The SECOND image is the character. Paint the grey-haired older woman in the olive quilted jacket from the second image as ONE single drawing exactly over the template, keeping the template's exact position, size, angles, framing and aspect ratio: the grey torso and head become the character's own torso and head (same clothes, same face and hair), the light grey arm is the character's RIGHT arm (near the camera) and the dark grey arm is her LEFT arm (far side), and the gun is the same scoped bolt-action hunting rifle with an olive stock at exactly the same place and size. A correct shouldered rifle firing pose: the butt of the stock pressed into the pocket of the right shoulder, the cheek resting on the top of the stock, head tilted down, eye behind the scope; the right hand wraps the wrist of the stock, index finger on the trigger, right elbow down and out; the left arm reaches forward under the gun and the left hand cups the fore-end from below, the left arm mostly hidden behind the gun and body; torso leaning slightly forward into the gun. Upper body only: the figure ends at the hips at the bottom of the grey torso shape, NO legs. Strict side view, the camera on the character's right, facing right."
+    },
+    {
+      "id": "aim_surv_pistol_revolver",
+      "ref": "aimref_surv_pistol",
+      "guide": "tools/rigs/src/aimguide_surv_pistol_revolver.png",
+      "prompt": "The FIRST image is a pose template: flat grey shapes and a gun on magenta. The SECOND image is the character. Paint the young dark-haired man in the red quilted vest over a green shirt from the second image as ONE single drawing exactly over the template, keeping the template's exact position, size, angles, framing and aspect ratio: the grey torso and head become the character's own torso and head (same clothes, same face and hair), the light grey arm is the character's RIGHT arm (near the camera) and the dark grey arm is his LEFT arm (far side), and the gun is the same revolver at exactly the same place and size. A correct two-handed revolver firing pose seen from the side: both arms extended forward at shoulder height, elbows almost straight, the right hand wraps the revolver grip with the index finger on the trigger, the left hand cups the right hand from below, the left arm mostly hidden behind the right arm; head upright, eyes looking along the sights; torso leaning slightly forward. Upper body only: the figure ends at the hips at the bottom of the grey torso shape, NO legs. Strict side view, the camera on the character's right, facing right."
+    }
+  ]
+}
