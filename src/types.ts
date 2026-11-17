@@ -107,6 +107,8 @@ export interface WeaponDef {
   flare?: boolean; // the shot lights up where it lands for a few seconds
   smoke?: boolean; // big muzzle smoke cloud (black powder)
   craftable?: boolean;
+  limbMul?: number; // damage multiplier on arm/leg zones (default 1, pellets 1.2)
+  stagger?: number; // 0..1 stagger chance per body hit (default derived from knockback)
 }
 
 export interface WeaponItem {

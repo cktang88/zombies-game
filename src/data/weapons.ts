@@ -32,6 +32,10 @@ import type { Res, WeaponDef, WeaponItem } from '../types';
  *   jam        chance per trigger pull that the gun jams (~0.9s lost) — wear + improvised guns
  *   recoverable fraction of spent ammo recovered after the fight (arrows & bolts). After a
  *              night: add(ammoRes, Math.floor(spent * recoverable)).
+ *   limbMul    multiplier on damage dealt to arm/leg zones (and their cripple thresholds):
+ *              buckshot 1.2, slugs 1.0, soft-point / hollow-point 1.3, .22 0.7
+ *   stagger    0..1 per body hit: chance (or impulse) that the hit staggers the target.
+ *              Slugs, soft-points, bolts, the muzzleloader high; .22 and nails low.
  *
  * Old fields on WeaponDef (dmg, rof, mag, ammo, …) are still present so legacy code
  * compiles, but they ignore ammo types. WEAPON_ORDER lists every gun.
@@ -42,6 +46,7 @@ export interface FireProfile {
   incendiary: boolean; flare: boolean; smoke: boolean;
   ammoRes: Res | null; perShot: number; reload: number; reloadPerRound: boolean; mag: number; rof: number; auto: boolean;
   burst: number; burstGap: number; jam: number; recoverable: number;
+  limbMul: number; stagger: number;
 }
 
 // Burning (dragon's breath, fire bolts, flares)
@@ -66,17 +71,18 @@ export interface AmmoType {
   res: Res; caliber: string; name: string; short: string; icon: string; desc: string;
   dmgMul?: number; pellets?: 'slug' | number; spreadMul?: number; pierceAdd?: number; pierceSet?: number;
   armorPen?: number; knockMul?: number; noiseMul?: number; incendiary?: boolean; flare?: boolean; recoverable?: number;
+  limbMul?: number; stagger?: number; // overrides
 }
 export const AMMO_TYPES: Partial<Record<Res, AmmoType>> = {
   r22: { res: 'r22', caliber: 'r22', name: '.22 LR', short: '.22', icon: 'icon_r22', desc: 'Bricks of 500 from every farm closet. Pennies a shot.' },
   light: { res: 'light', caliber: 'pistol', name: 'Pistol ball (FMJ)', short: 'FMJ', icon: 'icon_ammo', desc: 'Round-nose. Goes where you point it.' },
-  light_hp: { res: 'light_hp', caliber: 'pistol', name: 'Hollow-points', short: 'HP', icon: 'icon_ammo', desc: '+30% damage and more shove; useless against Deputy plate; no pierce.', dmgMul: 1.3, pierceAdd: -1, armorPen: -0.6, knockMul: 1.15 },
+  light_hp: { res: 'light_hp', caliber: 'pistol', name: 'Hollow-points', short: 'HP', icon: 'icon_ammo', desc: '+30% damage and more shove; useless against Deputy plate; no pierce.', dmgMul: 1.3, pierceAdd: -1, armorPen: -0.6, knockMul: 1.15, limbMul: 1.3 },
   shell: { res: 'shell', caliber: 'shot', name: 'Buckshot', short: 'buck', icon: 'icon_shells', desc: 'Nine pellets. The close-range answer.' },
-  shell_slug: { res: 'shell_slug', caliber: 'shot', name: 'Slugs', short: 'slug', icon: 'icon_slug', desc: 'One heavy lead slug: accurate, pierces one, cracks plate. Aim matters.', pellets: 'slug', spreadMul: 0.12, pierceAdd: 1, armorPen: 0.4, knockMul: 1.6 },
-  shell_flech: { res: 'shell_flech', caliber: 'shot', name: 'Flechettes', short: 'flech', icon: 'icon_shells', desc: 'Clipped roofing nails: more, lighter projectiles that go through.', pellets: 1.5, dmgMul: 0.55, pierceAdd: 1, armorPen: 0.5, knockMul: 0.5, spreadMul: 0.85 },
+  shell_slug: { res: 'shell_slug', caliber: 'shot', name: 'Slugs', short: 'slug', icon: 'icon_slug', desc: 'One heavy lead slug: accurate, pierces one, cracks plate. Aim matters.', pellets: 'slug', spreadMul: 0.12, pierceAdd: 1, armorPen: 0.4, knockMul: 1.6, limbMul: 1.0, stagger: 0.8 },
+  shell_flech: { res: 'shell_flech', caliber: 'shot', name: 'Flechettes', short: 'flech', icon: 'icon_shells', desc: 'Clipped roofing nails: more, lighter projectiles that go through.', pellets: 1.5, dmgMul: 0.55, pierceAdd: 1, armorPen: 0.5, knockMul: 0.5, spreadMul: 0.85, stagger: 0.1 },
   shell_fire: { res: 'shell_fire', caliber: 'shot', name: "Dragon's breath", short: 'fire', icon: 'icon_dragon', desc: 'Magnesium shavings from the mill shop. A cone of fire that sets them burning.', dmgMul: 0.55, spreadMul: 1.25, knockMul: 0.6, noiseMul: 1.2, incendiary: true, flare: true },
   rifle: { res: 'rifle', caliber: 'rifle', name: 'Rifle FMJ', short: 'FMJ', icon: 'icon_ammo', desc: 'Goes through one and into the next.' },
-  rifle_sp: { res: 'rifle_sp', caliber: 'rifle', name: 'Soft-points', short: 'SP', icon: 'icon_ammo', desc: 'Deer loads: +30% damage and shove, but they stop in the first body.', dmgMul: 1.3, pierceSet: 0, knockMul: 1.25, armorPen: -0.3 },
+  rifle_sp: { res: 'rifle_sp', caliber: 'rifle', name: 'Soft-points', short: 'SP', icon: 'icon_ammo', desc: 'Deer loads: +30% damage and shove, but they stop in the first body.', dmgMul: 1.3, pierceSet: 0, knockMul: 1.25, armorPen: -0.3, limbMul: 1.3, stagger: 0.6 },
   rifle_ap: { res: 'rifle_ap', caliber: 'rifle', name: 'Armor-piercing', short: 'AP', icon: 'icon_ammo', desc: 'Drill-bit steel cores. Ignore Deputy plate; pierce one more.', dmgMul: 0.92, armorPen: 0.9, pierceAdd: 1 },
   r556: { res: 'r556', caliber: 'r556', name: '5.56 NATO', short: '5.56', icon: 'icon_r556', desc: 'Green-tip from the Line. Light, fast, plentiful only at Corliss.', armorPen: 0.25 },
   ball: { res: 'ball', caliber: 'ball', name: '.50 ball & powder', short: 'ball', icon: 'icon_ball', desc: 'A lead ball, a patch, a measured charge. Cheap to cast.' },
@@ -129,7 +135,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
   // --- rimfire ---
   r22: {
     id: 'r22', name: 'Farm .22', icon: 'icon_r22rifle', ammo: 'r22', caliber: 'r22',
-    dmg: 17, rof: 5, mag: 25, reload: 1.8, spread: 0.01, pellets: 1, pierce: 0, knock: 1, auto: false, noise: 0.35,
+    dmg: 17, rof: 5, mag: 25, reload: 1.8, spread: 0.01, pellets: 1, pierce: 0, knock: 1, auto: false, noise: 0.35, limbMul: 0.7, stagger: 0.03,
     niche: 'Quiet, dead accurate and pennies a shot — a headshot tool, useless on bodies.',
     desc: 'Every barn in the county has one behind the door for skunks.',
   },
@@ -185,7 +191,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
   },
   muzzle: {
     id: 'muzzle', name: '.50 muzzleloader', icon: 'icon_muzzle', ammo: 'ball', caliber: 'ball',
-    dmg: 250, rof: 0.5, mag: 1, reload: 5.5, spread: 0.01, pellets: 1, pierce: 4, knock: 45, auto: false, noise: 3, armorPen: 0.8, smoke: true, craftable: true,
+    dmg: 250, rof: 0.5, mag: 1, reload: 5.5, spread: 0.01, pellets: 1, pierce: 4, knock: 45, auto: false, noise: 3, armorPen: 0.8, smoke: true, craftable: true, stagger: 1,
     niche: 'One enormous shot through four bodies, a cloud of smoke, then a long reload. Ammo is cheap.',
     desc: 'Black-powder season gun. Ram, cap, pray, and wait for the smoke to clear.',
   },
@@ -211,13 +217,13 @@ export const WEAPONS: Record<string, WeaponDef> = {
   // --- quiet & strange ---
   compound: {
     id: 'compound', name: 'Compound bow', icon: 'icon_bow', ammo: 'bolt', caliber: 'bolt',
-    dmg: 90, rof: 1.1, mag: 1, reload: 0.7, spread: 0.015, pellets: 1, pierce: 1, knock: 6, auto: false, noise: 0.1, recoverable: 0.6,
+    dmg: 90, rof: 1.1, mag: 1, reload: 0.7, spread: 0.015, pellets: 1, pierce: 1, knock: 6, auto: false, noise: 0.1, recoverable: 0.6, stagger: 0.5,
     niche: 'Silent, and most arrows come back. Wakes nobody on a daylight run.',
     desc: 'Bowhunter\'s rig from a deer stand on the Halvorsen forty.',
   },
   crossbow: {
     id: 'crossbow', name: 'Crossbow', icon: 'icon_crossbow', ammo: 'bolt', caliber: 'bolt',
-    dmg: 140, rof: 0.6, mag: 1, reload: 2.2, spread: 0.008, pellets: 1, pierce: 2, knock: 12, auto: false, noise: 0.15, armorPen: 0.4, recoverable: 0.5, craftable: true,
+    dmg: 140, rof: 0.6, mag: 1, reload: 2.2, spread: 0.008, pellets: 1, pierce: 2, knock: 12, auto: false, noise: 0.15, armorPen: 0.4, recoverable: 0.5, craftable: true, stagger: 0.7,
     niche: 'A silent heavy bolt that pierces two; slow to span.',
     desc: 'Leaf-spring limbs off a Ford, a cable winch, a walnut stock.',
   },
@@ -229,7 +235,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
   },
   nailer: {
     id: 'nailer', name: 'Nail driver', icon: 'icon_nailgun', ammo: 'scrap', caliber: 'nails',
-    dmg: 22, rof: 6, mag: 40, reload: 2.6, spread: 0.05, pellets: 1, pierce: 1, knock: 2, auto: true, noise: 0.5, perShot: 0.05, craftable: true,
+    dmg: 22, rof: 6, mag: 40, reload: 2.6, spread: 0.05, pellets: 1, pierce: 1, knock: 2, auto: true, noise: 0.5, perShot: 0.05, craftable: true, limbMul: 0.8, stagger: 0.04,
     niche: 'Near-silent automatic that feeds on the scrap pile.',
     desc: 'Mill-shop contraption. Quiet. Feeds on scrap.',
   },
@@ -349,5 +355,7 @@ export function fireProfile(w: WeaponItem): FireProfile {
     burstGap: d.burstGap ?? 0.06,
     jam: (d.jam ?? 0) + (cond < 0.5 ? (0.5 - cond) * 0.08 : 0),
     recoverable: a?.recoverable ?? d.recoverable ?? 0,
+    limbMul: a?.limbMul ?? d.limbMul ?? (pellets > 1 ? 1.2 : 1),
+    stagger: Math.max(0, Math.min(1, a?.stagger ?? d.stagger ?? (knock * (pellets > 1 ? pellets * 0.25 : 1)) / 45)),
   };
 }
