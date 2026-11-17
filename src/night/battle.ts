@@ -2774,6 +2774,9 @@ export class Battle {
   }
 
   text(x: number, y: number, text: string, color: string, size: number) {
+    // a hit out past the edge of the road (traps, guards' long shots) gets no label: clamped on
+    // screen they stacked into a column of "LEGS" at the right edge, pointing at nothing
+    if (x > W + 10 || x < -10) return;
     this.texts.push({ x, y, text, color, size, life: 1.2 });
   }
 
