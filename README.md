@@ -93,6 +93,7 @@ npx tsx tools/stage-save.ts 12 /tmp/vessey-save.json   # a believable day-12 sav
 Browser checks (Playwright; run `npx vite build && npx vite preview --port 4192 &` first):
 ```
 node tools/e2e/settings-check.cjs             # flips every setting and asserts what it changes; pause, rebinding, data
+node tools/e2e/smoke.cjs                      # title → day → run → dusk → night → dawn → day 2, no page errors
 node tools/e2e/shots.cjs [scene…]             # the README screenshots (needs the staged save above)
 ```
 Debug handles in the browser console: `__G` (the state), `__story` (`night(day)`, `run()`, `ending(kind)`, `roll()`, `crossing()`), `__battle`, `__EX` (the run), `__anim.state()`, `__settings`.
