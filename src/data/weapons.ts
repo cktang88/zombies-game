@@ -49,6 +49,13 @@ import type { Res, WeaponDef, WeaponItem, ModSlot, ModItem } from '../types';
  *   switchTime seconds added when the shooter changes target (scope +, red-dot −); guards'
  *              re-target delay, or the player's spread settle time
  *   range      px beyond which a projectile does half damage (sawed-off ~520; Infinity = none)
+ *
+ * SHOOTER (survivor skill / perks), optional 2nd argument:
+ *   fireProfile(w, { shooter: { reloadMul, spreadMul, jamMul, bloomMul } })
+ *   multiplies reload, spread (single projectiles and the pellet cone), jam chance and bloomMul.
+ *   jamClear   seconds lost clearing a jam (0.9 base; improvised guns longer). Not scaled by
+ *              shooter.jamMul — pass a reloadMul-style factor yourself if skill should speed it.
+ *
  *   Suppressors wear: call wearMods(w, roundsFired) after a fight; it lowers mod cond and
  *   removes worn-out mods, returning lines for the morning report.
  *
@@ -63,7 +70,10 @@ export interface FireProfile {
   burst: number; burstGap: number; jam: number; recoverable: number;
   limbMul: number; stagger: number;
   light: number; melee: number; bloomMul: number; recoilMul: number; braceBloomMul: number; switchTime: number; range: number;
+  jamClear: number;
 }
+
+export interface ShooterMods { reloadMul?: number; spreadMul?: number; jamMul?: number; bloomMul?: number }
 
 // Burning (dragon's breath, fire bolts, flares)
 export const BURN = { dps: 16, time: 3.5 };
@@ -503,8 +513,15 @@ export function roundsInStores(p: FireProfile, stores: Partial<Record<Res, numbe
 }
 
 /** THE CONTRACT: weapon + selected ammo + condition -> numbers to shoot with. Pure. */
-export function fireProfile(w: WeaponItem, opts: { noMods?: boolean } = {}): FireProfile {
+export function fireProfile(w: WeaponItem, opts: { noMods?: boolean; shooter?: ShooterMods } = {}): FireProfile {
   const p = baseProfile(w);
+  const sh = opts.shooter;
+  if (sh) {
+    p.reload *= sh.reloadMul ?? 1;
+    p.spread *= sh.spreadMul ?? 1;
+    p.jam = Math.min(1, p.jam * (sh.jamMul ?? 1));
+    p.bloomMul *= sh.bloomMul ?? 1;
+  }
   if (opts.noMods || !w.mods) return p;
   for (const m of Object.values(w.mods)) {
     const md = m && MODS[m.def];
@@ -580,5 +597,6 @@ function baseProfile(w: WeaponItem): FireProfile {
     limbMul: a?.limbMul ?? d.limbMul ?? (pellets > 1 ? 1.2 : 1),
     stagger: Math.max(0, Math.min(1, a?.stagger ?? d.stagger ?? (knock * (pellets > 1 ? pellets * 0.25 : 1)) / (pellets > 1 ? 90 : 45))),
     light: 0, melee: 0, bloomMul: 1, recoilMul: 1, braceBloomMul: 1, switchTime: 0, range: Infinity,
+    jamClear: d.jam ? 1.8 : d.caliber === 'ball' ? 1.4 : 0.9,
   };
 }

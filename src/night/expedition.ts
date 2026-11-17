@@ -515,7 +515,7 @@ export class Expedition {
     if (R.chance(p.jam)) {
       this.say(`${this.w.name ?? WEAPONS[this.w.def].name} jammed.`, 1.5);
       sfx.click();
-      this.cd = 0.9;
+      this.cd = p.jamClear;
       return;
     }
     this.burstLeft = p.burst;
