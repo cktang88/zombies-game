@@ -1,5 +1,5 @@
 // Anim lab: dev page for the cutout bone rig (animlab.html).
-import { createRig, gradedAtlas, loadAllGuns, loadRig, measureArms, SPRITE_RIGS, type Rig } from './anim';
+import { createRig, QuadRig, gradedAtlas, loadAllGuns, loadRig, measureArms, SPRITE_RIGS, type Rig } from './anim';
 import { WEAPONS } from './data/weapons';
 import { spriteUrl } from './assets';
 
@@ -466,8 +466,85 @@ function closeupRender(step = false) {
   }
 }
 
+// ---------------------------------------------------------------- ?dogs: the quadruped rig
+// Four dogs on treadmills (idle / walk / trot / gallop) with a live footfall diagram under each
+// (dark = paw on the ground; rows NF FF NH FH), a biter, a dog that dies into the ragdoll and
+// comes back, and one that runs across speeding up through every gait.
+interface DogA { rig: QuadRig; x: number; label: string; hist: boolean[][]; vx?: number; again?: number }
+const DOGS: DogA[] = [];
+let dogT = 0;
+function dogSetup() {
+  (['idle', 'walk', 'trot', 'gallop'] as const).forEach((g, i) => {
+    const r = new QuadRig('dog', i + 1);
+    r.gaitLock = g;
+    r.setSpeed(g === 'walk' ? 45 : g === 'trot' ? 120 : g === 'gallop' ? 260 : 0);
+    DOGS.push({ rig: r, x: 90 + i * 300, label: g, hist: [] });
+  });
+  const bite = new QuadRig('dog', 7), dead = new QuadRig('dog', 8), run = new QuadRig('dog', 9);
+  DOGS.push({ rig: bite, x: 120, label: 'bite / lunge', hist: [] }, { rig: dead, x: 470, label: 'ragdoll death', hist: [], again: 0 }, { rig: run, x: 760, label: 'free run', hist: [], vx: 20 });
+}
+function dogStep(dt: number) {
+  dogT += dt;
+  for (const d of DOGS) {
+    if (d.label === 'bite / lunge' && !d.rig.action && dogT % 1.6 < dt) d.rig.play(Math.floor(dogT / 1.6) % 3 === 2 ? 'bark' : 'bite');
+    if (d.again !== undefined) {
+      d.again += dt;
+      if (d.again > 1.0 && !d.rig.dead) d.rig.die({ impulse: { x: -160, y: -60 }, at: 'torso' });
+      if (d.again > 4.2) { d.rig = new QuadRig('dog', 8); d.again = 0; }
+    }
+    if (d.vx !== undefined) {
+      // speeds up through walk → trot → gallop, then wraps round
+      d.vx = Math.min(300, d.vx + dt * 55);
+      d.rig.setSpeed(d.vx);
+      d.x += d.vx * dt * 1.0;
+      if (d.x > W + 40) { d.x = 600; d.vx = 20; }
+    }
+    d.rig.update(dt);
+    d.hist.push([...d.rig.contact]);
+    if (d.hist.length > 150) d.hist.shift();
+  }
+}
+function dogRender() {
+  ctx.fillStyle = '#6f8a9a'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#4c5a50'; ctx.fillRect(0, 230, W, 8); ctx.fillRect(0, 560, W, 80);
+  ctx.font = '13px system-ui'; ctx.textAlign = 'left';
+  DOGS.forEach((d, i) => {
+    const row2 = i >= 4, gy = row2 ? 560 : 230, s = 1.1;
+    // treadmill ticks scroll at the dog's speed (so you can see the stance paws don't slide)
+    if (!row2 && d.rig.speed > 0) {
+      ctx.fillStyle = '#2e3530';
+      const off = (dogT * d.rig.speed * s) % 40;
+      for (let x = -40; x < 260; x += 40) ctx.fillRect(d.x + x - off, gy, 3, 8);
+    }
+    d.rig.draw(ctx, d.x + (row2 ? 0 : 60), gy, s, 1);
+    ctx.fillStyle = '#111'; ctx.fillText(d.label + (d.rig.dead ? ' (dead)' : d.label === 'free run' ? ` ${d.rig.gait} ${Math.round(d.rig.speed)}` : ''), row2 ? d.x - 40 : d.x, row2 ? gy + 40 : 30);
+    if (row2) return;
+    // footfall diagram
+    const names = ['NF', 'FF', 'NH', 'FH'];
+    for (let l = 0; l < 4; l++) {
+      const y = 260 + [0, 1, 2, 3][l] * 14;
+      ctx.fillStyle = '#222'; ctx.fillText(names[l], d.x - 4, y + 10);
+      ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.fillRect(d.x + 22, y, 150, 10);
+      ctx.fillStyle = l % 2 ? '#7a3b2a' : '#2a2a2a';
+      d.hist.forEach((h, k) => { if (h[l]) ctx.fillRect(d.x + 22 + k, y, 1, 10); });
+    }
+  });
+}
+function dogFrame(now: number) {
+  dogStep(1 / 60);
+  dogRender();
+  void now;
+  requestAnimationFrame(dogFrame);
+}
+
 // ---------------------------------------------------------------- boot
-if (params.has('closeup')) (async () => {
+if (params.has('dogs')) (async () => {
+  await loadRig('dog');
+  dogSetup();
+  (window as unknown as { __dogs: unknown }).__dogs = { dogs: DOGS, step: dogStep, render: dogRender };
+  if (params.has('still')) dogRender(); else requestAnimationFrame(dogFrame);
+})();
+else if (params.has('closeup')) (async () => {
   const ids = Object.keys(SPRITE_RIGS);
   await Promise.all([...ids.map(loadRig), loadAllGuns()]);
   closeupSetup();
