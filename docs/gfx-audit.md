@@ -123,3 +123,45 @@ None. The Turned busts are cut from the existing sprites, so the image model was
 **Checked, fine:** the scaffold legs sit behind the firestep crews; labels de-collide in the crowded six-guard line; the counter stays at or above 0; the horde (44 bodies) and the pile/climb frames show no z-fighting or popping; no new page errors in any scene.
 
 **Left:** a real portrait layout for the night (a second canvas framing, or a rotate-device prompt) belongs with the stage/UI owner (`src/main.ts`, `src/ui/*`). The moodle word over every guard ("starving", "exhausted") is accurate but busy on a hungry house. A one-glyph form when three or more guards share it would help. **Art spend:** none.
+
+## Round 3 — night scale & style
+
+**Method.** `battle-audit.cjs` (unlit, floodlit, fog, nests, traps, pile, wallhp, dawn) from the day-12 staged save, before and after, 2× PNGs. Scale is taken from the survivor: `SH` 158 px = 1.75 m, so **90 px/m at depthScale 1** (`HORIZON` 330, `REF_Y` 664; camera height ≈ (664 − 330) / 90 = 3.7 m, which matches where the horizon cuts the backdrop houses, at the porch-roof line).
+
+**Scale table** (px at scale 1 → metres; ✓ = within ~15% of the real thing)
+
+| Object | Drawn | Real | |
+|---|---|---|---|
+| Survivor (`SH`) | 158 px | 1.75 m | reference |
+| Barricade (`drawWall`, h 118 + up to 50) | 1.1 m above the firestep row's feet | 1.1–1.4 m to fire over | ✓ (low end) |
+| Scaffold deck (`ROOF_Y`) | ≈ 2.1 m | 2–2.5 m | ✓ |
+| Floodlight pole (`fort_light` 280 px) | 3.2 m | 3–4 m | ✓ |
+| Nest MG (`emp_mg_gun` len 88) | 0.98 m | 1.1 m (M60/M240) | ✓, reads the same as the guards' long guns |
+| Swivel rifle (len 80) | 0.9 m | 1.0–1.1 m | ✓ |
+| Dog (62 px to the head) | ≈ 0.55 m at the shoulder | 0.6 m | ✓ |
+| Bear trap (54 × 23 px) | 0.6 m across with springs | 0.5–0.7 m | ✓ |
+| Propane tank (46 px) | 0.51 m | 0.45 m | ✓ |
+| **Burning drums (58 px)** | **0.64 m** | **0.88 m** | **✗ → 80 px** |
+| Pipe mine 22, flare 24, radio 34, tin-can post 52, fence post 56 | 0.24–0.62 m | — | ✓ |
+| Deadfall gallows | ≈ 2.5 m | — | ✓ |
+| Corpses (lying) | the standing body's length | — | ✓ |
+| Backdrop pickup | length ✓ at its ground line (y ≈ 560, scale 0.69); height ≈ 1.3× | — | painted; left |
+| Brass (3 × 1.5 px) | 3 cm | 4.5–7 cm | slightly small; left (it reads) |
+
+| Scene | Sev | Issue | Fix |
+|---|---|---|---|
+| Corpses, blood, brass (every night with kills) | H | The road's decal canvas (`this.ground`: baked ragdolls, classic corpse stamps, blood, settled brass) was drawn **before** darkness pass A. A corpse took its own corpse darkening, then the full night mask, while the living took only 40%. Piles read as flat black cut-outs beside lit bodies. | The decal layer is drawn right after pass A, before the light pools. The dead now get the same 40% the actors and the trap decals get. Bodies read as bodies in a pile, darker than the living. |
+| Spike rails | M | Rails were anchored at `wallX(lane)`, the gameplay face that moves 10 px right per far lane. The barricade is one flat image, so the far rails hung 10–20 px off the face in mid-air. | Every rail's butt sits at `WALL_X − 8`, nailed into the face. |
+| Burning drums | M | 0.64 m tall: smaller than they read next to the 0.5 m propane tank. | 80 px (0.88 m × 0.57 m). The fire, smoke and light emitters were raised with it. |
+| Punji pit | M | Raw `drawImage`. It skipped the lane grade and read brighter than the road (the same bug round 2 fixed for four other kits). | `drawProp(…, LOOK[lane])`. `trap_pit` was added to `PROP_IDS` (preload and bake). |
+| Rot sludge | L | `rgba(78,64,26,.42)` drawn after the darkness read as mustard paint on the night road. | Dark rot smear `rgba(44,38,16,.5)`. |
+| Parallax | L | The backdrop moved `+px` and the near weed strip `+1.4·px` with the aim, while the playfield stood still. Both planes slid the same way, so the playfield seemed to slide against them. | The view pivots on the playfield: the backdrop goes `+px` and the near strip `−0.5·px`. (Research 04 §6 said 1.4× in the same direction. That is superseded here.) |
+
+**Checked and left as is.** The firestep, scaffold and roof crew heights against a person. The floodlights against the scaffold. The nest guns against hand-held guns. The dog. Trap kits other than the drums. The lane grade on wire, junk heaps, the drain and spikes. Contact shadows under every actor, the wall, the turrets and the cover. The backdrop horizon against `HORIZON`.
+
+**Left (other owners or no time).**
+- Ragdoll corpses bake with `shade: true` (actors.ts `bake`). After the layer move they read right. A corpse still in flight (drawn in the sorted pass, before it bakes) can be a little darker than the baked ones beside it, so give it one look in actors.ts (anim owner).
+- The nest gun is drawn at b 1.2 while its base is NEAR (1.0). A slight value step; harmless.
+- Nothing ties the barricade's height to the climb or pile heights in code, so I left it at the low end of realistic (≈ 1.1 m at the firestep).
+
+**Art spend:** none ($0.00).
