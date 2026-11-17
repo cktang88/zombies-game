@@ -11,7 +11,7 @@ import { keyOf, normKey, keyCap } from '../ui/keys';
 import { openPause } from '../ui/pause';
 import {
   living, canFight, aimFactor, first, displayName, wound, pain, killSurvivor, tale, addThought, hasTrait, changeOpinion, byId, isBitten, breakThresholds,
-  moodBreakdown, their, them, grantTitle, prof, attr,
+  moodBreakdown, their, them, grantTitle, prof, attr, perkFx,
 } from '../sim/survivors';
 import {
   kickFor, bloomAfter, aimedDelay, climbFor, heatLimit, heatCool, usesHeat, swapsBarrel, fireModes, hasChamber, manualAction, drawTime, shooterMods, clearTime,
@@ -1484,7 +1484,7 @@ export class Battle {
       // weakspots: small, and worth it
       let wk: { t: number; kind: WeakKind } | undefined;
       for (const w of this.weakPts(z)) {
-        const t = circle(w.x, w.y, w.r * (pellet ? 1 : 1.1));
+        const t = circle(w.x, w.y, w.r * (pellet ? 1 : 1.1) * (1 + ((g as Guard | null)?.s ? perkFx(g.s, 'weakspot') : 0))); // Bead perk
         if (t >= 0 && (!wk || t < wk.t)) wk = { t, kind: w.kind };
       }
       if (wk) { hits.push({ z, t: wk.t, head: false, zone: wk.kind === 'knee' ? 'leg' : 'torso', weak: wk.kind }); continue; }
@@ -2033,7 +2033,7 @@ export class Battle {
     const pHead = heads ? 1 : (0.2 + aim * 0.25) * Battle.tune.guardHead * (tgt.def.ranged ? 0.5 : 1);
     const pLegs = !heads && ((tgt.def.lunge && !tgt.crippled) || (tgt.def.burst && tgt.x - WALL_X > 300)) ? 0.15 + (hasTrait(g.s, 'gentle') ? 0.15 : 0) : 0;
     const weak = this.weakPts(tgt);
-    const wantWeak = !heads && weak.length && R.chance(0.08 + aim * 0.12) ? R.pick(weak) : undefined;
+    const wantWeak = !heads && weak.length && R.chance(0.08 + aim * 0.12 + perkFx(g.s, 'weakspot')) ? R.pick(weak) : undefined;
     const roll = R.next();
     let tx = tgt.x, ty = (hb.y1 + hb.y2) / 2;
     if (wantWeak) { tx = wantWeak.x; ty = wantWeak.y; }

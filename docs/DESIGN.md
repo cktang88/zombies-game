@@ -153,11 +153,11 @@ See research 03. In short: graphic-novel cel shading, heavy ink, two-tone hard s
 - [x] Combat tactics (research 05): body zones & visible weakspots, enemy roles & telegraphs, accuracy rework, Focus/nerve, guard posts & orders, reload choices (tactical / speed / smart), corpse ramps, pre-night deployment (trap planner), scouting intel, rally, crewed emplacements (MG nest, swivel rifle, flame projector, nail turret), Leapers & Spitters (duck to dodge)
 - [ ] Combat tactics, still open: the sally (a sortie over the wall)
 - [x] Survivor progression: XP per skill, psych/courage/grit, weapon-class proficiency, Drill job
-- [ ] Survivor progression, still open: perks at skill 4/7
+- [x] Survivor progression: perks at skill 4/7 (`src/data/perks.ts`: two offered per skill and tier, pick on the survivor sheet or they pick at the second dawn; effects read through `perkFx` / `perkMul`)
 - [x] Day loop (research 06): hour budget, dawn ledger juice, scarcity, seeds/daily, teaser
 - [x] Campaign/meta: radio threads, score card + endless choice, legacy ledger across runs with boons, tide calendar, push-your-luck run zones, companion runs
 - [x] Shooting feel & balance: layered procedural + recorded gun audio, balance harness (docs/balance.md, `tools/balance.ts`), hitstop/shake/recoil pass, launchers
 - [x] Animation (research 09): cutout bone rigs for every survivor and Turned (aim, reloads voiced stage by stage, gaits from ground speed, melee, duck / downed / haul / crew poses, attacks, archetype specials), Verlet ragdoll deaths baked into the road, crowd LOD from flipbooks, Classic fallback; replaces "2–3 sprite frames per Turned"
 - [x] Final pass: guards' reloads voiced (far, panned), tap-rack / double-feed strip / weapon-draw clips, run dead baked into the road, corpse-pile mass at once, adaptive full-rig budget before the Classic fallback, ragdolls rest on their own (`tools/ragdoll-check.ts`)
 - [x] Settings page (audio / video / gameplay / controls / data) from the title, the day screen and the pause menu; rebindable keys (`src/ui/keys.ts`); pause menu at night and on runs; save export / import; Playwright check (`tools/e2e/settings-check.cjs`)
-- [ ] Later: gamepad input; perks; the sally; touch controls for the wall beyond tap-to-fire
+- [ ] Later: gamepad input; the sally; touch controls for the wall beyond tap-to-fire

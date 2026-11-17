@@ -2,7 +2,7 @@
 // Pure helpers: no game state here. Battle owns the per-gun state (bloom, heat, chamber, pouch).
 import type { WeaponItem, Survivor } from '../types';
 import { WEAPONS, type FireProfile, type ShooterMods } from '../data/weapons';
-import { prof, hasTrait, attr } from '../sim/survivors';
+import { prof, hasTrait, attr, perkMul } from '../sim/survivors';
 
 /** Bloom (rad) added per shot, by weapon id first, then by class (balance.md §8.1). */
 const KICK_ID: Record<string, number> = { carbine: 0.085 };
@@ -68,8 +68,8 @@ export function shooterMods(s: Survivor, cls: FireProfile['cls'], forGuard: bool
   const pv = prof(s, cls); // 0..10
   const steady = hasTrait(s, 'steady') ? 0.75 : 1;
   return {
-    reloadMul: 1.15 - pv * 0.035, // prof 0: 15% slower, prof 10: 20% faster
-    jamMul: 1.25 - pv * 0.06, // prof 10: about half the jams
+    reloadMul: (1.15 - pv * 0.035) * perkMul(s, 'reload'), // prof 0: 15% slower, prof 10: 20% faster; perks
+    jamMul: (1.25 - pv * 0.06) * perkMul(s, 'jam'), // prof 10: about half the jams; perks
     spreadMul: forGuard ? 1.1 - pv * 0.025 : 1, // the player's own hand is the player's spread
     bloomMul: steady,
   };
@@ -77,7 +77,7 @@ export function shooterMods(s: Survivor, cls: FireProfile['cls'], forGuard: bool
 /** Seconds to clear a stoppage: tap-rack is quick; a double-feed is the punishing one. */
 export function clearTime(p: FireProfile, s: Survivor, kind: Malfunction) {
   const pv = prof(s, p.cls);
-  const k = 1.1 - pv * 0.04;
+  const k = (1.1 - pv * 0.04) * perkMul(s, 'jamClear'); // Tap-rack perk
   if (kind === 'double') return p.jamClear * 1.8 * k;
   if (kind === 'short') return 0.3;
   return Math.min(0.55, p.jamClear * 0.45) * k;

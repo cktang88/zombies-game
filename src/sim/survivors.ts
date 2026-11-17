@@ -2,6 +2,7 @@ import type { Survivor, SkillId, Thought, Wound, BodyPart, Scar } from '../types
 import { G, R, uid, log } from '../state';
 import { TRAITS, TRAIT_IDS } from '../data/traits';
 import { weaponClass, type WeaponClass } from '../data/weapons';
+import { PERKS, perksFor, PERK_TIERS, type PerkFx } from '../data/perks';
 import { FIRST_M, FIRST_F, LAST, BEFORE, OUTBREAK, NICKS } from '../data/names';
 
 export const SKILLS: SkillId[] = ['shooting', 'building', 'crafting', 'medicine', 'scavenging', 'farming', 'social', 'psych'];
@@ -168,6 +169,7 @@ export function moodBreakdown(s: Survivor): MoodPart[] {
   if (hasTrait(s, 'drinker') && !G.flags[`drank_${s.id}`]) parts.push({ label: 'Needs a drink', v: -6 });
   if (G.weather === 'cold' && G.stores.fuel <= 0) parts.push({ label: 'Freezing in the dark', v: -10 });
   if (G.weather === 'snow') parts.push({ label: 'First snow', v: hasTrait(s, 'optimist') ? 3 : -3 });
+  for (const o of living()) if (o !== s && !o.child) { const a = perkFx(o, 'aura'); if (a) parts.push({ label: `${first(o)} is around`, v: a }); }
   for (const t of s.thoughts) parts.push({ label: t.label, v: Math.round(t.mood) });
   return parts;
 }
@@ -178,7 +180,7 @@ export function computeMood(s: Survivor) {
 }
 
 export function breakThresholds(s: Survivor) {
-  const shift = s.traits.reduce((a, t) => a + (TRAITS[t].breakAt ?? 0), 0) - (attr(s, 'courage') - 4) * 0.8;
+  const shift = s.traits.reduce((a, t) => a + (TRAITS[t].breakAt ?? 0), 0) - (attr(s, 'courage') - 4) * 0.8 + perkFx(s, 'breakAt');
   return { minor: 28 + shift, major: 15 + shift, extreme: 6 + shift };
 }
 
@@ -327,6 +329,7 @@ export function gainXp(s: Survivor, k: ProgressKey, amount: number): boolean {
     setLevel(s, k, lvl);
     up = true;
   }
+  if (up) for (const t of PERK_TIERS) if (lvl >= t && lvl - t < 3 && (SKILLS as string[]).includes(k)) offerPerk(s, k as SkillId, t);
   if (up) levelUps.push(`${first(s)} got better at ${LEVEL_WORDS[k] ?? `the ${progressName(k)}`}: ${progressName(k)} ${lvl}.`);
   return up;
 }
@@ -341,7 +344,65 @@ export function migrateSurvivor(s: Survivor) {
   s.xp ??= {};
   s.prof ??= baseProf(s);
   s.base ??= { ...s.skills, ...s.attrs };
+  s.perks ??= [];
 }
+// ---------- perks (src/data/perks.ts): a skill reaching 4 and 7 offers two, one is kept ----------
+// API: perkFx(s, fx) sums a perk effect (0 without perks); perkMul(s, fx) = 1 + perkFx. Combat reads them
+// through shooterMods / clearTime (night/gunplay.ts) and the guards' weakspot chance (night/battle.ts).
+export function perkFx(s: Survivor, fx: PerkFx): number {
+  let v = 0;
+  for (const id of s.perks ?? []) v += PERKS[id]?.fx[fx] ?? 0;
+  return v;
+}
+export function perkMul(s: Survivor, fx: PerkFx) {
+  return Math.max(0.05, 1 + perkFx(s, fx));
+}
+export function hasPerk(s: Survivor, id: string) {
+  return !!s.perks?.includes(id);
+}
+/** Queue a perk offer for a skill tier (once per skill and tier). Returns false if already earned or offered. */
+export function offerPerk(s: Survivor, skill: SkillId, tier: 4 | 7): boolean {
+  const opts = perksFor(skill, tier).map((p) => p.id);
+  if (!opts.length || opts.some((id) => hasPerk(s, id)) || s.perkOffers?.some((o) => o.skill === skill && o.tier === tier)) return false;
+  (s.perkOffers ??= []).push({ skill, tier, options: opts, day: G.day });
+  levelUps.push(`${first(s)} reached ${progressName(skill)} ${tier}: a perk to choose (${opts.map((id) => PERKS[id].name).join(' or ')}).`);
+  return true;
+}
+/** Keep one perk from a pending offer. Returns the report line, or '' if that perk was not on offer. */
+export function choosePerk(s: Survivor, id: string): string {
+  const i = s.perkOffers?.findIndex((o) => o.options.includes(id)) ?? -1;
+  if (i < 0 || !PERKS[id]) return '';
+  s.perkOffers!.splice(i, 1);
+  (s.perks ??= []).push(id);
+  const p = PERKS[id];
+  return `${first(s)} learned ${p.name} (${progressName(p.skill)} ${p.tier}): ${p.desc}`;
+}
+/** What a survivor would pick left to themself: the perk that fits the work they do. */
+export function autoPerk(s: Survivor, options: string[]): string {
+  const job: Partial<Record<string, PerkFx[]>> = {
+    guard: ['aim', 'weakspot', 'jamClear', 'reload', 'jam'], drill: ['aim', 'reload', 'jamClear'], repair: ['repair', 'repairWood'], craft: ['craft'],
+    doctor: ['care', 'tendHeal'], scavenge: ['scav', 'scavDanger'], farm: ['farm', 'farmCold'], radio: ['radio'], counsel: ['counsel'],
+  };
+  const want = job[s.job] ?? [];
+  const score = (id: string) => Object.keys(PERKS[id].fx).reduce((a, k) => a + (want.includes(k as PerkFx) ? 2 : 0), 0) + (options.indexOf(id) === 0 ? 0.5 : 0);
+  return [...options].sort((a, b) => score(b) - score(a))[0];
+}
+/** Dawn: offers left unpicked a full day are picked for them. Returns the log lines. */
+export function settlePerkOffers(force = false): string[] {
+  const out: string[] = [];
+  for (const s of living()) {
+    for (const o of [...(s.perkOffers ?? [])]) {
+      if (!force && G.day - o.day < 2) continue;
+      const line = choosePerk(s, autoPerk(s, o.options));
+      if (line) {
+        out.push(line);
+        log('event', line);
+      }
+    }
+  }
+  return out;
+}
+
 /** The survivor's best skills, highest first. */
 export function topSkills(s: Survivor, n = 2) {
   return [...SKILLS].sort((a, b) => s.skills[b] - s.skills[a] || (s.passions.includes(b) ? 1 : 0) - (s.passions.includes(a) ? 1 : 0)).slice(0, n);
@@ -358,6 +419,7 @@ export function aimFactor(s: Survivor) {
   if (s.mood < 20) a -= 0.08;
   if (s.rest < 0.25) a -= 0.06;
   if (G.flags[`inspired_${s.id}`]) a += 0.2;
+  a += perkFx(s, 'aim');
   return Math.max(0.1, Math.min(1.2, a));
 }
 
@@ -507,6 +569,7 @@ export function counselled(s: Survivor) {
  * catatonia, and marks them counselled (dawn break chance x0.35). Awards psych XP to `by`. Returns a report line.
  */
 export function counsel(by: Survivor | null, t: Survivor, power = 1): string {
+  if (by) power *= perkMul(by, 'counsel');
   const skill = by ? skillOf(by, 'psych') : 4;
   const worst = t.thoughts.filter((x) => x.mood < 0).sort((a, b) => a.mood - b.mood)[0];
   let what = '';

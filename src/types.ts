@@ -91,6 +91,10 @@ export interface Survivor {
   prof?: Partial<Record<string, number>>;
   // Values at arrival (skills and attributes), to show growth on the survivor sheet.
   base?: Partial<Record<string, number>>;
+  // Perks (src/data/perks.ts) kept, by id; and offers waiting for a pick (two perk ids for a skill reaching 4 or 7).
+  // An offer not picked by the second dawn is picked for them. Optional so old saves load.
+  perks?: string[];
+  perkOffers?: { skill: SkillId; tier: 4 | 7; options: string[]; day: number }[];
 }
 
 // Weapon class: what a survivor's proficiency is in (see CLASS_NAMES in data/weapons.ts)
