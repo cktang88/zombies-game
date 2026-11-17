@@ -8,6 +8,8 @@ import { living, wound, killSurvivor, makeSurvivor, setBond } from '../src/sim/s
 import { fateLine, morningSummary } from '../src/sim/chronicle';
 import type { GameState } from '../src/types';
 import { activeThreads, threadTick, threadsWon, evacuees } from '../src/sim/threads';
+import { calendar, noiseOfHouse, omenTick } from '../src/sim/calendar';
+import { ICE_DAY } from '../src/state';
 import { inscribe, recordRun, setBoon, applyBoons, scoreCard } from '../src/sim/legacy';
 
 const fired = new Map<string, number>();
@@ -202,6 +204,27 @@ for (let i = 0; i < 40; i++) {
 }
 check(specials > 5, `trader specials offered ${specials}/40`);
 console.log(`trader specials bought: ${specials}/40; bench mods ${(G.modStock ?? []).map((m) => m.def).join(',')}`);
+
+// ---------- tide calendar, omens, smell of the house ----------
+newGame('siege', 8080);
+G.day = 1;
+const tides = calendar(23).filter((c) => c.kind === 'tide').map((c) => c.day);
+check(JSON.stringify(tides) === '[6,13,20]', `siege tides ${tides}`);
+check(calendar(30).find((c) => c.day === ICE_DAY)?.kind === 'crossing', 'crossing on the calendar');
+G.day = 4; const om = omenTick();
+check(om.length > 0 && !!G.flags.teaser, `omen 2 days before the tide: ${om.join(' / ')} teaser=${G.flags.teaser}`);
+console.log('omen day 4:', om.join(' / '), '| teaser:', G.flags.teaser);
+G.day = 5; G.director.cooldowns = {}; G.pendingEvent = null;
+console.log('omen incident day 5:', rollIncident()?.id, '| forecast:', JSON.stringify(G.flags.teaser));
+G.flags.forceSpecial = 'raiders';
+check(calendar(1)[0].kind === 'raiders', 'forced special shows tonight');
+delete G.flags.forceSpecial;
+const lean = noiseOfHouse(); G.stores.food = 300; G.stores.fuel = 80; G.fort.lights = 3;
+const fat = noiseOfHouse();
+check(fat.level > lean.level && fat.pct > lean.pct, 'hoarding raises the smell of the house');
+console.log('smell:', lean.pct + '%', '->', fat.pct + '%', fat.reasons.join('; '));
+G.director.mode = 'coin'; check(calendar(3).every((c) => c.kind === 'unknown'), 'coin is unknown');
+G.director.mode = 'quiet'; G.day = 1; console.log('quiet:', calendar(10).map((c) => c.kind[0]).join(''));
 
 const ids = INCIDENTS.map((i) => i.id);
 console.log(`\nincidents: ${ids.length} total; exercised ${fired.size}: ${[...fired.entries()].map(([k, v]) => `${k}×${v}`).join(' ')}`);

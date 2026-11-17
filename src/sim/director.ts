@@ -161,12 +161,13 @@ export function afterNight(deaths: number, wallHeld: boolean) {
 
 export function forecast(): string {
   const next = G.day + 1;
-  const c = persona().cycle;
   if (next === ICE_DAY) return 'The radio: "River\'s near froze over. Tomorrow, maybe the day after, it holds a man\'s weight."';
-  const daysToPeak = (() => {
-    for (let i = 1; i < 8; i++) if ((next - 1 + i - 1) % c.length === c.indexOf(Math.max(...c))) return i;
-    return 99;
-  })();
-  if (daysToPeak <= 2 && persona().id !== 'coin') return 'The dogs out on Route 9 have not stopped barking. Something big is moving east of the river.';
+  if (persona().id === 'coin' || next > ICE_DAY) return '';
+  // the next tide, as marked on the kitchen calendar (see sim/calendar.ts for the strip)
+  let daysToPeak = 99;
+  for (let i = 1; i < 8; i++) if (cyclePos(G.day + i).peak && G.day + i >= 5) { daysToPeak = i; break; }
+  if (persona().id === 'quiet') return daysToPeak <= 3 ? 'Somebody penciled a soft circle on the kitchen calendar: a tide, sometime soon.' : '';
+  if (daysToPeak === 1) return 'Tomorrow is circled in red on the kitchen calendar.';
+  if (daysToPeak === 2) return 'Two days to the red circle on the kitchen calendar.';
   return '';
 }

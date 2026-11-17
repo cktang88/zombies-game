@@ -12,6 +12,7 @@ import { FACTION_INCIDENTS, factionTick } from './factions';
 import { MORE_INCIDENTS, storyTick } from './incidents';
 import { THREAD_INCIDENTS, threadTick } from './threads';
 import { HEIR_INCIDENT } from './legacy';
+import { OMEN_INCIDENT, omenTick } from './calendar';
 
 // Incidents: the director draws one (sometimes none) each morning.
 const lbl = (r: Res) => RES_LABEL[r].toLowerCase();
@@ -611,6 +612,7 @@ export const INCIDENTS: Incident[] = [
   ...MORE_INCIDENTS,
   ...THREAD_INCIDENTS,
   HEIR_INCIDENT,
+  OMEN_INCIDENT,
 ];
 
 export function rollIncident(): PendingEvent | null {
@@ -651,7 +653,7 @@ export function returnsTick(): string[] {
       }
     }
   }
-  out.push(...factionTick(), ...storyTick(), ...threadTick());
+  out.push(...factionTick(), ...storyTick(), ...threadTick(), ...omenTick());
   return out;
 }
 
