@@ -9,6 +9,8 @@ import { buildingLevel } from './day';
 import { type Incident, cap, pop, popIntent, lowestSpotlight, shiftRep, admit } from './incident';
 import { FACTION_INCIDENTS, factionTick } from './factions';
 import { MORE_INCIDENTS, storyTick } from './incidents';
+import { THREAD_INCIDENTS, threadTick } from './threads';
+import { HEIR_INCIDENT } from './legacy';
 
 // Incidents: the director draws one (sometimes none) each morning.
 
@@ -585,6 +587,8 @@ export const INCIDENTS: Incident[] = [
   },
   ...FACTION_INCIDENTS,
   ...MORE_INCIDENTS,
+  ...THREAD_INCIDENTS,
+  HEIR_INCIDENT,
 ];
 
 export function rollIncident(): PendingEvent | null {
@@ -625,7 +629,7 @@ export function returnsTick(): string[] {
       }
     }
   }
-  out.push(...factionTick(), ...storyTick());
+  out.push(...factionTick(), ...storyTick(), ...threadTick());
   return out;
 }
 

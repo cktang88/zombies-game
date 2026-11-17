@@ -7,6 +7,8 @@ import { rollIncident, resolveEvent, returnsTick, INCIDENTS } from '../src/sim/e
 import { living, wound, killSurvivor, makeSurvivor, setBond } from '../src/sim/survivors';
 import { fateLine, morningSummary } from '../src/sim/chronicle';
 import type { GameState } from '../src/types';
+import { activeThreads, threadTick, threadsWon, evacuees } from '../src/sim/threads';
+import { inscribe, recordRun, setBoon, applyBoons, scoreCard } from '../src/sim/legacy';
 
 const fired = new Map<string, number>();
 const errors: string[] = [];
@@ -124,6 +126,63 @@ G.day = 12; living()[0].mood = 90; G.weapons[0].name = 'Old Reliable'; G.weapons
 setBond(living()[0], living()[1], 'lover');
 G.flags.rations = 'half'; G.stores.food = 99;
 coverage();
+
+// ---------- radio threads ----------
+const store = new Map<string, string>();
+(globalThis as unknown as { localStorage: object }).localStorage = {
+  getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k),
+};
+function runIncident(id: string, choice = 0) {
+  const inc = INCIDENTS.find((i) => i.id === id)!;
+  check(inc.weight() > 0, `${id} not available (weight 0)`);
+  const ev = inc.make();
+  check(!!ev, `${id} make() returned null`);
+  if (!ev) return '';
+  fired.set(id, (fired.get(id) ?? 0) + 1);
+  return resolveEvent(ev, choice);
+}
+newGame('siege', 31337);
+G.day = 6; G.flags.rep_ferry = 20; G.flags.rep_union = 10; G.flags.rep_parish = 10;
+for (const id of ['earl', 'guard']) runIncident(`thread_${id}`, 0);
+check(activeThreads().length === 2, `threads active: ${activeThreads().length}`);
+console.log('threads:', activeThreads().map((t) => `${t.title} (day ${t.deadlineDay}): ${t.text}`).join(' | '));
+G.stores.meds = 5;
+console.log('  earl ->', runIncident('deliver_earl').slice(0, 90));
+G.buildings.push({ id: 'radio', level: 1 }); living()[0].job = 'radio';
+for (let i = 0; i < 3; i++) { G.day++; threadTick(); }
+console.log('  guard ->', runIncident('deliver_guard').slice(0, 90));
+for (const id of ['peltier', 'union_gen']) runIncident(`thread_${id}`, 0);
+G.stores.fuel = 25; runIncident('deliver_peltier');
+G.day += 9; console.log('  failed:', threadTick().join(' / ').slice(0, 140));
+runIncident('thread_parish_soup', 0); G.stores.food = 80; runIncident('deliver_parish_soup'); runIncident('deliver_parish_soup');
+check(threadsWon() === 4, `threads won ${threadsWon()} (want 4: earl, guard, peltier, parish)`);
+G.day = 23; G.pendingEvent = null;
+const seat = rollIncident();
+check(seat?.id === 'peltier_seat', `seat incident: ${seat?.id}`);
+if (seat) { fired.set('peltier_seat', 1); resolveEvent(seat, 0); }
+check(evacuees().length === 1, 'evacuee recorded');
+const sc = scoreCard();
+console.log('score:', sc.score, sc.rows.map((r) => r.join(' ')).join('; '), '—', sc.grade);
+
+// ---------- legacy ----------
+const s0 = living()[0];
+s0.tales.push('Held the line alone on the north wall.');
+G.weapons[0].name = `${s0.name.split(' ')[0]}'s Hymnal`; G.weapons[0].kills = 31; s0.weapon = G.weapons[0].uid;
+check(inscribe(s0, 'lived'), 'inscribe');
+check(inscribe(living()[1], 'lived'), 'inscribe 2');
+check(!inscribe(living()[2] ?? s0, 'lived'), 'third inscription should be refused');
+G.day = 30; G.flags.ending = 'spring';
+const fresh = recordRun('ending');
+console.log('unlocked:', fresh.join(', '));
+check(fresh.length === 3, 'all three boons unlock on this run');
+for (const b of ['wall', 'press', 'dog']) setBoon(b, true);
+newGame('siege', 2024);
+const boonLines = applyBoons();
+check(G.fort.maxHp === 360 && !!G.flags.dog && G.buildings.some((b) => b.id === 'workbench' && b.level === 2), 'boons applied');
+G.day = 6;
+console.log('  heir ->', runIncident('heir', 0).slice(0, 100));
+check(G.weapons.some((w) => w.name?.endsWith('Hymnal') && w.kills === 31), 'heirloom gun arrived');
+console.log('  heir text:', living()[living().length - 1].tales.join(' '), '| boons:', boonLines.length);
 
 const ids = INCIDENTS.map((i) => i.id);
 console.log(`\nincidents: ${ids.length} total; exercised ${fired.size}: ${[...fired.entries()].map(([k, v]) => `${k}×${v}`).join(' ')}`);

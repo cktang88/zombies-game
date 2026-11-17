@@ -16,6 +16,7 @@ import { sfx, music } from '../audio';
 import { openSettings } from './settings';
 import { openHelp } from './help';
 import { hintHtml, markHintTarget, nextHint, skipHints } from './onboarding';
+import { threadsHtml } from '../sim/threads';
 
 const JOBS: { id: JobId; label: string; hint: string }[] = [
   { id: 'repair', label: 'Repair the wall', hint: 'Building. Uses timber.' },
@@ -434,6 +435,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
         ${warnings().map((w) => `<p class="stamp" role="alert">${esc(w)}</p>`).join('')}
         <div class="lines">${report.length ? report.map((l) => `<p>${esc(l)}</p>`).join('') : '<p class="dim">A quiet morning.</p>'}</div>
         ${fc ? `<p class="forecast">${esc(fc)}</p>` : ''}
+        ${threadsHtml()}
         <div class="weather">The Weather: <b>${persona().name}</b><br><span class="dim">Tonight feels like ${threatPoints() > 60 ? 'a long one' : threatPoints() > 30 ? 'a bad one' : 'any other night'}.</span></div>
         ${runHtml()}
         <button class="dusk" data-act="dusk">Go to the wall at dusk ›<small>Enter</small></button>
