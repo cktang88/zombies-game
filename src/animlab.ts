@@ -378,23 +378,60 @@ const galApi = {
 
 // ---------------------------------------------------------------- close-up (?closeup)
 // Every survivor rig (and the raiders) holding a gun, at the night's display size, graded and
-// inked like the wall's near row: for checking hands and held guns. ?w=<gun> overrides each
-// sprite's own gun; ?h=<px> the body height (default 158, the battle's); ?lane=2 the far row.
+// inked like the wall's near row: for checking hands, held guns and stances.
+//   ?w=<gun>         every sprite holds this gun (w=none: bare hands); w=a,b,c: one column per gun
+//   ?only=<id,...>   just these sprites          ?h=<px> body height (default 158)   ?lane=2 far row
+//   ?act=<what>      aim (default) | low (low ready) | walk (walking at low ready) | fire (a shot,
+//                    caught at the recoil peak) | reload (the gun's reload, empty) | tactical
+//   ?at=<0..1>       how far into the reload / walk cycle the still is taken    ?debug: skeleton
+//   ?aim=<rad>       aim angle below the horizon (default: a head-height target)  ?cols=<n>
 const CU: Actor[] = [];
+const cuStill = { act: params.get('act') ?? 'aim', at: +(params.get('at') ?? 0.45) };
 function closeupSetup() {
-  const ids = Object.keys(SPRITE_RIGS).filter((id) => SPRITE_RIGS[id].kind === 'survivor');
-  const h = +(params.get('h') ?? 158), cols = 5;
+  const only = params.get('only')?.split(',');
+  const ids = Object.keys(SPRITE_RIGS).filter((id) => SPRITE_RIGS[id].kind === 'survivor' && (!only || only.includes(id)));
+  const guns = (params.get('w') ?? '').split(',').filter(Boolean);
+  const cells: [string, string | null][] = [];
+  for (const id of ids) {
+    if (guns.length > 1) for (const g of guns) cells.push([id, g === 'none' ? null : g]);
+    else cells.push([id, guns[0] === 'none' ? null : guns[0] ?? SPRITE_RIGS[id].weapon ?? 'ar15']);
+  }
+  const h = +(params.get('h') ?? 158), cols = +(params.get('cols') ?? (guns.length > 1 ? guns.length : Math.min(5, cells.length)));
   const dx = Math.max(220, h * 1.25), dy = Math.max(210, h * 1.25);
-  cv.width = Math.round(40 + cols * dx); cv.height = Math.round(h + 40 + Math.ceil(ids.length / cols - 1) * dy);
-  ids.forEach((id, i) => {
-    const sr = SPRITE_RIGS[id];
+  cv.width = Math.round(40 + cols * dx); cv.height = Math.round(h + 40 + Math.ceil(cells.length / cols - 1) * dy);
+  cells.forEach(([id, gun], i) => {
     const rig = createRig('survivor', id, { seed: 7 + i * 13 });
-    rig.setWeapon(params.get('w') ?? sr.weapon ?? 'ar15');
-    const a: Actor = { rig, x: 70 + (i % cols) * dx, y: h + 20 + Math.floor(i / cols) * dy, h, facing: 1, vx: 0, label: `${id.replace(/^(z|surv)_/, '')} · ${rig.weaponId}` };
+    rig.setWeapon(gun);
+    const a: Actor = { rig, x: 40 + h * 0.35 + (i % cols) * dx, y: h + 20 + Math.floor(i / cols) * dy, h, facing: 1, vx: 0, label: `${id.replace(/^(z|surv)_/, '')} · ${rig.weaponId ?? 'hands'}` };
     CU.push(a);
   });
 }
-function closeupRender() {
+function closeupAim(a: Actor) {
+  const ang = params.has('aim') ? +params.get('aim')! : null;
+  if (cuStill.act === 'low') { a.rig.clearAim(); return; }
+  if (ang === null) a.rig.aimAt(a.x + 600, a.y - a.h * 0.75);
+  else a.rig.aimAt(a.x + 600, a.y - a.h * 0.72 + Math.tan(ang) * 600);
+}
+/** Pose every close-up actor for the still: settle, then run the action to `at`. */
+function closeupPose() {
+  for (const a of CU) {
+    closeupAim(a);
+    for (let i = 0; i < 40; i++) { a.rig.update(1 / 60); a.rig.draw(ctx, a.x, a.y, a.h / 240, 1); }
+    const def = a.rig.weaponId ? WEAPONS[a.rig.weaponId] : null;
+    const act = cuStill.act;
+    let secs = 0;
+    if (act === 'walk') { a.rig.setSpeed(70 * a.h / 240); secs = 1.2 + cuStill.at; }
+    else if (act === 'fire') { a.rig.fire(Math.min(2.5, 0.5 + (def?.knock ?? 6) / 14)); secs = 0.05; }
+    else if ((act === 'reload' || act === 'tactical') && def) {
+      const rounds = def.reloadPerRound ? 2 : undefined;
+      const dur = def.reloadPerRound ? 0.6 : def.reload;
+      a.rig.reload(dur, { empty: act === 'reload', rounds });
+      secs = dur * (rounds ?? 1) * cuStill.at;
+    }
+    for (let t = 0; t < secs; t += 1 / 60) { a.rig.update(1 / 60); a.rig.draw(ctx, a.x, a.y, a.h / 240, 1); }
+  }
+}
+function closeupRender(step = false) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = '#39404a'; ctx.fillRect(0, 0, cv.width, cv.height);
   const far = params.get('lane') === '2';
@@ -411,9 +448,9 @@ function closeupRender() {
       a.rig.skin = { atlas: gradedAtlas(as, key, filter, tints, false, grow), dark: gradedAtlas(as, key, filter, tints, true, grow), grow };
       (a.rig as unknown as { gunLook: unknown }).gunLook = { key, filter, tints, ink: look.outline };
     }
-    a.rig.aimAt(a.x + 400, a.y - a.h * 0.62);
-    a.rig.update(1 / 60);
+    if (step) { closeupAim(a); a.rig.update(1 / 60); }
     a.rig.draw(ctx, a.x, a.y, s, a.facing);
+    if (DEBUG) a.rig.drawSkeleton(ctx);
     ctx.fillStyle = 'rgba(240,235,220,0.9)'; ctx.font = '11px system-ui'; ctx.fillText(a.label ?? '', a.x - 50, a.y + 22);
   }
 }
@@ -423,9 +460,10 @@ if (params.has('closeup')) (async () => {
   const ids = Object.keys(SPRITE_RIGS);
   await Promise.all([...ids.map(loadRig), loadAllGuns()]);
   closeupSetup();
-  for (let i = 0; i < 40; i++) closeupRender();
+  closeupPose();
+  closeupRender();
   (window as unknown as { __cu: unknown }).__cu = { render: closeupRender, actors: CU };
-  const tick = () => { closeupRender(); requestAnimationFrame(tick); };
+  const tick = () => { closeupRender(true); requestAnimationFrame(tick); };
   if (!params.has('still')) requestAnimationFrame(tick);
 })();
 else if (params.has('gallery')) (async () => {

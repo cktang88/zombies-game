@@ -151,7 +151,8 @@ const reloadBolt: Clip = {
     gunTilt: [[0, 0], [0.08, -0.1], [0.9, -0.1], [1, 0]],
     head: [[0, 0], [0.1, 0.32], [0.9, 0.3], [1, 0]],
   },
-  n: [
+  // the trigger (strong) hand runs the bolt and thumbs the rounds in; the support hand stays on the fore-end
+  f: [
     [0, null],
     [0.1, G('rack', 0, 0, 'pinch')],
     [0.15, G('rack', 0, -6, 'pinch')],
@@ -167,7 +168,7 @@ const reloadBolt: Clip = {
     [0.87, G('rack', 0, 0, 'pinch')],
     [1, null],
   ],
-  set: [[0.4, 'prop', 'round'], [0.7, 'prop', null]],
+  set: [[0.4, 'fprop', 'round'], [0.7, 'fprop', null]],
   ev: [[0.15, 'boltUp'], [0.22, 'boltBack'], [0.4, 'roundGrab'], [0.58, 'roundIn'], [0.68, 'roundIn'], [0.82, 'boltFwd'], [0.87, 'boltDown']],
 };
 
@@ -176,7 +177,7 @@ const boltCycle: Clip = {
   id: 'boltCycle',
   dur: 0.7,
   num: { ready: [[0, 0], [0.3, 0.12], [1, 0]], head: [[0, 0], [0.5, 0.05], [1, 0]] },
-  n: [[0, null], [0.2, G('rack', 0, 0, 'pinch')], [0.32, G('rack', 0, -6, 'pinch')], [0.48, G('rack', -14, -6, 'pinch'), 'out'], [0.62, G('rack', 0, -6, 'pinch'), 'in'], [0.72, G('rack', 0, 0, 'pinch')], [1, null]],
+  f: [[0, null], [0.2, G('rack', 0, 0, 'pinch')], [0.32, G('rack', 0, -6, 'pinch')], [0.48, G('rack', -14, -6, 'pinch'), 'out'], [0.62, G('rack', 0, -6, 'pinch'), 'in'], [0.72, G('rack', 0, 0, 'pinch')], [1, null]],
   ev: [[0.32, 'boltUp'], [0.48, 'boltBack'], [0.48, 'eject'], [0.62, 'boltFwd'], [0.72, 'boltDown']],
 };
 

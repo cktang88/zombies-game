@@ -23,7 +23,8 @@ import {
 } from './skeleton';
 import { STYLES, type Style } from './styles';
 import { flipFrame, setTemplateFactory } from './flipbook';
-import { anchorsFor, type WeaponAnchors } from './weaponAnchors';
+import { anchorsFor, stanceOf, type WeaponAnchors } from './weaponAnchors';
+import { STANCES, type Slot, type Stance, type StanceId } from './stances';
 
 export type RigKind = 'survivor' | 'turned';
 export interface PlayOpts {
@@ -97,6 +98,14 @@ export class Rig {
   fprop: string | null = null;
   gunState: 'held' | 'slung' | 'hidden' = 'held';
   headFlip = 0;
+  /** shooting stance of the held weapon (stances.ts): feet, lean, pocket, low ready, draw order */
+  stance: Stance = STANCES.free;
+  /** a firearm in the hands: the support role (clip hand `n`) is solved on the FAR arm and the
+   * trigger role (`f`) on the NEAR arm (the camera sees the right side of a right-handed shooter) */
+  swap = false;
+  /** 0..1 low ready (muzzle down, stock still in the shoulder): not aiming, or walking without firing */
+  lowW = 0;
+  private lastFire = -9;
   aimWX = 0; aimWY = 0; hasAim = false;
   aimAngle = 0;
   recoil = 0; recoilV = 0;
@@ -109,7 +118,10 @@ export class Rig {
   jx = new Float32Array(PART_COUNT);
   jy = new Float32Array(PART_COUNT);
   ja = new Float32Array(PART_COUNT);
+  /** hand art per ROLE (n = support, f = trigger); see nearHand / farHand for the physical sides */
   handN = 'hand'; handF = 'hand';
+  get nearHand() { return this.swap ? this.handF : this.handN; }
+  get farHand() { return this.swap ? this.handN : this.handF; }
   gx = 0; gy = 0; ga = 0; gk = 1; gunVisible = false;
   rhoN = 0; rhoF = 0; palmNX = 0; palmNY = 0; palmFX = 0; palmFY = 0;
   pts = new Float32Array(RAGDOLL_POINTS * 2);
@@ -171,14 +183,17 @@ export class Rig {
   get ready() { return !!this.asset; }
 
   // ------------------------------------------------------------------ public API
-  setWeapon(defId: string | null, opts: { oneHand?: boolean } = {}) {
+  /** Put a weapon in the hands. stance: override the weapon's stance (stances.ts), e.g. 'hip' for an SMG fired from the hip. */
+  setWeapon(defId: string | null, opts: { oneHand?: boolean; stance?: StanceId } = {}) {
     this.weaponId = defId;
     this.oneHand = !!opts.oneHand;
     this.magState = 'gun';
     this.prop = null;
     this.gunState = 'held';
-    if (!defId) { this.anchors = null; this.gun = null; return; }
+    if (!defId) { this.anchors = null; this.gun = null; this.stance = STANCES.free; this.swap = false; return; }
     this.anchors = anchorsFor(defId);
+    this.stance = this.kind === 'survivor' ? STANCES[opts.stance ?? stanceOf(this.anchors, this.oneHand)] : STANCES.free;
+    this.swap = this.kind === 'survivor' && this.anchors.hold !== 'melee';
     this.gun = getGun(defId) ?? null;
     if (!this.gun) loadGun(defId).then((g) => { if (this.weaponId === defId) this.gun = g; });
   }
@@ -226,6 +241,7 @@ export class Rig {
   /** A shot: recoil kick (strength ~ weapon knock/caliber), muzzle flash flag, casing out. */
   fire(strength = 1) {
     this.recoilV += 9 * strength;
+    this.lastFire = this.t;
     this.ch.flash = 1;
     this.flashMuzzle = 0.06;
     const a = this.anchors;
@@ -288,6 +304,7 @@ export class Rig {
     const ch = this.ch;
     Object.assign(ch, CH_DEFAULT);
     applyGait(ch, gait, this.phase, g, this.moving);
+    if (this.swap && !gait.crawl) this.stanceLayer(dt, g);
     // breathing
     const br = Math.sin(this.t * (this.kind === 'turned' ? 1.3 : 2.1) + this.seed);
     ch.py += br * 0.8 * (1 - this.moving * 0.7);
@@ -387,6 +404,21 @@ export class Rig {
     if (id && CLIPS[id] && !(CLIPS[id].loop)) this.play(id);
   }
 
+  /**
+   * Firearm stance (before the clips, so a reload or a duck still bends it): the weak (far) foot
+   * leads, the strong (near) foot is back, soft knees; and the low-ready weight (muzzle down with
+   * the stock still in the shoulder while not aiming, or walking without having fired lately).
+   */
+  private stanceLayer(dt: number, g: RigGeom) {
+    const st = this.stance, ch = this.ch, L = g.legLen;
+    const w = 1 - this.moving;
+    ch.nFx += (st.feet[0] * L - ch.nFx) * w;
+    ch.fFx += (st.feet[1] * L - ch.fFx) * w;
+    ch.py += (-L * st.height - ch.py) * w;
+    const low = !this.hasAim || (this.moving > 0.5 && this.t - this.lastFire > 1.2) ? 1 : 0;
+    this.lowW += (low - this.lowW) * Math.min(1, dt * 6);
+  }
+
   // ------------------------------------------------------------------ solve
   private solve(tgt: { n: { k0: TKey | null; k1: TKey | null; u: number; w: number } | null; f: { k0: TKey | null; k1: TKey | null; u: number; w: number } | null }) {
     const g = this.geo!, ch = this.ch, P = this.asset!.meta.parts;
@@ -400,11 +432,17 @@ export class Rig {
       aim = clamp(Math.atan2(ly - sy, Math.max(8, lx - sx)), -1.2, 1.0);
     }
     this.aimAngle = aim;
-    const aimW = holding && this.gunState === 'held' && a!.hold !== 'melee' ? (1 - ch.ready) * (this.hasAim ? 1 : 0.4) : 0;
+    const st = this.stance, lr = this.swap ? this.lowW : 0;
+    // aimW: the gun is up in the aim pose (not in the reload workspace); raise: and not at low ready
+    const aimW = holding && this.gunState === 'held' && a!.hold !== 'melee' ? 1 - ch.ready : 0;
+    const raise = aimW * (1 - lr);
     if (holding && a!.hold !== 'melee') {
-      ch.lean += aim * 0.2 * aimW + (this.hasAim ? 0.04 : 0);
-      ch.head += aim * (a!.hold === 'long' || a!.hold === 'tube' ? 0.75 : 0.5) * aimW;
-      ch.lean -= this.recoil * 0.004;
+      // nose over the toes: the stance's lean, more of it when the gun is up; the head follows the sights
+      ch.lean += st.lean * aimW * (1 - 0.45 * lr) + aim * st.leanAim * raise;
+      ch.head += aim * st.headAim * raise + 0.12 * lr * aimW;
+      // recoil rocks the shoulder back (the feet stay planted)
+      ch.lean -= this.recoil * st.recoilLean;
+      ch.px -= this.recoil * st.recoilBack;
     }
     // ---- trunk
     const crouchDrop = ch.crouch * g.legLen * 0.5;
@@ -438,29 +476,39 @@ export class Rig {
       const muz = loc(a!.muzzle);
       let gAimA = 0, gX = 0, gY = 0;
       const reach = (g.ua + g.fa);
+      // the support (role n) and trigger (role f) shoulders: far / near with a firearm
+      const nsX = this.swap ? fshX : shX, nsY = this.swap ? fshY : shY;
+      const lowA = st.lowAngle;
       if (a!.hold === 'long' || a!.hold === 'tube') {
+        // butt in the near shoulder pocket, butt-to-muzzle line on the target; at low ready the
+        // muzzle dips about the stock, which stays in (a touch lower in) the shoulder
         const butt = loc(a!.butt ?? a!.grip);
-        const up = a!.hold === 'tube' ? 10 : 5, fw = a!.hold === 'tube' ? 2 : 9;
-        const pocketX = shX + vx * fw + ux * up, pocketY = shY + vy * fw + uy * up;
+        const up = st.pocket[0] - st.lowDrop * lr, fw = st.pocket[1];
+        const pocketX = neckX + vx * fw + ux * up, pocketY = neckY + vy * fw + uy * up;
         const d = Math.atan2(muz[1] - butt[1], muz[0] - butt[0]);
-        gAimA = aim - d;
+        gAimA = lerpAngle(aim, Math.max(aim, lowA), lr) - d;
         const c = Math.cos(gAimA), s = Math.sin(gAimA);
         gX = pocketX - (butt[0] * c - butt[1] * s); gY = pocketY - (butt[0] * s + butt[1] * c);
       } else if (a!.hold === 'pistol') {
-        const ext = this.oneHand ? 0.9 : 0.8;
-        gAimA = aim - Math.atan2(muz[1], muz[0]) * 0.5;
-        gX = shX + Math.cos(aim) * reach * ext + vx * 2; gY = shY + Math.sin(aim) * reach * ext + 3;
+        // arms out from the near shoulder (isosceles from the side); low ready: out and down
+        const ext = (st.ext ?? 0.85) * (1 - 0.18 * lr);
+        const ae = lerp(aim, Math.max(aim, lowA), lr);
+        gAimA = ae - Math.atan2(muz[1], muz[0]) * 0.5;
+        gX = shX + Math.cos(ae) * reach * ext + vx * 2 + ux * st.pocket[0]; gY = shY + Math.sin(ae) * reach * ext + 3 + uy * st.pocket[0];
       } else if (a!.hold === 'bow') {
-        gAimA = aim - Math.PI / 2;
-        gX = shX + Math.cos(aim) * reach * 0.93; gY = shY + Math.sin(aim) * reach * 0.93;
+        const ae = lerp(aim, Math.max(aim, lowA), lr);
+        gAimA = ae - Math.PI / 2;
+        gX = nsX + Math.cos(ae) * reach * 0.93; gY = nsY + Math.sin(ae) * reach * 0.93;
       }
-      // low ready / reload carry: grip in front of the belly, muzzle canted by gunTilt
-      const rX = pelX + ux * g.torsoLen * 0.42 + vx * 18 + ch.gunDX, rY = pelY + uy * g.torsoLen * 0.42 + vy * 18 + ch.gunDY;
-      const rA = (a!.hold === 'bow' ? -Math.PI / 2 + 0.3 : 0.32) + ch.gunTilt;
-      const rw = this.hasAim ? ch.ready : Math.max(ch.ready, 0.55);
+      // reload workspace: the gun comes down and in to the chest, canted by gunTilt (clips' `ready`)
+      const rX = pelX + ux * g.torsoLen * 0.5 + vx * 22 + ch.gunDX, rY = pelY + uy * g.torsoLen * 0.5 + vy * 22 + ch.gunDY;
+      const rA = (a!.hold === 'bow' ? -Math.PI / 2 + 0.3 : 0.12) + ch.gunTilt;
+      const rw = ch.ready;
       this.ga = lerpAngle(gAimA + ch.gunTilt * 0.3, rA, rw) - this.recoil * 0.03;
       this.gx = lerp(gX, rX, rw) - Math.cos(this.ga) * this.recoil * 0.9;
       this.gy = lerp(gY, rY, rw) - Math.sin(this.ga) * this.recoil * 0.9;
+      // cheek weld: the head drops onto the comb of the stock; what it can't reach, the gun comes up to
+      if (st.cheek && raise > 0.01 && a!.butt) this.cheekWeld(loc(a!.butt), muz, gun.combY !== undefined ? loc([a!.butt[0], gun.combY]) : null, raise);
       // default hand targets
       const gp = (p: [number, number], dx = 0, dy = 0) => this.gunPt(loc(p), dx, dy);
       if (a!.hold === 'bow') {
@@ -472,13 +520,14 @@ export class Rig {
         const [gx2, gy2] = gp(a!.grip);
         defF = { x: gx2, y: gy2, rho: this.ga, pose: 'grip' };
         if (a!.fore) {
-          // the support hand slides back along the fore-end until the elbow can bend
+          // the support hand slides back along the fore-end until its elbow can bend
           let [fx, fy] = gp(a!.fore);
-          const d = Math.hypot(fx - shX, fy - shY), maxD = reach * 0.8;
+          const d = Math.hypot(fx - nsX, fy - nsY), maxD = reach * 0.86;
           if (d > maxD) { const back = Math.min(d - maxD, Math.abs(loc(a!.fore)[0]) * 0.6); fx -= Math.cos(this.ga) * back; fy -= Math.sin(this.ga) * back; }
           defN = { x: fx, y: fy, rho: this.ga, pose: 'support' };
         }
-        else if (!this.oneHand) { const [px, py] = this.gunPt([0, 0], -1, 8); defN = { x: px, y: py, rho: this.ga + 0.35, pose: "support" }; }
+        // pistol: the support hand cups the trigger hand from below / in front of the grip
+        else if (!this.oneHand) { const [px, py] = this.gunPt([0, 0], 2, 7); defN = { x: px, y: py, rho: this.ga + 0.35, pose: 'support' }; }
       }
     } else if (ch.handIK > 0) {
       defN = { x: ch.nHx, y: ch.nHy, rho: NaN, pose: 'open' };
@@ -487,8 +536,15 @@ export class Rig {
     // ---- arms: default target blended with the clip target
     const tN = this.blendTarget(defN, tgt.n, 'n');
     const tF = this.blendTarget(defF, tgt.f, 'f');
-    this.solveArm(N_UA, N_FA, N_H, shX, shY, T, ch.nSh, ch.nEl, ch.nWr, tN, 'n');
-    this.solveArm(F_UA, F_FA, F_H, fshX, fshY, T, ch.fSh, ch.fEl, ch.fWr, tF, 'f');
+    // role n (support) on the far arm and role f (trigger) on the near arm with a firearm
+    if (this.swap) {
+      this.solveArm(F_UA, F_FA, F_H, fshX, fshY, T, ch.nSh, ch.nEl, ch.nWr, tN, 'n');
+      this.solveArm(N_UA, N_FA, N_H, shX, shY, T, ch.fSh, ch.fEl, ch.fWr, tF, 'f');
+    } else {
+      this.solveArm(N_UA, N_FA, N_H, shX, shY, T, ch.nSh, ch.nEl, ch.nWr, tN, 'n');
+      this.solveArm(F_UA, F_FA, F_H, fshX, fshY, T, ch.fSh, ch.fEl, ch.fWr, tF, 'f');
+    }
+
     // melee weapons ride the near hand
     if (holding && gun && a!.hold === 'melee' && this.gunState === 'held') {
       this.gunVisible = true;
@@ -504,13 +560,49 @@ export class Rig {
     const [hx, hy] = tip(HEAD, g.headLen); set(2, hx, hy);
     set(3, shX, shY); set(18, fshX, fshY);
     set(4, J[N_FA], K[N_FA]); set(5, J[N_H], K[N_H]);
-    const hn = tip(N_H, (P[this.handN] ?? P.hand).len); set(6, hn[0], hn[1]);
+    const hn = tip(N_H, (P[this.nearHand] ?? P.hand).len); set(6, hn[0], hn[1]);
     set(7, J[F_FA], K[F_FA]); set(8, J[F_H], K[F_H]);
-    const hf = tip(F_H, (P[this.handF] ?? P.hand).len); set(9, hf[0], hf[1]);
+    const hf = tip(F_H, (P[this.farHand] ?? P.hand).len); set(9, hf[0], hf[1]);
     set(10, J[N_TH], K[N_TH]); set(11, J[N_SN], K[N_SN]); set(12, J[N_FT], K[N_FT]);
     const tn = tip(N_FT, g.ft); set(13, tn[0], tn[1]);
     set(14, J[F_TH], K[F_TH]); set(15, J[F_SN], K[F_SN]); set(16, J[F_FT], K[F_FT]);
     const tf = tip(F_FT, g.ft); set(17, tf[0], tf[1]);
+  }
+
+  /**
+   * Turn the head (about the neck) until a cheek point sits on the stock's comb line (butt to muzzle,
+   * raised by the comb height); if the chin can't drop that far, lift the gun the rest of the way.
+   * butt / muz: gun-local points. w: blend (aim pose weight).
+   */
+  private cheekWeld(butt: [number, number], muz: [number, number], combPt: [number, number] | null, w: number) {
+    const g = this.geo!, A = this.ja;
+    const nx = this.jx[HEAD], ny = this.jy[HEAD];
+    const [bx, by] = this.gunPt(butt), [mx, my] = this.gunPt(muz);
+    let dx = mx - bx, dy = my - by;
+    const dl = Math.hypot(dx, dy) || 1; dx /= dl; dy /= dl;
+    const upx = dy, upy = -dx; // the up-normal of the gun line (facing right)
+    // the comb line: parallel to the bore through the stock's top edge (else a guess above the butt)
+    const [lx, ly] = combPt ? this.gunPt(combPt) : [bx + upx * 3.5, by + upy * 3.5];
+    // cheek: a third up the head bone, forward of it (the face side)
+    const ca = g.headLen * 0.22, cf = g.headLen * 0.3;
+    const f = (th: number) => {
+      const c = Math.cos(th), s = Math.sin(th);
+      const px = nx + c * ca - s * cf, py = ny + s * ca + c * cf;
+      return (px - lx) * upx + (py - ly) * upy; // > 0: cheek above the comb
+    };
+    const a0 = A[HEAD];
+    let lo = a0 - 0.2, hi = a0 + 0.36;
+    if (f(lo) < 0) { A[HEAD] = lerpAngle(a0, lo, w); return; }
+    const resid = f(hi);
+    if (resid > 0) {
+      // chin all the way down and still above it: bring the gun up to the face
+      const k = resid * w * 0.85;
+      this.gx += upx * k; this.gy += upy * k;
+      A[HEAD] = lerpAngle(a0, hi, w);
+      return;
+    }
+    for (let i = 0; i < 12; i++) { const m = (lo + hi) / 2; if (f(m) > 0) lo = m; else hi = m; }
+    A[HEAD] = lerpAngle(a0, (lo + hi) / 2, w);
   }
 
   private ikOut = { a1: 0, a2: 0, reach: 0 };
@@ -716,46 +808,65 @@ export class Rig {
     this.resetXf(ctx);
   }
 
+  /** Back-to-front draw order: the stance's (stances.ts) with a firearm, the classic one otherwise. */
+  get layers(): Slot[] { return this.swap ? this.stance.layers : STANCES.free.layers; }
+
   private drawBody(ctx: CanvasRenderingContext2D, as: RigAsset) {
     const atlas = this.skin?.atlas ?? as.atlas, dark = this.skin?.dark ?? as.dark, gw = this.skin?.grow ?? 0;
-    // far side
-    this.part(ctx, dark, F_TH, 'thigh', false, 0, 0, gw);
-    this.part(ctx, dark, F_SN, 'shin', false, 0, 0, gw);
-    this.part(ctx, dark, F_FT, 'foot', false, 0, 0, gw);
-    this.part(ctx, dark, F_UA, 'upperArm', false, 0, 0, gw);
-    this.part(ctx, dark, F_FA, 'forearm', false, 0, 0, gw);
-    if (this.gunState === 'slung' && this.gun && this.weaponId && this.anchors?.hold !== 'melee') this.drawSlung(ctx);
-    // trunk
-    this.part(ctx, atlas, TORSO, 'torso', false, 0, 0, gw);
-    if (!this.hideHead) this.part(ctx, atlas, HEAD, 'head', this.headFlip > 0.5, 0, 0, gw);
-    this.part(ctx, atlas, N_TH, 'thigh', false, 0, 0, gw);
-    this.part(ctx, atlas, N_SN, 'shin', false, 0, 0, gw);
-    this.part(ctx, atlas, N_FT, 'foot', false, 0, 0, gw);
-    if (this.gunVisible && this.anchors?.hold !== 'melee') this.drawGun(ctx);
-    // far (trigger) hand wraps the grip: in front of the gun
-    this.part(ctx, this.weaponId && this.kind === 'survivor' && this.gunState === 'held' ? atlas : dark, F_H, this.handF, false, 0, 0, gw);
-    if (this.fprop) this.drawProp(ctx, this.fprop, this.palmFX, this.palmFY, this.rhoF);
-    if (this.anchors?.hold === 'bow' && this.gunVisible) this.drawString(ctx);
-    // contact shadow of the near arm (skipped on small bodies: invisible there), then the arm
-    if (this.ds > 0.42 && this.kind === 'survivor') {
-      ctx.globalAlpha = this.baseAlpha * 0.28;
-      this.part(ctx, as.shadow, N_UA, 'upperArm', false, 2.5, 3);
-      this.part(ctx, as.shadow, N_FA, 'forearm', false, 2.5, 3);
-      ctx.globalAlpha = this.baseAlpha;
+    const melee = this.anchors?.hold === 'melee';
+    // the support role's props (mag, shell, round, speedloader) ride the hand on its physical side
+    const supFar = this.swap;
+    for (const slot of this.layers) switch (slot) {
+      case 'fLeg':
+        this.part(ctx, dark, F_TH, 'thigh', false, 0, 0, gw); this.part(ctx, dark, F_SN, 'shin', false, 0, 0, gw); this.part(ctx, dark, F_FT, 'foot', false, 0, 0, gw);
+        break;
+      case 'nLeg':
+        this.part(ctx, atlas, N_TH, 'thigh', false, 0, 0, gw); this.part(ctx, atlas, N_SN, 'shin', false, 0, 0, gw); this.part(ctx, atlas, N_FT, 'foot', false, 0, 0, gw);
+        break;
+      case 'torso': this.part(ctx, atlas, TORSO, 'torso', false, 0, 0, gw); break;
+      case 'head': if (!this.hideHead) this.part(ctx, atlas, HEAD, 'head', this.headFlip > 0.5, 0, 0, gw); break;
+      case 'fUA': this.part(ctx, dark, F_UA, 'upperArm', false, 0, 0, gw); break;
+      case 'fFA': this.part(ctx, dark, F_FA, 'forearm', false, 0, 0, gw); break;
+      case 'fH':
+        this.handProps(ctx, supFar);
+        // bare-handed the far hand is in shade; holding a gun without the swap (Turned never do) it wraps the grip
+        this.part(ctx, dark, F_H, this.farHand, false, 0, 0, gw);
+        break;
+      case 'nShadow':
+        // contact shadow of the near arm (skipped on small bodies: invisible there)
+        if (this.ds > 0.42 && this.kind === 'survivor') {
+          ctx.globalAlpha = this.baseAlpha * 0.28;
+          this.part(ctx, as.shadow, N_UA, 'upperArm', false, 2.5, 3);
+          this.part(ctx, as.shadow, N_FA, 'forearm', false, 2.5, 3);
+          ctx.globalAlpha = this.baseAlpha;
+        }
+        break;
+      case 'nUA': this.part(ctx, atlas, N_UA, 'upperArm', false, 0, 0, gw); break;
+      case 'nFA': this.part(ctx, atlas, N_FA, 'forearm', false, 0, 0, gw); break;
+      case 'nH':
+        this.handProps(ctx, !supFar);
+        this.part(ctx, atlas, N_H, this.nearHand, false, 0, 0, gw);
+        break;
+      case 'gun': if (this.gunVisible && !melee) this.drawGun(ctx); break;
+      case 'melee': if (this.gunVisible && melee) this.drawGun(ctx); break;
+      case 'slung': if (this.gunState === 'slung' && this.gun && this.weaponId && !melee) this.drawSlung(ctx); break;
+      case 'string': if (this.anchors?.hold === 'bow' && this.gunVisible) this.drawString(ctx); break;
     }
-    this.part(ctx, atlas, N_UA, 'upperArm', false, 0, 0, gw);
-    this.part(ctx, atlas, N_FA, 'forearm', false, 0, 0, gw);
-    if (this.magState === 'hand' && this.gun?.mag) this.drawMagInHand(ctx);
-    if (this.prop) this.drawProp(ctx, this.prop, this.palmNX, this.palmNY, this.rhoN);
-    this.part(ctx, atlas, N_H, this.handN, false, 0, 0, gw);
-    if (this.gunVisible && this.anchors?.hold === 'melee') this.drawGun(ctx);
+  }
+  /** What the hand on this physical side carries, drawn under its fingers: the support role's mag /
+   * prop when `support`, else the trigger role's prop (an arrow from the quiver). */
+  private handProps(ctx: CanvasRenderingContext2D, support: boolean) {
+    if (support) {
+      if (this.magState === 'hand' && this.gun?.mag) this.drawMagInHand(ctx);
+      if (this.prop) this.drawProp(ctx, this.prop, this.palmNX, this.palmNY, this.rhoN);
+    } else if (this.fprop) this.drawProp(ctx, this.fprop, this.palmFX, this.palmFY, this.rhoF);
   }
 
   /** Every body part from one flat atlas (outline, rim, flash), offset by (ox, oy) rig units. */
   private drawSil(ctx: CanvasRenderingContext2D, src: CanvasImageSource, ox: number, oy: number, grow: number) {
     for (let i = 0; i < PART_COUNT; i++) {
       if (i === HEAD && this.hideHead) continue;
-      this.part(ctx, src, i, i === N_H ? this.handN : i === F_H ? this.handF : PART_NAMES[i], i === HEAD && this.headFlip > 0.5, ox, oy, grow);
+      this.part(ctx, src, i, i === N_H ? this.nearHand : i === F_H ? this.farHand : PART_NAMES[i], i === HEAD && this.headFlip > 0.5, ox, oy, grow);
     }
   }
 
@@ -844,8 +955,9 @@ export class Rig {
     const P = this.asset!.meta.parts;
     // hands keep their pose art: bone angle (wrist→tip) already accounts for the art's rest
     void P;
-    this.rhoN = A[N_H] - (P[this.handN]?.rest ?? 0);
-    this.rhoF = A[F_H] - (P[this.handF]?.rest ?? 0);
+    const hn = this.swap ? F_H : N_H, hf = this.swap ? N_H : F_H;
+    this.rhoN = A[hn] - (P[this.handN]?.rest ?? 0);
+    this.rhoF = A[hf] - (P[this.handF]?.rest ?? 0);
     this.magState = this.magState === 'hand' ? 'none' : this.magState;
     this.prop = null; this.fprop = null;
   }

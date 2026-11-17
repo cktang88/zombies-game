@@ -18,6 +18,7 @@
  *            shoulder), 'bow', 'melee'
  *   reload   which reload choreography (see clips.ts RELOADS)
  */
+import type { StanceId } from './stances';
 export type HoldKind = 'pistol' | 'long' | 'tube' | 'bow' | 'melee';
 export type ReloadKind = 'mag' | 'pistolMag' | 'shells' | 'bolt' | 'lever' | 'break' | 'revolver' | 'bow' | 'crossbow' | 'muzzle' | 'tube' | 'none';
 export type V2 = [number, number];
@@ -37,6 +38,8 @@ export interface WeaponAnchors {
   port?: V2;
   /** one-handed by default (pistols): the support hand may still join when aiming */
   oneHand?: boolean;
+  /** shooting stance (stances.ts); default from `hold` / `reload` / `len` (stanceOf) */
+  stance?: StanceId;
 }
 
 export const WEAPON_ANCHORS: Record<string, WeaponAnchors> = {
@@ -50,7 +53,7 @@ export const WEAPON_ANCHORS: Record<string, WeaponAnchors> = {
   smg: { icon: 'icon_smg', flip: true, len: 86, hold: 'long', reload: 'mag', grip: [120, 55], fore: [45, 48], butt: [172, 40], muzzle: [2, 18], mag: [48, 50, 22, 42], magwell: [59, 50], rack: [36, 12] },
   ar15: { icon: 'icon_ar15', len: 132, hold: 'long', reload: 'mag', grip: [70, 58], fore: [165, 30], butt: [4, 34], muzzle: [240, 30], mag: [112, 50, 30, 44], magwell: [126, 50], rack: [90, 22] },
   carbine: { icon: 'icon_carbine', len: 128, hold: 'long', reload: 'mag', grip: [74, 58], fore: [180, 30], butt: [4, 30], muzzle: [260, 22], mag: [113, 50, 32, 46], magwell: [128, 50], rack: [96, 24] },
-  lmg: { icon: 'icon_lmg', len: 144, hold: 'long', reload: 'mag', grip: [74, 58], fore: [195, 30], butt: [4, 36], muzzle: [255, 30], mag: [94, 44, 32, 36], magwell: [110, 44], rack: [62, 24] },
+  lmg: { icon: 'icon_lmg', len: 144, hold: 'long', stance: 'hip', reload: 'mag', grip: [74, 58], fore: [195, 30], butt: [4, 36], muzzle: [255, 30], mag: [94, 44, 32, 36], magwell: [110, 44], rack: [62, 24] },
   nailer: { icon: 'icon_nailgun', len: 62, hold: 'long', reload: 'mag', grip: [34, 64], fore: [100, 46], butt: [4, 22], muzzle: [222, 22], mag: [48, 68, 64, 26], magwell: [80, 68], rack: [60, 10] },
   rivet: { icon: 'icon_rivet', len: 46, hold: 'pistol', reload: 'mag', grip: [38, 52], muzzle: [90, 15], mag: [40, 48, 30, 48], magwell: [55, 50], rack: [20, 10] },
   // ---- rifles
@@ -89,4 +92,18 @@ export const WEAPON_ANCHORS: Record<string, WeaponAnchors> = {
 /** Fallback by weapon class for guns added later without hand-placed anchors. */
 export function anchorsFor(defId: string): WeaponAnchors {
   return WEAPON_ANCHORS[defId] ?? WEAPON_ANCHORS.hunting;
+}
+
+/** The stance a weapon is shot from (stances.ts): explicit, else by how it is held. */
+export function stanceOf(a: WeaponAnchors | null, oneHand = false): StanceId {
+  if (!a) return 'free';
+  if (a.stance) return a.stance;
+  switch (a.hold) {
+    case 'pistol': return oneHand ? 'pistol1' : 'pistol';
+    case 'bow': return 'bow';
+    case 'tube': return 'tube';
+    case 'melee': return 'free';
+  }
+  if (a.reload === 'shells' || a.reload === 'break') return 'shotgun';
+  return a.len < 100 ? 'smg' : 'rifle';
 }

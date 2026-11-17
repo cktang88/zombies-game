@@ -14,19 +14,9 @@
       "prompt": "The same person from the reference image (a young woman with short dark hair, red quilted vest over a shirt) in a rigging pose for 2D skeletal animation, WITHOUT any weapon and holding nothing: strict side profile facing right, torso upright, both arms held straight out forward at shoulder height (the far arm hidden exactly behind the near arm), hands open and empty, legs in a wide walking stride so the two legs are clearly separated with a gap between them, full body head to boots."
     },
     {
-      "id": "surv_pistol__hands",
-      "ref": "surv_pistol",
-      "prompt": "A sheet of six separate bare hands of the person in the reference image (light skin, the same sleeve cuff), side view, all six at the same life-size scale, laid out apart in ONE single horizontal row with wide magenta gaps: 1 right hand closed around an invisible pistol grip, 2 left hand cupped as if supporting a rifle fore-end from below, 3 open relaxed hand, 4 closed fist, 5 hand pinching a small object between thumb and fingers, 6 open hand palm forward. Each hand ends at the wrist with a short bit of sleeve cuff. No weapons, no objects."
-    },
-    {
       "id": "surv_shotgun__riga",
       "ref": "surv_shotgun",
       "prompt": "The same person from the reference image (a older stocky man with a flat cap and a dark wool peacoat) in a rigging pose for 2D skeletal animation, WITHOUT any weapon and holding nothing: strict side profile facing right, torso upright, both arms held straight out forward at shoulder height (the far arm hidden exactly behind the near arm), hands open and empty, legs in a wide walking stride so the two legs are clearly separated with a gap between them, full body head to boots."
-    },
-    {
-      "id": "surv_shotgun__hands",
-      "ref": "surv_shotgun",
-      "prompt": "A sheet of six separate bare hands of the person in the reference image (light weathered skin, the same sleeve cuff), side view, all six at the same life-size scale, laid out apart in ONE single horizontal row with wide magenta gaps: 1 right hand closed around an invisible pistol grip, 2 left hand cupped as if supporting a rifle fore-end from below, 3 open relaxed hand, 4 closed fist, 5 hand pinching a small object between thumb and fingers, 6 open hand palm forward. Each hand ends at the wrist with a short bit of sleeve cuff. No weapons, no objects."
     },
     {
       "id": "surv_smg__riga",
@@ -34,19 +24,9 @@
       "prompt": "The same person from the reference image (a man with a shaved head in a worn dark hooded jacket) in a rigging pose for 2D skeletal animation, WITHOUT any weapon and holding nothing: strict side profile facing right, torso upright, both arms held straight out forward at shoulder height (the far arm hidden exactly behind the near arm), hands open and empty, legs in a wide walking stride so the two legs are clearly separated with a gap between them, full body head to boots."
     },
     {
-      "id": "surv_smg__hands",
-      "ref": "surv_smg",
-      "prompt": "A sheet of six separate bare hands of the person in the reference image (light skin, the same sleeve cuff), side view, all six at the same life-size scale, laid out apart in ONE single horizontal row with wide magenta gaps: 1 right hand closed around an invisible pistol grip, 2 left hand cupped as if supporting a rifle fore-end from below, 3 open relaxed hand, 4 closed fist, 5 hand pinching a small object between thumb and fingers, 6 open hand palm forward. Each hand ends at the wrist with a short bit of sleeve cuff. No weapons, no objects."
-    },
-    {
       "id": "surv_idle__riga",
       "ref": "surv_idle",
       "prompt": "The same person from the reference image (a young woman in a dark knit beanie with a long braid and a long olive parka, WITHOUT the bag she carries) in a rigging pose for 2D skeletal animation, WITHOUT any weapon and holding nothing: strict side profile facing right, torso upright, both arms held straight out forward at shoulder height (the far arm hidden exactly behind the near arm), hands open and empty, legs in a wide walking stride so the two legs are clearly separated with a gap between them, full body head to boots."
-    },
-    {
-      "id": "surv_idle__hands",
-      "ref": "surv_idle",
-      "prompt": "A sheet of six separate bare hands of the person in the reference image (light skin, the same sleeve cuff), side view, all six at the same life-size scale, laid out apart in ONE single horizontal row with wide magenta gaps: 1 right hand closed around an invisible pistol grip, 2 left hand cupped as if supporting a rifle fore-end from below, 3 open relaxed hand, 4 closed fist, 5 hand pinching a small object between thumb and fingers, 6 open hand palm forward. Each hand ends at the wrist with a short bit of sleeve cuff. No weapons, no objects."
     },
     {
       "id": "surv_f_old__riga",
@@ -54,19 +34,9 @@
       "prompt": "The same person from the reference image (a old woman with short grey hair in a quilted olive jacket and rubber boots) in a rigging pose for 2D skeletal animation, WITHOUT any weapon and holding nothing: strict side profile facing right, torso upright, both arms held straight out forward at shoulder height (the far arm hidden exactly behind the near arm), hands open and empty, legs in a wide walking stride so the two legs are clearly separated with a gap between them, full body head to boots."
     },
     {
-      "id": "surv_f_old__hands",
-      "ref": "surv_f_old",
-      "prompt": "A sheet of six separate bare hands of the person in the reference image (pale wrinkled old skin, the same sleeve cuff), side view, all six at the same life-size scale, laid out apart in ONE single horizontal row with wide magenta gaps: 1 right hand closed around an invisible pistol grip, 2 left hand cupped as if supporting a rifle fore-end from below, 3 open relaxed hand, 4 closed fist, 5 hand pinching a small object between thumb and fingers, 6 open hand palm forward. Each hand ends at the wrist with a short bit of sleeve cuff. No weapons, no objects."
-    },
-    {
       "id": "surv_f_mid__riga",
       "ref": "surv_f_mid",
       "prompt": "The same person from the reference image (a heavy-set middle-aged woman with a red bandana in her hair and a worn brown jacket) in a rigging pose for 2D skeletal animation, WITHOUT any weapon and holding nothing: strict side profile facing right, torso upright, both arms held straight out forward at shoulder height (the far arm hidden exactly behind the near arm), hands open and empty, legs in a wide walking stride so the two legs are clearly separated with a gap between them, full body head to boots."
-    },
-    {
-      "id": "surv_f_mid__hands",
-      "ref": "surv_f_mid",
-      "prompt": "A sheet of six separate bare hands of the person in the reference image (light skin, the same sleeve cuff), side view, all six at the same life-size scale, laid out apart in ONE single horizontal row with wide magenta gaps: 1 right hand closed around an invisible pistol grip, 2 left hand cupped as if supporting a rifle fore-end from below, 3 open relaxed hand, 4 closed fist, 5 hand pinching a small object between thumb and fingers, 6 open hand palm forward. Each hand ends at the wrist with a short bit of sleeve cuff. No weapons, no objects."
     },
     {
       "id": "surv_m_mid__riga",
@@ -74,19 +44,9 @@
       "prompt": "The same person from the reference image (a Black middle-aged man in a dark shirt with a stained white apron) in a rigging pose for 2D skeletal animation, WITHOUT any weapon and holding nothing: strict side profile facing right, torso upright, both arms held straight out forward at shoulder height (the far arm hidden exactly behind the near arm), hands open and empty, legs in a wide walking stride so the two legs are clearly separated with a gap between them, full body head to boots."
     },
     {
-      "id": "surv_m_mid__hands",
-      "ref": "surv_m_mid",
-      "prompt": "A sheet of six separate bare hands of the person in the reference image (dark brown skin, the same sleeve cuff), side view, all six at the same life-size scale, laid out apart in ONE single horizontal row with wide magenta gaps: 1 right hand closed around an invisible pistol grip, 2 left hand cupped as if supporting a rifle fore-end from below, 3 open relaxed hand, 4 closed fist, 5 hand pinching a small object between thumb and fingers, 6 open hand palm forward. Each hand ends at the wrist with a short bit of sleeve cuff. No weapons, no objects."
-    },
-    {
       "id": "surv_m_young__riga",
       "ref": "surv_m_young",
       "prompt": "The same person from the reference image (a young blond man in a varsity jacket with an orange H patch) in a rigging pose for 2D skeletal animation, WITHOUT any weapon and holding nothing: strict side profile facing right, torso upright, both arms held straight out forward at shoulder height (the far arm hidden exactly behind the near arm), hands open and empty, legs in a wide walking stride so the two legs are clearly separated with a gap between them, full body head to boots."
-    },
-    {
-      "id": "surv_m_young__hands",
-      "ref": "surv_m_young",
-      "prompt": "A sheet of six separate bare hands of the person in the reference image (light skin, the same sleeve cuff), side view, all six at the same life-size scale, laid out apart in ONE single horizontal row with wide magenta gaps: 1 right hand closed around an invisible pistol grip, 2 left hand cupped as if supporting a rifle fore-end from below, 3 open relaxed hand, 4 closed fist, 5 hand pinching a small object between thumb and fingers, 6 open hand palm forward. Each hand ends at the wrist with a short bit of sleeve cuff. No weapons, no objects."
     },
     {
       "id": "surv_f_native__riga",
@@ -94,19 +54,9 @@
       "prompt": "The same person from the reference image (a Indigenous woman with a long black braid in a worn olive field jacket) in a rigging pose for 2D skeletal animation, WITHOUT any weapon and holding nothing: strict side profile facing right, torso upright, both arms held straight out forward at shoulder height (the far arm hidden exactly behind the near arm), hands open and empty, legs in a wide walking stride so the two legs are clearly separated with a gap between them, full body head to boots."
     },
     {
-      "id": "surv_f_native__hands",
-      "ref": "surv_f_native",
-      "prompt": "A sheet of six separate bare hands of the person in the reference image (tan brown skin, the same sleeve cuff), side view, all six at the same life-size scale, laid out apart in ONE single horizontal row with wide magenta gaps: 1 right hand closed around an invisible pistol grip, 2 left hand cupped as if supporting a rifle fore-end from below, 3 open relaxed hand, 4 closed fist, 5 hand pinching a small object between thumb and fingers, 6 open hand palm forward. Each hand ends at the wrist with a short bit of sleeve cuff. No weapons, no objects."
-    },
-    {
       "id": "surv_m_old__riga",
       "ref": "surv_m_old",
       "prompt": "The same person from the reference image (a old man with a white mustache and a military cap in an olive jacket) in a rigging pose for 2D skeletal animation, WITHOUT any weapon and holding nothing: strict side profile facing right, torso upright, both arms held straight out forward at shoulder height (the far arm hidden exactly behind the near arm), hands open and empty, legs in a wide walking stride so the two legs are clearly separated with a gap between them, full body head to boots."
-    },
-    {
-      "id": "surv_m_old__hands",
-      "ref": "surv_m_old",
-      "prompt": "A sheet of six separate bare hands of the person in the reference image (pale wrinkled old skin, the same sleeve cuff), side view, all six at the same life-size scale, laid out apart in ONE single horizontal row with wide magenta gaps: 1 right hand closed around an invisible pistol grip, 2 left hand cupped as if supporting a rifle fore-end from below, 3 open relaxed hand, 4 closed fist, 5 hand pinching a small object between thumb and fingers, 6 open hand palm forward. Each hand ends at the wrist with a short bit of sleeve cuff. No weapons, no objects."
     },
     {
       "id": "surv_m_big__riga",
@@ -114,19 +64,9 @@
       "prompt": "The same person from the reference image (a huge bald bearded man with a leather work apron over a grey shirt) in a rigging pose for 2D skeletal animation, WITHOUT any weapon and holding nothing: strict side profile facing right, torso upright, both arms held straight out forward at shoulder height (the far arm hidden exactly behind the near arm), hands open and empty, legs in a wide walking stride so the two legs are clearly separated with a gap between them, full body head to boots."
     },
     {
-      "id": "surv_m_big__hands",
-      "ref": "surv_m_big",
-      "prompt": "A sheet of six separate bare hands of the person in the reference image (light ruddy skin, the same sleeve cuff), side view, all six at the same life-size scale, laid out apart in ONE single horizontal row with wide magenta gaps: 1 right hand closed around an invisible pistol grip, 2 left hand cupped as if supporting a rifle fore-end from below, 3 open relaxed hand, 4 closed fist, 5 hand pinching a small object between thumb and fingers, 6 open hand palm forward. Each hand ends at the wrist with a short bit of sleeve cuff. No weapons, no objects."
-    },
-    {
       "id": "surv_f_young__riga",
       "ref": "surv_f_young",
       "prompt": "The same person from the reference image (a young woman with an undercut hairstyle in a black puffer vest over a light shirt) in a rigging pose for 2D skeletal animation, WITHOUT any weapon and holding nothing: strict side profile facing right, torso upright, both arms held straight out forward at shoulder height (the far arm hidden exactly behind the near arm), hands open and empty, legs in a wide walking stride so the two legs are clearly separated with a gap between them, full body head to boots."
-    },
-    {
-      "id": "surv_f_young__hands",
-      "ref": "surv_f_young",
-      "prompt": "A sheet of six separate bare hands of the person in the reference image (light skin, the same sleeve cuff), side view, all six at the same life-size scale, laid out apart in ONE single horizontal row with wide magenta gaps: 1 right hand closed around an invisible pistol grip, 2 left hand cupped as if supporting a rifle fore-end from below, 3 open relaxed hand, 4 closed fist, 5 hand pinching a small object between thumb and fingers, 6 open hand palm forward. Each hand ends at the wrist with a short bit of sleeve cuff. No weapons, no objects."
     }
   ]
 }

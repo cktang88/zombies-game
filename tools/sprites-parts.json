@@ -34,11 +34,6 @@
       "prompt": "Only the two arms of the zombie in the reference image, cut off at the shoulder, drawn as two separate pieces far apart: each arm in its torn flannel sleeve held straight out horizontally pointing left, side view, ending in a grey clawed hand. No body, no head."
     },
     {
-      "id": "surv_rifle__hands",
-      "ref": "surv_rifle",
-      "prompt": "A sheet of six separate bare hands of the man in the reference image, side view, laid out apart in a row with wide magenta gaps: 1 right hand closed around an invisible pistol grip, 2 left hand cupped as if supporting a rifle fore-end from below, 3 open relaxed hand, 4 closed fist, 5 hand pinching a small object between thumb and fingers, 6 open hand palm forward. Each hand ends at the wrist with a short bit of jacket cuff. No weapons, no objects."
-    },
-    {
       "id": "surv_rifle__riga",
       "ref": "surv_rifle",
       "prompt": "The same man from the reference image in a rigging pose for 2D skeletal animation, WITHOUT any weapon: strict side profile facing right, torso upright, both arms held straight out forward at shoulder height (the far arm hidden exactly behind the near arm), hands open and empty, legs in a wide walking stride so the two legs are clearly separated with a gap between them, full body head to boots."

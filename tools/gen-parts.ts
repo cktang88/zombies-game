@@ -39,7 +39,7 @@ const MODEL = process.env.SPRITE_MODEL || manifest.model;
 
 /** Reference image: the original generation if cached, else the shipped sprite. */
 async function refDataUrl(id: string): Promise<string> {
-  const cands = [path.join(ROOT, 'tools/.cache/raw', `${id}.png`), path.join(ROOT, 'public/sprites', `${id}.png`)];
+  const cands = [path.join(ROOT, 'tools/.cache/raw', `${id}.png`), path.join(ROOT, 'public/sprites', `${id}.png`), path.join(ROOT, 'tools/rigs/src', `${id}.png`)];
   const f = cands.find((c) => fs.existsSync(c));
   if (!f) throw new Error(`no reference for ${id}`);
   // flatten onto magenta so the model sees the house background, cap the size to keep tokens low

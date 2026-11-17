@@ -60,17 +60,22 @@ Per frame, `Rig.update(dt)`:
 5. **Solve** — legs: 2-bone IK, knee forward. Arms: 2-bone IK to the hand target (elbow-down
    solution; elbow-up for crawling), hand art rotation from the target; else FK.
 
-Draw order (facing right; the viewer sees the character's left side): far leg, far arm (dark), slung
-gun, torso, head, near leg, gun, far (trigger) hand + its prop, contact shadow of the near arm,
-near arm, magazine/shell/speedloader in the near hand, near hand, melee weapon, hit flash, props
-(dropped mags, casings, shells). Far limbs reuse the near limb art pre-darkened.
+Draw order: per stance, as data (`src/anim/stances.ts`; see [11-shooting-poses.md](11-shooting-poses.md)).
+Facing right, the viewer sees the character's **right** side: with a firearm the trigger arm is the near
+one, drawn over the gun, and the support arm is the far one (upper arm behind the torso, forearm under the
+gun, hand on the fore-end). Bare-handed / melee: far leg, far arm, slung gun, torso, head, near leg, far
+hand, near arm, near hand, melee weapon. Then hit flash and props (dropped mags, casings, shells). Far
+limbs reuse the near limb art pre-darkened. (Superseded: the first version drew the left side, with the
+support hand on the near arm.)
 
 ## 3. Data formats
 
 **Rig source** `tools/rigs/<id>.json` (hand-authored, ~15 joints in source-image pixels):
 `{ id, source, height, joints: {headTop, neck, shoulder, elbow, wrist, handTip, pelvis, hip, knee,
 ankle, toe, bHip, bKnee, bAnkle, bToe}, radius?: {part: fraction}, force?: [{part, poly}],
-fillMaxX?, hands?: {source, refPose, scale?, poses: {grip|support|open|fist|pinch: {index, wrist, tip, grip}}} }`.
+fillMaxX?, hands?: {lib: 'light'|'medium'|'dark'|'glove', tint?, tintA?, bright?, len?} }` — hands come
+from the shared library `tools/rigs/src/hands_<lib>.png` (11 §6); the older per-sheet form
+`{source, refPose, poses: {…: {index, wrist, tip, grip}}}` still works.
 
 **Part atlas** `public/sprites/parts/<id>.png` + `.json` (written by `tools/segment.ts`):
 `{ id, height: 240, ground, joints (rig units, relative to pelvis), parts: { name: {x,y,w,h, px,py
