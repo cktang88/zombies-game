@@ -56,7 +56,7 @@ export interface ZombieDef {
 
 export const ZOMBIES: Record<string, ZombieDef> = {
   sleeper: {
-    id: 'sleeper', name: 'Sleeper', sprites: ['z_shambler', 'z_shambler2', 'z_mill', 'z_hunter', 'z_manor', 'z_church'], hp: 64, speed: 32, dps: 6, cost: 1, minDay: 1,
+    id: 'sleeper', name: 'Sleeper', sprites: ['z_shambler', 'z_shambler2', 'z_mill', 'z_hunter', 'z_manor', 'z_church'], hp: 64, speed: 36, dps: 6, cost: 1, minDay: 1,
     head: 0.17, width: 46, height: 120,
     lore: 'They stand for hours like they\'re waiting on a shift whistle. Don\'t wake a Sleeper.',
   },
@@ -117,3 +117,56 @@ export const ZOMBIES: Record<string, ZombieDef> = {
     lore: 'Somebody rang the All Saints\' bell for forty minutes the night it began. Nobody would say who. Now you know.',
   },
 };
+
+// ---- pacing: no two bodies walk alike (docs/research/09-animation.md §Crowd audit) ----
+/**
+ * How a type covers ground around its def.speed:
+ *   spread   each body's own pace, ±fraction (seeded by its id)
+ *   stopP    a shambler stalls every stopP[0]..stopP[1] s (sways, sniffs, then goes on) ...
+ *   stopW    ... for stopW[0]..stopW[1] s, easing down to a stand and back up
+ *   base     cruising pace / def.speed (Deer cruise slower and bolt)
+ *   dash     Deer: the bolt out of the pant, peak multiple of the cruise (decays over DASH_T)
+ * Average speed stays def.speed (the stops are paid back by a slightly quicker walk), so the
+ * balance tuned on def.speed holds.
+ */
+export interface Pace { spread: number; base?: number; stopP?: [number, number]; stopW?: [number, number]; dash?: number }
+const PACE: Record<string, Pace> = {
+  sleeper: { spread: 0.18, stopP: [7, 13], stopW: [0.8, 1.6] },
+  deer: { spread: 0.1, base: 0.82, dash: 3 }, // cruise 0.82x, bolt to 3x: about +8% over a pant cycle
+  drag: { spread: 0.22, stopP: [4, 7], stopW: [0.5, 1.1] },
+  tunneler: { spread: 0.15 },
+  pulper: { spread: 0.1, stopP: [9, 15], stopW: [1, 1.8] },
+  crier: { spread: 0.1 },
+  deputy: { spread: 0.1, stopP: [12, 20], stopW: [0.7, 1.2] },
+  ferryman: { spread: 0.05 },
+  leaper: { spread: 0.12 },
+  spitter: { spread: 0.1 },
+  raider: { spread: 0.08 },
+  bellwether: { spread: 0 },
+};
+export const DASH_T = 0.8;
+/** Per-body height spread, ± fraction (uniform): ±7% is about the spread of adult heights
+ *  (sd ~4%, 1.62-1.86 m round a 1.74 m Sleeper); the made-to-order big ones vary less. */
+export const sizeVar = (def: ZombieDef) => (def.boss ? 0.02 : def.id === 'ferryman' ? 0.04 : 0.07);
+export function paceOf(def: ZombieDef): Pace & { base: number } { const p = PACE[def.id] ?? { spread: 0.1 };
+  return { ...p, base: p.base ?? 1 }; }
+const hash = (n: number) => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+/**
+ * Speed multiplier for one body at time t (its own clock, e.g. Zombie.phase): its own pace,
+ * an occasional stall, and (Deer) the bolt `dash` s after a pant (dash counts down from DASH_T).
+ */
+export function paceMul(def: ZombieDef, id: number, t: number, dash = 0): number {
+  const p = PACE[def.id];
+  if (!p) return 1;
+  let m = (p.base ?? 1) * (1 + p.spread * (hash(id) * 2 - 1));
+  if (p.stopP && p.stopW) {
+    const P = p.stopP[0] + (p.stopP[1] - p.stopP[0]) * hash(id + 0.37);
+    const w = p.stopW[0] + (p.stopW[1] - p.stopW[0]) * hash(id + 0.71);
+    const c = (t + P * hash(id + 0.13)) % P;
+    // ease to a stand and back: 1 - min(1, 1.6 (1 - cos)/2) over the window (mean dip 0.6375 w)
+    const stop = c < w ? Math.min(1, 0.8 * (1 - Math.cos((Math.PI * 2 * c) / w))) : 0;
+    m *= (1 - stop) / (1 - (0.6375 * w) / P);
+  }
+  if (p.dash && dash > 0) m *= 1 + (p.dash - 1) * (dash / DASH_T) ** 1.5;
+  return m;
+}

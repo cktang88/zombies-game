@@ -1,6 +1,6 @@
 import type { Survivor, WeaponItem, Res, NightPlan } from '../types';
 import { G, R, log, add } from '../state';
-import { ZOMBIES, WEAKSPOTS, EYES, type ZombieDef, type WeakKind } from '../data/zombies';
+import { ZOMBIES, WEAKSPOTS, EYES, paceMul, sizeVar, DASH_T, type ZombieDef, type WeakKind } from '../data/zombies';
 import { WEAPONS, fireProfile, armorDamage, roundsInStores, ammoLabel, ammoTypesFor, selectedAmmo, shotSound, wearMods, blastDamage, AMMO_RES, AMMO_TYPES, BURN, FLARE_LIGHT, type FireProfile } from '../data/weapons';
 import { img, flashImg, shadeImg } from '../assets';
 import { sfx, wind, gunSoundFor, muffle, ambienceLayer } from '../audio';
@@ -117,6 +117,7 @@ export interface Zombie {
   spitT?: number; // Biler: seconds to the next glob
   climb?: number; // coming up the corpse pile: seconds left
   pant?: number; // deer: breath-puff timer
+  dash?: number; // deer: the bolt out of the pant (counts down from DASH_T; zombies.ts paceMul)
   slide?: number; // knockback still easing out, px/s (impact.ts)
   react?: Reaction; // the last stagger / stumble / knockdown (impact.ts): drawing reads it
 }
@@ -873,7 +874,7 @@ export class Battle {
     const lane = R.pick([0, 1, 2, 3].filter((i) => count[i] === fewest));
     const yoff = R.range(-3, 3);
     const y = LANES[lane] + yoff;
-    const jit = R.range(0.96, 1.04);
+    const jit = R.range(1 - sizeVar(def), 1 + sizeVar(def)); // grown men and slight ones (zombies.ts sizeVar)
     const hpMul = def.ranged || def.boss ? 1 : 1 + Math.max(0, G.day - 8) * 0.02; // balance.md §8.9
     const sprite = R.pick(def.sprites);
     const z: Zombie = {
@@ -2215,7 +2216,9 @@ export class Battle {
       }
     }
     const wire = z.x > WALL_X + 60 && z.x < WALL_X + 60 + 90 * Math.min(3, G.fort.wire) ? 0.55 : 1;
-    let speed = z.def.speed * cold * wire;
+    // each body's own pace, a shambler's stalls, a Deer's bolt (zombies.ts paceMul; mean = def.speed)
+    z.dash = Math.max(0, (z.dash ?? 0) - dt);
+    let speed = z.def.speed * paceMul(z.def, z.id, z.phase, z.dash) * cold * wire;
     if (this.surge > 0 && !z.def.boss && !z.def.ranged) speed *= 1.7;
     if (z.crippled) speed *= z.def.id === 'ferryman' ? 0.5 : 0.35;
     if (z.def.lunge && !z.crippled) {
@@ -2229,7 +2232,7 @@ export class Battle {
           const h = this.zh(z);
           this.particles.push({ x: z.x - this.zw(z) * 0.3, y: z.y - h * 0.86, vx: R.range(-30, -10), vy: R.range(-14, -4), life: 0.9, max: 0.9, size: R.range(3, 5) * z.scale, color: '#cfd6dc', kind: 'smoke', ground: 0 });
         }
-        if (z.lungeT < -0.8) z.lungeT = R.range(1.2, 2.6);
+        if (z.lungeT < -0.8) { z.lungeT = R.range(1.2, 2.6); z.dash = DASH_T; }
       }
     }
     if (z.state === 'cover') return this.updateRaider(z, dt);
