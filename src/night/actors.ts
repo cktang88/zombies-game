@@ -333,7 +333,7 @@ export class BattleActors implements BattleHook {
     }
     // a new hit (the sim's flash timer jumped up), not every frame of it: under steady fire a big
     // body would otherwise stay white
-    if (z.flash > r.flash + 0.02) rig.flashT = Math.max(rig.flashT, 0.06);
+    if (z.flash > r.flash + 0.02) rig.flashHit(0.06);
     r.flash = z.flash;
     // ---- legs gone: buckle into a crawl (a Ferryman limps on)
     if (z.crippled && !r.crip) {
@@ -897,7 +897,7 @@ export class RunActors {
     rig.setSpeed(r.v);
     if (rig.ready) {
       if (!r.ready) { r.ready = true; rig.phase = (z.id * 0.6180339) % 1; }
-      if (z.flash > r.flash + 0.02) rig.flashT = Math.max(rig.flashT, 0.06);
+      if (z.flash > r.flash + 0.02) rig.flashHit(0.06);
       r.flash = z.flash;
       // hit reactions, as at the wall (night/impact.ts): a flinch on every new hit, then the
       // stagger / knee / fall clip for the tier the hit earned, stretched to the sim's time

@@ -110,6 +110,10 @@ export class Rig {
   aimAngle = 0;
   recoil = 0; recoilV = 0;
   flashT = 0;
+  private lastFlashT = -9;
+  /** The hit flash, at most every 0.22 s: under sustained fire (an MG on a big body) it would
+   *  otherwise stay on and the body would read as a pale blob. */
+  flashHit(dur = 0.07) { if (this.t - this.lastFlashT < 0.22) return; this.lastFlashT = this.t; this.flashT = Math.max(this.flashT, dur); }
   // last draw transform (so aimAt can take world coords)
   dx = 0; dy = 0; ds = 0.5; df = 1;
   // layers
@@ -252,7 +256,7 @@ export class Rig {
   /** Hit reaction by zone. Turned: a crippling leg hit may drop them to a crawl. */
   hit(zone: 'head' | 'torso' | 'arm' | 'leg', o: { cripple?: boolean; flash?: boolean } = {}) {
     if (this.dead) return;
-    this.flashT = o.flash === false ? 0 : 0.09;
+    if (o.flash === false) this.flashT = 0; else this.flashHit(0.09);
     if (zone === 'leg' && o.cripple && !this.crawling) {
       this.play('buckle', { onEnd: () => { this.stop(); this.setGait(this.style.id === 'drag' ? 'crawl' : (this.r() < 0.5 ? 'crawl' : 'crawlOneArm')); } });
       return;
@@ -807,7 +811,7 @@ export class Rig {
     }
     if (this.flashT > 0) {
       // per-part silhouettes overlap at the joints: keep it light so the seams don't read as blobs
-      ctx.globalAlpha = this.baseAlpha * 0.38 * Math.min(1, this.flashT / 0.04);
+      ctx.globalAlpha = this.baseAlpha * 0.3 * Math.min(1, this.flashT / 0.04);
       this.drawSil(ctx, as.flash, 0, 0, 0);
       ctx.globalAlpha = this.baseAlpha;
     }
