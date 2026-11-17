@@ -1,11 +1,67 @@
 // Procedural sound: no audio files, just shaped noise and oscillators.
 //
-// Routing:  sfx voices ─► sfxBus ─┐
-//           music beds ─► musicBus ┼─► master ─► destination
-//                     (reverb send)┘
+// =====================================================================================
+//  GUN AUDIO API — for the battle / expedition integrator
+// =====================================================================================
 //
-// Public API:
-//   sfx.*                       one-shot effects (unchanged)
+//  One call per trigger pull (per round for bursts; the coach gun's two simultaneous
+//  barrels are merged automatically — any two calls of one family within 12 ms are):
+//
+//    sfx.shoot(def.id, { suppressed, far, incendiary, pan })   // gun + casing, from the weapon id
+//    sfx.gun(kind, opts)                                        // just the shot, by family
+//
+//  `gunSoundFor(defId)` → { kind, reload, casing, casingDelay } tells you everything:
+//
+//    weapon id   kind          reload     casing        weapon id   kind          reload    casing
+//    service9    pistol        pistol     small         hunting     boltRifle     bolt      brass .8s
+//    revolver    magnum        revolver   — (on 'out')  lever       lever         lever     brass .45s
+//    m1911       pistol45      pistol     brass         scoped      marksman      bolt      brass .9s
+//    mp93        burst         pistol     small         muzzle      muzzleloader  muzzle    —
+//    smg         smg           smg        small         ar15        ar            rifle     brass
+//    r22         rimfire       rifle      small         carbine     carbine       rifle     brass
+//    pump        pump          pump       hull .5s      lmg         lmg           lmg       link
+//    coach       double        double     — (on 'out')  compound    bow           bow       —
+//    snake410    shotgun410    single     —             crossbow    crossbow      crossbow  —
+//    pipe        pipe          single     —             flaregun    flare         flare     —
+//    autoshot    autoshot      pump       hull .25s     nailer      nailer        nailer    —
+//                                                       rivet       rivet         nailer    —
+//    (also: rocket, grenade — launchers, not yet in WEAPONS)
+//
+//  GunOpts: suppressed (WeaponItem has the suppressor mod) · far: true | 0..1 (guards'
+//  guns: low-pass + sound-travel delay + more echo) · action: false to skip the pump/
+//  bolt/lever cycle (e.g. the last round) · pan -1..1 · delay s · volume · incendiary.
+//  Variation is built in: 4 pre-rendered takes per family, round-robin, ±2.5% rate,
+//  ±8% gain; so full-auto never machine-guns one sample.
+//
+//  Impacts (one per projectile is fine — repeats inside 25 ms are merged):
+//    sfx.impact('flesh' | 'head' | 'bone' | 'armor' | 'ricochet' | 'metal' | 'wood' | 'ground' | 'burst', { volume?, delay? })
+//      body hit → flesh · headshot/decap → head · weakspot/limb snap → bone · Deputy plate
+//      → armor (25% of armor hits auto-add a ricochet whine) · barricade → wood · miss →
+//      ground · pulper pops → burst
+//    sfx.confirm(streak)            kill-confirm tick, pitch +6% per kill in a streak
+//                                   (streak = kills within ~1.5 s; 1 for the first)
+//
+//  Reloads & handling:
+//    sfx.reload(kind, stage)        kind = gunSoundFor(id).reload; stage 'out' | 'in' |
+//                                   'rack' | 'shell' | 'bolt' | 'close' | 'arrow'
+//    sfx.reloadFor(defId, seconds, rounds?) → { cancel() }
+//                                   schedules a whole reload's stages across `seconds`;
+//                                   cancel() if the reload is interrupted / weapon swapped.
+//                                   Per-shell guns (pump, lever, autoshot): call
+//                                   sfx.reload(kind, 'shell') per shell instead, then 'rack'.
+//    sfx.casing(kind, delay?)       'brass' | 'small' | 'big' | 'hull' | 'link' (shoot() does it)
+//    sfx.dry()  sfx.jam()  sfx.overheat()  sfx.explosion(size = 1)
+//
+//  Legacy calls still work and now use the new kit: shot(id|kind, far), click, reload(),
+//  shell, hit, headpop, thud, wallHit, burst, boom, fire, groan, scream, hurt, bell, ui.
+//
+//  Mix: sfx → glue compressor → limiter → sfx volume → master → limiter. Loud shots duck
+//  the music bus briefly. Max 40 voices (oldest low-priority voice is stolen).
+//  Dev sound board: /soundboard.html (built alongside the game).
+//
+// =====================================================================================
+//
+// Other public API:
 //   wind(on)                    low wind ambience used by the night canvases
 //   music(mode)                 'title' | 'day' | 'night' | 'off' — crossfades beds
 //   setMasterVolume / setMusicVolume / setSfxVolume (0..1)
@@ -14,10 +70,24 @@
 // Browsers only allow an AudioContext after a user gesture. music() may be called
 // before that; the requested mode starts on the first pointer/key press.
 
+import { Engine, Synth, bankFor } from './audio/engine';
+import { GunKind } from './audio/guns';
+import { GunOpts, playGun, prewarm, resolveGun } from './audio/gunbank';
+import {
+  CasingKind, ImpactKind, ReloadKind, ReloadStage,
+  casing as casingFx, confirm as confirmFx, dryFire, explosion as explosionFx, impact as impactFx,
+  jam as jamFx, overheat as overheatFx, reload as reloadFx, reloadPlan,
+} from './audio/foley';
+import { WEAPONS } from './data/weapons';
+
+export type { GunKind } from './audio/guns';
+export type { GunOpts } from './audio/gunbank';
+export type { CasingKind, ImpactKind, ReloadKind, ReloadStage } from './audio/foley';
+
 let ctx: AudioContext | null = null;
-let master: GainNode | null = null;
-let sfxBus: GainNode | null = null;
-let musicBus: GainNode | null = null;
+let E: Engine | null = null;
+let sfxBus: GainNode | null = null;    // post-compressor sfx volume (wind goes straight here)
+let musicBus: GainNode | null = null;  // music input (ducked)
 let reverb: ConvolverNode | null = null;
 let noiseBuf: AudioBuffer | null = null;
 export let muted = false;
@@ -27,18 +97,13 @@ const vol = { master: 0.7, music: 0.55, sfx: 0.8 };
 function ac() {
   if (!ctx) {
     ctx = new AudioContext();
-    master = ctx.createGain();
-    master.gain.value = muted ? 0 : vol.master;
-    master.connect(ctx.destination);
-    sfxBus = ctx.createGain();
-    sfxBus.gain.value = vol.sfx;
-    sfxBus.connect(master);
-    musicBus = ctx.createGain();
-    musicBus.gain.value = vol.music;
-    musicBus.connect(master);
-    noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
-    const d = noiseBuf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    E = new Engine(ctx);
+    E.master.gain.value = muted ? 0 : vol.master;
+    E.sfxVol.gain.value = vol.sfx;
+    E.musicVol.gain.value = vol.music;
+    sfxBus = E.sfxVol;
+    musicBus = E.musicIn;
+    noiseBuf = bankFor(ctx).white;
     // a long, dark room for the music: decaying noise impulse
     reverb = ctx.createConvolver();
     const len = Math.floor(ctx.sampleRate * 4.5);
@@ -52,9 +117,17 @@ function ac() {
     wet.gain.value = 0.55;
     reverb.connect(wet).connect(musicBus);
     if (wantMode !== mode) queueMicrotask(() => music(wantMode));
+    // render the gun bank in the background (a few hundred ms of offline work)
+    const sr = ctx.sampleRate;
+    setTimeout(() => void prewarm(sr), 250);
   }
   if (ctx.state === 'suspended' && !document.hidden) void ctx.resume();
   return ctx;
+}
+function engine(): Engine | null {
+  if (muted) return null;
+  ac();
+  return E;
 }
 
 // Start audio (and any pending music) on the first gesture.
@@ -82,75 +155,169 @@ function ramp(p: AudioParam | undefined, v: number) {
 
 export function setMuted(m: boolean) {
   muted = m;
-  ramp(master?.gain, m ? 0 : vol.master);
+  ramp(E?.master.gain, m ? 0 : vol.master);
 }
 export function setMasterVolume(v: number) {
   vol.master = clamp01(v);
-  if (!muted) ramp(master?.gain, vol.master);
+  if (!muted) ramp(E?.master.gain, vol.master);
 }
 export function setMusicVolume(v: number) {
   vol.music = clamp01(v);
-  ramp(musicBus?.gain, vol.music);
+  ramp(E?.musicVol.gain, vol.music);
 }
 export function setSfxVolume(v: number) {
   vol.sfx = clamp01(v);
-  ramp(sfxBus?.gain, vol.sfx);
+  ramp(E?.sfxVol.gain, vol.sfx);
 }
 
+// ---------------------------------------------------------------------------
+// Weapon → sound mapping
+// ---------------------------------------------------------------------------
+export interface GunSound { kind: GunKind; reload: ReloadKind; casing: CasingKind | null; casingDelay: number }
+
+const GUN_SOUNDS: Record<string, [GunKind, ReloadKind, CasingKind | null, number?]> = {
+  service9: ['pistol', 'pistol', 'small'],
+  revolver: ['magnum', 'revolver', null],
+  m1911: ['pistol45', 'pistol', 'brass'],
+  mp93: ['burst', 'pistol', 'small'],
+  smg: ['smg', 'smg', 'small'],
+  r22: ['rimfire', 'rifle', 'small'],
+  pump: ['pump', 'pump', 'hull', 0.5],
+  coach: ['double', 'double', null],
+  snake410: ['shotgun410', 'single', null],
+  pipe: ['pipe', 'single', null],
+  autoshot: ['autoshot', 'pump', 'hull', 0.25],
+  hunting: ['boltRifle', 'bolt', 'brass', 0.8],
+  lever: ['lever', 'lever', 'brass', 0.45],
+  scoped: ['marksman', 'bolt', 'brass', 0.9],
+  muzzle: ['muzzleloader', 'muzzle', null],
+  ar15: ['ar', 'rifle', 'brass'],
+  carbine: ['carbine', 'rifle', 'brass'],
+  lmg: ['lmg', 'lmg', 'link'],
+  compound: ['bow', 'bow', null],
+  crossbow: ['crossbow', 'crossbow', null],
+  flaregun: ['flare', 'flare', null],
+  nailer: ['nailer', 'nailer', null],
+  rivet: ['rivet', 'nailer', null],
+};
+
+/** Which sounds a weapon (WEAPONS id) uses. Unknown ids fall back by caliber. */
+export function gunSoundFor(defId: string): GunSound {
+  const m = GUN_SOUNDS[defId];
+  if (m) return { kind: m[0], reload: m[1], casing: m[2], casingDelay: m[3] ?? 0.3 };
+  const k = resolveGun(defId);
+  if (k) return { kind: k, reload: 'rifle', casing: null, casingDelay: 0.3 };
+  const d = WEAPONS[defId];
+  const cal = d?.caliber;
+  if (cal === 'shot') return { kind: 'pump', reload: 'pump', casing: 'hull', casingDelay: 0.5 };
+  if (cal === 'rifle') return { kind: 'boltRifle', reload: 'bolt', casing: 'brass', casingDelay: 0.8 };
+  if (cal === 'r556') return { kind: d?.auto ? 'carbine' : 'ar', reload: 'rifle', casing: 'brass', casingDelay: 0.3 };
+  if (cal === 'ball') return { kind: 'muzzleloader', reload: 'muzzle', casing: null, casingDelay: 0 };
+  if (cal === 'bolt') return { kind: 'crossbow', reload: 'crossbow', casing: null, casingDelay: 0 };
+  if (cal === 'nails') return { kind: 'nailer', reload: 'nailer', casing: null, casingDelay: 0 };
+  if (cal === 'flare') return { kind: 'flare', reload: 'flare', casing: null, casingDelay: 0 };
+  if (cal === 'r22') return { kind: 'rimfire', reload: 'rifle', casing: 'small', casingDelay: 0.3 };
+  return { kind: d?.auto ? 'smg' : 'pistol', reload: d?.auto ? 'smg' : 'pistol', casing: 'small', casingDelay: 0.3 };
+}
+
+// legacy sfx.shot kinds from shotSound() in weapons.ts
+const LEGACY_SHOT: Record<string, GunKind> = { hunting: 'boltRifle', nailer: 'nailer', pump: 'pump', smg: 'smg', carbine: 'carbine' };
+
+// ---------------------------------------------------------------------------
+// Small helpers for the legacy one-liners
+// ---------------------------------------------------------------------------
 function noise(dur: number, freq: number, q: number, v: number, decay: number, type: BiquadFilterType = 'lowpass', when = 0) {
-  if (muted) return;
-  const c = ac();
-  const t = c.currentTime + when;
-  const src = c.createBufferSource();
-  src.buffer = noiseBuf;
-  src.playbackRate.value = 0.8 + Math.random() * 0.4;
-  const f = c.createBiquadFilter();
-  f.type = type;
-  f.frequency.value = freq;
-  f.Q.value = q;
-  const g = c.createGain();
-  g.gain.setValueAtTime(v, t);
-  g.gain.exponentialRampToValueAtTime(0.001, t + decay);
-  src.connect(f).connect(g).connect(sfxBus!);
-  src.start(t, Math.random(), dur);
+  const e = engine();
+  if (!e) return;
+  e.synth(when, decay + 0.1, { pri: 0 }).noise({ dur: Math.max(dur, decay), v, f: freq, q, type });
+}
+function tone(freq: number, dur: number, v: number, type: OscillatorType = 'sine', slide = 0, when = 0) {
+  const e = engine();
+  if (!e) return;
+  e.synth(when, dur + 0.1, { pri: 0 }).tone({ f: freq, f2: slide ? Math.max(20, freq + slide) : undefined, dur, v, type });
+}
+/** Run a foley synth on a fresh voice. */
+function fx(len: number, draw: (s: Synth) => void, o: { delay?: number; gate?: string; gap?: number; rev?: number; echo?: number; volume?: number; pri?: number; far?: boolean } = {}) {
+  const e = engine();
+  if (!e) return;
+  const delay = o.delay ?? 0;
+  if (o.gate && !e.gate(o.gate, e.now + delay, o.gap ?? 0.025)) return;
+  draw(e.synth(delay, len, { gain: o.volume ?? 1, rev: o.rev ?? 0.08, echo: o.echo ?? 0, pri: o.pri ?? 0, far: o.far }));
 }
 
-function tone(freq: number, dur: number, v: number, type: OscillatorType = 'sine', slide = 0, when = 0) {
-  if (muted) return;
-  const c = ac();
-  const t = c.currentTime + when;
-  const o = c.createOscillator();
-  o.type = type;
-  o.frequency.setValueAtTime(freq, t);
-  if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(20, freq + slide), t + dur);
-  const g = c.createGain();
-  g.gain.setValueAtTime(v, t);
-  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-  o.connect(g).connect(sfxBus!);
-  o.start(t);
-  o.stop(t + dur + 0.05);
-}
+let casingCount = 0;
 
 export const sfx = {
-  shot(kind: string, far = false) {
-    const v = far ? 0.25 : 0.6;
-    if (kind === 'pump') { noise(0.5, 900, 0.7, v * 1.2, 0.45); tone(70, 0.2, v * 0.6, 'sine', -30); }
-    else if (kind === 'hunting') { noise(0.7, 1600, 0.6, v * 1.3, 0.6); tone(55, 0.3, v * 0.7, 'sine', -20); }
-    else if (kind === 'nailer') { noise(0.08, 3000, 2, v * 0.4, 0.07, 'bandpass'); tone(400, 0.05, 0.1, 'square', -200); }
-    else if (kind === 'smg' || kind === 'carbine') { noise(0.15, 2200, 0.8, v * 0.8, 0.13); }
-    else { noise(0.3, 1800, 0.7, v, 0.25); tone(90, 0.1, v * 0.4, 'sine', -40); }
+  // ---- guns ------------------------------------------------------------------------
+  /** One shot of a gun family (GunKind or alias like '22', '410', 'rifle-bolt', 'assault'). */
+  gun(kind: GunKind | string, opts: GunOpts = {}) {
+    const e = engine();
+    if (e) playGun(e, kind, opts);
   },
-  click() { tone(1800, 0.03, 0.15, 'square'); },
-  reload() { noise(0.05, 2500, 3, 0.2, 0.05, 'bandpass'); noise(0.05, 1800, 3, 0.2, 0.05, 'bandpass', 0.12); },
-  shell() { noise(0.04, 3000, 4, 0.18, 0.04, 'bandpass'); },
-  hit() { noise(0.08, 500, 1, 0.3, 0.08); },
-  headpop() { noise(0.15, 700, 1, 0.5, 0.14); tone(140, 0.08, 0.2, 'sine', -80); },
+  /** One trigger pull of a WEAPONS id: the shot + its ejected casing. */
+  shoot(defId: string, opts: GunOpts = {}) {
+    const g = gunSoundFor(defId);
+    const e = engine();
+    if (!e || !playGun(e, g.kind, opts)) return;
+    // casings: skip for distant guns; thin them out under full-auto
+    if (g.casing && !opts.far && (g.kind !== 'lmg' && g.kind !== 'smg' && g.kind !== 'carbine' || casingCount++ % 3 === 0)) {
+      sfx.casing(g.casing, (opts.delay ?? 0) + g.casingDelay + Math.random() * 0.15);
+    }
+  },
+  // ---- impacts ---------------------------------------------------------------------
+  impact(kind: ImpactKind, o: { volume?: number; delay?: number } = {}) {
+    const rev = kind === 'burst' ? 0.2 : kind === 'ricochet' || kind === 'armor' ? 0.15 : 0.06;
+    fx(kind === 'burst' ? 0.9 : 0.45, (s) => impactFx(s, kind), { ...o, gate: `imp:${kind}`, gap: 0.025, rev, pri: kind === 'head' || kind === 'burst' ? 1 : 0 });
+    if (kind === 'armor' && Math.random() < 0.25) fx(0.5, (s) => impactFx(s, 'ricochet'), { delay: (o.delay ?? 0) + 0.02, gate: 'imp:ric', gap: 0.15, rev: 0.2, volume: o.volume });
+  },
+  /** Kill-confirm tick. streak = consecutive kills within ~1.5 s (1 = first). */
+  confirm(streak = 1) {
+    fx(0.1, (s) => confirmFx(s, streak), { gate: 'confirm', gap: 0.04, rev: 0, pri: 1 });
+  },
+  // ---- reloads & handling ----------------------------------------------------------
+  /** A reload stage for a reload family. Called with no arguments: the legacy generic sound. */
+  reload(kind: ReloadKind = 'rifle', stage: ReloadStage = 'in', delay = 0) {
+    fx(0.8, (s) => reloadFx(s, kind, stage), { delay, rev: 0.05, pri: 1 });
+  },
+  /** Schedule a whole reload for a WEAPONS id across `seconds`. cancel() stops what hasn't played. */
+  reloadFor(defId: string, seconds: number, rounds?: number) {
+    const g = gunSoundFor(defId);
+    const r = rounds ?? WEAPONS[defId]?.mag ?? 1;
+    const timers: number[] = [];
+    for (const [stage, f] of reloadPlan(g.reload, r)) {
+      timers.push(window.setTimeout(() => sfx.reload(g.reload, stage), Math.max(0, f * seconds) * 1000));
+    }
+    return { cancel() { for (const t of timers) clearTimeout(t); timers.length = 0; } };
+  },
+  casing(kind: CasingKind = 'brass', delay = 0.3 + Math.random() * 0.15) {
+    fx(0.5, (s) => casingFx(s, kind), { delay, gate: `case:${kind}`, gap: 0.05, rev: 0.03 });
+  },
+  dry() { fx(0.1, dryFire, { gate: 'dry', gap: 0.05, pri: 1 }); },
+  jam() { fx(0.4, jamFx, { pri: 1 }); },
+  overheat() { fx(1.4, overheatFx, { gate: 'heat', gap: 0.5 }); },
+  explosion(size = 1, o: { delay?: number; far?: boolean } = {}) {
+    const e = engine();
+    if (!e) return;
+    fx(3 * size + 0.5, (s) => explosionFx(s, size), { delay: o.delay, far: o.far, rev: 0.6, echo: 0.5, pri: 3, volume: o.far ? 0.5 : 1 });
+    e.duck(0.9 * Math.min(1, size), o.delay ?? 0);
+  },
+
+  // ---- legacy ----------------------------------------------------------------------
+  /** Legacy: a WEAPONS id, a GunKind/alias or a shotSound() name. far = a guard's gun. */
+  shot(kind: string, far = false) {
+    if (GUN_SOUNDS[kind] || WEAPONS[kind]) { sfx.shoot(kind, { far }); return; }
+    sfx.gun(LEGACY_SHOT[kind] ?? resolveGun(kind) ?? 'pistol', { far });
+  },
+  click() { sfx.dry(); },
+  shell() { sfx.reload('pump', 'shell'); },
+  hit() { sfx.impact('flesh'); },
+  headpop() { sfx.impact('head'); },
   thud() { noise(0.15, 220, 1, 0.35, 0.15); },
-  wallHit() { noise(0.12, 300, 2, 0.28, 0.12, 'bandpass'); },
+  wallHit() { sfx.impact('wood'); },
   groan() { tone(80 + Math.random() * 60, 0.9, 0.06, 'sawtooth', -30); },
   scream() { tone(900 + Math.random() * 300, 1.2, 0.08, 'sawtooth', 500); tone(1300, 1.0, 0.04, 'triangle', -400); },
-  burst() { noise(0.6, 400, 0.6, 0.6, 0.6); },
-  boom() { noise(1.2, 300, 0.5, 1, 1.1); tone(45, 0.8, 0.6, 'sine', -20); },
+  burst() { sfx.impact('burst'); },
+  boom() { sfx.explosion(1); },
   fire() { noise(0.6, 1200, 0.3, 0.15, 0.6, 'highpass'); },
   hurt() { tone(220, 0.25, 0.12, 'triangle', -120); },
   bell() { tone(392, 3, 0.18, 'sine'); tone(784, 2.5, 0.06, 'sine'); tone(523, 3, 0.05, 'sine'); },
