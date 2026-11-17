@@ -4,6 +4,7 @@
 import { ZOMBIES } from '../data/zombies';
 import { portraitImg } from './portrait';
 import { sfx } from '../audio';
+import { tip, ico, fold } from './kit';
 import { ACTIONS, FIXED, keyLabel, keyOf, type KeyCtx } from './keys';
 
 /** The bindings for a context, as the ledger's key list (live: rebinding shows here). */
@@ -15,55 +16,73 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 type Page = 'day' | 'night' | 'runs' | 'turned' | 'moods';
 let page: Page = 'day';
 
+/** A picture card: icon or portrait, a name, one line; the rest on hover / long press. */
+const card = (pic: string, name: string, line: string, more = '') =>
+  `<div class="hcard"${tip(more)}>${pic}<div><b class="t-m">${name}</b><span class="t-s">${line}</span></div></div>`;
+const JOBS: [string, string, string, string][] = [
+  ['job_repair', 'Repair the wall', 'Burns timber.', 'Building skill. Patches the barricade.'],
+  ['job_scavenge', 'Scavenge', 'Pick a site.', 'Scavenging skill. Sites run dry, and the riskier ones bite back.'],
+  ['job_craft', 'Workshop', 'Works the queue.', 'Crafting skill. <b>A queue with nobody at the bench does nothing.</b>'],
+  ['job_farm', 'Food', 'One a day each.', 'Farming skill. Snares and kale, more with cold frames. Everyone eats one a day.'],
+  ['job_doctor', 'Tend wounded', 'Stops the rot.', 'Medicine. Untended cuts go septic.'],
+  ['job_radio', 'Work the radio', 'Voices, news.', 'Social. Needs a radio mast. Contacts and news from across the river.'],
+  ['job_rest', 'Rest', 'Sleep it off.', 'Recovers rest and lifts the mood a little.'],
+];
+
 const PAGES: Record<Page, { label: string; html: () => string }> = {
   day: {
     label: 'The day',
     html: () => `
-      <p>Each survivor does one job. Work resolves when you go to the wall at dusk.</p>
-      <dl class="gloss">
-        <dt>Repair the wall</dt><dd>Building skill. Patches the barricade; burns timber.</dd>
-        <dt>Scavenge</dt><dd>Scavenging skill. Choose a site. Sites run dry, and the riskier ones bite back.</dd>
-        <dt>Workshop</dt><dd>Crafting skill. Works through the craft queue. <b>A queue with nobody at the bench does nothing.</b></dd>
-        <dt>Food</dt><dd>Farming skill. Snares and kale, more with cold frames. Everyone eats one a day.</dd>
-        <dt>Tend wounded</dt><dd>Medicine. Untended cuts go septic.</dd>
-        <dt>Work the radio</dt><dd>Social. Needs a radio mast. Voices, contacts, news from across the river.</dd>
-        <dt>Rest</dt><dd>Recovers rest and lifts the mood a little.</dd>
-      </dl>
-      <p>The leader can also <b>lead a run</b> instead of working: a daylight walk down one street, played by you.</p>
-      <p><kbd>${esc(keyLabel(keyOf('day.dusk')))}</kbd> goes to the wall at dusk when nothing else is open; <kbd>${esc(keyLabel(keyOf('day.help')))}</kbd> opens this ledger.</p>`,
+      <p class="t-l">One job each. It all comes due at dusk.</p>
+      <div class="hcards">${JOBS.map(([i, n, l, m]) => card(ico(i), n, l, m)).join('')}
+        ${card(ico('st_danger'), 'Lead a run', 'You walk it.', 'The leader can lead a run instead of working: a daylight walk down one street, played by you.')}</div>
+      <p class="t-s"><kbd>${esc(keyLabel(keyOf('day.dusk')))}</kbd> to the wall at dusk · <kbd>${esc(keyLabel(keyOf('day.help')))}</kbd> this ledger · hover anything for more.</p>`,
   },
   night: {
     label: 'The wall',
     html: () => `
-      ${keyList('night')}
-      <p>Everyone else who can fight stands the wall and shoots on their own. The barricade is the health bar; if it falls, they climb over and the defenders get hurt. Noise draws stragglers. Worn guns jam. Every key can be changed in Settings › Controls.</p>`,
+      <p class="t-l">Aim for the head. Hold the wall.</p>
+      <div class="hcards">
+        ${card(ico('st_wall'), 'The barricade', 'Your health bar.', 'If it falls, they climb over and the defenders get hurt.')}
+        ${card(ico('job_guard'), 'The others', 'Shoot on their own.', 'Everyone else who can fight stands the wall.')}
+        ${card(ico('st_noise'), 'Noise', 'Draws stragglers.', 'Every shot carries. Quiet guns draw fewer.')}
+        ${card(ico('st_break'), 'Jams', 'Worn guns jam.', 'Keep them maintained in the workshop.')}
+      </div>
+      ${fold('<span class="t-s">Keys</span>', keyList('night') + '<p class="t-s">Every key can be changed in Settings › Controls.</p>', { id: 'help-keys-night', open: true })}`,
   },
   runs: {
     label: 'Runs',
     html: () => `
-      ${keyList('run')}
-      <p>Sleepers stand still until you get near or loud. The light lasts about two and a half minutes; after that the dead wake everywhere. Walk back off the <b>left edge</b> to go home. Die out there and what you carried stays in the road.</p>`,
+      <p class="t-l">One street, one light, home off the left edge.</p>
+      <div class="hcards">
+        ${card(ico('st_tired'), 'Sleepers', 'Wake if you get close.', 'They stand still until you get near or loud.')}
+        ${card(ico('st_time'), 'The light', 'About 2½ minutes.', 'After that the dead wake everywhere.')}
+        ${card(ico('st_dead'), 'Dying out there', 'The loot stays.', 'What you carried stays in the road.')}
+      </div>
+      ${fold('<span class="t-s">Keys</span>', keyList('run'), { id: 'help-keys-run', open: true })}`,
   },
   turned: {
     label: 'The Turned',
-    html: () => `<div class="turned">${Object.values(ZOMBIES).map((z) => `
-      <div class="tz">${portraitImg(z.sprites[0], 'tzport')}
-        <div><b>${esc(z.name)}</b> <span class="dim">${z.minDay >= 100 ? 'special nights' : `from day ${z.minDay}`}${z.armor && z.armor > 10 ? ' · armoured' : ''}${z.burst ? ' · bursts' : ''}${z.scream ? ' · calls others' : ''}${z.lunge ? ' · sprints' : ''}</span>
-        <p>${esc(z.lore)}</p></div></div>`).join('')}</div>
-      <p class="dim">They were all somebody. The town gave them these names.</p>`,
+    html: () => `<div class="turned hcards">${Object.values(ZOMBIES).map((z) => {
+      const tags = [z.minDay >= 100 ? 'special nights' : `day ${z.minDay}+`, z.armor && z.armor > 10 ? 'armoured' : '', z.burst ? 'bursts' : '', z.scream ? 'calls others' : '', z.lunge ? 'sprints' : ''].filter(Boolean);
+      return `<div class="tz hcard"${tip(`<b>${esc(z.name)}</b><br>${esc(z.lore)}`)}>${portraitImg(z.sprites[0], 'tzport')}<div><b class="t-m">${esc(z.name)}</b><span class="t-xs">${tags.join(' · ')}</span></div></div>`;
+    }).join('')}</div>
+      <p class="t-s">They were all somebody. The town gave them these names. Hover one for its story.</p>`,
   },
   moods: {
     label: 'Moods & breaks',
     html: () => `
-      <p>Mood is a sum of named reasons: the end of the world, hunger, rest, pain, fever, lovers, drink, and thoughts that fade over days ("Friend died", "We held the wall"). Open a survivor's name to see every line.</p>
-      <p>The ticks on the mood bar are <b>break thresholds</b>. Below them, a survivor may break at dawn:</p>
-      <dl class="gloss">
-        <dt>Minor</dt><dd>Sulk on the porch, binge the food, go on a bender, lash out at someone.</dd>
-        <dt>Major</dt><dd>Go catatonic, wander off, smash the workbench, hide a bite.</dd>
-        <dt>Extreme</dt><dd>Walk off toward the river, desert in the night with supplies, shut down entirely, or end it.</dd>
-      </dl>
-      <p>Sometimes they find <b>resolve</b> instead: "Not today." After a break comes catharsis, a lift that lasts a few days.</p>
-      <p>Fed, rested, tended, doing work they care about, beside someone they love: that is how you keep people.</p>`,
+      <p class="t-l">Fed, rested, tended, loved: that is how you keep people.</p>
+      <div class="hcards">
+        ${card(ico('st_mood_up'), 'Mood', 'A sum of reasons.', 'The end of the world, hunger, rest, pain, fever, lovers, drink, and thoughts that fade over days ("Friend died", "We held the wall"). Open a survivor\'s name to see every line.')}
+        ${card(ico('st_break'), 'Breaks', 'Below the ticks, at dawn.', 'The ticks on the mood bar are break thresholds. Below them, a survivor may break at dawn.')}
+        ${card(ico('st_courage'), 'Resolve', '"Not today."', 'Sometimes they find resolve instead. After a break comes catharsis, a lift that lasts a few days.')}
+      </div>
+      ${fold('<span class="t-s">What a break looks like</span>', `<dl class="gloss">
+        <dt>Minor</dt><dd>Sulk on the porch, binge the food, go on a bender, lash out.</dd>
+        <dt>Major</dt><dd>Catatonic, wander off, smash the workbench, hide a bite.</dd>
+        <dt>Extreme</dt><dd>Walk toward the river, desert with supplies, shut down, or end it.</dd>
+      </dl>`, { id: 'help-breaks' })}`,
   },
 };
 

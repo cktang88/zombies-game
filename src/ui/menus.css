@@ -1,0 +1,19 @@
+/* Menus, picture-first (help, settings, the ending): cards and folds instead of paragraphs. */
+
+/* help: picture cards, the sentence on hover */
+.hcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; margin: 10px 0; }
+.hcard { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); background: rgba(0,0,0,.12); cursor: help; }
+.hcard:hover, .hcard:focus { border-color: #8a7550; outline: none; }
+.hcard > .ico { width: 34px; height: 34px; flex: none; }
+.hcard b { display: block; font-family: var(--type); font-weight: normal; }
+.hcard .t-s, .hcard .t-xs { display: block; }
+.turned.hcards { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.turned .tz.hcard { flex-direction: column; text-align: center; border-bottom: 1px solid var(--line); padding: 10px 6px; }
+.turned .tz.hcard img.tzport { width: 72px; height: 90px; }
+.hbody > .t-l { margin: 4px 0 6px; }
+@media (max-width: 600px) { .hcards { grid-template-columns: 1fr 1fr; } .hcard { padding: 6px; } .hcard > .ico { width: 26px; height: 26px; } }
+
+/* settings: one-line rows, the explanation behind an (i) */
+.qi { display: inline-block; width: 15px; height: 15px; line-height: 15px; margin-left: 6px; border-radius: 50%; border: 1px solid #6a5c46; color: var(--dim); font: 10px var(--type); text-align: center; vertical-align: 1px; cursor: help; }
+.sbody .fold > summary { font-size: var(--fs-s); text-transform: uppercase; letter-spacing: .1em; color: var(--dim); }
+.sbody .fold > .fold-body { padding-left: 4px; }

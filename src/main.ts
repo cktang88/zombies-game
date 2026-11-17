@@ -27,6 +27,7 @@ import { keyCap } from './ui/keys';
 import { startAsh } from './ui/titlefx';
 import { portraitImg } from './ui/portrait';
 import './ui/ledger.css';
+import './ui/menus.css';
 import { renderDeploy } from './ui/deploy';
 import { TRAPS, placementsAllowed, spendStock, dawnRetrieve, migrateTrapStock, type Placement } from './data/traps';
 import { takeSpent } from './night/traps';

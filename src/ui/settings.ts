@@ -13,6 +13,7 @@ import { setMasterVolume, setMusicVolume, setReducedGore, setSfxVolume, setAmbie
 import { ACTIONS, FIXED, PAD, PAD_BUTTONS, PAD_STICKS, conflicts, keyLabel, keyOf, normKey, reserved, resetKeys, setKey, type KeyCtx } from './keys';
 import { padConnected } from '../input/gamepad';
 import { resetHints } from './onboarding';
+import { fold } from './kit';
 
 export type TextSize = 'S' | 'M' | 'L';
 export interface Settings {
@@ -241,10 +242,13 @@ export function openSettings(host: HTMLElement = document.body, onClose?: () => 
     const s = getSettings();
     return `<label class="set-row"><span>${label}</span><input type="range" min="0" max="100" step="5" data-k="${k}" value="${Math.round(s[k] * 100)}" style="--p:${Math.round(s[k] * 100)}%" aria-label="${label} volume"><output>${Math.round(s[k] * 100)}</output></label>`;
   };
+  // one line per setting; the explanation lives behind the (i), shown on hover, focus or long press
+  const qi = (note: string) => (note ? '<span class="qi" aria-hidden="true">i</span>' : '');
+  const tipAttr = (note: string) => (note ? ` data-tip="${esc(note)}" aria-description="${esc(note)}"` : '');
   const check = (k: keyof Settings, label: string, note: string, on: boolean) =>
-    `<label class="set-row check"><input type="checkbox" data-k="${k}" ${on ? 'checked' : ''}><span>${label}<small>${note}</small></span></label>`;
+    `<label class="set-row check"${tipAttr(note)}><input type="checkbox" data-k="${k}" ${on ? 'checked' : ''}><span>${label}${qi(note)}</span></label>`;
   const choice = (k: keyof Settings, label: string, opts: [string, string][], cur: string, note = '') =>
-    `<div class="set-row choice" role="radiogroup" aria-label="${label}"><span>${label}${note ? `<small>${note}</small>` : ''}</span><span class="seg">${opts.map(([v, l]) => `<button type="button" role="radio" aria-checked="${v === cur}" class="${v === cur ? 'on' : ''}" data-choice="${k}" data-v="${v}">${l}</button>`).join('')}</span></div>`;
+    `<div class="set-row choice" role="radiogroup" aria-label="${label}"${tipAttr(note)}><span>${label}${qi(note)}</span><span class="seg">${opts.map(([v, l]) => `<button type="button" role="radio" aria-checked="${v === cur}" class="${v === cur ? 'on' : ''}" data-choice="${k}" data-v="${v}">${l}</button>`).join('')}</span></div>`;
 
   const body = (): string => {
     const s = getSettings();
@@ -252,41 +256,43 @@ export function openSettings(host: HTMLElement = document.body, onClose?: () => 
       case 'audio': return `
         ${slider('master', 'Master')}${slider('music', 'Music')}${slider('sfx', 'Effects')}${slider('ambience', 'Ambience')}
         ${check('muted', 'Mute everything', 'The same as the title screen\'s "sound off".', s.muted)}`;
-      case 'video': return `
+      case 'video': return `${fold('Look', `
         ${choice('animation', 'Animation', [['rigged', 'Rigged'], ['classic', 'Classic']], s.animation, 'Rigged: bone rigs that aim, reload, walk and fall. Classic: single images, lighter (used by itself if the rigs can\'t load or run too slowly).')}
         ${choice('fxQuality', 'Effects quality', [['high', 'High'], ['medium', 'Medium'], ['low', 'Low']], s.fxQuality, 'Muzzle flashes, tracers, smoke, fire and blasts. Lower it if the night stutters.')}
-        ${check('reduceShake', 'Reduce screen shake', 'Gunfire and the wall falling barely move the camera.', s.reduceShake)}
-        ${check('reduceGore', 'Reduce gore', 'Less blood on the road, no heads coming off. The dead still fall.', s.reduceGore)}
-        ${check('flashes', 'Screen flashes and hitstop', 'The screen edge warms on a kill, the wall bar flashes, heavy hits hold the world still for a few frames.', s.flashes)}
-        ${check('hitMarkers', 'Hit markers', 'A tick at the crosshair for every hit, coloured by where it landed.', s.hitMarkers)}
-        ${check('zoneMarkers', 'Damage-zone markers', 'Faint rings on the Turned\'s weak spots (neck, shoulder, knees, the Biler\'s sac).', s.zoneMarkers)}
         ${choice('textSize', 'Text size', [['S', 'S'], ['M', 'M'], ['L', 'L']], s.textSize)}
         ${check('highContrast', 'High-contrast text', 'Brighter ink, darker paper, no ruled lines.', s.highContrast)}
-        <div class="set-row choice"><span>Fullscreen<small>Not saved: the browser asks each time.</small></span><span class="seg"><button type="button" data-act="fullscreen" aria-pressed="${fsOn()}">${fsOn() ? 'Leave fullscreen' : 'Go fullscreen'}</button></span></div>
-        ${check('showFps', 'Show frame rate', 'A small counter in the corner: frames per second and the slowest frame.', s.showFps)}`;
+        <div class="set-row choice" data-tip="Not saved: the browser asks each time."><span>Fullscreen<span class="qi" aria-hidden="true">i</span></span><span class="seg"><button type="button" data-act="fullscreen" aria-pressed="${fsOn()}">${fsOn() ? 'Leave fullscreen' : 'Go fullscreen'}</button></span></div>`, { open: true, id: 'set-look' })}
+        ${fold('Comfort', `
+        ${check('reduceShake', 'Reduce screen shake', 'Gunfire and the wall falling barely move the camera.', s.reduceShake)}
+        ${check('reduceGore', 'Reduce gore', 'Less blood on the road, no heads coming off. The dead still fall.', s.reduceGore)}
+        ${check('flashes', 'Screen flashes and hitstop', 'The screen edge warms on a kill, the wall bar flashes, heavy hits hold the world still for a few frames.', s.flashes)}`, { open: true, id: 'set-comfort' })}
+        ${fold('On screen', `
+        ${check('hitMarkers', 'Hit markers', 'A tick at the crosshair for every hit, coloured by where it landed.', s.hitMarkers)}
+        ${check('zoneMarkers', 'Damage-zone markers', 'Faint rings on the Turned\'s weak spots (neck, shoulder, knees, the Biler\'s sac).', s.zoneMarkers)}
+        ${check('showFps', 'Show frame rate', 'A small counter in the corner: frames per second and the slowest frame.', s.showFps)}`, { open: true, id: 'set-screen' })}`;
       case 'gameplay': return `
         ${choice('realism', 'Realism', [['standard', 'Standard'], ['hardcore', 'Hardcore']], s.realism, 'Hardcore: no exact round count, double-feeds are commoner, and a speed reload leaves the magazine in the snow.')}
         ${check('autoReload', 'Reload when empty', 'The gun reloads by itself when it runs dry. Off: it clicks until you press reload.', s.autoReload)}
         ${choice('focusMode', 'Focus (right mouse)', [['hold', 'Hold'], ['toggle', 'Toggle']], s.focusMode)}
         ${check('threatRibbon', 'Threat ribbon', 'The strip at the top of the night: what is coming up the road and from which side.', s.threatRibbon)}
-        <div class="set-row choice"><span>Tutorial hints<small>The notes clipped to the first day's ledger.</small></span><span class="seg"><button type="button" data-act="hints">Show them again</button></span></div>`;
+        <div class="set-row choice" data-tip="The notes clipped to the first day's ledger."><span>Tutorial hints<span class="qi" aria-hidden="true">i</span></span><span class="seg"><button type="button" data-act="hints">Show them again</button></span></div>`;
       case 'controls': {
         const clash = conflicts();
         const ctxs: [KeyCtx, string][] = [['night', 'At the wall'], ['run', 'Daylight runs'], ['day', 'The day']];
-        return `<p class="dim small">Click a key, then press the new one (Esc cancels). Mouse, number keys, Tab, Shift, the arrows and Esc are fixed.</p>
+        return `<p class="t-s">Click a key, then press the new one.<span class="qi" data-tip="Esc cancels. Mouse, number keys, Tab, Shift, the arrows and Esc are fixed.">i</span></p>
           ${note ? `<p class="setnote" role="status">${esc(note)}</p>` : ''}
-          ${ctxs.map(([c, label]) => `<h3>${label}</h3><div class="keylist">
+          ${ctxs.map(([c, label]) => fold(label, `<div class="keylist">
             ${ACTIONS.filter((a) => a.ctx === c).map((a) => {
               const cl = clash.get(a.id);
               return `<div class="keyrow${cl ? ' clash' : ''}"><span>${esc(a.label)}${cl ? `<small>also ${esc(cl.join(', ').toLowerCase())}</small>` : ''}</span><button type="button" class="kbd${capture === a.id ? ' wait' : ''}" data-bind="${a.id}" aria-label="${esc(a.label)}: ${esc(keyLabel(keyOf(a.id)))}. Click to change.">${capture === a.id ? 'press a key…' : esc(keyLabel(keyOf(a.id)))}</button></div>`;
             }).join('')}
             ${FIXED[c].map(([k, l]) => `<div class="keyrow fixed"><span>${esc(l)}</span><kbd>${esc(k)}</kbd></div>`).join('')}
-          </div>`).join('')}
-          <h3>Gamepad</h3><p class="dim small padstatus">${padConnected() ? `Connected: ${esc(padConnected())}.` : 'None connected. Plug one in and press a button.'} The pad presses the keys above, so rebinding a key moves it too. In menus: D-pad moves, A picks, B backs out.</p>
+          </div>`, { open: c === 'night' || !!clash.size, id: `set-keys-${c}` })).join('')}
+          ${fold('Gamepad', `<p class="dim small padstatus">${padConnected() ? `Connected: ${esc(padConnected())}.` : 'None connected. Plug one in and press a button.'} The pad presses the keys above, so rebinding a key moves it too. In menus: D-pad moves, A picks, B backs out.</p>
           ${(['night', 'run'] as const).map((c) => `<div class="keylist"><h4>${c === 'night' ? 'At the wall' : 'Daylight runs'}</h4>
             ${PAD_STICKS[c].map(([k, l]) => `<div class="keyrow fixed"><span>${esc(l)}</span><kbd>${esc(k)}</kbd></div>`).join('')}
             ${PAD[c].map((b) => `<div class="keyrow fixed"><span>${esc(b.label)}</span><kbd>${esc(PAD_BUTTONS[b.btn])}</kbd></div>`).join('')}
-          </div>`).join('')}
+          </div>`).join('')}`, { id: 'set-pad' })}
           <button type="button" data-act="resetkeys">Reset all keys to defaults</button>`;
       }
       case 'data': {
@@ -295,10 +301,10 @@ export function openSettings(host: HTMLElement = document.body, onClose?: () => 
           : `<button type="button" data-act="${id}" ${id === 'delsave' && !hasKey(DATA_KEYS.save) ? 'disabled' : ''}>${label}</button>`;
         return `<p class="dim small">Everything lives in this browser. Export it to keep a copy or move it to another device.</p>
           ${note ? `<p class="setnote" role="status">${esc(note)}</p>` : ''}
-          <div class="datarow"><button type="button" data-act="export">Export save to a file</button><span class="dim small">The game in progress, the Ledger, settings and keys.</span></div>
-          <div class="datarow"><label class="filebtn"><input type="file" accept="application/json,.json" data-act="import">Import a save file…</label><span class="dim small">Replaces what is here, then reloads.</span></div>
-          <div class="datarow">${conf('resetlegacy', 'Reset the Ledger', 'Every inscribed name, unlocked boon and best score goes. Sure?')}<span class="dim small">The legacy across runs.</span></div>
-          <div class="datarow">${conf('delsave', 'Delete the saved game', 'The house on Ferry Road is forgotten. Sure?')}<span class="dim small">${hasKey(DATA_KEYS.save) ? 'The game in progress.' : 'No game saved.'}</span></div>`;
+          <div class="datarow"><button type="button" data-act="export" data-tip="The game in progress, the Ledger, settings and keys.">Export save to a file</button></div>
+          <div class="datarow"><label class="filebtn"><input type="file" accept="application/json,.json" data-act="import">Import a save file…<span class="qi" data-tip="Replaces what is here, then reloads.">i</span></label></div>
+          <div class="datarow">${conf('resetlegacy', 'Reset the Ledger', 'Every inscribed name, unlocked boon and best score goes. Sure?')}</div>
+          <div class="datarow">${conf('delsave', 'Delete the saved game', 'The house on Ferry Road is forgotten. Sure?')}${hasKey(DATA_KEYS.save) ? '' : '<span class="t-s">No game saved.</span>'}</div>`;
       }
     }
   };
