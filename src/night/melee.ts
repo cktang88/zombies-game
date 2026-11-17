@@ -49,6 +49,7 @@ export class Melee implements BattleHook {
   bleed = new Map<number, { dps: number; t: number; g: Guardian | null }>();
   slashes: Slash[] = [];
   meleeKills = new Map<string, number>();
+  stepped = new Set<string>(); // guards who went up to the wall to fight hand to hand
   swings = 0;
 
   constructor(b: Battle, traps?: Traps) {
@@ -218,11 +219,19 @@ export class Melee implements BattleHook {
   /** A guard with nothing left to shoot swings their hand weapon at whatever is on the wall. Sets g.cd. */
   guard(g: Guardian) {
     const { prof } = profOf(g);
-    // guards near the wall reach the barricade; anything inside the line comes to them
-    const cands = this.reachable(g.x > 200 ? WALL_X - 30 : g.x, prof.reach).filter((z) => {
+    // out of rounds, they step up to the barricade with whatever they carry
+    const atWall = g.x >= WALL_X - 90;
+    const cands = this.reachable(g.x, prof.reach).filter((z) => {
       const st = z.state as string;
-      return st === 'over' || st === 'maul' ? Math.abs(z.x - g.x) < prof.reach + 40 : g.x > 200;
+      return st === 'over' || st === 'maul' ? Math.abs(z.x - g.x) < prof.reach + 40 : atWall;
     });
+    if (!cands.length && !atWall && this.reachable(WALL_X, prof.reach).length) {
+      const n = this.b.guards.filter((q) => q !== g && q.homeX >= WALL_X - 90).length;
+      g.homeX = WALL_X - 46 - n * 24;
+      g.cd = 0.4;
+      if (!this.stepped.has(g.s.id)) { this.stepped.add(g.s.id); this.b.say(`${first(g.s)} is out of rounds and goes up to the wall with ${itemOf(g) ? `the ${MELEE[itemOf(g)!.def].name.toLowerCase()}` : 'bare hands'}.`, 3); }
+      return;
+    }
     if (!cands.length) {
       g.cd = 1.2;
       if (R.chance(0.25)) this.b.text(g.x + 20, g.y - 150, 'out of ammo', '#c88', 10);

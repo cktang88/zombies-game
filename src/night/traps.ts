@@ -135,10 +135,19 @@ export class Traps implements BattleHook {
   explode(tr: TrapRT, x: number, y: number) {
     const fx = tr.def.fx, r = tr.def.area.radius ?? 130;
     const ex = { radius: r, dmg: fx.dmg ?? 100 };
-    const hit = this.b.zombies.filter((z) => z.state !== 'dying' && blastDamage(ex, z.x - x, z.y - y) > 0);
-    this.b.blast(x, y, ex, fx.knock ?? 40, this.leader);
+    // strung across the road: the blast reaches every lane, falling off with distance along it
+    const span = tr.def.area.allLanes;
+    const hit = this.b.zombies.filter((z) => z.state !== 'dying' && (z.emerge ?? 0) <= 0.25 && blastDamage(ex, z.x - x, span ? 0 : z.y - y) > 0);
+    this.b.blast(x, y, { radius: r, dmg: 0 }, 0, null); // the flash, the scorch, the noise
+    const knock = fx.knock ?? 40;
     for (const z of hit) {
-      if (z.state === 'dying') { tr.kills++; continue; }
+      const dmg = blastDamage(ex, z.x - x, span ? 0 : z.y - y);
+      z.flash = 0.1;
+      if (!(z.def.id === 'ferryman' || z.def.boss || z.state === 'cover')) {
+        z.x = Math.min(W + 150, z.x + Math.sign(z.x - x || 1) * knock * (dmg / ex.dmg));
+        if (z.state === 'wall') z.state = 'walk';
+      }
+      if (this.hurt(z, dmg, tr)) continue;
       if (fx.cripple) this.cripple(z, fx.cripple);
       if (fx.burn) z.burn = Math.max(z.burn, fx.burn);
       this.holds.delete(z.id);
@@ -731,6 +740,10 @@ export class Traps implements BattleHook {
 
   // ---------------- drawing ----------------
   drawGround(c: CanvasRenderingContext2D) {
+    void c; // decals go in the sorted pass (after the darkness, behind every lane): see decals()
+  }
+
+  decals(c: CanvasRenderingContext2D) {
     for (const tr of this.list) {
       const id = tr.def.id;
       const hw = (tr.def.area.length ?? 40) / 2;
@@ -739,9 +752,9 @@ export class Traps implements BattleHook {
         // a dark glossy smear across every lane, with a moon sheen
         for (let l = 0; l < 4; l++) {
           const y = LANES[l] + 2, s = depthScale(y);
-          c.fillStyle = tr.on ? 'rgba(40,20,8,0.75)' : 'rgba(6,6,8,0.62)';
+          c.fillStyle = tr.on ? 'rgba(40,20,8,0.75)' : 'rgba(4,4,6,0.55)';
           c.beginPath(); c.ellipse(tr.x + (l - 1.5) * 4, y, hw * (0.92 + l * 0.03), 9 * s, 0, 0, Math.PI * 2); c.fill();
-          c.strokeStyle = `rgba(150,170,200,${0.12 + 0.05 * Math.sin(tr.tick * 1.3 + l)})`;
+          c.strokeStyle = `rgba(160,180,215,${0.3 + 0.12 * Math.sin(tr.tick * 1.3 + l)})`;
           c.lineWidth = 1.5;
           c.beginPath(); c.ellipse(tr.x - hw * 0.25, y - 2, hw * 0.4, 3 * s, 0, Math.PI * 1.1, Math.PI * 1.9); c.stroke();
         }
@@ -771,7 +784,7 @@ export class Traps implements BattleHook {
   }
 
   sorted(c: CanvasRenderingContext2D): SortedDraw[] {
-    const out: SortedDraw[] = [];
+    const out: SortedDraw[] = [{ y: LANES[0] - 8, f: () => this.decals(c) }];
     for (const tr of this.list) {
       const id = tr.def.id;
       const s = depthScale(tr.y);
@@ -810,8 +823,8 @@ export class Traps implements BattleHook {
       } });
       else if (id === 'net' && !tr.spent) out.push({ y: tr.y - 0.2, f: () => {
         const im = sprite('trap_net');
-        const load = tr.on ? Math.min(1, (1 - tr.hp / (tr.def.fx.hp ?? 240)) + 0.3) : 0;
-        const h = 44 * s, w = 60 * s;
+        const load = tr.on ? Math.max(0, Math.min(1, (1 - tr.hp / (tr.def.fx.hp ?? 240)) + 0.3)) : 0;
+        const h = 46 * s, w = 84 * s;
         c.save();
         c.translate(tr.x, tr.y);
         c.transform(1, 0, -0.18 * load, 1, 0, 0);

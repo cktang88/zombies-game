@@ -18,6 +18,8 @@ import { depthScale } from './render';
 const WALL_X = 372;
 const ROOF_Y = 506; // the scaffold's deck
 const FIRESTEP_Y = 688; // the near defenders' row, behind the barricade
+/** "the MG nest", "the swivel deer rifle" */
+const lc = (name: string) => name.replace(/^[A-Z](?=[a-z])/, (m) => m.toLowerCase());
 const PROFILE_GUN: Record<string, string> = { mgnest: 'lmg', swivel: 'hunting', flamer: 'flaregun', nailturret: 'nailer' };
 
 export interface Mount {
@@ -128,7 +130,7 @@ export class Emplacements implements BattleHook {
       this.seat(m, g, g === leader);
     });
     const crewed = this.mounts.filter((m) => m.crew);
-    if (crewed.length) b.say(crewed.map((m) => `${first(m.crew!.s)} on the ${m.def.name.toLowerCase()}`).join('; ') + '.', 4);
+    if (crewed.length) b.say(crewed.map((m) => `${first(m.crew!.s)} on the ${lc(m.def.name)}`).join('; ') + '.', 4);
   }
 
   seat(m: Mount, g: Guardian, byPlayer: boolean) {
@@ -166,15 +168,15 @@ export class Emplacements implements BattleHook {
       const p = b.player;
       if (!p) return true;
       const cur = this.playerMount();
-      if (cur) { this.unseat(cur); b.say(`${first(p.s)} leaves the ${cur.def.name.toLowerCase()}.`, 2); return true; }
+      if (cur) { this.unseat(cur); b.say(`${first(p.s)} leaves the ${lc(cur.def.name)}.`, 2); return true; }
       const crewable = this.mounts.filter((m) => m.def.crew && m.item);
       if (!crewable.length) { b.say('No gun nest on the line. Build one at the forge.', 2); return true; }
       const m = crewable.sort((a, c) => Math.abs(a.x - p.x) - Math.abs(c.x - p.x))[0];
       if (m.crew) {
         const o = m.crew;
         this.unseat(m);
-        b.say(`${first(p.s)} takes the ${m.def.name.toLowerCase()} from ${first(o.s)}.`, 3);
-      } else b.say(`${first(p.s)} takes the ${m.def.name.toLowerCase()}. [H] to leave it.`, 3);
+        b.say(`${first(p.s)} takes the ${lc(m.def.name)} from ${first(o.s)}.`, 3);
+      } else b.say(`${first(p.s)} takes the ${lc(m.def.name)}. [H] to leave it.`, 3);
       this.seat(m, p, true);
       sfx.reload('lmg', 'close');
       return true;
@@ -205,7 +207,7 @@ export class Emplacements implements BattleHook {
         this.credit(m);
         g.crew = false;
         m.crew = null; m.byPlayer = false;
-        if (!g.s.dead) b.say(`The ${m.def.name.toLowerCase()} falls silent.`, 3);
+        if (!g.s.dead) b.say(`The ${lc(m.def.name)} falls silent.`, 3);
       }
       if (!m.crew) continue;
       const h = crewHandling(this.heavyOf(m));
@@ -226,7 +228,7 @@ export class Emplacements implements BattleHook {
   startReload(m: Mount) {
     if (m.def.id === 'flamer' || m.reload > 0 || m.mag >= m.def.mag) return;
     if ((G.stores[m.def.ammo] ?? 0) < m.def.perShot) {
-      if (m.byPlayer || this.msgT <= 0) { this.b.say(`No ${m.def.ammo === 'r556' ? '5.56' : m.def.ammo} for the ${m.def.name.toLowerCase()}.`, 2); this.msgT = 6; }
+      if (m.byPlayer || this.msgT <= 0) { this.b.say(`No ${m.def.ammo === 'r556' ? '5.56' : m.def.ammo} for the ${lc(m.def.name)}.`, 2); this.msgT = 6; }
       m.cd = 2;
       return;
     }
@@ -413,7 +415,8 @@ export class Emplacements implements BattleHook {
     const roofs = this.mounts.filter((m) => m.post === 'roof');
     if (roofs.length) out.push({ y: ROOF_Y - 1, f: () => this.drawScaffold(c, roofs) });
     for (const m of this.mounts) {
-      const y = !m.def.crew ? 700 + 1 : m.post === 'roof' ? ROOF_Y + 0.5 : 699;
+      // firestep guns sit on the barricade top, in front of it; roof guns on the scaffold deck
+      const y = !m.def.crew ? 700 + 1 : m.post === 'roof' ? ROOF_Y + 0.5 : 701.2;
       out.push({ y, f: () => this.drawGun(c, m) });
     }
     return out;
@@ -457,21 +460,32 @@ export class Emplacements implements BattleHook {
       c.fillStyle = '#c9c6bc';
       c.fillRect(m.px - 22, footY - 22, 10, 20); c.fillRect(m.px - 10, footY - 22, 10, 20);
     }
+    if (m.post === 'firestep') {
+      // sandbags stacked on the barricade top under the gun
+      c.fillStyle = '#4a4232';
+      c.strokeStyle = 'rgba(20,18,14,0.9)'; c.lineWidth = 1;
+      for (let k = 0; k < 3; k++) { c.beginPath(); c.ellipse(m.px - 14 + k * 15, m.py + 14, 9, 6, 0, 0, Math.PI * 2); c.fill(); c.stroke(); }
+      c.beginPath(); c.ellipse(m.px - 6, m.py + 6, 9, 6, 0, 0, Math.PI * 2); c.fill(); c.stroke();
+      c.beginPath(); c.ellipse(m.px + 9, m.py + 6, 9, 6, 0, 0, Math.PI * 2); c.fill(); c.stroke();
+    }
     c.translate(m.px, m.py);
     c.rotate(m.ang);
+    c.scale(1.2, 1.2);
     const hot = m.heat;
+    const rim = (x: number, y: number, w: number, h: number) => { c.strokeStyle = 'rgba(210,205,190,0.45)'; c.lineWidth = 1; c.strokeRect(x, y, w, h); };
     if (m.def.id === 'mgnest') {
-      c.fillStyle = '#23252a'; c.fillRect(-16, -7, 40, 13);
-      c.fillStyle = '#3a3a34'; c.fillRect(-6, 6, 14, 10); // belt box
-      c.fillStyle = `rgb(${50 + hot * 170},${48 + hot * 30},${46})`; c.fillRect(24, -3, 30, 5);
-      if (m.swap > 0) { c.fillStyle = 'rgba(255,120,60,0.6)'; c.fillRect(24, -3, 30, 5); }
+      c.fillStyle = '#4a4d55'; c.fillRect(-16, -7, 40, 13); rim(-16, -7, 40, 13);
+      c.fillStyle = '#5c5a4c'; c.fillRect(-6, 6, 14, 10); rim(-6, 6, 14, 10); // belt box
+      c.fillStyle = '#c9a24a'; for (let k = 0; k < 4; k++) c.fillRect(-4 + k * 3, 16, 2, 4); // the belt
+      c.fillStyle = `rgb(${80 + hot * 160},${78 + hot * 20},${74})`; c.fillRect(24, -3, 30, 5); rim(24, -3, 30, 5);
+      if (m.swap > 0) { c.fillStyle = 'rgba(255,120,60,0.7)'; c.fillRect(24, -3, 30, 5); }
     } else if (m.def.id === 'swivel') {
-      c.fillStyle = '#4a3622'; c.fillRect(-22, -4, 30, 8); // stock
-      c.fillStyle = '#26272a'; c.fillRect(6, -3, 44, 4);
-      c.fillStyle = '#111'; c.fillRect(4, -9, 18, 4); // scope
+      c.fillStyle = '#7a5632'; c.fillRect(-22, -4, 30, 8); rim(-22, -4, 30, 8); // stock
+      c.fillStyle = '#55575c'; c.fillRect(6, -3, 44, 4); rim(6, -3, 44, 4);
+      c.fillStyle = '#222'; c.fillRect(4, -9, 18, 4); rim(4, -9, 18, 4); // scope
     } else {
-      c.fillStyle = '#3c3a36'; c.fillRect(-10, -5, 26, 10);
-      c.fillStyle = '#6a6458'; c.fillRect(14, -3, 26, 6);
+      c.fillStyle = '#6a665e'; c.fillRect(-10, -5, 26, 10); rim(-10, -5, 26, 10);
+      c.fillStyle = '#8a8478'; c.fillRect(14, -3, 26, 6); rim(14, -3, 26, 6);
     }
     if (m.flash > 0) { c.fillStyle = 'rgba(255,230,160,0.95)'; c.beginPath(); c.moveTo(54, 0); c.lineTo(72, -5); c.lineTo(78, 0); c.lineTo(72, 5); c.fill(); }
     if (m.firing > 0) {

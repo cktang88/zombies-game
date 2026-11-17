@@ -282,12 +282,14 @@ function deployStep() {
     let last: Placement[] = [];
     try { last = JSON.parse((G.flags.lastPlan as string) ?? '[]'); } catch { last = []; }
     const left: Record<string, number> = { ...stock };
-    const initial = last.filter((p) => TRAPS[p.trap] && (left[p.trap] = (left[p.trap] ?? 0) - 1) >= 0);
-    const bestBuilding = Math.max(0, ...fighters.map((s) => s.skills.building ?? 0), ...living().map((s) => s.skills.building ?? 0));
+    const bestBuilding = Math.max(0, ...living().map((s) => s.skills.building ?? 0));
+    const allowed = placementsAllowed(bestBuilding);
+    // last night's plan, as far as the kits on hand and tonight's hands allow
+    const initial = last.filter((p) => TRAPS[p.trap] && (left[p.trap] = (left[p.trap] ?? 0) - 1) >= 0).slice(0, allowed);
     renderDeploy(rootEl, {
       stock, laneCount: 4, roadMinX: WALL_X, roadMaxX: ROAD_MAX_X, wallX: WALL_X,
-      placementsAllowed: placementsAllowed(bestBuilding), initial, title: `Dusk, ${dateLabel()}. The road.`,
-      onDone: (ps) => finish(ps),
+      placementsAllowed: allowed, initial, title: `Dusk, ${dateLabel()}. The road.`,
+      onDone: (ps) => finish(ps.slice(0, allowed)),
     });
   } else {
     rootEl.innerHTML = '<div class="dep" style="text-align:right"><button type="button" class="dep-done">To the wall. Night falls.</button></div>';
