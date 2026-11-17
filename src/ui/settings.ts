@@ -18,10 +18,12 @@ export interface Settings {
   sfx: number;
   reduceShake: boolean;
   reduceGore: boolean;
+  /** Gun handling: 'standard' (default) or 'hardcore' (hidden ammo count, more double-feeds, speed reloads lose the mag). */
+  realism: 'standard' | 'hardcore';
 }
 
 export const SETTINGS_KEY = 'vessey-settings-v1';
-const DEFAULTS: Settings = { master: 0.7, music: 0.55, sfx: 0.8, reduceShake: false, reduceGore: false };
+const DEFAULTS: Settings = { master: 0.7, music: 0.55, sfx: 0.8, reduceShake: false, reduceGore: false, realism: 'standard' };
 
 let cache: Settings | null = null;
 
@@ -41,6 +43,7 @@ export function getSettings(): Settings {
     sfx: num(s.sfx, DEFAULTS.sfx),
     reduceShake: s.reduceShake === true,
     reduceGore: s.reduceGore === true,
+    realism: s.realism === 'hardcore' ? 'hardcore' : 'standard',
   };
   return cache;
 }
@@ -62,6 +65,8 @@ export const reduceShake = () => getSettings().reduceShake;
 export const reduceGore = () => getSettings().reduceGore;
 /** Multiply camera shake amplitudes by this (0.2 when reduced, else 1). */
 export const shakeScale = () => (getSettings().reduceShake ? 0.2 : 1);
+/** Gun-handling realism: 'standard' (default) or 'hardcore'. */
+export const realism = (): 'standard' | 'hardcore' => getSettings().realism;
 
 export function applyAudio() {
   const s = getSettings();
@@ -96,6 +101,8 @@ export function openSettings(host: HTMLElement = document.body, onClose?: () => 
     <h3>Comfort</h3>
     ${toggle('reduceShake', 'Reduce screen shake', 'Gunfire and the wall falling barely move the camera.')}
     ${toggle('reduceGore', 'Reduce gore', 'Less blood on the road. The dead still fall.')}
+    <h3>Gun handling</h3>
+    <label class="set-row check"><input type="checkbox" data-k="realism" ${s.realism === 'hardcore' ? 'checked' : ''}><span>Hardcore realism<small>No exact round count, double-feeds are commoner, and a speed reload leaves the magazine in the snow.</small></span></label>
     <p class="dim small">Saved on this device.</p>
     <button class="go" data-s="close">Done</button>
   </div>`;
@@ -118,6 +125,8 @@ export function openSettings(host: HTMLElement = document.body, onClose?: () => 
       setSetting(k as 'master' | 'music' | 'sfx', +t.value / 100);
       const o = t.parentElement?.querySelector('output');
       if (o) o.textContent = t.value;
+    } else if (k === 'realism') {
+      setSetting('realism', t.checked ? 'hardcore' : 'standard');
     } else {
       setSetting(k as 'reduceShake' | 'reduceGore', t.checked);
     }

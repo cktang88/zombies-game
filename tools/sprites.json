@@ -293,6 +293,16 @@
       "prompt": "A shambling zombie, a dead middle-aged woman in a torn church dress and cardigan with a rosary around her wrist, one shoe, grey mottled skin, blood down the chin, walking to the left, facing left."
     },
     {
+      "id": "z_leaper",
+      "height": 240,
+      "prompt": "A lean long-limbed zombie, a dead young farmhand in a torn quilted hunting vest and ripped jeans, grey sinewy skin, glowing ochre-yellow eyes, crouched low on bent haunches like a sprinter about to spring, knuckles near the ground, coiled to leap, facing left."
+    },
+    {
+      "id": "z_spitter",
+      "height": 240,
+      "prompt": "A hunched sickly zombie, a dead heavyset man in a stained mill worker's coverall, grey-yellow jaundiced skin, swollen throat and distended cheeks, dark yellow-green bile drooling from its mouth and down its chest, leaning back as if about to spit, walking to the left, facing left."
+    },
+    {
       "id": "z_runner2",
       "height": 240,
       "prompt": "A fast recently turned zombie, a young man in a torn high school letterman jacket, grey skin, ochre-yellow eyes, mouth open, sprinting hunched forward to the left, facing left."
