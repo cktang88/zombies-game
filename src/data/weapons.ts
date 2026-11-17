@@ -1,4 +1,5 @@
-import type { Res, WeaponDef, WeaponItem, ModSlot, ModItem } from '../types';
+import type { Res, WeaponDef, WeaponItem, ModSlot, ModItem, WeaponClass } from '../types';
+export type { WeaponClass } from '../types';
 
 /* =====================================================================================
  * THE ARSENAL — weapon & ammunition data, and the firing CONTRACT for night/day combat.
@@ -59,6 +60,17 @@ import type { Res, WeaponDef, WeaponItem, ModSlot, ModItem } from '../types';
  *   Suppressors wear: call wearMods(w, roundsFired) after a fight; it lowers mod cond and
  *   removes worn-out mods, returning lines for the morning report.
  *
+ * CLASS & LAUNCHERS
+ *   cls        WeaponClass (handgun, smg, rifle, assault, marksman, shotgun, heavy, launcher,
+ *              bow, improvised) — key for survivor proficiency. Labels in CLASS_NAMES.
+ *   explosive  optional { radius, dmg }: on impact (first body hit in the lane, else the lane's
+ *              ground row), deal dmg to everything within a ground-space ellipse
+ *              (dx/r)² + (dy/(0.3r))² <= 1, falling off linearly to 30% at the edge; armour
+ *              ignored. Knock everyone outward by `knock` scaled the same way. The direct-hit
+ *              `dmg` still applies to the first body. See blastDamage().
+ *   arc        lobbed (40mm, pipe-bomb mortar): ignore bodies on the way; the round lands at
+ *              the crosshair's x on the target lane after ~0.6s of flight, then explodes.
+ *
  * Old fields on WeaponDef (dmg, rof, mag, ammo, …) are still present so legacy code
  * compiles, but they ignore ammo types. WEAPON_ORDER lists every gun.
  * ===================================================================================== */
@@ -71,6 +83,9 @@ export interface FireProfile {
   limbMul: number; stagger: number;
   light: number; melee: number; bloomMul: number; recoilMul: number; braceBloomMul: number; switchTime: number; range: number;
   jamClear: number;
+  cls: WeaponClass;
+  explosive?: { radius: number; dmg: number };
+  arc?: boolean;
 }
 
 export interface ShooterMods { reloadMul?: number; spreadMul?: number; jamMul?: number; bloomMul?: number }
@@ -91,6 +106,9 @@ export const CALIBERS: Record<string, Caliber> = {
   bolt: { id: 'bolt', name: 'Arrows & bolts', types: ['bolt', 'bolt_fire'], icon: 'icon_bolts' },
   flare: { id: 'flare', name: '12 ga flare shells', types: ['flare'], icon: 'icon_flares' },
   nails: { id: 'nails', name: 'Nails & rivets (scrap)', types: ['scrap'], icon: 'icon_scrap' },
+  rocket: { id: 'rocket', name: '66mm rockets', types: ['rocket'], icon: 'icon_rocket' },
+  g40: { id: 'g40', name: '40mm grenades', types: ['g40', 'g40_buck'], icon: 'icon_g40' },
+  pipebomb: { id: 'pipebomb', name: 'Pipe bombs', types: ['pipebomb'], icon: 'icon_pipebomb' },
 };
 
 export interface AmmoType {
@@ -98,6 +116,9 @@ export interface AmmoType {
   dmgMul?: number; pellets?: 'slug' | number; spreadMul?: number; pierceAdd?: number; pierceSet?: number;
   armorPen?: number; knockMul?: number; noiseMul?: number; incendiary?: boolean; flare?: boolean; recoverable?: number;
   limbMul?: number; stagger?: number; // overrides
+  explosive?: { radius: number; dmg: number } | null; // null removes the blast (40mm buckshot)
+  arc?: boolean;
+  pelletsSet?: number; dmgSet?: number;
 }
 export const AMMO_TYPES: Partial<Record<Res, AmmoType>> = {
   r22: { res: 'r22', caliber: 'r22', name: '.22 LR', short: '.22', icon: 'icon_r22', desc: 'Bricks of 500 from every farm closet. Pennies a shot.' },
@@ -115,6 +136,10 @@ export const AMMO_TYPES: Partial<Record<Res, AmmoType>> = {
   bolt: { res: 'bolt', caliber: 'bolt', name: 'Broadheads', short: 'broad', icon: 'icon_bolts', desc: 'Dowel shafts and saw-tooth heads. Most come back.' },
   bolt_fire: { res: 'bolt_fire', caliber: 'bolt', name: 'Fire bolts', short: 'fire', icon: 'icon_bolts', desc: 'Rag-wrapped and dipped in still fuel. They burn, and they do not come back.', dmgMul: 0.8, incendiary: true, recoverable: 0 },
   flare: { res: 'flare', caliber: 'flare', name: 'Flare shells', short: 'flare', icon: 'icon_flares', desc: 'Lights the road and whatever it hits.' },
+  rocket: { res: 'rocket', caliber: 'rocket', name: '66mm rocket', short: 'rocket', icon: 'icon_rocket', desc: 'A whole disposable launcher tube per shot. The Guard left a crate; the crate is mostly empty.' },
+  g40: { res: 'g40', caliber: 'g40', name: '40mm HE', short: 'HE', icon: 'icon_g40', desc: 'High-explosive grenade. Lobbed; bursts where it lands.' },
+  g40_buck: { res: 'g40_buck', caliber: 'g40', name: '40mm buckshot', short: 'buck', icon: 'icon_g40', desc: 'A fat shotgun shell for the thumper: flat-shooting, no blast.', explosive: null, arc: false, pelletsSet: 20, dmgSet: 15, spreadMul: 6, knockMul: 0.5, stagger: 0.6 },
+  pipebomb: { res: 'pipebomb', caliber: 'pipebomb', name: 'Pipe bomb', short: 'bomb', icon: 'icon_pipebomb', desc: 'Capped pipe, powder and roofing nails.' },
   scrap: { res: 'scrap', caliber: 'nails', name: 'Scrap (nails & rivets)', short: 'scrap', icon: 'icon_scrap', desc: 'Cut, headed and fed from the scrap pile.' },
 };
 export const AMMO_RES: Res[] = Object.values(CALIBERS).flatMap((c) => c.types).filter((r) => r !== 'scrap');
@@ -129,147 +154,169 @@ export function ammoLabel(res: Res | null | undefined): string {
 export const WEAPONS: Record<string, WeaponDef> = {
   // --- handguns ---
   service9: {
-    id: 'service9', name: 'Service pistol', icon: 'icon_pistol', ammo: 'light', caliber: 'pistol',
+    id: 'service9', cls: 'handgun', name: 'Service pistol', icon: 'icon_pistol', ammo: 'light', caliber: 'pistol',
     dmg: 26, rof: 4, mag: 15, reload: 1.3, spread: 0.035, pellets: 1, pierce: 0, knock: 4, auto: false, noise: 1,
     niche: 'Fifteen rounds and never jams: the cheapest dependable gun in the house.',
     desc: 'A deputy\'s sidearm. Ugly, honest, always works.',
   },
   revolver: {
-    id: 'revolver', name: '.357 revolver', icon: 'icon_revolver', ammo: 'light', caliber: 'pistol',
+    id: 'revolver', cls: 'handgun', name: '.357 revolver', icon: 'icon_revolver', ammo: 'light', caliber: 'pistol',
     dmg: 55, rof: 2.2, mag: 6, reload: 2.4, spread: 0.02, pellets: 1, pierce: 1, knock: 10, auto: false, noise: 1.4, armorPen: 0.3,
     niche: 'One shot drops a Deer; six chances, then a slow reload.',
     desc: 'Six chances. Somebody\'s grandfather kept it oiled.',
   },
   m1911: {
-    id: 'm1911', name: '.45 1911', icon: 'icon_m1911', ammo: 'light', caliber: 'pistol',
+    id: 'm1911', cls: 'handgun', name: '.45 1911', icon: 'icon_m1911', ammo: 'light', caliber: 'pistol',
     dmg: 38, rof: 3, mag: 7, reload: 1.4, spread: 0.03, pellets: 1, pierce: 0, knock: 16, auto: false, noise: 1.2,
     niche: 'Big slow .45: the most shove of any handgun, holds runners off the wall.',
     desc: 'Carried home from somewhere hot by a man who never talked about it.',
   },
   mp93: {
-    id: 'mp93', name: 'Burst machine pistol', icon: 'icon_mp93', ammo: 'light', caliber: 'pistol',
+    id: 'mp93', cls: 'handgun', name: 'Burst machine pistol', icon: 'icon_mp93', ammo: 'light', caliber: 'pistol',
     dmg: 22, rof: 2.4, mag: 21, reload: 1.6, spread: 0.05, pellets: 1, pierce: 0, knock: 3, auto: false, noise: 1.6, burst: 3, burstGap: 0.05,
     niche: 'Three-round bursts: a quick string up the body into the head, one-handed.',
     desc: 'From the County SWAT locker, with the folding grip still taped shut.',
   },
   smg: {
-    id: 'smg', name: 'Submachine gun', icon: 'icon_smg', ammo: 'light', caliber: 'pistol',
+    id: 'smg', cls: 'smg', name: 'Submachine gun', icon: 'icon_smg', ammo: 'light', caliber: 'pistol',
     dmg: 20, rof: 11, mag: 30, reload: 2.0, spread: 0.07, pellets: 1, pierce: 0, knock: 3, auto: true, noise: 2.4,
     niche: 'Pistol-caliber hose for when the wall is crowded; burns a box a night.',
     desc: 'County SWAT locker. Eats ammunition like the dead eat.',
   },
   // --- rimfire ---
   r22: {
-    id: 'r22', name: 'Farm .22', icon: 'icon_r22rifle', ammo: 'r22', caliber: 'r22',
+    id: 'r22', cls: 'rifle', name: 'Farm .22', icon: 'icon_r22rifle', ammo: 'r22', caliber: 'r22',
     dmg: 17, rof: 5, mag: 25, reload: 1.8, spread: 0.01, pellets: 1, pierce: 0, knock: 1, auto: false, noise: 0.35, limbMul: 0.7, stagger: 0.03,
     niche: 'Quiet, dead accurate and pennies a shot — a headshot tool, useless on bodies.',
     desc: 'Every barn in the county has one behind the door for skunks.',
   },
   // --- shotguns ---
   pump: {
-    id: 'pump', name: 'Pump shotgun', icon: 'icon_shotgun', ammo: 'shell', caliber: 'shot',
+    id: 'pump', cls: 'shotgun', name: 'Pump shotgun', icon: 'icon_shotgun', ammo: 'shell', caliber: 'shot',
     dmg: 16, rof: 1.2, mag: 6, reload: 3.2, spread: 0.13, pellets: 8, pierce: 0, knock: 30, auto: false, noise: 2, reloadPerRound: true,
     niche: 'Feeds every shell — buck, slug, flechette, dragon\'s breath — one at a time.',
     desc: 'Duck gun. Stops anything close enough to smell.',
   },
   coach: {
-    id: 'coach', name: 'Double-barrel coach gun', icon: 'icon_coachgun', ammo: 'shell', caliber: 'shot',
+    id: 'coach', cls: 'shotgun', name: 'Double-barrel coach gun', icon: 'icon_coachgun', ammo: 'shell', caliber: 'shot',
     dmg: 17, rof: 1.4, mag: 2, reload: 2.0, spread: 0.16, pellets: 9, pierce: 0, knock: 40, auto: false, noise: 2.8, burst: 2, burstGap: 0,
     niche: 'Both barrels at once: the hardest point-blank punch and shove in the house.',
     desc: 'Hung over the bar at the Legion. Nobody remembered it was loaded.',
   },
   snake410: {
-    id: 'snake410', name: '.410 snake charmer', icon: 'icon_snake410', ammo: 'shell', caliber: 'shot',
+    id: 'snake410', cls: 'shotgun', name: '.410 snake charmer', icon: 'icon_snake410', ammo: 'shell', caliber: 'shot',
     dmg: 11, rof: 2.2, mag: 1, reload: 0.9, spread: 0.11, pellets: 5, pierce: 0, knock: 10, auto: false, noise: 1.1, perShot: 0.5,
     niche: 'Tiny hulls, half a shell a shot: a shotgun for the young, the old and the frugal.',
     desc: 'A stainless single-shot that lived under a truck seat for snakes.',
   },
   pipe: {
-    id: 'pipe', name: 'Pipe shotgun', icon: 'icon_pipegun', ammo: 'shell', caliber: 'shot',
+    id: 'pipe', cls: 'improvised', name: 'Pipe shotgun', icon: 'icon_pipegun', ammo: 'shell', caliber: 'shot',
     dmg: 16, rof: 1, mag: 1, reload: 2.3, spread: 0.18, pellets: 8, pierce: 0, knock: 26, auto: false, noise: 2.2, jam: 0.07, craftable: true,
     niche: 'Two pipes and a nail. Cheapest gun you can build; takes any shell; jams.',
     desc: 'Slam the pipes together and the nail does the rest. Usually.',
   },
   autoshot: {
-    id: 'autoshot', name: 'Riot auto-shotgun', icon: 'icon_autoshotgun', ammo: 'shell', caliber: 'shot',
+    id: 'autoshot', cls: 'shotgun', name: 'Riot auto-shotgun', icon: 'icon_autoshotgun', ammo: 'shell', caliber: 'shot',
     dmg: 13, rof: 3.2, mag: 8, reload: 3.6, spread: 0.12, pellets: 8, pierce: 0, knock: 22, auto: false, noise: 2.5, reloadPerRound: true,
     niche: 'Semi-auto 12-gauge: clears the wall in seconds and drinks shells doing it.',
     desc: 'County riot gun. The stock says PROPERTY OF in white paint.',
   },
   // --- rifles ---
   hunting: {
-    id: 'hunting', name: 'Bolt hunting rifle', icon: 'icon_rifle', ammo: 'rifle', caliber: 'rifle',
+    id: 'hunting', cls: 'rifle', name: 'Bolt hunting rifle', icon: 'icon_rifle', ammo: 'rifle', caliber: 'rifle',
     dmg: 110, rof: 0.9, mag: 5, reload: 3.0, spread: 0.006, pellets: 1, pierce: 3, knock: 18, auto: false, noise: 2.2, armorPen: 0.2,
     niche: '.30-06 through three in a line; the deer-camp workhorse.',
     desc: 'Deer season opened the week everything ended.',
   },
   lever: {
-    id: 'lever', name: 'Lever .30-30', icon: 'icon_lever', ammo: 'rifle', caliber: 'rifle',
+    id: 'lever', cls: 'rifle', name: 'Lever .30-30', icon: 'icon_lever', ammo: 'rifle', caliber: 'rifle',
     dmg: 78, rof: 2, mag: 7, reload: 3.2, spread: 0.012, pellets: 1, pierce: 2, knock: 14, auto: false, noise: 2, reloadPerRound: true,
     niche: 'Fast follow-ups that pierce two, and a tube you can top off between Deer.',
     desc: 'Grandpa\'s brush gun. The stock is worn pale where a hand held it for sixty years.',
   },
   scoped: {
-    id: 'scoped', name: 'Scoped .308', icon: 'icon_scoped', ammo: 'rifle', caliber: 'rifle',
+    id: 'scoped', cls: 'marksman', name: 'Scoped .308', icon: 'icon_scoped', ammo: 'rifle', caliber: 'rifle',
     dmg: 135, rof: 0.75, mag: 5, reload: 2.6, spread: 0.0025, pellets: 1, pierce: 3, knock: 20, auto: false, noise: 2.4, armorPen: 0.5,
     niche: 'Pinpoint and brutal: puts a round through a Deputy visor at the far end of the road.',
     desc: 'Glass worth more than the truck it rode in. Strand sold three a season.',
   },
   muzzle: {
-    id: 'muzzle', name: '.50 muzzleloader', icon: 'icon_muzzle', ammo: 'ball', caliber: 'ball',
+    id: 'muzzle', cls: 'marksman', name: '.50 muzzleloader', icon: 'icon_muzzle', ammo: 'ball', caliber: 'ball',
     dmg: 250, rof: 0.5, mag: 1, reload: 5.5, spread: 0.01, pellets: 1, pierce: 4, knock: 45, auto: false, noise: 3, armorPen: 0.8, smoke: true, craftable: true, stagger: 1,
     niche: 'One enormous shot through four bodies, a cloud of smoke, then a long reload. Ammo is cheap.',
     desc: 'Black-powder season gun. Ram, cap, pray, and wait for the smoke to clear.',
   },
   // --- 5.56 ---
   ar15: {
-    id: 'ar15', name: 'Range AR-15', icon: 'icon_ar15', ammo: 'r556', caliber: 'r556',
+    id: 'ar15', cls: 'assault', name: 'Range AR-15', icon: 'icon_ar15', ammo: 'r556', caliber: 'r556',
     dmg: 44, rof: 5, mag: 30, reload: 2.2, spread: 0.014, pellets: 1, pierce: 1, knock: 6, auto: false, noise: 2.2,
     niche: 'Accurate semi-auto thirty-rounder: the best all-rounder for a steady shooter.',
     desc: 'Off the rack at Strand Sporting. Red-dot sight, price tag still on the trigger guard.',
   },
   carbine: {
-    id: 'carbine', name: 'Guard carbine', icon: 'icon_carbine', ammo: 'r556', caliber: 'r556',
+    id: 'carbine', cls: 'assault', name: 'Guard carbine', icon: 'icon_carbine', ammo: 'r556', caliber: 'r556',
     dmg: 48, rof: 7, mag: 30, reload: 2.4, spread: 0.03, pellets: 1, pierce: 1, knock: 8, auto: true, noise: 2.6,
     niche: 'Full-auto rifle rounds: pierce and volume at once, if you can feed it.',
     desc: 'Serial number filed. Someone walked away from the Line.',
   },
   lmg: {
-    id: 'lmg', name: 'Line machine gun', icon: 'icon_lmg', ammo: 'r556', caliber: 'r556',
+    id: 'lmg', cls: 'heavy', name: 'Line machine gun', icon: 'icon_lmg', ammo: 'r556', caliber: 'r556',
     dmg: 42, rof: 12, mag: 100, reload: 6.5, spread: 0.06, pellets: 1, pierce: 1, knock: 9, auto: true, noise: 3.4,
     niche: 'A hundred rounds before you stop; the slowest reload in Vessey.',
     desc: 'Belt-fed, bipod bent. It held the bridge at Corliss for eleven hours.',
   },
   // --- quiet & strange ---
   compound: {
-    id: 'compound', name: 'Compound bow', icon: 'icon_bow', ammo: 'bolt', caliber: 'bolt',
+    id: 'compound', cls: 'bow', name: 'Compound bow', icon: 'icon_bow', ammo: 'bolt', caliber: 'bolt',
     dmg: 90, rof: 1.1, mag: 1, reload: 0.7, spread: 0.015, pellets: 1, pierce: 1, knock: 6, auto: false, noise: 0.1, recoverable: 0.6, stagger: 0.5,
     niche: 'Silent, and most arrows come back. Wakes nobody on a daylight run.',
     desc: 'Bowhunter\'s rig from a deer stand on the Halvorsen forty.',
   },
   crossbow: {
-    id: 'crossbow', name: 'Crossbow', icon: 'icon_crossbow', ammo: 'bolt', caliber: 'bolt',
+    id: 'crossbow', cls: 'bow', name: 'Crossbow', icon: 'icon_crossbow', ammo: 'bolt', caliber: 'bolt',
     dmg: 140, rof: 0.6, mag: 1, reload: 2.2, spread: 0.008, pellets: 1, pierce: 2, knock: 12, auto: false, noise: 0.15, armorPen: 0.4, recoverable: 0.5, craftable: true, stagger: 0.7,
     niche: 'A silent heavy bolt that pierces two; slow to span.',
     desc: 'Leaf-spring limbs off a Ford, a cable winch, a walnut stock.',
   },
   flaregun: {
-    id: 'flaregun', name: 'Flare pistol', icon: 'icon_flaregun', ammo: 'flare', caliber: 'flare',
+    id: 'flaregun', cls: 'improvised', name: 'Flare pistol', icon: 'icon_flaregun', ammo: 'flare', caliber: 'flare',
     dmg: 30, rof: 1, mag: 1, reload: 1.6, spread: 0.03, pellets: 1, pierce: 0, knock: 4, auto: false, noise: 1, incendiary: true, flare: true, craftable: true,
     niche: 'Sets one burning and lights the road for every gun on the wall.',
     desc: 'Orange plastic from the boathouse emergency kit.',
   },
   nailer: {
-    id: 'nailer', name: 'Nail driver', icon: 'icon_nailgun', ammo: 'scrap', caliber: 'nails',
+    id: 'nailer', cls: 'improvised', name: 'Nail driver', icon: 'icon_nailgun', ammo: 'scrap', caliber: 'nails',
     dmg: 22, rof: 6, mag: 40, reload: 2.6, spread: 0.05, pellets: 1, pierce: 1, knock: 2, auto: true, noise: 0.5, perShot: 0.05, craftable: true, limbMul: 0.8, stagger: 0.04,
     niche: 'Near-silent automatic that feeds on the scrap pile.',
     desc: 'Mill-shop contraption. Quiet. Feeds on scrap.',
   },
   rivet: {
-    id: 'rivet', name: 'Rivet gun', icon: 'icon_rivet', ammo: 'scrap', caliber: 'nails',
+    id: 'rivet', cls: 'improvised', name: 'Rivet gun', icon: 'icon_rivet', ammo: 'scrap', caliber: 'nails',
     dmg: 62, rof: 1.6, mag: 10, reload: 2.2, spread: 0.02, pellets: 1, pierce: 2, knock: 7, auto: false, noise: 0.6, armorPen: 0.6, perShot: 0.25, craftable: true,
     niche: 'Quiet steel rivets that punch through Deputy plate; hungry for scrap.',
     desc: 'A boiler-shop rivet hammer on a compressor bottle. Thunk.',
+  },
+  // --- launchers ---
+  law: {
+    id: 'law', cls: 'launcher', name: 'M72 rocket tube', icon: 'icon_law', ammo: 'rocket', caliber: 'rocket',
+    dmg: 80, rof: 0.5, mag: 1, reload: 3.5, spread: 0.012, pellets: 1, pierce: 0, knock: 90, auto: false, noise: 7, armorPen: 1, smoke: true, stagger: 1,
+    explosive: { radius: 170, dmg: 340 },
+    niche: 'One rocket, one hole in the horde: the answer to a Ferryman and everything standing near it.',
+    desc: 'Disposable, olive drab, stencilled THE LINE HOLDS. Reloading means unslinging the next tube.',
+  },
+  m79: {
+    id: 'm79', cls: 'launcher', name: '40mm grenade launcher', icon: 'icon_m79', ammo: 'g40', caliber: 'g40',
+    dmg: 40, rof: 0.8, mag: 1, reload: 2.2, spread: 0.02, pellets: 1, pierce: 0, knock: 50, auto: false, noise: 3.5, stagger: 1,
+    explosive: { radius: 100, dmg: 150 }, arc: true,
+    niche: 'Lobs a grenade over the front rank into the middle of the pack; buckshot rounds for the wall.',
+    desc: 'A break-open thumper from the County armoury. Somebody wrote RIOT ONLY on it in marker.',
+  },
+  pipemortar: {
+    id: 'pipemortar', cls: 'launcher', name: 'Pipe-bomb mortar', icon: 'icon_pipemortar', ammo: 'pipebomb', caliber: 'pipebomb',
+    dmg: 20, rof: 0.4, mag: 1, reload: 3.4, spread: 0.06, pellets: 1, pierce: 0, knock: 40, auto: false, noise: 4, jam: 0.08, craftable: true, stagger: 0.8,
+    explosive: { radius: 85, dmg: 115 }, arc: true,
+    niche: 'Cheap homemade area damage, lobbed; inaccurate, and one in twelve is a dud.',
+    desc: 'A fence-post driver tube on a shotgun stock, and a shotshell to kick the bomb out.',
   },
 };
 
@@ -279,10 +326,17 @@ export const WEAPON_ORDER = [
   'hunting', 'lever', 'scoped', 'muzzle',
   'ar15', 'carbine', 'lmg',
   'compound', 'crossbow', 'flaregun', 'nailer', 'rivet',
+  'law', 'm79', 'pipemortar',
 ];
+
+export const CLASS_NAMES: Record<WeaponClass, string> = {
+  handgun: 'Handguns', smg: 'Submachine guns', rifle: 'Rifles', assault: 'Assault rifles', marksman: 'Marksman rifles',
+  shotgun: 'Shotguns', heavy: 'Heavy machine guns', launcher: 'Launchers', bow: 'Bows', improvised: 'Improvised',
+};
 
 // Every icon the arsenal needs (spread into the asset preload list).
 export const ARSENAL_ICONS: string[] = [...new Set([
+  'icon_law', 'icon_m79', 'icon_pipemortar', 'icon_rocket', 'icon_g40', 'icon_pipebomb',
   'icon_mod_scope', 'icon_mod_reddot', 'icon_mod_suppressor', 'icon_mod_brake', 'icon_mod_sawedoff',
   'icon_mod_flashlight', 'icon_mod_hatchet', 'icon_mod_bipod', 'icon_mod_extmag', 'icon_mod_drum', 'icon_mod_taped', 'icon_mod_sling',
   ...Object.values(WEAPONS).map((w) => w.icon),
@@ -295,10 +349,14 @@ export const AMMO_NAMES: Record<string, string> = { light: 'Pistol rounds', shel
 
 
 // ---------- attachments ----------
-export type WeaponClass = 'pistol' | 'smg' | 'shotgun' | 'rifle' | 'lmg' | 'bow' | 'tool';
+// Which attachment family a gun belongs to (finer than proficiency class for fitting purposes).
+type ModFamily = 'pistol' | 'smg' | 'shotgun' | 'rifle' | 'lmg' | 'bow' | 'tool';
 export function weaponClass(defId: string): WeaponClass {
+  return WEAPONS[defId]?.cls ?? 'improvised';
+}
+function modFamily(defId: string): ModFamily {
   const d = WEAPONS[defId];
-  if (!d) return 'tool';
+  if (!d || d.cls === 'launcher') return 'tool';
   if (d.caliber === 'nails') return 'tool';
   if (d.caliber === 'bolt') return 'bow';
   if (defId === 'lmg') return 'lmg';
@@ -310,7 +368,7 @@ export function weaponClass(defId: string): WeaponClass {
 // guns that take a detachable box magazine
 const BOX_MAG = ['service9', 'm1911', 'mp93', 'smg', 'r22', 'ar15', 'carbine'];
 const TUBE_MAG = ['pump', 'autoshot', 'lever'];
-const LONG = (id: string) => ['shotgun', 'rifle', 'lmg'].includes(weaponClass(id)) && id !== 'pipe';
+const LONG = (id: string) => ['shotgun', 'rifle', 'lmg'].includes(modFamily(id)) && id !== 'pipe';
 
 export interface ModDef {
   id: string; name: string; slot: ModSlot; icon: string; niche: string; desc: string;
@@ -329,35 +387,35 @@ export const MODS: Record<string, ModDef> = {
     id: 'scope', name: 'Deer scope', slot: 'optic', icon: 'icon_mod_scope',
     niche: 'Pinpoint at range; slow to swing onto a new target.',
     desc: 'A 3-9x from a stand on the Halvorsen forty. Zeroed for a buck at a hundred yards.',
-    fits: (id) => ['rifle', 'bow'].includes(weaponClass(id)) && id !== 'muzzle',
+    fits: (id) => ['rifle', 'bow'].includes(modFamily(id)) && id !== 'muzzle',
     spreadMul: 0.35, rofMul: 0.85, switchTime: 0.35,
   },
   reddot: {
     id: 'reddot', name: 'Red-dot sight', slot: 'optic', icon: 'icon_mod_reddot',
     niche: 'Faster, tighter snap shots on anything with a front sight.',
     desc: 'Pulled off a Guard rifle at Corliss. The battery is the precious part.',
-    fits: (id) => !['tool', 'bow', 'lmg'].includes(weaponClass(id)) && id !== 'pipe' && id !== 'flaregun',
+    fits: (id) => !['tool', 'bow', 'lmg'].includes(modFamily(id)) && id !== 'pipe' && id !== 'flaregun',
     spreadMul: 0.72, switchTime: -0.12,
   },
   suppressor: {
     id: 'suppressor', name: 'Oil-filter suppressor', slot: 'muzzle', icon: 'icon_mod_suppressor',
     niche: 'Turns a shot into a cough; a little weaker, and it burns out.',
     desc: 'A truck oil filter on a threaded adapter. Good for a few nights of shooting.',
-    fits: (id) => ['pistol', 'smg', 'rifle'].includes(weaponClass(id)) && !['muzzle', 'revolver', 'flaregun'].includes(id),
+    fits: (id) => ['pistol', 'smg', 'rifle'].includes(modFamily(id)) && !['muzzle', 'revolver', 'flaregun'].includes(id),
     noiseMul: 0.3, dmgMul: 0.92, life: 240,
   },
   brake: {
     id: 'brake', name: 'Muzzle brake', slot: 'muzzle', icon: 'icon_mod_brake',
     niche: 'Kills muzzle climb so follow-ups land; louder for everyone.',
     desc: 'Slotted pipe coupling, ported on the lathe.',
-    fits: (id) => ['rifle', 'lmg', 'shotgun', 'smg'].includes(weaponClass(id)) && !['pipe', 'muzzle', 'r22', 'coach'].includes(id),
+    fits: (id) => ['rifle', 'lmg', 'shotgun', 'smg'].includes(modFamily(id)) && !['pipe', 'muzzle', 'r22', 'coach'].includes(id),
     recoilMul: 0.6, bloomMul: 0.72, noiseMul: 1.3,
   },
   choke: {
     id: 'choke', name: 'Full choke', slot: 'muzzle', icon: 'icon_mod_brake',
     niche: 'Tightens the shot cone: buckshot that reaches the back of the road.',
     desc: 'Screw-in turkey choke from Strand\'s counter.',
-    fits: (id) => weaponClass(id) === 'shotgun' && !['pipe', 'flaregun'].includes(id),
+    fits: (id) => modFamily(id) === 'shotgun' && !['pipe', 'flaregun'].includes(id),
     coneMul: 0.62, knockMul: 0.9,
   },
   sawedoff: {
@@ -371,7 +429,7 @@ export const MODS: Record<string, ModDef> = {
     id: 'flashlight', name: 'Duct-taped flashlight', slot: 'under', icon: 'icon_mod_flashlight',
     niche: 'A cone of light down the barrel: see them, and so does everyone on the wall.',
     desc: 'A Maglite and most of a roll of duct tape.',
-    fits: (id) => weaponClass(id) !== 'tool' && id !== 'flaregun',
+    fits: (id) => modFamily(id) !== 'tool' && id !== 'flaregun',
     light: 340,
   },
   hatchet: {
@@ -494,10 +552,17 @@ export function shotSound(defId: string): string {
   const d = WEAPONS[defId];
   if (!d) return 'service9';
   if (d.caliber === 'nails' || d.caliber === 'bolt' || d.caliber === 'r22') return 'nailer';
-  if (d.caliber === 'shot' || d.caliber === 'flare') return 'pump';
+  if (d.caliber === 'shot' || d.caliber === 'flare' || d.cls === 'launcher') return 'pump';
   if (d.caliber === 'rifle' || d.caliber === 'ball') return 'hunting';
   if (d.auto) return 'smg';
   return defId;
+}
+
+/** Blast damage at a ground-space offset (dx, dy from the impact foot point), or 0 if outside. */
+export function blastDamage(ex: { radius: number; dmg: number }, dx: number, dy: number): number {
+  const q = (dx / ex.radius) ** 2 + (dy / (0.3 * ex.radius)) ** 2;
+  if (q > 1) return 0;
+  return ex.dmg * (1 - 0.7 * Math.sqrt(q));
 }
 
 /** Body-hit damage against armour (Deputies). armorPen 1 = full damage. */
@@ -557,6 +622,8 @@ function baseProfile(w: WeaponItem): FireProfile {
   let dmg = d.dmg;
   let spread = d.spread;
   let knock = d.knock;
+  if (a?.pelletsSet) pellets = a.pelletsSet;
+  if (a?.dmgSet) dmg = a.dmgSet;
   if (a?.pellets === 'slug' && pellets > 1) {
     dmg = dmg * pellets * 0.7;
     pellets = 1;
@@ -598,5 +665,8 @@ function baseProfile(w: WeaponItem): FireProfile {
     stagger: Math.max(0, Math.min(1, a?.stagger ?? d.stagger ?? (knock * (pellets > 1 ? pellets * 0.25 : 1)) / (pellets > 1 ? 90 : 45))),
     light: 0, melee: 0, bloomMul: 1, recoilMul: 1, braceBloomMul: 1, switchTime: 0, range: Infinity,
     jamClear: d.jam ? 1.8 : d.caliber === 'ball' ? 1.4 : 0.9,
+    cls: d.cls,
+    explosive: a?.explosive === null ? undefined : a?.explosive ?? d.explosive,
+    arc: a?.arc ?? d.arc,
   };
 }

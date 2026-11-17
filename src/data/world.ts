@@ -26,8 +26,8 @@ export const SITES: Site[] = [
   { id: 'manor', name: 'St. Aubin Manor', desc: 'The nursing home. The residents are still in residence.', risk: 0.45, loot: { meds: 6, food: 3, cloth: 4 }, weaponChance: 0.02, weapons: ['service9', 'r22'], survivorChance: 0.12, minDay: 4, stock: 5 },
   { id: 'school', name: 'Vessey High', desc: 'The gym was the Parish kitchen until it wasn\'t. Chem lab upstairs.', risk: 0.35, loot: { food: 6, fuel: 2, parts: 2, cloth: 3, meds: 1, bolt: 6 }, weaponChance: 0.04, weapons: ['hunting', 'compound'], survivorChance: 0.18, minDay: 4, stock: 6 },
   { id: 'gunshop', name: 'Strand Sporting Goods', desc: 'Deer season opened the week everything ended. Shelves mostly bare.', risk: 0.4, loot: { light: 16, light_hp: 10, shell: 10, shell_slug: 6, rifle: 6, rifle_sp: 8, r22: 60, r556: 10, bolt: 6, cloth: 2 }, weaponChance: 0.3, weapons: ['hunting', 'pump', 'revolver', 'lever', 'scoped', 'ar15', 'compound', 'coach', 'r22'], mods: ['scope', 'reddot', 'choke', 'extmag', 'bipod', 'sling', 'brake'], survivorChance: 0.06, minDay: 5, stock: 4 },
-  { id: 'courthouse', name: 'County courthouse', desc: 'The deputies held it with lists and quarantine. Now the lists are all that hold.', risk: 0.55, loot: { light: 22, light_hp: 10, rifle: 6, shell_flech: 6, shell_slug: 4, meds: 2, parts: 2 }, weaponChance: 0.35, weapons: ['smg', 'service9', 'autoshot', 'mp93', 'scoped', 'pump'], mods: ['drum', 'extmag', 'flashlight', 'taped', 'speedloader', 'reddot'], survivorChance: 0.1, minDay: 8, stock: 4 },
-  { id: 'corliss', name: 'The Line at Corliss', desc: 'Thirty kilometres downriver. Sandbags, a dropped bridge, and whatever the Guard left behind.', risk: 0.7, loot: { r556: 60, rifle_ap: 12, light: 16, flare: 4, meds: 4, parts: 4, fuel: 4 }, weaponChance: 0.5, weapons: ['carbine', 'carbine', 'lmg', 'smg', 'ar15'], mods: ['reddot', 'reddot', 'drum', 'bipod', 'extmag', 'brake', 'taped'], survivorChance: 0.12, minDay: 12, stock: 3 },
+  { id: 'courthouse', name: 'County courthouse', desc: 'The deputies held it with lists and quarantine. Now the lists are all that hold.', risk: 0.55, loot: { light: 22, light_hp: 10, rifle: 6, shell_flech: 6, shell_slug: 4, meds: 2, parts: 2, g40_buck: 1.2 }, weaponChance: 0.35, weapons: ['smg', 'service9', 'autoshot', 'mp93', 'scoped', 'pump', 'm79'], mods: ['drum', 'extmag', 'flashlight', 'taped', 'speedloader', 'reddot'], survivorChance: 0.1, minDay: 8, stock: 4 },
+  { id: 'corliss', name: 'The Line at Corliss', desc: 'Thirty kilometres downriver. Sandbags, a dropped bridge, and whatever the Guard left behind.', risk: 0.7, loot: { r556: 60, rifle_ap: 12, light: 16, flare: 4, meds: 4, parts: 4, fuel: 4, rocket: 0.6, g40: 2 }, weaponChance: 0.5, weapons: ['carbine', 'carbine', 'lmg', 'smg', 'ar15', 'law', 'm79'], mods: ['reddot', 'reddot', 'drum', 'bipod', 'extmag', 'brake', 'taped'], survivorChance: 0.12, minDay: 12, stock: 3 },
 ];
 
 // ---------- workshop machinery ----------
@@ -93,11 +93,13 @@ export const RECIPES: Recipe[] = [
   { id: 'mod_hatchet', name: 'Hatchet bayonet', needs: 'forge', cost: { scrap: 4, wood: 2 }, work: 3, mod: 'hatchet', desc: 'A hatchet head clamped under a long gun. Melee at the wall.' },
   { id: 'mod_bipod', name: 'Bipod', needs: 'forge', cost: { scrap: 4, parts: 1 }, work: 3, mod: 'bipod', desc: 'Folding legs for rifles and the LMG: steady on the wall.' },
   { id: 'mod_brake', name: 'Muzzle brake', needs: 'forge', level: 2, cost: { scrap: 4, parts: 2 }, work: 4, mod: 'brake', desc: 'Ported pipe coupling: less climb, more bark.' },
+  { id: 'ammo_pipebomb', name: 'Pipe bombs ×3', needs: 'workbench', cost: { scrap: 4, fuel: 2, parts: 1 }, work: 4, gives: { pipebomb: 3 }, desc: 'Capped pipe, powder, roofing nails, a fuse cut short. For the mortar.' },
   // --- improvised guns ---
   { id: 'pipe', name: 'Pipe shotgun', needs: 'workbench', cost: { scrap: 8, wood: 2, parts: 1 }, work: 4, weapon: 'pipe', desc: 'Two pipes and a nail. Takes any shell. Jams.' },
   { id: 'flaregun', name: 'Flare pistol', needs: 'workbench', level: 2, cost: { scrap: 6, parts: 3 }, work: 5, weapon: 'flaregun', desc: 'A drilled-out signal pistol body on a pipe barrel. Fires flare shells.' },
   { id: 'crossbow', name: 'Crossbow', needs: 'forge', cost: { wood: 8, scrap: 6, parts: 2 }, work: 8, weapon: 'crossbow', desc: 'Leaf-spring limbs off a Ford, a winch, a walnut stock. Silent.' },
   { id: 'muzzle', name: '.50 muzzleloader', needs: 'forge', level: 2, cost: { scrap: 12, wood: 6, parts: 3 }, work: 10, weapon: 'muzzle', desc: 'A rifled barrel from a fence-post driver. One huge shot.' },
+  { id: 'pipemortar', name: 'Pipe-bomb mortar', needs: 'workbench', level: 2, cost: { scrap: 10, parts: 4, wood: 2 }, work: 8, weapon: 'pipemortar', desc: 'A fence-post tube on a shotgun stock. Lobs pipe bombs over the dead.' },
   { id: 'rivet', name: 'Rivet gun', needs: 'workbench', level: 3, cost: { scrap: 16, parts: 8, fuel: 2 }, work: 12, weapon: 'rivet', desc: 'A boiler-shop rivet hammer on a welding bottle. Quiet; punches plate.' },
   { id: 'repair', name: 'Repair the worst gun', needs: 'workbench', cost: { scrap: 3, parts: 1 }, work: 3, special: 'repair', desc: 'Strip, clean, file, pray.' },
   { id: 'nailer', name: 'Nail driver', needs: 'workbench', level: 2, cost: { scrap: 14, parts: 8, fuel: 2 }, work: 12, weapon: 'nailer', desc: 'A framing nailer fed from a welding bottle. Quiet. Eats scrap.' },
@@ -118,9 +120,11 @@ export const RES_LABEL: Record<Res, string> = {
   food: 'Food', scrap: 'Scrap', wood: 'Timber', parts: 'Parts', meds: 'Medicine', fuel: 'Fuel', cloth: 'Cloth', light: 'Pistol ammo', shell: 'Shells', rifle: 'Rifle ammo', liquor: 'Liquor', molotov: 'Firebombs',
   r22: '.22 ammo', light_hp: 'Hollow-points', shell_slug: 'Slugs', shell_flech: 'Flechettes', shell_fire: "Dragon's breath", rifle_sp: 'Soft-points', rifle_ap: 'AP rounds',
   r556: '5.56 ammo', ball: '.50 ball', bolt: 'Broadheads', bolt_fire: 'Fire bolts', flare: 'Flare shells',
+  rocket: 'Rockets', g40: '40mm HE', g40_buck: '40mm buckshot', pipebomb: 'Pipe bombs',
 };
 export const RES_ICON: Record<Res, string> = {
   food: 'icon_food', scrap: 'icon_scrap', wood: 'icon_wood', parts: 'icon_parts', meds: 'icon_meds', fuel: 'icon_fuel', cloth: 'icon_cloth', light: 'icon_ammo', shell: 'icon_ammo', rifle: 'icon_ammo', liquor: 'icon_molotov', molotov: 'icon_molotov',
   r22: 'icon_r22', light_hp: 'icon_ammo', shell_slug: 'icon_slug', shell_flech: 'icon_shells', shell_fire: 'icon_dragon', rifle_sp: 'icon_ammo', rifle_ap: 'icon_ammo',
   r556: 'icon_r556', ball: 'icon_ball', bolt: 'icon_bolts', bolt_fire: 'icon_bolts', flare: 'icon_flares',
+  rocket: 'icon_rocket', g40: 'icon_g40', g40_buck: 'icon_g40', pipebomb: 'icon_pipebomb',
 };
