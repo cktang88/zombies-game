@@ -193,8 +193,8 @@ function bakeBattleBg(special: string | undefined) {
     return cv;
   };
   const r = {
-    early: one(ice ? 0.86 : 0.8, fog ? 0.5 : 0.34, 0.5),
-    late: one(ice ? 0.74 : 0.68, fog ? 0.55 : 0.36, 0.7),
+    early: one(ice ? 1.08 : 1.05, fog ? 0.5 : 0.4, 0.4),
+    late: one(ice ? 0.98 : 0.94, fog ? 0.55 : 0.4, 0.55),
   };
   bgCache.set(key, r);
   return r;
@@ -3521,7 +3521,7 @@ export class Battle {
     const s = 0.5;
     d.globalCompositeOperation = 'source-over';
     d.clearRect(0, 0, W * s, H * s);
-    const base = Math.max(0.12, 0.46 - G.fort.lights * 0.1 + (this.plan.special === 'crossing' ? -0.08 : 0));
+    const base = Math.max(0.12, 0.4 - G.fort.lights * 0.09 + (this.plan.special === 'crossing' ? -0.06 : 0));
     d.fillStyle = `rgba(4,6,14,${base})`;
     d.fillRect(0, 0, W * s, H * s);
     d.globalCompositeOperation = 'destination-out';
@@ -3605,7 +3605,7 @@ export class Battle {
     c.scale(1.7, 1);
     const v = c.createRadialGradient(0, 0, H * 0.32, 0, 0, H * 0.72);
     v.addColorStop(0, 'rgba(0,0,0,0)');
-    v.addColorStop(1, 'rgba(0,0,0,0.45)');
+    v.addColorStop(1, 'rgba(0,0,0,0.38)');
     c.fillStyle = v;
     c.fillRect(-W, -H, W * 2, H * 2);
     c.restore();
