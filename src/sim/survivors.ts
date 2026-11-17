@@ -3,7 +3,7 @@ import { G, R, uid, log } from '../state';
 import { TRAITS, TRAIT_IDS } from '../data/traits';
 import { FIRST_M, FIRST_F, LAST, BEFORE, OUTBREAK, NICKS } from '../data/names';
 
-export const SKILLS: SkillId[] = ['shooting', 'building', 'crafting', 'medicine', 'scavenging', 'farming', 'social'];
+export const SKILLS: SkillId[] = ['shooting', 'building', 'crafting', 'medicine', 'scavenging', 'farming', 'social', 'psych'];
 // sprites by sex and age bracket (young <30, mid <55, old)
 const SPRITES: Record<string, string[]> = {
   m0: ['surv_smg', 'surv_m_young'], m1: ['surv_rifle', 'surv_m_mid', 'surv_m_big'], m2: ['surv_shotgun', 'surv_m_old'],
@@ -89,6 +89,12 @@ export function makeSurvivor(opts: Partial<Survivor> = {}): Survivor {
     ...opts,
   };
   if (!s.sprite) s.sprite = pickSprite(s.sex, s.age);
+  if (!opts.attrs) {
+    s.attrs = baseAttrs(s);
+    for (const [k, v] of Object.entries(before.attrs ?? {})) s.attrs[k as AttrId] = Math.min(10, s.attrs[k as AttrId] + (v ?? 0));
+  }
+  s.xp ??= {};
+  s.base ??= { ...s.skills, ...s.attrs };
   return s;
 }
 
@@ -147,7 +153,7 @@ export function computeMood(s: Survivor) {
 }
 
 export function breakThresholds(s: Survivor) {
-  const shift = s.traits.reduce((a, t) => a + (TRAITS[t].breakAt ?? 0), 0);
+  const shift = s.traits.reduce((a, t) => a + (TRAITS[t].breakAt ?? 0), 0) - (attr(s, 'courage') - 4) * 0.8;
   return { minor: 28 + shift, major: 15 + shift, extreme: 6 + shift };
 }
 
@@ -164,7 +170,7 @@ export function moodWord(m: number) {
 export function workMult(s: Survivor) {
   let m = 1;
   for (const t of s.traits) m += TRAITS[t].work ?? 0;
-  m -= Math.min(0.7, pain(s) * 0.4);
+  m -= Math.min(0.7, pain(s) * 0.4 * (1.16 - attr(s, 'grit') * 0.04));
   for (const sc of s.scars) m += sc.work ?? 0;
   if (s.rest < 0.25) m -= 0.2;
   if (s.hunger < 0.15) m -= 0.25;
@@ -174,6 +180,116 @@ export function workMult(s: Survivor) {
 
 export function skillOf(s: Survivor, k: SkillId) {
   return s.skills[k] * (s.passions.includes(k) ? 1.15 : 1);
+}
+
+// ---------- progression: skills, attributes and training grow with use ----------
+// API for other systems (night/combat, events, runs):
+//   gainXp(s, key, amount)  award XP. key = any SkillId, 'courage', 'grit' or 'heavy' (crew-served weapons).
+//                           Passions give x1.5, Grim/Idle x0.8. Level-up at xp >= 100 * (level + 1), max 10.
+//                           Negative amounts shake it (a trauma can drop courage a level).
+//                           Level-ups queue a line for the report; drainLevelUps() collects them.
+//   level(s, key)           the current 0..10 value of a skill, attribute or training track.
+//   attr(s, 'courage'|'grit')  attribute 0..10 (defaults derived from traits for old saves).
+//   xpProgress(s, key)      0..1 toward the next level (for UI bars).
+// Rough XP scale: a working hour ~ 6 XP, a kill ~ 3 shooting XP, a held hard night ~ 15-30 courage XP.
+// Effects here: grit cuts fatigue drain (sim/day.ts) and the pain penalty in workMult; courage shifts break
+// thresholds. Combat may read attr(s, 'courage') for panic/flee and level(s, 'heavy') for emplacement handling.
+export type AttrId = 'courage' | 'grit';
+export type ProgressKey = SkillId | AttrId | 'heavy';
+export const ATTRS: AttrId[] = ['courage', 'grit'];
+export const ATTR_NAMES: Record<AttrId, string> = { courage: 'Courage', grit: 'Grit' };
+const levelUps: string[] = [];
+
+export function baseAttrs(s: Pick<Survivor, 'traits'>, roll = true): { courage: number; grit: number } {
+  let courage = roll ? R.gauss(4, 1.4) : 4, grit = roll ? R.gauss(4, 1.4) : 4;
+  const t = (id: string) => s.traits.includes(id);
+  if (t('ironwill')) courage += 2;
+  if (t('coward')) courage -= 3;
+  if (t('fragile')) courage -= 1;
+  if (t('jittery')) courage -= 1;
+  if (t('bloodlust')) courage += 1;
+  if (t('tough')) grit += 2;
+  if (t('slowhealer')) grit -= 1;
+  if (t('hardworker')) grit += 1;
+  if (t('lazy')) grit -= 1;
+  const c = (v: number) => Math.max(0, Math.min(10, Math.round(v)));
+  return { courage: c(courage), grit: c(grit) };
+}
+export function attr(s: Survivor, a: AttrId): number {
+  if (!s.attrs) s.attrs = baseAttrs(s, false);
+  return s.attrs[a] ?? 4;
+}
+export function level(s: Survivor, k: ProgressKey): number {
+  if (k === 'courage' || k === 'grit') return attr(s, k);
+  if (k === 'heavy') return s.training?.heavy ?? 0;
+  return s.skills[k] ?? 0;
+}
+function setLevel(s: Survivor, k: ProgressKey, v: number) {
+  v = Math.max(0, Math.min(10, v));
+  if (k === 'courage' || k === 'grit') {
+    attr(s, k);
+    s.attrs![k] = v;
+  } else if (k === 'heavy') (s.training ??= {}).heavy = v;
+  else s.skills[k] = v;
+}
+export function xpNeeded(lvl: number) {
+  return 100 * (lvl + 1);
+}
+export function xpProgress(s: Survivor, k: ProgressKey) {
+  const lvl = level(s, k);
+  return lvl >= 10 ? 1 : Math.max(0, Math.min(1, (s.xp?.[k] ?? 0) / xpNeeded(lvl)));
+}
+const LEVEL_WORDS: Record<ProgressKey, string> = {
+  shooting: 'shooting straight', building: 'building', crafting: 'the bench work', medicine: 'stitching', scavenging: 'finding things',
+  farming: 'growing things', social: 'talking to people', psych: 'talking people down', courage: 'standing the wall', grit: 'going without', heavy: 'working the gun nest',
+};
+const KEY_NAMES: Record<string, string> = { courage: 'Courage', grit: 'Grit', heavy: 'Heavy weapons', psych: 'Counsel' };
+export function progressName(k: ProgressKey) {
+  return KEY_NAMES[k] ?? k[0].toUpperCase() + k.slice(1);
+}
+export function gainXp(s: Survivor, k: ProgressKey, amount: number): boolean {
+  if (s.dead || !amount) return false;
+  s.xp ??= {};
+  let lvl = level(s, k);
+  if (amount < 0) {
+    // a shake: lose progress, and a level if there is none left to lose
+    const cur = (s.xp[k] ?? 0) + amount;
+    if (cur < 0 && lvl > 0) {
+      setLevel(s, k, lvl - 1);
+      s.xp[k] = Math.max(0, xpNeeded(lvl - 1) + cur);
+      levelUps.push(`${first(s)} came out of it shaken. ${progressName(k)} ${lvl - 1}.`);
+    } else s.xp[k] = Math.max(0, cur);
+    return false;
+  }
+  if (lvl >= 10) return false;
+  let mult = 1;
+  if ((s.passions as string[]).includes(k)) mult *= 1.5;
+  if (s.traits.includes('grim') || s.traits.includes('lazy')) mult *= 0.8;
+  s.xp[k] = (s.xp[k] ?? 0) + amount * mult;
+  let up = false;
+  while (lvl < 10 && (s.xp[k] ?? 0) >= xpNeeded(lvl)) {
+    s.xp[k] = (s.xp[k] ?? 0) - xpNeeded(lvl);
+    lvl++;
+    setLevel(s, k, lvl);
+    up = true;
+  }
+  if (up) levelUps.push(`${first(s)} got better at ${LEVEL_WORDS[k]}: ${progressName(k)} ${lvl}.`);
+  return up;
+}
+/** Level-up lines queued since the last call (shown in the dusk and dawn reports). */
+export function drainLevelUps(): string[] {
+  return levelUps.splice(0);
+}
+/** Old saves: fill in psych, attributes, xp and base values. Safe to call repeatedly. */
+export function migrateSurvivor(s: Survivor) {
+  if (s.skills.psych == null) s.skills.psych = Math.max(0, Math.min(10, Math.round(s.skills.social * 0.6)));
+  s.attrs ??= baseAttrs(s, false);
+  s.xp ??= {};
+  s.base ??= { ...s.skills, ...s.attrs };
+}
+/** The survivor's best skills, highest first. */
+export function topSkills(s: Survivor, n = 2) {
+  return [...SKILLS].sort((a, b) => s.skills[b] - s.skills[a] || (s.passions.includes(b) ? 1 : 0) - (s.passions.includes(a) ? 1 : 0)).slice(0, n);
 }
 
 // 0..1 rough accuracy factor used for both the player's spread and the guards' hit chance
@@ -322,4 +438,43 @@ export function checkTitles(s: Survivor) {
   if (s.tales.some((t) => t.startsWith('Dropped a Ferryman'))) grantTitle(s, 'Ferryman\'s Fee');
   if (s.tales.some((t) => t.startsWith('Took') && t.includes('bone saw'))) grantTitle(s, 'Sawbones');
   if (s.daysSurvived >= 20) grantTitle(s, 'Old Hand');
+}
+
+// ---------- counselling (the Counsel job; incidents may call counsel() too) ----------
+/** True if someone talked this survivor down today or yesterday (breaks at dawn are much less likely). */
+export function counselled(s: Survivor) {
+  const d = G.flags[`counseled_${s.id}`] as number | undefined;
+  return d !== undefined && d >= G.day - 1;
+}
+/**
+ * Talk a survivor down. `by` is the counsellor (null = an incident or stranger, psych 4 assumed).
+ * Removes or halves their worst negative thought, adds a small "talked it through" lift, may lift a sulk or
+ * catatonia, and marks them counselled (dawn break chance x0.35). Awards psych XP to `by`. Returns a report line.
+ */
+export function counsel(by: Survivor | null, t: Survivor, power = 1): string {
+  const skill = by ? skillOf(by, 'psych') : 4;
+  const worst = t.thoughts.filter((x) => x.mood < 0).sort((a, b) => a.mood - b.mood)[0];
+  let what = '';
+  if (worst) {
+    if (skill * power >= 6 || worst.mood > -6) {
+      t.thoughts = t.thoughts.filter((x) => x !== worst);
+      what = ` and got "${worst.label.toLowerCase()}" off ${their(t)} chest`;
+    } else {
+      worst.mood = Math.round(worst.mood * 0.5);
+      what = ` about "${worst.label.toLowerCase()}"`;
+    }
+  }
+  addThought(t, { id: 'counselled', label: by ? `Talked it through with ${first(by)}` : 'Talked it through', mood: Math.round(3 + skill * 0.6 * power), days: 2 }, 1);
+  G.flags[`counseled_${t.id}`] = G.day;
+  let lifted = '';
+  if (t.breakState && (t.breakState.kind === 'sulk' || t.breakState.kind === 'catatonic') && R.chance(0.15 + skill * 0.06 * power)) {
+    t.breakState = null;
+    lifted = ` ${first(t)} got up afterwards.`;
+  }
+  if (by) {
+    changeOpinion(t, by, 4);
+    gainXp(by, 'psych', 12);
+  }
+  computeMood(t);
+  return `${by ? first(by) : 'Someone'} sat with ${first(t)}${what}.${lifted}`;
 }

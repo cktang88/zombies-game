@@ -6,7 +6,7 @@ export type Res = 'food' | 'scrap' | 'wood' | 'parts' | 'meds' | 'fuel' | 'cloth
   | 'rocket' | 'g40' | 'g40_buck' | 'pipebomb';
 export type Stores = Record<Res, number>;
 
-export type SkillId = 'shooting' | 'building' | 'crafting' | 'medicine' | 'scavenging' | 'farming' | 'social';
+export type SkillId = 'shooting' | 'building' | 'crafting' | 'medicine' | 'scavenging' | 'farming' | 'social' | 'psych';
 export type BodyPart = 'head' | 'torso' | 'larm' | 'rarm' | 'lleg' | 'rleg';
 
 export interface Wound {
@@ -42,7 +42,7 @@ export interface Relation {
   bond?: 'lover' | 'spouse' | 'sibling' | 'parent' | 'child' | 'friend' | 'rival';
 }
 
-export type JobId = 'guard' | 'repair' | 'scavenge' | 'craft' | 'farm' | 'doctor' | 'rest' | 'radio' | 'cook';
+export type JobId = 'guard' | 'repair' | 'scavenge' | 'craft' | 'farm' | 'doctor' | 'rest' | 'radio' | 'cook' | 'drill' | 'counsel';
 
 export interface Survivor {
   id: string;
@@ -76,6 +76,17 @@ export interface Survivor {
   tales: string[]; // short memorable things they did
   titles?: string[]; // earned epithets
   child?: boolean; // a non-combatant child: eats, lifts spirits, never stands the wall
+  // ---- progression (src/sim/survivors.ts: gainXp / level / attr; optional so old saves load) ----
+  // xp toward the NEXT level of a skill, attribute or training track, keyed by ProgressKey.
+  // Level-up when xp >= 100 * (level + 1). Award it with gainXp(), never write it directly.
+  xp?: Partial<Record<string, number>>;
+  // Attributes 0..10: courage (night nerve, panic/flee resistance) and grit (fatigue and pain tolerance).
+  attrs?: { courage: number; grit: number };
+  // Crew-served weapon training 0..10 (MG nests and other G.flags.emplacements). Grows from the Drill job
+  // while an emplacement exists. Combat should read it via level(s, 'heavy').
+  training?: { heavy?: number };
+  // Values at arrival (skills and attributes), to show growth on the survivor sheet.
+  base?: Partial<Record<string, number>>;
 }
 
 // Weapon class: what a survivor's proficiency is in (see CLASS_NAMES in data/weapons.ts)

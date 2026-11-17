@@ -1,10 +1,11 @@
 import type { Survivor, Res } from '../types';
 import { G, R, log, add, pay, has, newWeapon, uid, findDoc } from '../state';
 import { SITES, RECIPES, RES_LABEL } from '../data/world';
-import { WEAPONS, MODS, modFits, slotsFor } from '../data/weapons';
+import { WEAPONS, MODS, modFits, slotsFor, selectedAmmo } from '../data/weapons';
 import {
   living, first, displayName, workMult, skillOf, addThought, wound, canWork, rel, changeOpinion, setBond, hasTrait,
   computeMood, breakThresholds, killSurvivor, pain, they, their, tale, isBitten, PART_NAMES, closeTo, them, checkTitles,
+  gainXp, attr, counsel, counselled, drainLevelUps,
 } from './survivors';
 import { bondLine, breakLine } from './chronicle';
 
@@ -14,27 +15,144 @@ export function buildingLevel(id: string) {
   return G.buildings.find((b) => b.id === id)?.level ?? 0;
 }
 
+// ---------- the day budget: 10 hours of daylight (07:00–17:00) ----------
+// Every survivor spends some hours on their job; the rest of the day is rest.
+// Work drains `rest`, free hours restore it, so a ten-hour day every day wears people down.
+export const DAY_HOURS = 10;
+export const DAY_START = 7; // 07:00
+export const DEFAULT_HOURS = 8;
+// Seconds of run daylight per hour left when the leader leaves (9h → 153 s, about the old run length).
+export const RUN_SEC_PER_HOUR = 17;
+// Round-trip travel hours from Ferry Road. Far sites leave less time to actually search.
+export const SITE_TRAVEL: Record<string, number> = {
+  route9: 1, diner: 1, rexall: 1, legion: 1, millyard: 2, boathouse: 2, school: 2, manor: 2, gunshop: 2, deercamp: 3, courthouse: 3, corliss: 6,
+};
+// rest drained per working hour, by job
+const DRAIN: Record<string, number> = { scavenge: 0.05, repair: 0.045, craft: 0.035, farm: 0.035, doctor: 0.03, radio: 0.02, guard: 0.04, cook: 0.03, drill: 0.035, counsel: 0.025 };
+const XP_PER_HOUR = 6; // skill XP per working hour (passions x1.5, see gainXp)
+export const DRILL_ROUNDS = 10; // live rounds a full 8h drill burns; without them it is dry-fire at half XP
+
+/** Crew-served emplacements built by the combat pass (G.flags.emplacements, a JSON array). */
+export function emplacements(): unknown[] {
+  try {
+    const v = JSON.parse((G.flags.emplacements as string) ?? '[]');
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
+/** What a drill would burn and teach today. */
+export function drillPlan(s: Survivor) {
+  const it = G.weapons.find((w) => w.uid === s.weapon);
+  const ammo = it ? selectedAmmo(it) : null;
+  const rounds = Math.ceil(DRILL_ROUNDS * jobHours(s) / DEFAULT_HOURS);
+  const live = !!ammo && ammo !== 'scrap' && (G.stores[ammo] ?? 0) >= rounds && rounds > 0;
+  return { ammo, rounds, live, heavy: emplacements().length > 0 };
+}
+const FREE_HOUR_REST = 0.04; // rest regained per unworked daylight hour
+const NIGHT_SLEEP = 0.22; // rest regained overnight (dawnTick)
+const SEARCH_NORM = 6; // search hours that give the site table ×1 (8h at a 2h site)
+
+export function travelHours(siteId: string) {
+  return SITE_TRAVEL[siteId] ?? 2;
+}
+export function clockLabel(h: number) {
+  const t = DAY_START + h;
+  return `${String(Math.floor(t)).padStart(2, '0')}:${t % 1 ? '30' : '00'}`;
+}
+export function ranToday() {
+  return G.flags.ranToday === G.day;
+}
+/** Daylight hours this survivor has for house work today (the leader loses the hours after leaving on a run). */
+export function hoursAvailable(s: Survivor) {
+  if (s.isLeader && ranToday()) return Math.max(0, Math.min(DAY_HOURS, (G.flags.runLeave as number) ?? 0));
+  return DAY_HOURS;
+}
+/** Hours booked on the survivor's job (Rest books none: the whole day is rest). */
+export function jobHours(s: Survivor) {
+  if (s.job === 'rest') return 0;
+  const h = (G.flags[`hours_${s.id}`] as number) ?? DEFAULT_HOURS;
+  return Math.max(0, Math.min(hoursAvailable(s), h));
+}
+export function setJobHours(s: Survivor, h: number) {
+  G.flags[`hours_${s.id}`] = Math.max(1, Math.min(DAY_HOURS, Math.round(h)));
+}
+export function survivorSite(s: Survivor) {
+  return (G.flags[`site_${s.id}`] as string) ?? 'route9';
+}
+/** Hours spent searching at a site after the walk there and back. */
+export function searchHours(s: Survivor) {
+  return Math.max(0, jobHours(s) - travelHours(survivorSite(s)));
+}
+export function searchFactor(h: number) {
+  return h <= 0 ? 0 : Math.pow(h / SEARCH_NORM, 0.85);
+}
+/** Plans carry over from yesterday, but the day screen flags them until the player touches them. */
+export function planConfirmed(s: Survivor) {
+  return G.flags[`plan_${s.id}`] === G.day;
+}
+export function confirmPlan(s: Survivor) {
+  G.flags[`plan_${s.id}`] = G.day;
+}
+/** Daylight (seconds) the leader would have on a run leaving after `leave` hours of house work. */
+export function runDaylightFor(siteId: string, leave: number) {
+  return Math.max(0, Math.round((DAY_HOURS - leave - travelHours(siteId)) * RUN_SEC_PER_HOUR));
+}
+/**
+ * Book the leader's run. Sets G.flags.runDaylight (seconds of street daylight; the run code reads it),
+ * G.flags.runLeave (house hours worked before leaving) and G.flags.ranToday. The leader's job keeps
+ * running for the `leave` hours before departure; with leave 0 the job becomes Rest.
+ */
+export function prepareRun(siteId: string, leave: number) {
+  G.flags.ranToday = G.day;
+  G.flags.runLeave = leave;
+  G.flags.runSite = siteId;
+  G.flags.runDaylight = runDaylightFor(siteId, leave);
+  const l = living().find((s) => s.isLeader);
+  if (l) {
+    if (leave <= 0) l.job = 'rest';
+    l.rest = Math.max(0, l.rest - 0.2); // a run is a hard day's walking
+  }
+  return G.flags.runDaylight as number;
+}
+
+/** Fuel the stove burns tonight: frost and snow cost 1 per 3 people; late in the year every night costs a little. */
+export function heatNeed(weather = G.weather, day = G.day, people = living().length) {
+  if (!people) return 0;
+  if (weather === 'cold' || weather === 'snow') return Math.ceil(people / 3);
+  if (day >= 10) return Math.ceil(people / 5);
+  return 0;
+}
+
 // ---------- day work: runs when the player calls dusk ----------
 export function resolveDayWork(): string[] {
   const out: string[] = [];
   const workers = living();
   const siteRuns: Record<string, Survivor[]> = {};
   for (const s of workers) {
+    const away = s.isLeader && ranToday();
+    const hours = jobHours(s);
+    const free = Math.max(0, hoursAvailable(s) - hours);
     if (!canWork(s)) {
-      if (s.job !== 'rest') out.push(`${first(s)} could not work today.`);
+      if (s.job !== 'rest' && !away) out.push(`${first(s)} could not work today.`);
       s.rest = Math.min(1, s.rest + 0.3);
       continue;
     }
     const m = workMult(s);
+    const f = hours / DEFAULT_HOURS; // yields are tuned for an 8-hour day
+    const gritF = 1.16 - attr(s, 'grit') * 0.04; // grit 4 = x1, grit 10 = x0.76
+    if (s.job !== 'rest') s.rest = Math.max(0, Math.min(1, s.rest - (DRAIN[s.job] ?? 0.03) * gritF * hours + FREE_HOUR_REST * free));
+    if (hours > 8) gainXp(s, 'grit', (hours - 8) * 8);
+    if (hours > 0 && s.rest < 0.3) gainXp(s, 'grit', 10);
+    if (s.job !== 'rest' && hours <= 0) continue;
     switch (s.job) {
       case 'repair': {
-        const amt = Math.round((40 + skillOf(s, 'building') * 9) * m);
+        const amt = Math.round((40 + skillOf(s, 'building') * 9) * m * f);
         const before = G.fort.hp;
         G.fort.hp = Math.min(G.fort.maxHp, G.fort.hp + amt);
         const wood = Math.min(G.stores.wood, Math.ceil((G.fort.hp - before) / 25));
         add('wood', -wood);
-        out.push(`${first(s)} patched the wall (+${G.fort.hp - before}).`);
-        s.rest -= 0.15;
+        out.push(`${first(s)} patched the wall for ${hours}h (+${G.fort.hp - before}).`);
         break;
       }
       case 'craft': {
@@ -42,7 +160,7 @@ export function resolveDayWork(): string[] {
           out.push(`${first(s)} sat at an idle bench. Nothing was queued.`);
           break;
         }
-        let pts = (3 + skillOf(s, 'crafting') * 0.9) * m;
+        let pts = (3 + skillOf(s, 'crafting') * 0.9) * m * f;
         while (pts > 0 && G.craftQueue.length) {
           const job = G.craftQueue[0];
           const r = RECIPES.find((x) => x.id === job.recipe)!;
@@ -55,20 +173,18 @@ export function resolveDayWork(): string[] {
             out.push(finishRecipe(r.id, s));
           }
         }
-        s.rest -= 0.12;
         break;
       }
       case 'farm': {
         const g = buildingLevel('garden');
-        const amt = Math.round((1.5 + skillOf(s, 'farming') * 0.45 + g * 2.2) * m * (G.weather === 'cold' || G.weather === 'snow' ? 0.6 : 1));
+        const amt = Math.round((1.5 + skillOf(s, 'farming') * 0.45 + g * 2.2) * m * f * (G.weather === 'cold' || G.weather === 'snow' ? 0.6 : 1));
         add('food', amt);
         out.push(`${first(s)} brought in ${amt} food${g ? ' from the cold frames' : ' snaring rabbits and picking frost-bit kale'}.`);
-        s.rest -= 0.1;
         break;
       }
       case 'doctor': {
         const patients = living().filter((p) => p.wounds.length);
-        let care = Math.round((2 + skillOf(s, 'medicine')) * m);
+        let care = Math.max(1, Math.round((2 + skillOf(s, 'medicine')) * m * f));
         for (const p of patients) {
           for (const w of p.wounds) {
             if (care <= 0) break;
@@ -76,6 +192,7 @@ export function resolveDayWork(): string[] {
               w.tended = true;
               w.bleeding = false;
               care--;
+              gainXp(s, 'medicine', 10);
               if (G.stores.meds > 0 && w.severity > 0.3) {
                 add('meds', -1);
                 w.severity *= 0.8;
@@ -84,13 +201,15 @@ export function resolveDayWork(): string[] {
           }
         }
         out.push(patients.length ? `${first(s)} tended the wounded.` : `${first(s)} sorted the medicine shelf. Nobody needed stitching. A good day.`);
-        s.rest -= 0.08;
         break;
       }
       case 'scavenge': {
-        const site = (G.flags[`site_${s.id}`] as string) ?? 'route9';
+        const site = survivorSite(s);
+        if (searchHours(s) <= 0) {
+          out.push(`${first(s)} set out for ${SITES.find((x) => x.id === site)?.name ?? 'town'} and had to turn back to beat the dark.`);
+          break;
+        }
         (siteRuns[site] ??= []).push(s);
-        s.rest -= 0.25;
         break;
       }
       case 'radio': {
@@ -98,29 +217,68 @@ export function resolveDayWork(): string[] {
           out.push(`${first(s)} turned the dial of a dead transistor radio.`);
           break;
         }
-        G.flags.radioWork = ((G.flags.radioWork as number) ?? 0) + (1 + skillOf(s, 'social') * 0.2) * m;
-        out.push(`${first(s)} worked the CB all day.`);
+        G.flags.radioWork = ((G.flags.radioWork as number) ?? 0) + (1 + skillOf(s, 'social') * 0.2) * m * f;
+        out.push(`${first(s)} worked the CB for ${hours}h.`);
+        break;
+      }
+      case 'drill': {
+        const d = drillPlan(s);
+        if (d.live && d.ammo) add(d.ammo, -d.rounds);
+        gainXp(s, 'shooting', (d.live ? 2 : 1) * XP_PER_HOUR * hours);
+        if (d.heavy) gainXp(s, 'heavy', (d.live ? 2 : 1) * 5 * hours);
+        out.push(d.live
+          ? `${first(s)} drilled ${hours}h${d.heavy ? ' on the gun nest' : ''} and burned ${d.rounds} ${(RES_LABEL[d.ammo!] ?? 'rounds').toLowerCase()}.`
+          : `${first(s)} dry-fired for ${hours}h${d.heavy ? ' behind the gun nest' : ''}. Without live rounds it only half takes.`);
+        break;
+      }
+      case 'counsel': {
+        const sessions = Math.max(1, Math.floor(hours / 4));
+        const targets = living()
+          .filter((o) => o !== s && !counselled(o) && (o.mood < 60 || o.breakState || o.thoughts.some((t) => t.mood <= -6)))
+          .sort((a, b) => (a.mood - breakThresholds(a).minor) - (b.mood - breakThresholds(b).minor))
+          .slice(0, sessions);
+        if (!targets.length) out.push(`${first(s)} made coffee and listened. Nobody needed talking down today.`);
+        for (const t of targets) out.push(counsel(s, t, Math.min(1.2, f)));
+        gainXp(s, 'psych', XP_PER_HOUR * hours * 0.5);
         break;
       }
       case 'rest':
       default:
-        s.rest = Math.min(1, s.rest + 0.35);
+        if (away) break;
+        s.rest = Math.min(1, s.rest + 0.4);
         addThought(s, { id: 'rested', label: 'Got a day off', mood: 3, days: 1 }, 1);
         break;
     }
+    if (s.rest < 0.2 && s.job !== 'rest') addThought(s, { id: 'worked_ragged', label: 'Worked to the bone', mood: -4, days: 1 }, 1);
     // passions
     if (s.job !== 'rest') {
       const skill = jobSkill(s.job);
       if (skill && s.passions.includes(skill)) addThought(s, { id: 'passion', label: 'Did work I care about', mood: 4, days: 1 }, 1);
-      if (skill && R.chance(0.12 * (s.passions.includes(skill) ? 2 : 1)) && s.skills[skill] < 10) s.skills[skill]++;
+      if (skill && s.job !== 'drill' && s.job !== 'counsel') gainXp(s, skill, XP_PER_HOUR * hours);
     }
   }
   for (const [siteId, team] of Object.entries(siteRuns)) out.push(...scavenge(siteId, team));
+  out.push(...drainLevelUps());
+  // the stove
+  const heat = heatNeed();
+  if (heat > 0) {
+    if (G.stores.fuel >= heat) {
+      add('fuel', -heat);
+      out.push(`The stove will burn ${heat} fuel tonight.`);
+    } else {
+      add('fuel', -G.stores.fuel);
+      out.push('Not enough fuel for the stove. Everyone sleeps in their coats.');
+      for (const s of living()) {
+        addThought(s, { id: 'freezing', label: 'Freezing in the house', mood: -8, days: 1 }, 1);
+        s.rest = Math.max(0, s.rest - 0.1);
+      }
+    }
+  }
   return out;
 }
 
 function jobSkill(j: string) {
-  return ({ repair: 'building', craft: 'crafting', farm: 'farming', doctor: 'medicine', scavenge: 'scavenging', radio: 'social', guard: 'shooting' } as const)[j as 'repair'];
+  return ({ repair: 'building', craft: 'crafting', farm: 'farming', doctor: 'medicine', scavenge: 'scavenging', radio: 'social', guard: 'shooting', drill: 'shooting', counsel: 'psych' } as const)[j as 'repair'];
 }
 
 function scavenge(siteId: string, team: Survivor[]): string[] {
@@ -130,7 +288,8 @@ function scavenge(siteId: string, team: Survivor[]): string[] {
   const stock = (G.flags[stockKey] as number) ?? site.stock;
   const fullness = Math.max(0.15, stock / site.stock);
   const skill = team.reduce((a, s) => a + skillOf(s, 'scavenging') * workMult(s), 0);
-  const mult = (0.55 + skill * 0.12) * fullness * (team.length > 1 ? 1 + (team.length - 1) * 0.5 : 1);
+  const search = team.reduce((a, s) => a + searchFactor(searchHours(s)), 0) / team.length;
+  const mult = (0.55 + skill * 0.12) * fullness * search * (team.length > 1 ? 1 + (team.length - 1) * 0.5 : 1);
   const names = team.map(first).join(' and ');
   const got: string[] = [];
   for (const [k, v] of Object.entries(site.loot)) {
@@ -156,7 +315,7 @@ function scavenge(siteId: string, team: Survivor[]): string[] {
   out.push(`${names} searched ${site.name}: ${got.length ? got.join(', ') : 'nothing worth carrying'}.${stock <= 1 ? ' The place is picked clean.' : ''}`);
   // danger
   for (const s of team) {
-    const danger = site.risk * (1.2 - Math.min(0.6, skillOf(s, 'scavenging') * 0.06)) * (team.length > 1 ? 0.75 : 1);
+    const danger = site.risk * (1.2 - Math.min(0.6, skillOf(s, 'scavenging') * 0.06)) * (team.length > 1 ? 0.75 : 1) * Math.min(1.3, searchFactor(searchHours(s)));
     if (R.chance(danger * 0.45)) {
       const roll = R.next();
       if (roll < 0.12 + site.risk * 0.1) {
@@ -252,7 +411,7 @@ export function dawnTick(): string[] {
       s.hunger = Math.max(0, s.hunger - 0.35);
     }
     s.hunger = Math.max(0, s.hunger - 0.25);
-    s.rest = Math.max(0, Math.min(1, s.rest + 0.3));
+    s.rest = Math.max(0, Math.min(1, s.rest + NIGHT_SLEEP));
     if (s.hunger <= 0 && R.chance(0.25)) {
       wound(s, 'bruise', 0.2, 'torso');
       out.push(`${first(s)} is starving.`);
@@ -269,8 +428,7 @@ export function dawnTick(): string[] {
     s.daysSurvived++;
     delete G.flags[`inspired_${s.id}`];
   }
-  // heat
-  if ((G.weather === 'cold' || G.weather === 'snow') && G.stores.fuel > 0) add('fuel', -Math.min(G.stores.fuel, 1 + Math.floor(people.length / 4)));
+  // heat: the stove is paid at dusk (resolveDayWork → heatNeed)
   if (G.fort.lights > 0 && buildingLevel('generator')) add('fuel', -Math.min(G.stores.fuel, 0.5 * G.fort.lights));
   // wounds
   const inf = buildingLevel('infirmary');
@@ -427,7 +585,7 @@ function breaksTick(): string[] {
       }
       continue;
     }
-    const p = [0, 0.2, 0.45, 0.8][tier];
+    const p = [0, 0.2, 0.45, 0.8][tier] * (counselled(s) ? 0.35 : 1);
     if (!R.chance(p)) continue;
     // resolve: Darkest-Dungeon-style turn from breaking to standing
     const partner = closeTo(s).length > 0;
