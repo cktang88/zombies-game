@@ -1,4 +1,4 @@
-import type { Res, WeaponDef, WeaponItem } from '../types';
+import type { Res, WeaponDef, WeaponItem, ModSlot, ModItem } from '../types';
 
 /* =====================================================================================
  * THE ARSENAL — weapon & ammunition data, and the firing CONTRACT for night/day combat.
@@ -37,6 +37,21 @@ import type { Res, WeaponDef, WeaponItem } from '../types';
  *   stagger    0..1 per body hit: chance (or impulse) that the hit staggers the target.
  *              Slugs, soft-points, bolts, the muzzleloader high; .22 and nails low.
  *
+ *
+ * ATTACHMENTS (WeaponItem.mods, folded in by fireProfile — battle code gets them for free):
+ *   light      length in px of a flashlight cone from the muzzle at night (0 = none). Light the
+ *              road in that cone and let guards see / engage inside it.
+ *   melee      damage of a lashed blade when the wall is reached / out of ammo (0 = none;
+ *              use instead of the bare hand-to-hand value)
+ *   bloomMul   multiply the per-shot bloom you add (sling, brake)
+ *   recoilMul  multiply recoil/shake applied to the shooter (brake, padded stock)
+ *   braceBloomMul extra bloom multiplier while firing from the wall (bipod); 1 = none
+ *   switchTime seconds added when the shooter changes target (scope +, red-dot −); guards'
+ *              re-target delay, or the player's spread settle time
+ *   range      px beyond which a projectile does half damage (sawed-off ~520; Infinity = none)
+ *   Suppressors wear: call wearMods(w, roundsFired) after a fight; it lowers mod cond and
+ *   removes worn-out mods, returning lines for the morning report.
+ *
  * Old fields on WeaponDef (dmg, rof, mag, ammo, …) are still present so legacy code
  * compiles, but they ignore ammo types. WEAPON_ORDER lists every gun.
  * ===================================================================================== */
@@ -47,6 +62,7 @@ export interface FireProfile {
   ammoRes: Res | null; perShot: number; reload: number; reloadPerRound: boolean; mag: number; rof: number; auto: boolean;
   burst: number; burstGap: number; jam: number; recoverable: number;
   limbMul: number; stagger: number;
+  light: number; melee: number; bloomMul: number; recoilMul: number; braceBloomMul: number; switchTime: number; range: number;
 }
 
 // Burning (dragon's breath, fire bolts, flares)
@@ -257,6 +273,8 @@ export const WEAPON_ORDER = [
 
 // Every icon the arsenal needs (spread into the asset preload list).
 export const ARSENAL_ICONS: string[] = [...new Set([
+  'icon_mod_scope', 'icon_mod_reddot', 'icon_mod_suppressor', 'icon_mod_brake', 'icon_mod_sawedoff',
+  'icon_mod_flashlight', 'icon_mod_hatchet', 'icon_mod_bipod', 'icon_mod_extmag', 'icon_mod_drum', 'icon_mod_taped', 'icon_mod_sling',
   ...Object.values(WEAPONS).map((w) => w.icon),
   ...Object.values(CALIBERS).map((c) => c.icon),
   ...Object.values(AMMO_TYPES).map((a) => a!.icon),
@@ -264,6 +282,182 @@ export const ARSENAL_ICONS: string[] = [...new Set([
 
 // Legacy pool names (still used by some night code).
 export const AMMO_NAMES: Record<string, string> = { light: 'Pistol rounds', shell: 'Shells', rifle: 'Rifle rounds', scrap: 'Scrap' };
+
+
+// ---------- attachments ----------
+export type WeaponClass = 'pistol' | 'smg' | 'shotgun' | 'rifle' | 'lmg' | 'bow' | 'tool';
+export function weaponClass(defId: string): WeaponClass {
+  const d = WEAPONS[defId];
+  if (!d) return 'tool';
+  if (d.caliber === 'nails') return 'tool';
+  if (d.caliber === 'bolt') return 'bow';
+  if (defId === 'lmg') return 'lmg';
+  if (d.caliber === 'shot') return 'shotgun';
+  if (defId === 'flaregun' || (d.caliber === 'pistol' && !d.auto)) return 'pistol';
+  if (d.caliber === 'pistol') return 'smg';
+  return 'rifle';
+}
+// guns that take a detachable box magazine
+const BOX_MAG = ['service9', 'm1911', 'mp93', 'smg', 'r22', 'ar15', 'carbine'];
+const TUBE_MAG = ['pump', 'autoshot', 'lever'];
+const LONG = (id: string) => ['shotgun', 'rifle', 'lmg'].includes(weaponClass(id)) && id !== 'pipe';
+
+export interface ModDef {
+  id: string; name: string; slot: ModSlot; icon: string; niche: string; desc: string;
+  fits: (defId: string) => boolean;
+  dmgMul?: number; spreadMul?: number; coneMul?: number; rofMul?: number; magMul?: number; reloadMul?: number;
+  noiseMul?: number; knockMul?: number; bloomMul?: number; recoilMul?: number; braceBloomMul?: number;
+  switchTime?: number; light?: number; melee?: number; range?: number; armorPen?: number;
+  life?: number; // rounds before it wears out (suppressor)
+}
+export const MOD_SLOTS: { id: ModSlot; name: string }[] = [
+  { id: 'optic', name: 'optic' }, { id: 'muzzle', name: 'muzzle' }, { id: 'barrel', name: 'barrel' },
+  { id: 'under', name: 'under-barrel' }, { id: 'mag', name: 'magazine' }, { id: 'stock', name: 'stock' },
+];
+export const MODS: Record<string, ModDef> = {
+  scope: {
+    id: 'scope', name: 'Deer scope', slot: 'optic', icon: 'icon_mod_scope',
+    niche: 'Pinpoint at range; slow to swing onto a new target.',
+    desc: 'A 3-9x from a stand on the Halvorsen forty. Zeroed for a buck at a hundred yards.',
+    fits: (id) => ['rifle', 'bow'].includes(weaponClass(id)) && id !== 'muzzle',
+    spreadMul: 0.35, rofMul: 0.85, switchTime: 0.35,
+  },
+  reddot: {
+    id: 'reddot', name: 'Red-dot sight', slot: 'optic', icon: 'icon_mod_reddot',
+    niche: 'Faster, tighter snap shots on anything with a front sight.',
+    desc: 'Pulled off a Guard rifle at Corliss. The battery is the precious part.',
+    fits: (id) => !['tool', 'bow', 'lmg'].includes(weaponClass(id)) && id !== 'pipe' && id !== 'flaregun',
+    spreadMul: 0.72, switchTime: -0.12,
+  },
+  suppressor: {
+    id: 'suppressor', name: 'Oil-filter suppressor', slot: 'muzzle', icon: 'icon_mod_suppressor',
+    niche: 'Turns a shot into a cough; a little weaker, and it burns out.',
+    desc: 'A truck oil filter on a threaded adapter. Good for a few nights of shooting.',
+    fits: (id) => ['pistol', 'smg', 'rifle'].includes(weaponClass(id)) && !['muzzle', 'revolver', 'flaregun'].includes(id),
+    noiseMul: 0.3, dmgMul: 0.92, life: 240,
+  },
+  brake: {
+    id: 'brake', name: 'Muzzle brake', slot: 'muzzle', icon: 'icon_mod_brake',
+    niche: 'Kills muzzle climb so follow-ups land; louder for everyone.',
+    desc: 'Slotted pipe coupling, ported on the lathe.',
+    fits: (id) => ['rifle', 'lmg', 'shotgun', 'smg'].includes(weaponClass(id)) && !['pipe', 'muzzle', 'r22', 'coach'].includes(id),
+    recoilMul: 0.6, bloomMul: 0.72, noiseMul: 1.3,
+  },
+  choke: {
+    id: 'choke', name: 'Full choke', slot: 'muzzle', icon: 'icon_mod_brake',
+    niche: 'Tightens the shot cone: buckshot that reaches the back of the road.',
+    desc: 'Screw-in turkey choke from Strand\'s counter.',
+    fits: (id) => weaponClass(id) === 'shotgun' && !['pipe', 'flaregun'].includes(id),
+    coneMul: 0.62, knockMul: 0.9,
+  },
+  sawedoff: {
+    id: 'sawedoff', name: 'Sawed-off barrel', slot: 'barrel', icon: 'icon_mod_sawedoff',
+    niche: 'A wide, brutal cone and more shove — for the wall only; weak past the wire.',
+    desc: 'Hacksaw, file, and a decision you cannot undo. (Detach it and it goes back on the shelf.)',
+    fits: (id) => ['pump', 'coach', 'snake410'].includes(id),
+    coneMul: 1.45, knockMul: 1.3, switchTime: -0.1, range: 520,
+  },
+  flashlight: {
+    id: 'flashlight', name: 'Duct-taped flashlight', slot: 'under', icon: 'icon_mod_flashlight',
+    niche: 'A cone of light down the barrel: see them, and so does everyone on the wall.',
+    desc: 'A Maglite and most of a roll of duct tape.',
+    fits: (id) => weaponClass(id) !== 'tool' && id !== 'flaregun',
+    light: 340,
+  },
+  hatchet: {
+    id: 'hatchet', name: 'Hatchet bayonet', slot: 'under', icon: 'icon_mod_hatchet',
+    niche: 'A blade at the wall when the gun runs dry; heavy on the muzzle.',
+    desc: 'A Plumb hatchet head hose-clamped under the barrel.',
+    fits: LONG,
+    melee: 45, spreadMul: 1.06,
+  },
+  bipod: {
+    id: 'bipod', name: 'Bipod', slot: 'under', icon: 'icon_mod_bipod',
+    niche: 'Braced on the wall, bloom all but vanishes; clumsy to swing.',
+    desc: 'Folding legs off a range rifle, or two bent tent stakes.',
+    fits: (id) => ['hunting', 'scoped', 'ar15', 'carbine', 'lmg', 'muzzle', 'lever'].includes(id),
+    braceBloomMul: 0.45, switchTime: 0.15,
+  },
+  extmag: {
+    id: 'extmag', name: 'Extended magazine', slot: 'mag', icon: 'icon_mod_extmag',
+    niche: 'Half again as many rounds; a slower, fumblier reload.',
+    desc: 'A longer box, or a tube extension clamped to the barrel.',
+    fits: (id) => BOX_MAG.includes(id) || TUBE_MAG.includes(id),
+    magMul: 1.5, reloadMul: 1.15,
+  },
+  drum: {
+    id: 'drum', name: 'Drum magazine', slot: 'mag', icon: 'icon_mod_drum',
+    niche: 'Two and a half magazines in one; a long reload and a heavy, wandering muzzle.',
+    desc: 'A County SWAT drum. Rattles like a coffee can of bolts.',
+    fits: (id) => ['smg', 'carbine', 'ar15'].includes(id),
+    magMul: 2.5, reloadMul: 1.6, spreadMul: 1.1,
+  },
+  taped: {
+    id: 'taped', name: 'Taped double mags', slot: 'mag', icon: 'icon_mod_taped',
+    niche: 'Two magazines taped head to tail: flip and go, a much faster reload.',
+    desc: 'The oldest trick there is. Electrical tape, and practice.',
+    fits: (id) => BOX_MAG.includes(id) && id !== 'r22',
+    reloadMul: 0.6,
+  },
+  speedloader: {
+    id: 'speedloader', name: 'Speedloader', slot: 'mag', icon: 'icon_mod_taped',
+    niche: 'Six at once into the cylinder: halves the revolver\'s reload.',
+    desc: 'A twist-lock loader from a dead deputy\'s belt.',
+    fits: (id) => id === 'revolver',
+    reloadMul: 0.5,
+  },
+  sling: {
+    id: 'sling', name: 'Sling & padded stock', slot: 'stock', icon: 'icon_mod_sling',
+    niche: 'Less kick and bloom from long strings of fire.',
+    desc: 'A rifle sling and a cut-down boot insole for a recoil pad.',
+    fits: (id) => LONG(id) || id === 'crossbow' || id === 'smg',
+    recoilMul: 0.7, bloomMul: 0.8, switchTime: 0.05,
+  },
+};
+export const MOD_ICONS: string[] = [...new Set(Object.values(MODS).map((m) => m.icon))];
+
+export function modFits(modId: string, defId: string): boolean {
+  return !!MODS[modId]?.fits(defId);
+}
+/** Slots this gun has any attachment for. */
+export function slotsFor(defId: string): ModSlot[] {
+  return MOD_SLOTS.map((s) => s.id).filter((slot) => Object.values(MODS).some((m) => m.slot === slot && m.fits(defId)));
+}
+/** Moves a mod from the spare stock onto the gun (swapping out whatever was there). */
+export function attachMod(stock: ModItem[], w: WeaponItem, modUid: string): boolean {
+  const i = stock.findIndex((m) => m.uid === modUid);
+  if (i < 0) return false;
+  const m = stock[i];
+  const def = MODS[m.def];
+  if (!def || !def.fits(w.def)) return false;
+  stock.splice(i, 1);
+  w.mods = w.mods ?? {};
+  const old = w.mods[def.slot];
+  if (old) stock.push(old);
+  w.mods[def.slot] = m;
+  return true;
+}
+export function detachMod(stock: ModItem[], w: WeaponItem, slot: ModSlot): void {
+  const m = w.mods?.[slot];
+  if (!m) return;
+  delete w.mods![slot];
+  stock.push(m);
+}
+/** Wear attachments with a life (suppressors) by rounds fired; returns lines for the log. */
+export function wearMods(w: WeaponItem, rounds: number): string[] {
+  const out: string[] = [];
+  if (!w.mods || rounds <= 0) return out;
+  for (const [slot, m] of Object.entries(w.mods) as [ModSlot, ModItem][]) {
+    const life = MODS[m.def]?.life;
+    if (!life) continue;
+    m.cond = Math.max(0, m.cond - rounds / life);
+    if (m.cond <= 0) {
+      delete w.mods[slot];
+      out.push(`The ${MODS[m.def].name.toLowerCase()} on the ${WEAPONS[w.def].name.toLowerCase()} is burnt out.`);
+    }
+  }
+  return out;
+}
 
 export function caliberOf(defId: string): Caliber | null {
   const d = WEAPONS[defId];
@@ -309,7 +503,35 @@ export function roundsInStores(p: FireProfile, stores: Partial<Record<Res, numbe
 }
 
 /** THE CONTRACT: weapon + selected ammo + condition -> numbers to shoot with. Pure. */
-export function fireProfile(w: WeaponItem): FireProfile {
+export function fireProfile(w: WeaponItem, opts: { noMods?: boolean } = {}): FireProfile {
+  const p = baseProfile(w);
+  if (opts.noMods || !w.mods) return p;
+  for (const m of Object.values(w.mods)) {
+    const md = m && MODS[m.def];
+    if (!md || !md.fits(w.def)) continue;
+    p.dmg = Math.round(p.dmg * (md.dmgMul ?? 1) * 10) / 10;
+    if (p.pellets > 1) p.spread *= md.coneMul ?? 1;
+    else p.spread *= md.spreadMul ?? 1;
+    if (p.pellets > 1 && md.spreadMul && md.spreadMul > 1) p.spread *= md.spreadMul; // weight still hurts
+    p.rof *= md.rofMul ?? 1;
+    if (md.magMul) p.mag = Math.max(1, Math.round(p.mag * md.magMul));
+    p.reload *= md.reloadMul ?? 1;
+    p.noise *= md.noiseMul ?? 1;
+    p.knock *= md.knockMul ?? 1;
+    p.bloomMul *= md.bloomMul ?? 1;
+    p.recoilMul *= md.recoilMul ?? 1;
+    p.braceBloomMul *= md.braceBloomMul ?? 1;
+    p.switchTime += md.switchTime ?? 0;
+    p.light = Math.max(p.light, md.light ?? 0);
+    p.melee = Math.max(p.melee, md.melee ?? 0);
+    p.range = Math.min(p.range, md.range ?? Infinity);
+    p.armorPen = Math.max(-1, Math.min(1, p.armorPen + (md.armorPen ?? 0)));
+  }
+  p.switchTime = Math.max(0, p.switchTime);
+  return p;
+}
+
+function baseProfile(w: WeaponItem): FireProfile {
   const d = WEAPONS[w.def];
   const res = selectedAmmo(w);
   const a = res ? AMMO_TYPES[res] : undefined;
@@ -357,5 +579,6 @@ export function fireProfile(w: WeaponItem): FireProfile {
     recoverable: a?.recoverable ?? d.recoverable ?? 0,
     limbMul: a?.limbMul ?? d.limbMul ?? (pellets > 1 ? 1.2 : 1),
     stagger: Math.max(0, Math.min(1, a?.stagger ?? d.stagger ?? (knock * (pellets > 1 ? pellets * 0.25 : 1)) / (pellets > 1 ? 90 : 45))),
+    light: 0, melee: 0, bloomMul: 1, recoilMul: 1, braceBloomMul: 1, switchTime: 0, range: Infinity,
   };
 }

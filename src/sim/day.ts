@@ -1,7 +1,7 @@
 import type { Survivor, Res } from '../types';
 import { G, R, log, add, pay, has, newWeapon, uid, findDoc } from '../state';
 import { SITES, RECIPES, RES_LABEL } from '../data/world';
-import { WEAPONS } from '../data/weapons';
+import { WEAPONS, MODS, modFits, slotsFor } from '../data/weapons';
 import {
   living, first, displayName, workMult, skillOf, addThought, wound, canWork, rel, changeOpinion, setBond, hasTrait,
   computeMood, breakThresholds, killSurvivor, pain, they, their, tale, isBitten, PART_NAMES, closeTo, them, checkTitles,
@@ -198,11 +198,15 @@ export function finishRecipe(id: string, by?: Survivor): string {
   const r = RECIPES.find((x) => x.id === id)!;
   const who = by ? first(by) : 'Someone';
   if (r.gives) for (const [k, v] of Object.entries(r.gives)) add(k as Res, v ?? 0);
+  if (r.mod) (G.modStock ??= []).push({ uid: uid('m'), def: r.mod, cond: 1 });
   if (r.weapon) {
     const w = newWeapon(r.weapon, 0.9);
     if (by && R.chance(0.25 + by.skills.crafting * 0.03)) {
       w.name = `${first(by)}'s ${R.pick(['Widowmaker', 'Bad News', 'Last Word', 'Hymnal', 'Second Shift', 'Ferryman\'s Fee'])}`;
       w.cond = 1;
+      // a masterwork comes with something extra built in
+      const fit = Object.keys(MODS).filter((m) => modFits(m, w.def) && slotsFor(w.def).includes(MODS[m].slot));
+      if (fit.length) { const m = R.pick(fit); w.mods = { [MODS[m].slot]: { uid: uid('m'), def: m, cond: 1 } }; }
       log('craft', `${who} built a masterwork: "${w.name}".`);
       tale(by, `Built "${w.name}" at the workbench.`);
       return `${who} finished a masterwork ${WEAPONS[r.weapon].name}: "${w.name}".`;

@@ -1,7 +1,7 @@
 import type { Survivor, Res, WeaponItem } from '../types';
-import { G, R, log, add, newWeapon, findDoc } from '../state';
+import { G, R, log, add, newWeapon, findDoc, uid } from '../state';
 import { ZOMBIES, type ZombieDef } from '../data/zombies';
-import { WEAPONS, fireProfile, ammoTypesFor, ammoLabel, AMMO_TYPES, armorDamage, roundsInStores, shotSound, BURN, FLARE_LIGHT, type FireProfile } from '../data/weapons';
+import { WEAPONS, fireProfile, ammoTypesFor, ammoLabel, AMMO_TYPES, armorDamage, roundsInStores, shotSound, BURN, FLARE_LIGHT, MODS, wearMods, type FireProfile } from '../data/weapons';
 import { SITES, RES_LABEL, type Site } from '../data/world';
 import { img, flashImg, shadeImg } from '../assets';
 import { sfx, wind } from '../audio';
@@ -176,6 +176,7 @@ export class Expedition {
   burstLeft = 0;
   burstT = 0;
   spent: Partial<Record<Res, number>> = {};
+  roundsFired = 0;
   glows: { x: number; y: number; life: number; max: number }[] = [];
   reload = 0;
   cd = 0;
@@ -438,7 +439,7 @@ export class Expedition {
       if (Math.abs(d) < 70 && Math.sign(d) === this.face) {
         z.x += this.face * (z.def.id === 'ferryman' ? 10 : 80);
         z.state = z.state === 'sleep' ? 'walk' : z.state === 'grab' ? 'walk' : z.state;
-        z.hp -= 8;
+        z.hp -= this.prof()?.melee || 8; // a lashed hatchet beats a bare shove
         z.flash = 0.1;
         if (z.hp <= 0) this.kill(z);
       }
@@ -541,8 +542,9 @@ export class Expedition {
         if (p.pellets > 1 && R.chance(0.25)) { const adj = LANES[li + (R.chance(0.5) ? 1 : -1)]; if (adj !== undefined) ly = adj; }
         this.ray(mz.x + this.cam, mz.y, base + (R.next() + R.next() - 1) * (p.pellets > 1 ? p.spread : spreadA), p, p.pellets > 1, ly);
       }
-      this.bloom = Math.min(0.12, this.bloom + p.spread * 0.35 / Math.max(1, p.burst) + 0.01);
-      this.shake = Math.max(this.shake, p.knock * (p.pellets > 1 ? p.pellets * 0.25 : 1) / 7);
+      this.bloom = Math.min(0.12, this.bloom + (p.spread * 0.35 / Math.max(1, p.burst) + 0.01) * p.bloomMul);
+      this.shake = Math.max(this.shake, p.knock * (p.pellets > 1 ? p.pellets * 0.25 : 1) / 7 * p.recoilMul);
+      this.roundsFired++;
       this.noise = Math.min(4, this.noise + p.noise);
       G.stats.shots++;
       this.w.cond = Math.max(0.05, this.w.cond - 0.0008);
@@ -577,7 +579,8 @@ export class Expedition {
     let end = dy > 0.01 ? Math.min(1500, (laneY - 2 - oy) / dy) : 1500, n = 0, d = dmg;
     for (const h of hits) {
       const z = h.z;
-      let dd = h.head ? d * (pellet ? 2 : 3) : armorDamage(d, z.def.armor, armorPen);
+      const dr = h.t > p.range ? d * 0.5 : d; // sawed-off: weak past its range
+      let dd = h.head ? dr * (pellet ? 2 : 3) : armorDamage(dr, z.def.armor, armorPen);
       if (z.state === 'kin') {
         dd *= 1;
         this.lines.push(`${first(this.s)} shot the Kin at ${this.site.name}.`);
@@ -641,6 +644,11 @@ export class Expedition {
       const d = findDoc();
       if (d) { got.push(`papers: "${d.title}"`); this.lines.push(`Found papers: ${d.title}. (Town tab)`); }
     }
+    if (this.site.mods?.length && R.chance(0.14 * sp.loot)) {
+      const md = R.pick(this.site.mods);
+      (G.modStock ??= []).push({ uid: uid('m'), def: md, cond: R.range(0.6, 1) });
+      got.push(`a ${MODS[md].name.toLowerCase()}`);
+    }
     if (R.chance(this.site.weaponChance * 0.5 * sp.loot)) {
       const wd = R.pick(this.site.weapons);
       newWeapon(wd, R.range(0.5, 1));
@@ -661,6 +669,7 @@ export class Expedition {
       log('death', `${displayName(this.s)} went to ${this.site.name} and did not come back. Whatever they carried is out there still.`);
       for (const [k, v] of Object.entries(this.loot)) add(k as Res, -(v ?? 0));
     } else {
+      if (this.w) for (const l of wearMods(this.w, this.roundsFired)) this.lines.push(l);
       const rec = this.prof()?.recoverable ?? 0;
       for (const [k, v] of Object.entries(this.spent)) {
         const back = Math.floor((v ?? 0) * (AMMO_TYPES[k as Res]?.recoverable ?? rec));
@@ -754,6 +763,19 @@ export class Expedition {
       for (let x = -off; x < W; x += 2560) c.drawImage(fgC, x, H - 38);
     }
     for (const p of this.parts) { c.fillStyle = p.color; c.fillRect(p.x - this.cam, p.y, p.size, p.size); }
+    const pf = this.prof();
+    if (pf && pf.light > 0 && dusk > 0.15) {
+      const mz = this.muzzle();
+      const a = Math.atan2(this.mouse.y - mz.y, this.mouse.x - mz.x);
+      const g = c.createRadialGradient(mz.x, mz.y, 10, mz.x, mz.y, pf.light);
+      g.addColorStop(0, `rgba(255,240,200,${0.35 * dusk})`);
+      g.addColorStop(1, 'rgba(255,240,200,0)');
+      c.save();
+      c.globalCompositeOperation = 'lighter';
+      c.fillStyle = g;
+      c.beginPath(); c.moveTo(mz.x, mz.y); c.arc(mz.x, mz.y, pf.light, a - 0.22, a + 0.22); c.closePath(); c.fill();
+      c.restore();
+    }
     for (const t of this.tracers) {
       c.strokeStyle = `rgba(255,226,170,${t.life * 12})`;
       c.lineWidth = 1.5;

@@ -118,6 +118,14 @@ export interface WeaponItem {
   name?: string; // given a name after a memorable event
   kills: number;
   ammoType?: Res; // selected bullet type for this gun (must match its caliber); default = WeaponDef.ammo
+  mods?: Partial<Record<ModSlot, ModItem>>; // attachments (see MODS in data/weapons.ts)
+}
+
+export type ModSlot = 'optic' | 'muzzle' | 'barrel' | 'under' | 'mag' | 'stock';
+export interface ModItem {
+  uid: string;
+  def: string; // MODS key
+  cond: number; // 0..1; mods with a `life` wear out with use (suppressors)
 }
 
 export interface Building {
@@ -140,6 +148,7 @@ export interface GameState {
   survivors: Survivor[];
   graves: Survivor[];
   weapons: WeaponItem[];
+  modStock?: ModItem[]; // spare attachments on the bench
   buildings: Building[];
   fort: { hp: number; maxHp: number; level: number; spikes: number; wire: number; lights: number; traps: number; turrets?: number };
   craftQueue: { recipe: string; progress: number }[];

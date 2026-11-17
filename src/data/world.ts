@@ -9,24 +9,25 @@ export interface Site {
   loot: Partial<Record<Res, number>>; // expected yield per run at full stock
   weaponChance: number;
   weapons: string[];
+  mods?: string[]; // attachments that can turn up here (MODS keys); found on daylight runs
   survivorChance: number;
   minDay: number;
   stock: number; // runs before it's picked clean
 }
 
 export const SITES: Site[] = [
-  { id: 'route9', name: 'Route 9 houses', desc: 'Split-levels and trailers along the county road. Somebody\'s kitchen, somebody\'s garage.', risk: 0.12, loot: { food: 5, wood: 6, cloth: 3, scrap: 3, light: 6, shell: 2, r22: 20 }, weaponChance: 0.06, weapons: ['revolver', 'r22', 'r22', 'snake410'], survivorChance: 0.1, minDay: 1, stock: 8 },
+  { id: 'route9', name: 'Route 9 houses', desc: 'Split-levels and trailers along the county road. Somebody\'s kitchen, somebody\'s garage.', risk: 0.12, loot: { food: 5, wood: 6, cloth: 3, scrap: 3, light: 6, shell: 2, r22: 20 }, weaponChance: 0.06, weapons: ['revolver', 'r22', 'r22', 'snake410'], mods: ['flashlight', 'sling'], survivorChance: 0.1, minDay: 1, stock: 8 },
   { id: 'diner', name: 'Ferry Diner', desc: 'The walk-in cooler stopped humming a week ago. The whiteboard still says SOUP.', risk: 0.15, loot: { food: 9, fuel: 1, cloth: 1 }, weaponChance: 0.03, weapons: ['service9', 'snake410'], survivorChance: 0.08, minDay: 1, stock: 5 },
   { id: 'rexall', name: 'Rexall pharmacy', desc: 'Looted twice. Not everything was understood by the looters.', risk: 0.25, loot: { meds: 4, food: 2, cloth: 2 }, weaponChance: 0.02, weapons: ['service9', 'm1911'], survivorChance: 0.06, minDay: 1, stock: 5 },
-  { id: 'millyard', name: 'Aubin mill yard', desc: 'Pallets, drums, the maintenance shop. Pond 2 smells like bread gone off.', risk: 0.3, loot: { scrap: 10, parts: 3, fuel: 3, wood: 4, flare: 2 }, weaponChance: 0.05, weapons: ['nailer', 'rivet', 'pipe', 'flaregun'], survivorChance: 0.08, minDay: 2, stock: 9 },
-  { id: 'legion', name: 'Legion hall', desc: 'Bingo cards on the floor. A doe walked in here once, during bingo.', risk: 0.2, loot: { food: 3, fuel: 2, light: 14, cloth: 2, shell_slug: 4 }, weaponChance: 0.12, weapons: ['revolver', 'pump', 'coach', 'm1911'], survivorChance: 0.1, minDay: 2, stock: 5 },
-  { id: 'boathouse', name: 'Halvorsen boathouse', desc: 'Ferry family stores: rope, outboard parts, jerry cans, duck guns.', risk: 0.25, loot: { fuel: 6, parts: 3, shell: 10, cloth: 2, flare: 4 }, weaponChance: 0.12, weapons: ['pump', 'coach', 'flaregun', 'flaregun', 'snake410'], survivorChance: 0.1, minDay: 3, stock: 6 },
-  { id: 'deercamp', name: 'Nils\'s deer camp', desc: 'A plywood shack two miles up the Ox Creek trail. Blaze orange on every nail; the buck pole is empty.', risk: 0.3, loot: { food: 5, rifle_sp: 10, ball: 8, bolt: 10, fuel: 2, cloth: 2 }, weaponChance: 0.25, weapons: ['lever', 'hunting', 'muzzle', 'compound', 'crossbow', 'r22'], survivorChance: 0.06, minDay: 3, stock: 4 },
+  { id: 'millyard', name: 'Aubin mill yard', desc: 'Pallets, drums, the maintenance shop. Pond 2 smells like bread gone off.', risk: 0.3, loot: { scrap: 10, parts: 3, fuel: 3, wood: 4, flare: 2 }, weaponChance: 0.05, weapons: ['nailer', 'rivet', 'pipe', 'flaregun'], mods: ['flashlight', 'hatchet', 'suppressor'], survivorChance: 0.08, minDay: 2, stock: 9 },
+  { id: 'legion', name: 'Legion hall', desc: 'Bingo cards on the floor. A doe walked in here once, during bingo.', risk: 0.2, loot: { food: 3, fuel: 2, light: 14, cloth: 2, shell_slug: 4 }, weaponChance: 0.12, weapons: ['revolver', 'pump', 'coach', 'm1911'], mods: ['speedloader', 'sling'], survivorChance: 0.1, minDay: 2, stock: 5 },
+  { id: 'boathouse', name: 'Halvorsen boathouse', desc: 'Ferry family stores: rope, outboard parts, jerry cans, duck guns.', risk: 0.25, loot: { fuel: 6, parts: 3, shell: 10, cloth: 2, flare: 4 }, weaponChance: 0.12, weapons: ['pump', 'coach', 'flaregun', 'flaregun', 'snake410'], mods: ['flashlight', 'choke'], survivorChance: 0.1, minDay: 3, stock: 6 },
+  { id: 'deercamp', name: 'Nils\'s deer camp', desc: 'A plywood shack two miles up the Ox Creek trail. Blaze orange on every nail; the buck pole is empty.', risk: 0.3, loot: { food: 5, rifle_sp: 10, ball: 8, bolt: 10, fuel: 2, cloth: 2 }, weaponChance: 0.25, weapons: ['lever', 'hunting', 'muzzle', 'compound', 'crossbow', 'r22'], mods: ['scope', 'scope', 'bipod', 'sling', 'choke'], survivorChance: 0.06, minDay: 3, stock: 4 },
   { id: 'manor', name: 'St. Aubin Manor', desc: 'The nursing home. The residents are still in residence.', risk: 0.45, loot: { meds: 6, food: 3, cloth: 4 }, weaponChance: 0.02, weapons: ['service9', 'r22'], survivorChance: 0.12, minDay: 4, stock: 5 },
   { id: 'school', name: 'Vessey High', desc: 'The gym was the Parish kitchen until it wasn\'t. Chem lab upstairs.', risk: 0.35, loot: { food: 6, fuel: 2, parts: 2, cloth: 3, meds: 1, bolt: 6 }, weaponChance: 0.04, weapons: ['hunting', 'compound'], survivorChance: 0.18, minDay: 4, stock: 6 },
-  { id: 'gunshop', name: 'Strand Sporting Goods', desc: 'Deer season opened the week everything ended. Shelves mostly bare.', risk: 0.4, loot: { light: 16, light_hp: 10, shell: 10, shell_slug: 6, rifle: 6, rifle_sp: 8, r22: 60, r556: 10, bolt: 6, cloth: 2 }, weaponChance: 0.3, weapons: ['hunting', 'pump', 'revolver', 'lever', 'scoped', 'ar15', 'compound', 'coach', 'r22'], survivorChance: 0.06, minDay: 5, stock: 4 },
-  { id: 'courthouse', name: 'County courthouse', desc: 'The deputies held it with lists and quarantine. Now the lists are all that hold.', risk: 0.55, loot: { light: 22, light_hp: 10, rifle: 6, shell_flech: 6, shell_slug: 4, meds: 2, parts: 2 }, weaponChance: 0.35, weapons: ['smg', 'service9', 'autoshot', 'mp93', 'scoped', 'pump'], survivorChance: 0.1, minDay: 8, stock: 4 },
-  { id: 'corliss', name: 'The Line at Corliss', desc: 'Thirty kilometres downriver. Sandbags, a dropped bridge, and whatever the Guard left behind.', risk: 0.7, loot: { r556: 60, rifle_ap: 12, light: 16, flare: 4, meds: 4, parts: 4, fuel: 4 }, weaponChance: 0.5, weapons: ['carbine', 'carbine', 'lmg', 'smg', 'ar15'], survivorChance: 0.12, minDay: 12, stock: 3 },
+  { id: 'gunshop', name: 'Strand Sporting Goods', desc: 'Deer season opened the week everything ended. Shelves mostly bare.', risk: 0.4, loot: { light: 16, light_hp: 10, shell: 10, shell_slug: 6, rifle: 6, rifle_sp: 8, r22: 60, r556: 10, bolt: 6, cloth: 2 }, weaponChance: 0.3, weapons: ['hunting', 'pump', 'revolver', 'lever', 'scoped', 'ar15', 'compound', 'coach', 'r22'], mods: ['scope', 'reddot', 'choke', 'extmag', 'bipod', 'sling', 'brake'], survivorChance: 0.06, minDay: 5, stock: 4 },
+  { id: 'courthouse', name: 'County courthouse', desc: 'The deputies held it with lists and quarantine. Now the lists are all that hold.', risk: 0.55, loot: { light: 22, light_hp: 10, rifle: 6, shell_flech: 6, shell_slug: 4, meds: 2, parts: 2 }, weaponChance: 0.35, weapons: ['smg', 'service9', 'autoshot', 'mp93', 'scoped', 'pump'], mods: ['drum', 'extmag', 'flashlight', 'taped', 'speedloader', 'reddot'], survivorChance: 0.1, minDay: 8, stock: 4 },
+  { id: 'corliss', name: 'The Line at Corliss', desc: 'Thirty kilometres downriver. Sandbags, a dropped bridge, and whatever the Guard left behind.', risk: 0.7, loot: { r556: 60, rifle_ap: 12, light: 16, flare: 4, meds: 4, parts: 4, fuel: 4 }, weaponChance: 0.5, weapons: ['carbine', 'carbine', 'lmg', 'smg', 'ar15'], mods: ['reddot', 'reddot', 'drum', 'bipod', 'extmag', 'brake', 'taped'], survivorChance: 0.12, minDay: 12, stock: 3 },
 ];
 
 // ---------- workshop machinery ----------
@@ -58,6 +59,7 @@ export interface Recipe {
   work: number; // work points (a skilled crafter makes ~8/day)
   gives?: Partial<Record<Res, number>>;
   weapon?: string;
+  mod?: string; // MODS key: an attachment goes onto the bench (G.modStock)
   special?: 'spikes' | 'wire' | 'light' | 'trap' | 'armor' | 'molotov' | 'liquor' | 'fortify' | 'repair' | 'turret';
   desc: string;
 }
@@ -79,6 +81,18 @@ export const RECIPES: Recipe[] = [
   { id: 'ammo_bolt', name: 'Broadheads ×12', needs: 'workbench', cost: { wood: 3, scrap: 1, cloth: 1 }, work: 3, gives: { bolt: 12 }, desc: 'Dowel shafts, heads ground from saw teeth. For bows and crossbows.' },
   { id: 'ammo_bolt_fire', name: 'Fire bolts ×8', needs: 'still', cost: { wood: 2, fuel: 1, cloth: 1 }, work: 2, gives: { bolt_fire: 8 }, desc: 'Rag-wrapped, still-fuel soaked. They burn, and they do not come back.' },
   { id: 'ammo_flare', name: 'Flare shells ×4', needs: 'still', cost: { fuel: 2, scrap: 1, parts: 1 }, work: 3, gives: { flare: 4 }, desc: 'Road-flare composition packed into 12-gauge hulls.' },
+  // --- attachments (go onto the bench; fit them in the armory) ---
+  { id: 'mod_suppressor', name: 'Oil-filter suppressor', needs: 'workbench', cost: { scrap: 3, parts: 1 }, work: 3, mod: 'suppressor', desc: 'A truck oil filter on a threaded adapter. Quiet, for a few nights.' },
+  { id: 'mod_flashlight', name: 'Duct-taped flashlight', needs: 'workbench', cost: { parts: 2, cloth: 1 }, work: 2, mod: 'flashlight', desc: 'A Maglite taped under the barrel. Lights a cone down the road at night.' },
+  { id: 'mod_sling', name: 'Sling & padded stock', needs: 'workbench', cost: { cloth: 3, scrap: 1 }, work: 2, mod: 'sling', desc: 'Less kick, less bloom on long strings of fire.' },
+  { id: 'mod_taped', name: 'Taped double mags', needs: 'workbench', cost: { cloth: 1, scrap: 2 }, work: 2, mod: 'taped', desc: 'Two magazines taped together: a much faster reload.' },
+  { id: 'mod_sawedoff', name: 'Sawed-off barrel', needs: 'workbench', cost: { scrap: 1 }, work: 2, mod: 'sawedoff', desc: 'Shorter shotgun barrel: wide cone, big shove, weak past the wire.' },
+  { id: 'mod_choke', name: 'Full choke', needs: 'workbench', level: 2, cost: { scrap: 2, parts: 2 }, work: 3, mod: 'choke', desc: 'Threaded choke tube turned on the lathe. Tighter buckshot.' },
+  { id: 'mod_extmag', name: 'Extended magazine', needs: 'workbench', level: 2, cost: { scrap: 4, parts: 3 }, work: 4, mod: 'extmag', desc: 'Two magazines welded into one long one.' },
+  { id: 'mod_speedloader', name: 'Speedloader', needs: 'workbench', level: 2, cost: { scrap: 3, parts: 1 }, work: 3, mod: 'speedloader', desc: 'Twist-lock revolver loader, filed from a pipe cap.' },
+  { id: 'mod_hatchet', name: 'Hatchet bayonet', needs: 'forge', cost: { scrap: 4, wood: 2 }, work: 3, mod: 'hatchet', desc: 'A hatchet head clamped under a long gun. Melee at the wall.' },
+  { id: 'mod_bipod', name: 'Bipod', needs: 'forge', cost: { scrap: 4, parts: 1 }, work: 3, mod: 'bipod', desc: 'Folding legs for rifles and the LMG: steady on the wall.' },
+  { id: 'mod_brake', name: 'Muzzle brake', needs: 'forge', level: 2, cost: { scrap: 4, parts: 2 }, work: 4, mod: 'brake', desc: 'Ported pipe coupling: less climb, more bark.' },
   // --- improvised guns ---
   { id: 'pipe', name: 'Pipe shotgun', needs: 'workbench', cost: { scrap: 8, wood: 2, parts: 1 }, work: 4, weapon: 'pipe', desc: 'Two pipes and a nail. Takes any shell. Jams.' },
   { id: 'flaregun', name: 'Flare pistol', needs: 'workbench', level: 2, cost: { scrap: 6, parts: 3 }, work: 5, weapon: 'flaregun', desc: 'A drilled-out signal pistol body on a pipe barrel. Fires flare shells.' },
