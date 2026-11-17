@@ -160,4 +160,6 @@ See research 03. In short: graphic-novel cel shading, heavy ink, two-tone hard s
 - [x] Animation (research 09): cutout bone rigs for every survivor and Turned (aim, reloads voiced stage by stage, gaits from ground speed, melee, duck / downed / haul / crew poses, attacks, archetype specials), Verlet ragdoll deaths baked into the road, crowd LOD from flipbooks, Classic fallback; replaces "2–3 sprite frames per Turned"
 - [x] Final pass: guards' reloads voiced (far, panned), tap-rack / double-feed strip / weapon-draw clips, run dead baked into the road, corpse-pile mass at once, adaptive full-rig budget before the Classic fallback, ragdolls rest on their own (`tools/ragdoll-check.ts`)
 - [x] Settings page (audio / video / gameplay / controls / data) from the title, the day screen and the pause menu; rebindable keys (`src/ui/keys.ts`); pause menu at night and on runs; save export / import; Playwright check (`tools/e2e/settings-check.cjs`)
-- [ ] Later: gamepad input; the sally; touch controls for the wall beyond tap-to-fire
+- [x] Gamepad input (`src/input/gamepad.ts`, bindings in `src/ui/keys.ts` PAD): right stick aims, triggers fire / focus, face buttons, guards on the bumpers, orders on the D-pad, left stick walks on runs, D-pad / A / B in menus
+- [x] Touch controls for the wall beyond tap-to-fire (`src/input/stage.ts`): Duck / Focus / Reload / Gun / Pause buttons (walk / search / reload / swing / shove on runs); a portrait phone gets "turn your phone" with Play sideways (the playfield rotated to fill the screen) or play small
+- [ ] Later: the sally

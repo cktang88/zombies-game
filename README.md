@@ -70,12 +70,16 @@ All keys below are defaults; every one can be changed in **Settings › Controls
 | hold `Space` | hurry the night along | | |
 | `P` / `Esc` | pause menu | | |
 
+**Gamepad** (standard mapping; a toast says when one connects): right stick aims, **RT** fire, **LT** Focus, **X** reload (hold: speed reload), **Y** next gun, **B** duck, **A** rally, **LB/RB** previous / next guard, **D-pad** orders (↑ free, ↓ hold, ← heads, → wall), **R3** firebomb, **Back** (hold) hurry, **Start** pause. On runs the left stick walks, **A** searches, **B** shoves, **LT** swings. In menus the D-pad moves, **A** picks, **B** backs out. The pad presses the bound keys, so rebinding a key moves it too; the full list is in Settings › Controls.
+
+**Touch:** tap or drag on the night to aim and fire; round buttons at the edges duck, focus, reload, change guns and pause (on runs: walk, search, reload, swing, shove). Held upright, a phone asks to be turned: **Play sideways** rotates the night to fill the screen (for when rotation is locked), or play it small.
+
 ## Settings
 One ledger page, reachable from the title, the day screen (⚙) and the **pause menu** (`P`/`Esc` at night and on runs: Resume / Settings / Help / Quit to title; the game is frozen and takes no input while it is open). Everything is saved in this browser.
 - **Audio:** master, music, effects and ambience volumes; mute.
 - **Video:** animation Rigged / Classic, reduce screen shake, reduce gore, screen flashes and hitstop, hit markers, damage-zone markers, text size S/M/L, high-contrast text, fullscreen, frame-rate counter.
 - **Gameplay:** realism Standard / Hardcore, reload when empty, Focus hold / toggle, the threat ribbon, show the tutorial hints again.
-- **Controls:** every binding for the wall, runs and the day, with rebinding, conflict warnings and reset to defaults.
+- **Controls:** every binding for the wall, runs and the day, with rebinding, conflict warnings and reset to defaults; the gamepad layout and whether a pad is connected.
 - **Data:** export the save (game, Ledger, settings, keys) to a file, import one, reset the Ledger, delete the saved game (both ask first).
 
 ## Dev
