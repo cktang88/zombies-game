@@ -216,6 +216,8 @@ export interface NightResult {
 }
 
 export class Battle {
+  /** Balance knobs (docs/balance.md §9): guard rate of fire, aim error and head-aim share, the Turned at the wall. */
+  static tune = { guardCd: 2.2, guardErr: 1.15, guardHead: 0.85, wallDps: 1.3, guardRange: 0.55, guardShove: 0.35 };
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
   ground: HTMLCanvasElement;
@@ -1638,7 +1640,7 @@ export class Battle {
     z.hp -= d;
     z.flash = 0.08;
     // stagger (balance.md §8.8): a body hit rolls fireProfile().stagger; one pellet in four rolls
-    if (!head && fx && (!pellet || R.chance(0.25)) && R.chance(fx.stagger)) staggerHit = true;
+    if (!head && fx && (!pellet || R.chance(isPlayer ? 0.25 : 0.25 * Battle.tune.guardShove)) && R.chance(fx.stagger)) staggerHit = true;
     if (head && d >= 60) { if (z.def.id === 'ferryman') { if (d >= 100) staggerHit = true; } else this.stagger(z, 0.6); }
     if (staggerHit) { if (z.def.id === 'ferryman') this.ferryStagger(z, g, isPlayer); else this.stagger(z, 0.3); }
     const heavy = z.def.id === 'ferryman' || z.def.boss || z.state === 'cover';
@@ -1876,7 +1878,7 @@ export class Battle {
     const fog = this.plan.special === 'fog';
     const roof = g.post === 'roof';
     // guards only engage what they can make out in the dark
-    const range = Math.max((fog ? 640 : 820) + Math.min(3, G.fort.lights) * 130 + (hasTrait(g.s, 'nightowl') ? 120 : 0) + (roof ? 260 : 0), g.x + SH * 0.45 + prof.light);
+    const range = Math.max(WALL_X + ((fog ? 640 : 820) - WALL_X) * Battle.tune.guardRange + Math.min(3, G.fort.lights) * 130 + (hasTrait(g.s, 'nightowl') ? 120 : 0) + (roof ? 260 : 0), g.x + SH * 0.45 + prof.light);
     const marked = this.mark ? this.zombies.find((z) => z.id === this.mark!.id) : undefined;
     // orders (bloodlust can't hold its fire for long)
     let order = g.order;
@@ -1940,7 +1942,7 @@ export class Battle {
     const dist = Math.hypot(hb.hx - mz.x, hb.hy - mz.y);
     // where on the body: the head by skill (always, on Heads only); the legs of a herd animal or a far Pulper; a weakspot when they know one
     const heads = order === 'heads';
-    const pHead = heads ? 1 : (0.2 + aim * 0.25) * (tgt.def.ranged ? 0.5 : 1);
+    const pHead = heads ? 1 : (0.2 + aim * 0.25) * Battle.tune.guardHead * (tgt.def.ranged ? 0.5 : 1);
     const pLegs = !heads && ((tgt.def.lunge && !tgt.crippled) || (tgt.def.burst && tgt.x - WALL_X > 300)) ? 0.15 + (hasTrait(g.s, 'gentle') ? 0.15 : 0) : 0;
     const weak = this.weakPts(tgt);
     const wantWeak = !heads && weak.length && R.chance(0.08 + aim * 0.12) ? R.pick(weak) : undefined;
@@ -1949,9 +1951,9 @@ export class Battle {
     if (wantWeak) { tx = wantWeak.x; ty = wantWeak.y; }
     else if (roll < pHead) { tx = hb.hx; ty = hb.hy; }
     else if (roll < pHead + pLegs) ty = hb.y1 + (hb.y2 - hb.y1) * 0.78;
-    const err = (prof.spread * 1.2 + (1.15 - aim - lightBonus) * 0.07 + (fog ? 0.04 : 0)) * (1 + dist / 900) * (tgt.def.ranged ? 1.8 : 1) * (0.5 + 0.5 * prof.braceBloomMul) * (roof ? 0.8 : 1) * (heads ? 0.85 : 1);
+    const err = Battle.tune.guardErr * (prof.spread * 1.2 + (1.15 - aim - lightBonus) * 0.07 + (fog ? 0.04 : 0)) * (1 + dist / 900) * (tgt.def.ranged ? 1.8 : 1) * (0.5 + 0.5 * prof.braceBloomMul) * (roof ? 0.8 : 1) * (heads ? 0.85 : 1);
     const base = Math.atan2(ty - mz.y, tx - mz.x);
-    g.cd = (1 / prof.rof) * (prof.auto ? 1.3 : 1.6) * R.range(0.9, 1.25) * (g.mode === 'panic' ? 0.55 : g.mode === 'rage' ? 0.7 : 1) * (heads ? 1.35 : 1) * (this.rallyT > 0 ? 0.75 : 1);
+    g.cd = Battle.tune.guardCd * (1 / prof.rof) * (prof.auto ? 1.3 : 1.6) * R.range(0.9, 1.25) * (g.mode === 'panic' ? 0.55 : g.mode === 'rage' ? 0.7 : 1) * (heads ? 1.35 : 1) * (this.rallyT > 0 ? 0.75 : 1);
     g.burstLeft = Math.min(prof.burst, g.mag);
     // their shots lock to the target's lane: no rounds wasted on a nearer body in front
     g.burstLane = tgt.y;
@@ -1975,7 +1977,7 @@ export class Battle {
         const a = base + R.gauss(0, prof.pellets > 1 ? prof.spread * 0.7 * (g.post === 'loop' ? 0.8 : 1) : err * 0.6);
         let ly = g.burstLane;
         if (prof.pellets > 1 && R.chance(0.25)) { const adj = LANES[li + (R.chance(0.5) ? 1 : -1)]; if (adj !== undefined) ly = adj; }
-        this.castShot(g, mz.x, mz.y, a, prof.dmg, prof.pierce, prof.knock, prof.pellets > 1, false, prof, ly);
+        this.castShot(g, mz.x, mz.y, a, prof.dmg, prof.pierce, prof.knock * (prof.pellets > 1 ? Battle.tune.guardShove : 1), prof.pellets > 1, false, prof, ly);
       }
       this.roundFired(g, prof, mz, true, base);
       g.w.cond = Math.max(0.05, g.w.cond - 0.0006);
@@ -2206,7 +2208,7 @@ export class Battle {
       if (!atFace && !inQueue) { z.state = 'walk'; return; }
       const k = this.laneQ[z.lane]++;
       // no arms: they can only lean on it; no legs: they claw at the bottom
-      const dmg = z.def.dps * dt * cold * (z.disarmed ? 0.4 : 1) * (z.crippled && z.def.id !== 'ferryman' ? 0.6 : 1);
+      const dmg = z.def.dps * Battle.tune.wallDps * dt * cold * (z.disarmed ? 0.4 : 1) * (z.crippled && z.def.id !== 'ferryman' ? 0.6 : 1);
       G.fort.hp = Math.max(0, G.fort.hp - dmg);
       z.wallHit -= dt;
       if (z.wallHit <= 0) {

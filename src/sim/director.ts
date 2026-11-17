@@ -31,9 +31,12 @@ export function campWealth() {
   return goods + guns + builds + fort;
 }
 
+/** Balance knobs (docs/balance.md §9): days for the early ramp to reach full strength, and how long each surge takes to arrive (share of the night). */
+export const DIRECTOR_TUNE = { rampDays: 9, span: 0.08, mul: 1, early: 0.5, at: [0.0, 0.42, 0.78], share: [0.25, 0.4, 0.35] };
+(globalThis as unknown as { __directorTune: typeof DIRECTOR_TUNE }).__directorTune = DIRECTOR_TUNE; // debug handle (balance harness)
 export function threatPoints(day = G.day) {
   const p = persona();
-  const ramp = 0.55 + 0.45 * Math.min(1, Math.max(0, (day - 2) / 12));
+  const ramp = 0.55 + 0.45 * Math.min(1, Math.max(0, (day - 2) / DIRECTOR_TUNE.rampDays));
   const base = 10 + 6 * Math.pow(day, 1.02);
   const wealth = Math.min(35, Math.sqrt(campWealth()) * 0.7);
   const pawns = living().filter(canFight).length * 3;
@@ -41,7 +44,9 @@ export function threatPoints(day = G.day) {
   const adaptF = adapt < 0 ? 0.6 + 0.4 * ((adapt + 20) / 20) : 1 + 0.22 * (adapt / 40);
   const { phase } = cyclePos(day);
   const jitter = R.range(p.jitter[0], p.jitter[1]);
-  let pts = (base + wealth + pawns) * ramp * adaptF * phase * jitter * p.diff;
+  // early and mid nights run heavier (a full wall of guards otherwise never lets one reach the planks); it tapers off by day 18, where ammunition is the squeeze
+  const early = 1 + DIRECTOR_TUNE.early * Math.min(1, Math.max(0, (18 - day) / 10));
+  let pts = (base + wealth + pawns) * ramp * adaptF * phase * jitter * p.diff * DIRECTOR_TUNE.mul * early;
   // mercy: right after a death the Weather eases off
   if (G.flags.lastDeathDay !== undefined && day - (G.flags.lastDeathDay as number) <= 1) pts *= 0.8;
   if (day === ICE_DAY) pts *= 2.2;
@@ -86,12 +91,12 @@ export function planNight(): NightPlan {
   const spawns: NightPlan['spawns'] = [];
   let budget = pts;
   const duration = Math.min(210, 70 + pts * 0.55);
-  const surgeAt = [0.0, 0.38, 0.7];
-  const surgeShare = [0.4, 0.3, 0.3];
+  const surgeAt = DIRECTOR_TUNE.at;
+  const surgeShare = DIRECTOR_TUNE.share;
   for (let s = 0; s < 3; s++) {
     let sb = pts * surgeShare[s];
     const t0 = duration * surgeAt[s];
-    const span = duration * 0.28;
+    const span = duration * DIRECTOR_TUNE.span;
     // part of the budget goes on combination packs
     const spent = placePacks(spawns, day, sb, t0, span, special);
     sb -= spent;

@@ -10,7 +10,7 @@ import { POST_NAMES, type Post as GuardPost } from './night/battle';
 import { rollIncident, resolveEvent, returnsTick } from './sim/events';
 import { Battle, W, H, type NightResult } from './night/battle';
 import { Expedition, type ExpeditionResult } from './night/expedition';
-import { living, displayName, first, byId, canFight, migrateSurvivor, gainXp, gainProf, heldProf, closeTo, drainLevelUps } from './sim/survivors';
+import { living, displayName, first, byId, canFight, migrateSurvivor, gainXp, gainProf, heldProf, closeTo, drainLevelUps, makeSurvivor } from './sim/survivors';
 import { showDawnReport } from './ui/dawn';
 import { AMMO_RES, fireProfile, WEAPONS } from './data/weapons';
 import { morningSummary, fateLine, type Fate } from './sim/chronicle';
@@ -641,6 +641,7 @@ function openLedger() {
 // debug handle for story testing: roll today's incident now, or force an ending screen
 (globalThis as unknown as { __story: object }).__story = {
   roll: () => { G.pendingEvent = rollIncident(); day(); return G.pendingEvent?.id ?? null; },
+  addSurvivor: () => { const s = makeSurvivor(); s.arrivedDay = 1; G.survivors.push(s); return s.id; },
   crossing: () => crossing(false),
   ending: (kind: string) => { G.flags.ending = kind; G.flags.endWent ??= JSON.stringify(living().map((s) => s.id)); epilogue(); },
 };

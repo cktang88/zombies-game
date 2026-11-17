@@ -537,3 +537,54 @@ These are still **not** in `src/night/battle.ts`. The harness models them as `PA
 10. **Dawn salvage:** if the wall held, add `0.12 × kills` scrap.
 11. **`fireProfile().switchTime`** is now non-zero by default for the LMG (0.15 s) and the muzzleloader (0.1 s). Apply it as the retarget delay for guards and as the player's settle time.
 12. **Feel numbers:** hitstop, shake and kick per class, as in §5.
+
+## 9. Night sanity: real nights, auto-played (feel & wiring pass)
+
+**Method.** The real `Battle` is stepped headless in the browser (Playwright, 30 Hz, no drawing) from the real dusk flow, with a mid-game house per day: survivors, guns and stores from the §6f PATCH means (day 3: 4 people, pistol/revolver/pump/.22; day 8: 5, + lever and hunting rifle, wall 360, a light; day 13: 6, + M1911 and AR-15, wall 420, 2 lights; day 18–23: autoshot, scoped, carbine, wall 480). Forced specials are cleared, so tide and tunnel nights come from the calendar and the 6% roll. Two leaders:
+- **passive**: never fires. The guards hold alone.
+- **decent**: a bot that aims at heads via `window.__battle` hitboxes, with a human hand: a 0.28–0.43 s reaction on each new target, a 1600 px/s flick, a few px of error, aimed shots when it can and snap shots when something is close. It clears jams, reloads in lulls, rallies under pressure and throws firebombs at queues. It still sees and engages at the spawn edge (x ≈ 1260), which a person in the dark does not. Treat it as an upper bound.
+
+The harness is `tools`-free (a scratch script). The knobs it moves are in code: `Battle.tune` (night/battle.ts) and `DIRECTOR_TUNE` (sim/director.ts).
+
+**Findings before the change.** No wall damage at all through day 11 for either leader, with 1.1–1.6 guard rounds per kill. Three things made the guards untouchable:
+1. **The loophole pump is crowd control.** Every pellet shoves (`knock × 0.25`, × 1.3 at the loophole) and rolls a stagger. A wave of 30 Sleepers stalled at x ≈ 650–780 for 20 s on hp 1–27, being shoved back faster than it walked.
+2. **Rifle pierce through lane columns.** A dense wave in four lanes is four files. One hunting or lever round takes 2–3 bodies, so 30 Sleepers died to 16–20 rounds. Denser waves made it *easier*.
+3. **Sight range.** Guards engaged from 820 px plus 130 per light, which is two-thirds of the road, and kill zones of about 30 s.
+
+The decent bot alone killed ~1 body per shot at any range, so early nights never reached the wall.
+
+**Change (the values now in code).**
+- Guards (`Battle.tune`): fire at 1/2.2 of the old cadence (`guardCd 2.2`: frightened people on a wall at night, not soldiers). Aim error ×1.15, head-aim share ×0.85. They make out the road only to 55% of the old distance in the dark (`guardRange 0.55`), so each floodlight (+130 px) and the roof (+260) matter more. Their pellets shove and stagger at 35% (`guardShove 0.35`). The player's own gun is untouched.
+- The Turned at the wall do ×1.3 damage (`wallDps 1.3`).
+- Director (`DIRECTOR_TUNE`): the early ramp reaches full strength by day 11 instead of 14 (`rampDays 9`). Early and mid nights run heavier, +50% at day ≤ 8, tapering to +0% at day 18 (`early 0.5`), where ammunition is already the squeeze. Each night is three tight waves (25% / 40% / 35% of the budget at 0 / 42% / 78% of the night, each arriving over 8% of it) instead of three 28%-long trickles.
+
+**Results** (2 seeds each; wall lost / max; "fell" = the wall went down):
+
+| day | night | passive leader | decent leader | notes |
+|---|---|---|---|---|
+| 3 | ordinary (50 pts, ~43 bodies) | 0/300, 0/300 | 0, 0 | guards kill everything; the leader takes ~80% when shooting |
+| 6 | **tide** (140 pts, ~100) | 0/360, 0/360 | 0, 0 | 4 guards hold a tide alone. **Not scary yet.** |
+| 8 | ordinary (86 pts, ~47) | 0/360, 16/360 | 0, 0 | passive holds: **target missed** |
+| 11 | tunnel / ordinary (~170 pts) | **fell**, 0/420 | 0, 0 | |
+| 13 | tunnel / **tide** (~245 pts) | **fell**, **fell** | **fell**, **fell** | the §6f day-13 house is out of pistol rounds mid-night: the leader fires all 89 light and the line falls after (ammunition, not tempo) |
+| 18 | tunnel / ordinary (~175 pts) | 49/480, 0/480 | 0, 0 | bigger stocks (§6f day 18) |
+| 20 | tunnel / **tide** (~265 pts) | **fell**, **fell** | 16/480, 0/480 | |
+| 23 | **the Crossing** (~360 pts, ~150) | **fell** in ~2 min | **fell** at ~3 min, 1–2 dead | a desperate last stand, as intended |
+
+Before the change, on the same seeds (1 seed): passive held 3/8 at 0 and fell from 13; decent held everything to 18 at 0 (−322 once at 13) and fell at the Crossing.
+
+**Verdict.**
+- Better: guards no longer carry a passive leader past day 11 (before: day 13). Tides at 13 and 20 now break a passive house. The leader's gun is what holds from mid-game. The Crossing is lost by both, the decent leader after a long fight.
+- **Not met:**
+  - *Passive loses badly by ~day 8.* Days 3–8 are still safe without the leader.
+  - *Decent holds but loses wall chunks.* The bot rarely loses planks before ammunition runs out.
+  - *Tide nights are scary.* The day-6 tide is not.
+
+  Heavier nerfs did not change this (guard cadence ×3.5 with sight ×0.45 still held day 8 at 0). The remaining reason is crowd tempo, not guard numbers. Lanes are single files: a fast Deer waits behind a Sleeper, and Drags and Pulpers (20–22 px/s) set the pace. A wave arrives over 30–40 s even when it spawns in 8, which a few guards always out-shoot.
+- **Next levers** (not done; each is a design call):
+  - Let a blocked body overtake inside its lane (a shoulder-barge) so the crowd moves at the Sleepers' pace.
+  - Spawn the big waves closer, inside the dark (x ≈ 1000–1100), so the kill zone is shorter for everyone.
+  - Cap guards' pierce at 1.
+  - Make the tide special double its middle wave rather than only adding points.
+
+Economy after the change: `npm run simtest` passes. Day-10 ammunition is 1.4 nights in reserve, day 15 is 0.9, and 68% of nights from day 10 end with less than one night left (target ≥ 40%). `tools/balance.ts --quick` reports 8/10. Its two fails (tap vs spray on autos, a niche for the muzzleloader) are in the gun data and are unchanged by this pass.
