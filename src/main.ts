@@ -35,6 +35,8 @@ import { level } from './sim/survivors';
 import { SITES } from './data/world';
 import { buildingLevel } from './sim/day';
 import { add } from './state';
+import { mountStage } from './input/stage';
+import { startGamepad } from './input/gamepad';
 const WALL_X = 372; // the battle's wall face (night/battle.ts)
 
 const app = document.getElementById('app')!;
@@ -142,10 +144,11 @@ function run(site: string) {
   save();
   app.onclick = null;
   app.onchange = null;
-  app.innerHTML = `<div class="stage"><canvas width="${W}" height="${H}"></canvas></div>`;
+  app.innerHTML = `<div class="stage"><div class="pf"><canvas width="${W}" height="${H}"></canvas></div></div>`;
   ambience('run');
   const ex = new Expedition(app.querySelector('canvas')!, l, site, (r) => afterRun(r));
   ex.start();
+  mountStage(app.querySelector('.stage')!, 'run');
 }
 
 function afterRun(r: ExpeditionResult) {
@@ -371,10 +374,11 @@ function night() {
   G.phase = 'night';
   app.onclick = null;
   app.onchange = null;
-  app.innerHTML = `<div class="stage"><canvas width="${W}" height="${H}"></canvas></div>`;
+  app.innerHTML = `<div class="stage"><div class="pf"><canvas width="${W}" height="${H}"></canvas></div></div>`;
   const canvas = app.querySelector('canvas')!;
   battle = new Battle(canvas, G.nextNight!, (r) => dawn(r));
   battle.start();
+  mountStage(app.querySelector('.stage')!, 'night');
 }
 
 // XP from the night: kills train shooting and the held gun's class; standing the wall builds courage;
@@ -650,6 +654,8 @@ function openLedger() {
   roll: () => { G.pendingEvent = rollIncident(); day(); return G.pendingEvent?.id ?? null; },
   addSurvivor: () => { const s = makeSurvivor(); s.arrivedDay = 1; G.survivors.push(s); return s.id; },
   crossing: () => crossing(false),
+  /** tests: the night in play (input checks read its crosshair, focus, duck, selected guard) */
+  battle: () => battle,
   /** tests: a fresh game straight to a night (day n; 23 = the Crossing) or a daylight run */
   night: (dayN = 1, mode?: string) => { clearSave(); newGame(mode); G.day = dayN; G.nextNight = planNight(); night(); },
   run: (site?: string) => { clearSave(); newGame(); run(site ?? SITES[0].id); },
@@ -659,6 +665,7 @@ function openLedger() {
 // the pause menu's "Quit to title" (the night or run has already torn itself down)
 onQuitToTitle(() => { battle = null; app.onclick = null; title(); });
 
+startGamepad();
 app.innerHTML = '<div class="loading">Vessey, November<div class="bar"><div></div></div></div>';
 loadAssets((p) => {
   const b = app.querySelector('.bar div') as HTMLElement | null;

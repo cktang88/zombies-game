@@ -117,3 +117,46 @@ export function conflicts(): Map<string, string[]> {
   }
   return out;
 }
+
+// ---- gamepad (src/input/gamepad.ts polls the pad and feeds these through the bindings above)
+// Standard-mapping button indices: 0 A, 1 B, 2 X, 3 Y, 4 LB, 5 RB, 6 LT, 7 RT, 8 Back, 9 Start,
+// 12–15 D-pad up/down/left/right. A target is an action id above (sent as that action's current
+// key, so a rebinding moves the pad too) or a fixed input: '@fire' / '@alt' (left / right mouse
+// button at the crosshair), '@next' / '@prev' (Tab / Shift+Tab), '@pause' (Esc).
+export interface PadBind { btn: number; to: string; label: string }
+export const PAD_BUTTONS = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'Back', 'Start', 'L3', 'R3', 'D-pad ↑', 'D-pad ↓', 'D-pad ←', 'D-pad →'];
+export const PAD: Record<'night' | 'run', PadBind[]> = {
+  night: [
+    { btn: 7, to: '@fire', label: 'Fire' },
+    { btn: 6, to: '@alt', label: 'Focus' },
+    { btn: 2, to: 'night.reload', label: 'Reload (hold: speed reload)' },
+    { btn: 3, to: 'night.weapon', label: 'Next gun' },
+    { btn: 1, to: 'night.duck', label: 'Duck (hold)' },
+    { btn: 0, to: 'night.rally', label: 'Rally the line' },
+    { btn: 4, to: '@prev', label: 'Previous guard' },
+    { btn: 5, to: '@next', label: 'Next guard' },
+    { btn: 12, to: 'night.free', label: 'Order: free fire' },
+    { btn: 13, to: 'night.hold', label: 'Order: hold fire' },
+    { btn: 14, to: 'night.heads', label: 'Order: heads only' },
+    { btn: 15, to: 'night.wall', label: 'Order: protect the wall' },
+    { btn: 11, to: 'night.firebomb', label: 'Firebomb' },
+    { btn: 8, to: 'night.hurry', label: 'Hurry the night (hold)' },
+    { btn: 9, to: '@pause', label: 'Pause' },
+  ],
+  run: [
+    { btn: 7, to: '@fire', label: 'Fire' },
+    { btn: 6, to: '@alt', label: 'Swing' },
+    { btn: 2, to: 'run.reload', label: 'Reload' },
+    { btn: 0, to: 'run.search', label: 'Search / revive (hold)' },
+    { btn: 1, to: 'run.shove', label: 'Shove' },
+    { btn: 3, to: 'run.pack', label: 'Next item in the pack' },
+    { btn: 4, to: 'run.ammo', label: 'Ammunition swap' },
+    { btn: 5, to: 'run.drop', label: 'Drop the selected item' },
+    { btn: 9, to: '@pause', label: 'Pause' },
+  ],
+};
+/** Sticks, listed beside the buttons. */
+export const PAD_STICKS: Record<'night' | 'run', [string, string][]> = {
+  night: [['Right stick', 'Aim (the crosshair)']],
+  run: [['Left stick', 'Walk'], ['Right stick', 'Aim']],
+};

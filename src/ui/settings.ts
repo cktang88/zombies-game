@@ -10,7 +10,8 @@
 // updated whenever the page changes it.
 
 import { setMasterVolume, setMusicVolume, setReducedGore, setSfxVolume, setAmbienceVolume, setMuted, sfx, volumes } from '../audio';
-import { ACTIONS, FIXED, conflicts, keyLabel, keyOf, normKey, reserved, resetKeys, setKey, type KeyCtx } from './keys';
+import { ACTIONS, FIXED, PAD, PAD_BUTTONS, PAD_STICKS, conflicts, keyLabel, keyOf, normKey, reserved, resetKeys, setKey, type KeyCtx } from './keys';
+import { padConnected } from '../input/gamepad';
 import { resetHints } from './onboarding';
 
 export type TextSize = 'S' | 'M' | 'L';
@@ -280,6 +281,11 @@ export function openSettings(host: HTMLElement = document.body, onClose?: () => 
               return `<div class="keyrow${cl ? ' clash' : ''}"><span>${esc(a.label)}${cl ? `<small>also ${esc(cl.join(', ').toLowerCase())}</small>` : ''}</span><button type="button" class="kbd${capture === a.id ? ' wait' : ''}" data-bind="${a.id}" aria-label="${esc(a.label)}: ${esc(keyLabel(keyOf(a.id)))}. Click to change.">${capture === a.id ? 'press a key…' : esc(keyLabel(keyOf(a.id)))}</button></div>`;
             }).join('')}
             ${FIXED[c].map(([k, l]) => `<div class="keyrow fixed"><span>${esc(l)}</span><kbd>${esc(k)}</kbd></div>`).join('')}
+          </div>`).join('')}
+          <h3>Gamepad</h3><p class="dim small padstatus">${padConnected() ? `Connected: ${esc(padConnected())}.` : 'None connected. Plug one in and press a button.'} The pad presses the keys above, so rebinding a key moves it too. In menus: D-pad moves, A picks, B backs out.</p>
+          ${(['night', 'run'] as const).map((c) => `<div class="keylist"><h4>${c === 'night' ? 'At the wall' : 'Daylight runs'}</h4>
+            ${PAD_STICKS[c].map(([k, l]) => `<div class="keyrow fixed"><span>${esc(l)}</span><kbd>${esc(k)}</kbd></div>`).join('')}
+            ${PAD[c].map((b) => `<div class="keyrow fixed"><span>${esc(b.label)}</span><kbd>${esc(PAD_BUTTONS[b.btn])}</kbd></div>`).join('')}
           </div>`).join('')}
           <button type="button" data-act="resetkeys">Reset all keys to defaults</button>`;
       }

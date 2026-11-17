@@ -163,8 +163,28 @@ a[data-act] { cursor: pointer; color: var(--ink); text-decoration: underline dot
 .tale { font-size: 14px; font-style: italic; margin: 3px 0; }
 
 /* night */
-.stage { width: 100vw; height: 100vh; display: grid; place-items: center; background: #000; overflow: hidden; }
-.stage canvas { width: min(100vw, calc(100vh * 16 / 9)); height: auto; cursor: none; display: block; image-rendering: auto; touch-action: none; }
+.stage { position: relative; width: 100vw; height: 100vh; height: 100dvh; display: grid; place-items: center; background: #000; overflow: hidden; }
+.stage .pf { position: relative; width: min(100vw, calc(100vh * 16 / 9)); width: min(100vw, calc(100dvh * 16 / 9)); aspect-ratio: 16 / 9; }
+.stage canvas { width: 100%; height: 100%; cursor: none; display: block; image-rendering: auto; touch-action: none; }
+/* portrait phone, "play sideways": the playfield turned a quarter so it fills the tall screen */
+.stage.rot .pf { position: absolute; left: 50%; top: 50%; width: min(100vh, calc(100vw * 16 / 9)); width: min(100dvh, calc(100vw * 16 / 9)); transform: translate(-50%, -50%) rotate(90deg); }
+.rotprompt { position: absolute; inset: 0; z-index: 40; display: grid; place-items: center; padding: 16px; background: rgba(5,5,6,.9); text-align: center; }
+.rotbox { max-width: 320px; display: grid; gap: 10px; justify-items: center; }
+.rotbox h2 { margin: 6px 0 0; }
+.rotbox p { margin: 0; }
+.rotbox button { width: 100%; padding: 12px; font-size: 16px; }
+.rotphone { width: 44px; height: 76px; border: 3px solid var(--ochre, #c9a24a); border-radius: 8px; animation: rotphone 2.4s ease-in-out infinite; }
+@keyframes rotphone { 0%, 30% { transform: rotate(0); } 60%, 100% { transform: rotate(90deg); } }
+/* on-screen buttons (touch) */
+.tbtns-pad { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+.tbtns-pad .tb { position: absolute; pointer-events: auto; width: 8.5%; aspect-ratio: 1; min-width: 44px; padding: 0; border-radius: 50%; border: 2px solid rgba(235,225,200,.45); background: rgba(12,11,10,.42); color: #eadfc4; font: 600 clamp(10px, 1.6vw, 15px) var(--type, monospace); touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+.tbtns-pad .tb.on { background: rgba(200,150,70,.55); border-color: #f0d890; }
+/* stacked at the edges: the guards stand left of 12%, the ammo count sits in the bottom-right corner */
+.tbtns-pad .l1 { left: 1%; bottom: 18%; } .tbtns-pad .l2 { left: 1%; bottom: 36%; }
+.tbtns-pad .r1 { right: 1%; bottom: 18%; } .tbtns-pad .r2 { right: 1%; bottom: 36%; }
+.tbtns-pad .r3 { right: 10%; bottom: 18%; } .tbtns-pad .r4 { right: 10%; bottom: 36%; }
+.tbtns-pad .tp { right: 1.5%; top: 11%; width: 6%; font-size: 12px; }
+.padtoast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 50; padding: 8px 16px; background: #15130f; border: 1px solid var(--ochre, #c9a24a); color: #eadfc4; font-family: var(--type, monospace); font-size: 14px; pointer-events: none; animation: ovin .18s ease-out; }
 
 /* over */
 .over { max-width: 1100px; margin: 0 auto; padding: 30px 16px; }
