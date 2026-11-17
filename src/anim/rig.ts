@@ -705,7 +705,8 @@ export class Rig {
       ctx.globalAlpha = this.baseAlpha;
     }
     if (this.flashT > 0) {
-      ctx.globalAlpha = this.baseAlpha * 0.65;
+      // per-part silhouettes overlap at the joints: keep it light so the seams don't read as blobs
+      ctx.globalAlpha = this.baseAlpha * 0.38 * Math.min(1, this.flashT / 0.04);
       this.drawSil(ctx, as.flash, 0, 0, 0);
       ctx.globalAlpha = this.baseAlpha;
     }

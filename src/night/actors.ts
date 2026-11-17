@@ -189,7 +189,7 @@ function applyLook(rig: Rig, L: LookSpec, scale: number, facing: number) {
 interface Hit { zone: 'head' | 'torso' | 'arm' | 'leg'; dx: number; dy: number; mag: number; kind: DeathKind; t: number; n: number }
 interface ZR {
   rig: Rig; px: number; v: number; stun: number; down: number; wind: number; crip: boolean; state: string;
-  attack: string | null; gap: number; tolled: boolean; pant: boolean; seen: number; hit?: Hit; react?: Hit; ready: boolean;
+  attack: string | null; gap: number; tolled: boolean; pant: boolean; seen: number; hit?: Hit; react?: Hit; ready: boolean; flash: number;
 }
 interface GR { rig: Rig; weapon: string | null; px: number; v: number; aimX: number; aimY: number; reload: number; wounds: number; perRound?: { empty: boolean; finish: boolean }; swingT: number }
 interface Corpse { rig: Rig; x: number; y: number; scale: number; facing: 1 | -1; lane: number; t: number; snap?: Zombie; pileM: number; id: number }
@@ -230,7 +230,7 @@ export class BattleActors implements BattleHook {
     if (sr.kind === 'turned') rig.autoIdle = true;
     if (sr.weapon) rig.setWeapon(sr.weapon);
     if (getRig(z.sprite) === undefined) loadRig(z.sprite).then((a) => noteLoad(z.sprite, !!a));
-    r = { rig, px: z.x, v: 0, stun: 0, down: 0, wind: 0, crip: false, state: z.state, attack: null, gap: 0, tolled: false, pant: false, seen: 0, ready: false };
+    r = { rig, px: z.x, v: 0, stun: 0, down: 0, wind: 0, crip: false, state: z.state, attack: null, gap: 0, tolled: false, pant: false, seen: 0, ready: false, flash: 0 };
     this.zs.set(z.id, r);
     return r;
   }
@@ -315,7 +315,10 @@ export class BattleActors implements BattleHook {
       r.react = undefined;
       rig.hit(h.zone, { cripple: false });
     }
-    if (z.flash > 0.05) rig.flashT = Math.max(rig.flashT, 0.06);
+    // a new hit (the sim's flash timer jumped up), not every frame of it: under steady fire a big
+    // body would otherwise stay white
+    if (z.flash > r.flash + 0.02) rig.flashT = Math.max(rig.flashT, 0.06);
+    r.flash = z.flash;
     // ---- legs gone: buckle into a crawl (a Ferryman limps on)
     if (z.crippled && !r.crip) {
       r.crip = true;
@@ -785,7 +788,7 @@ export class RunActors {
     const rig = createRig('turned', z.sprite, { seed: z.id * 7919 + 3, style: STYLES[z.def.id] ? z.def.id : sr.style });
     rig.autoIdle = true;
     if (getRig(z.sprite) === undefined) loadRig(z.sprite).then((a) => noteLoad(z.sprite, !!a));
-    r = { rig, px: z.x, v: 0, stun: 0, down: 0, wind: 0, crip: false, state: z.state, attack: null, gap: 0, tolled: false, pant: false, seen: 0, ready: false, lastState: '' };
+    r = { rig, px: z.x, v: 0, stun: 0, down: 0, wind: 0, crip: false, state: z.state, attack: null, gap: 0, tolled: false, pant: false, seen: 0, ready: false, flash: 0, lastState: '' };
     this.zs.set(z.id, r);
     return r;
   }
@@ -866,7 +869,8 @@ export class RunActors {
     rig.setSpeed(r.v);
     if (rig.ready) {
       if (!r.ready) { r.ready = true; rig.phase = (z.id * 0.6180339) % 1; }
-      if (z.flash > 0.05) rig.flashT = Math.max(rig.flashT, 0.06);
+      if (z.flash > r.flash + 0.02) rig.flashT = Math.max(rig.flashT, 0.06);
+      r.flash = z.flash;
       if ((z.stun ?? 0) > r.stun + 0.05) rig.play(clip('stagger'), { duration: 0.6 });
       r.stun = z.stun ?? 0;
       if (z.state === 'grab') { if (!rig.isPlaying('grabBite')) rig.play('grabBite'); }

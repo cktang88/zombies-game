@@ -72,6 +72,10 @@ async function fightFor(page, ms, beat = 260) {
   }
 }
 
+/** Verification frames (v_* scenes): raw PNGs only, for checking poses by eye. */
+const snap = (page, name) => page.screenshot({ path: path.join(RAW, `${name}.png`) });
+const near = (page, f) => B(page, f);
+
 const scenes = {
   async title(page) { await boot(page); await page.waitForTimeout(1500); },
   async day(page) {
@@ -182,6 +186,40 @@ const scenes = {
     await page.click('.overlay.settings [data-tab=video]');
     await page.waitForTimeout(300);
   },
+  // ---- pose checks (not in the README): node tools/e2e/shots.cjs v_downed v_knock v_toll v_raiders v_pulper
+  async v_downed(page) {
+    await nightFrom(page, 12);
+    await near(page, () => { const b = window.__battle; const g = b.guards.find((x) => x !== b.player && !x.crew && x.post !== 'roof'); g.downed = true; g.wasDowned = true; g.x = g.homeX + 40; });
+    await page.waitForTimeout(900); await snap(page, 'v_downed_1');
+    await page.waitForTimeout(2500); await snap(page, 'v_downed_haul');
+    await page.waitForTimeout(2500);
+  },
+  async v_knock(page) {
+    await nightFrom(page, 12);
+    await near(page, () => { const b = window.__battle; b.spawn('ferryman'); const z = b.zombies.find((x) => x.def.id === 'ferryman'); z.x = 600; z.hp = 9999; z.down = 2.5; });
+    await page.waitForTimeout(500); await snap(page, 'v_knock_down');
+    await page.waitForTimeout(1700); await snap(page, 'v_knock_getup');
+    await page.waitForTimeout(900);
+  },
+  async v_toll(page) {
+    await nightFrom(page, 23, { wall: true });
+    await near(page, () => { const b = window.__battle; b.spawn('bellwether'); const z = b.zombies.find((x) => x.def.id === 'bellwether'); z.x = 700; z.hp = 99999; z.screamT = 1.75; });
+    await page.waitForTimeout(1300); await snap(page, 'v_toll_1');
+    await page.waitForTimeout(500); await snap(page, 'v_toll_2');
+  },
+  async v_raiders(page) {
+    await nightFrom(page, 12);
+    await near(page, () => { const b = window.__battle; for (let i = 0; i < 3; i++) b.spawn('raider'); b.zombies.filter((z) => z.def.id === 'raider').forEach((z, i) => { z.x = 640 + i * 150; z.hp = 9999; }); });
+    await page.waitForTimeout(3500);
+  },
+  async v_pulper(page) {
+    await nightFrom(page, 12);
+    await near(page, () => { const b = window.__battle; b.spawn('pulper'); const z = b.zombies.find((x) => x.def.id === 'pulper'); z.x = 620; z.hp = 9999; });
+    await page.waitForTimeout(800);
+    await near(page, () => { const b = window.__battle; const z = b.zombies.find((x) => x.def.id === 'pulper' && x.state !== 'dying'); z.hp = 0; b.kill(z, b.player); });
+    await page.waitForTimeout(120); await snap(page, 'v_pulper_1');
+    await page.waitForTimeout(250);
+  },
   async animlab(page) {
     await page.goto(URL + 'animlab.html');
     await page.waitForTimeout(4000);
@@ -189,7 +227,7 @@ const scenes = {
 };
 
 (async () => {
-  const want = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(scenes);
+  const want = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(scenes).filter((k) => !k.startsWith('v_'));
   const browser = await pw.chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
   for (const name of want) {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 2 });
@@ -200,7 +238,7 @@ const scenes = {
       await scenes[name](page);
       const raw = path.join(RAW, `${name}.png`);
       await page.screenshot({ path: raw });
-      await sharp(raw).resize({ width: 1600 }).jpeg({ quality: 80, mozjpeg: true }).toFile(path.join(OUT, `${name}.jpg`));
+      if (!name.startsWith('v_')) await sharp(raw).resize({ width: 1600 }).jpeg({ quality: 80, mozjpeg: true }).toFile(path.join(OUT, `${name}.jpg`));
       console.log(`${name}: ok${errs.length ? ` (page errors: ${errs.join(' | ')})` : ''}`);
     } catch (e) {
       console.log(`${name}: FAILED ${String(e).split('\n')[0]}${errs.length ? ` (page errors: ${errs.join(' | ')})` : ''}`);
