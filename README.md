@@ -18,6 +18,10 @@ Vessey is a dying paper-mill town on the St. Aubin River, in November. The Guard
 - **Storyteller.** Three personas (The Long Siege, The Quiet, The Coin), threat budgets and tides on a calendar, mercy after deaths, 51 incidents, radio threads with deadlines, four factions with standing, and the Crossing on Nov 28.
 - **Production.** Workbench, forge, cold frames, infirmary, still, generator and radio; ammunition by caliber and bullet type, 23 guns, 14 attachments in 6 slots, traps, armour, wall reinforcements, and named veteran guns.
 - **Endings and legacy.** Three endings (the ferry, the mill, Spring) and a score card; inscribe survivors in a Ledger that lasts across runs and unlock boons. Daily seed for everyone.
+- **The sally.** Drop over the wall for a few seconds to swing, re-set sprung traps and pick up rounds, then climb back before they close in.
+- **Perks.** At skill 4 and 7 a survivor is offered two perks (Tap-rack, Bead, Field medic, Ghost, The voice…); 32 in all.
+- **Pictures first.** Every ledger screen leads with icons, pips and big numbers; the sentences live in hover cards (long press on touch) and folds that remember how you left them ([research 12](docs/research/12-ui.md)).
+- **Anywhere.** Gamepad, touch buttons, and a sideways mode for phones held upright.
 - **Sound.** Layered procedural guns plus CC0 recordings, reloads voiced by the animation, ambience beds per scene, procedural music.
 
 ## Screenshots
@@ -78,7 +82,7 @@ All keys below are defaults; every one can be changed in **Settings › Controls
 ## Settings
 One ledger page, reachable from the title, the day screen (⚙) and the **pause menu** (`P`/`Esc` at night and on runs: Resume / Settings / Help / Quit to title; the game is frozen and takes no input while it is open). Everything is saved in this browser.
 - **Audio:** master, music, effects and ambience volumes; mute.
-- **Video:** animation Rigged / Classic, reduce screen shake, reduce gore, screen flashes and hitstop, hit markers, damage-zone markers, text size S/M/L, high-contrast text, fullscreen, frame-rate counter.
+- **Video:** animation Rigged / Classic, effects quality, WebGL effects (experimental: cel-shaded fire and smoke fields, heat haze, bloom; a frame-time governor steps it down), reduce screen shake, reduce gore, screen flashes and hitstop, hit markers, damage-zone markers, text size S/M/L, high-contrast text, fullscreen, frame-rate counter.
 - **Gameplay:** realism Standard / Hardcore, reload when empty, Focus hold / toggle, the threat ribbon, show the tutorial hints again.
 - **Controls:** every binding for the wall, runs and the day, with rebinding, conflict warnings and reset to defaults; the gamepad layout and whether a pad is connected.
 - **Data:** export the save (game, Ledger, settings, keys) to a file, import one, reset the Ledger, delete the saved game (both ask first).
@@ -113,7 +117,7 @@ Debug handles in the browser console: `__G` (the state), `__story` (`night(day)`
 
 ## Docs
 - [Design document](docs/DESIGN.md) (with the roadmap) · [Balance](docs/balance.md)
-- Research: [Last Stand & genre](docs/research/01-last-stand-and-genre.md) · [RimWorld & emergent story](docs/research/02-rimworld-emergent-story.md) · [Art style & lore](docs/research/03-art-style-and-lore.md) · [Depth & readability](docs/research/04-depth-and-readability.md) · [Combat depth](docs/research/05-combat-depth.md) · [Design principles & loops](docs/research/06-design-principles-and-loops.md) · [Gun audio](docs/research/07-gun-audio.md) · [Traps](docs/research/08-traps.md) · [Animation](docs/research/09-animation.md)
+- Research: [Last Stand & genre](docs/research/01-last-stand-and-genre.md) · [RimWorld & emergent story](docs/research/02-rimworld-emergent-story.md) · [Art style & lore](docs/research/03-art-style-and-lore.md) · [Depth & readability](docs/research/04-depth-and-readability.md) · [Combat depth](docs/research/05-combat-depth.md) · [Design principles & loops](docs/research/06-design-principles-and-loops.md) · [Gun audio](docs/research/07-gun-audio.md) · [Traps](docs/research/08-traps.md) · [Animation](docs/research/09-animation.md) · [VFX](docs/research/10-vfx.md) · [Shooting poses](docs/research/11-shooting-poses.md) · [UI](docs/research/12-ui.md)
 
 ## Credits
 Code, procedural audio and the story are original to this project; the art is AI-generated for it. Recorded sound effects are **CC0 / public domain** from OpenGameArt, listed with authors in [CREDITS.md](CREDITS.md) ([what CC0 means](https://creativecommons.org/publicdomain/zero/1.0/)). Fonts: Special Elite and Crimson Text (SIL Open Font License, via Google Fonts).
