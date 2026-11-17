@@ -34,7 +34,7 @@ export function campWealth() {
 /** Balance knobs (docs/balance.md §9–10): days for the early ramp to reach full strength, and how long each surge takes to arrive (share of the night).
  *  late: from day 13 (eased in from day 9) the nights are × this (tide nights × lateTide: they stay the big nights); crossing: the Crossing's × on threat.
  *  tideMid: the tide's middle wave × this. dark / darkBig: share of a later surge (ordinary nights from darkDay / tide, horde, Crossing) that forms up close in the dark. */
-export const DIRECTOR_TUNE = { rampDays: 9, span: 0.08, mul: 1, early: 0.6, at: [0.0, 0.42, 0.78], share: [0.25, 0.4, 0.35], tideMid: 2, dark: 0.25, darkDay: 6, darkBig: 0.6, late: 0.7, lateTide: 0.85, crossing: 2.2 };
+export const DIRECTOR_TUNE = { rampDays: 9, span: 0.08, mul: 1, early: 0.6, at: [0.0, 0.42, 0.78], share: [0.25, 0.4, 0.35], tideMid: 1.45, dark: 0.25, darkDay: 6, darkBig: 0.6, late: 0.7, lateTide: 0.85, crossing: 2.2 };
 (globalThis as unknown as { __directorTune: typeof DIRECTOR_TUNE }).__directorTune = DIRECTOR_TUNE; // debug handle (balance harness)
 export function threatPoints(day = G.day) {
   const p = persona();

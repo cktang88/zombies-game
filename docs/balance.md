@@ -648,3 +648,14 @@ Falls: passive 5/8 with reactions, 5/8 without; decent 3/8 vs 2/8; prep 1/8 vs 2
 - Trying `at.stumble 170` (fewer falls from the guards' rifles) changed nothing on days 6 and 8 (2 seeds): the day-8 passive night fell both times, and the day-6 decent night held once at −316.
 
 **Change.** None to `IMPACT` beyond `at.stagger 85` (already in code). No `DIRECTOR_TUNE` or `Battle.tune` change is proposed. If the day-6 tide should again cost the decent leader planks rather than the wall, the lever to try is §10's `tideMid` (director, e.g. 2 → 1.7; untested), not the reactions.
+
+### §11b tideMid sweep (day-6 tide, 2 seeds, passive / decent)
+| tideMid | passive | decent |
+|---|---|---|
+| 2.0 | fell, fell | fell, fell |
+| 1.7 | fell, fell | fell, fell |
+| 1.45 | held, fell | fell, held |
+| 1.35 | 0, 0 | −224, 0 |
+| 1.2 | – | 0, 0 |
+
+The outcome is a cliff, not a slope: once the bunched middle wave reaches the planks, the wall goes. 1.45 sits on the edge, a coin-flip for both, and is the new default. Follow-up: soften the cliff (stagger the middle wave's arrival) so a decent leader's skill buys planks, not a whole night.
