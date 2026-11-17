@@ -262,8 +262,27 @@ the bones).
   (6 rigs × 9 hit kinds) all settle flat.
 - Camera: `draw(…, cam)` composes every part transform with the caller's transform (shake).
 - Fallback: parts that fail to load stay Classic per sprite (3 failures and no success → all
-  Classic); frames > 25 ms for 3 s while the rigs carry > 25% of the frame → Classic for the
-  session (logged once). Debug: `globalThis.__anim.state()`, `__story.night(day)`, `__story.run()`.
+  Classic). Slow frames first shrink the full-rig budget (40 → 8, −25% every 0.4 s while the
+  average frame is > 22 ms and the rigs carry > 20% of it; it grows back +2 under 15 ms); only at
+  the floor do frames > 25 ms for 3 s switch to Classic for the session (logged once). The
+  flipbook cache is LRU, 48 MB. Debug: `globalThis.__anim.state()`, `__story.night(day)`, `__story.run()`.
+
+Final pass (integration gaps closed):
+- Guards' reloads play their clip over the sim's reload time and voice each stage, quieter with
+  distance from the leader and panned to where the guard stands (`sfx.reload(kind, stage, 0,
+  { volume, pan, far })`, gated so a line of guards doesn't stack).
+- The leader's stoppages: `clearJam()` plays `tapRack` (failure to feed, short stroke) or
+  `stripFeed` (double-feed, barrel swap: lock, strip the mag, rack ×3, mag in, rack) over the
+  real clear time; a weapon switch plays `drawGun` over the draw time. Runs tap-rack too.
+- Run dead: settled (or 3.2 s) ragdolls are baked into a small darkened image each and blitted
+  in the road (≤ 60 kept), like the battle's ground canvas.
+- Corpse pile: a rigged kill adds its pile mass at once where it dropped (ramps aren't delayed by
+  the fall) and moves it to where the body comes to rest when it settles (`pileMass`).
+- Ragdoll settling: rest is judged on net movement over a step (in-step jitter between a joint
+  limit and the ground no longer counts as motion), late in the fall whatever lies on the road
+  bleeds its velocity, and the sit-up/kneel nudge fades out by 2 s; `ragdoll-check` reports how
+  many come to rest on their own (32/54, mean 2.4 s; the rest hit the 2.6 s cap, all flat).
+- Hit flash: on a new hit only, at 38% (overlapping part silhouettes made seams read as blobs).
 
 Measured (headless Chromium, SwiftShader software raster, this container; avg frame over 10 s):
 night 1 rigged 19.1 ms vs Classic 17.0 ms; 150 Turned (day 23 + injected crowd) rigged 90.6 ms
