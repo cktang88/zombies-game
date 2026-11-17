@@ -621,3 +621,30 @@ Economy after the change: `npm run simtest` passes. Day-10 ammunition is 1.4 nig
 - **Caveat: outcomes are binary.** The wall either loses ≤ 50 or falls. The fall comes when the leader's magazine stock runs dry (every fall above has the leader's stock at 0). From there the guards' rounds and then their melee cannot stop the crowd. This is the §6f ammunition squeeze and not tempo: the same seed can land on either side between runs. Partial-loss nights ("chunks") show up mainly on tides. Making losses more gradual would need the leader's options after ammo (melee, firebombs, falling back), and that is out of scope here.
 
 Economy: `npm run simtest -- 3` passes (nights from day 10 ending with < 1 night of ammo: 72%, target ≥ 40%). `tools/balance.ts --quick` reports 8/10, unchanged.
+
+## 11. Hit reactions (impact.ts) against the §10 targets
+
+**Question.** Mass-vs-impulse hit reactions (`src/night/impact.ts`: flinch / stagger / stumble / knockdown, stun and down time, a slide, ×1.3 damage while down) arrived after §10. Did they make nights easier, and do rifles or shotguns pin the crowd?
+
+**Method.** The §9/§10 harness, now committed as `tools/e2e/night-balance.cjs` (`npx vite build && npx vite preview --port 4198`, then `PORT=4198 node tools/e2e/night-balance.cjs 3,6,8 1 passive,decent,prep`). It takes `IMP` (JSON merged into `IMPACT`) next to `TUNE` and `DTUNE`, and adds two columns: **stun%** (share of on-screen body-seconds spent staggered or down, from any cause) and **rx/k** (staggers / stumbles / knockdowns per kill). One seed per cell (a quick check; outcomes are binary, see §10's caveat), current `IMPACT` with `at.stagger 85` (was 62). The control is the same build with every reaction tier above flinch switched off (`at.stagger/stumble/knockdown 1e9`, `FINISH_MUL 1`).
+
+| day | night | passive (impact / off) | decent (impact / off) | decent + prep (impact / off) | stun% impact (P/D/prep) | rx/k passive |
+|---|---|---|---|---|---|---|
+| 3 | ordinary | −18 / 0 | 0 / −118 | 0 / 0 | 0.5 / 0.6 / 0 | .07/.02/0 |
+| 6 | **tide** | **fell**†† / −45 | **fell**†† / −233 | **fell**† / −93 | 1.1 / 1.2 / 1.0 | .19/.23/0 |
+| 8 | ordinary | −184 / **fell** | 0 / 0 | 0 / 0 | 1.4 / 1.2 / 1.1 | .41/.13/0 |
+| 11 | tunnel | **fell**†† / **fell**† | 0 / **fell** | −16 / **fell**† | 2.0 / 1.8 / 2.2 | .54/.43/0 |
+| 13 | tunnel | **fell**† / **fell**†† | **fell**†† / −223† | 0 / 0 | 2.1 / 1.9 / 1.4 | .51/.68/.01 |
+| 18 | tunnel | −143†† / −80† | 0 / 0 | 0 / 0 | 3.1 / 5.9 / 6.6 | .31/.36/0 |
+| 20 | tunnel / **tide** | **fell**† / **fell**† | −141††† / 0 | 0 / 0 | 1.5 / 3.3 / 6.1 | .42/.45/0 |
+| 23 | **the Crossing** | **fell**† / **fell**†† | **fell**††† / **fell**†† | −240 / **fell**††† | 1.5 / 2.8 / 3.9 | .36/.08/0 |
+
+Falls: passive 5/8 with reactions, 5/8 without; decent 3/8 vs 2/8; prep 1/8 vs 2/8. A second look at days 6 and 8 (2 seeds, passive + decent): day-6 tide fell 4/4 with reactions; day-8 passive held once at −289 and fell once.
+
+**Read.**
+- **Not easier.** At `at.stagger 85` the reactions do not soften nights: the fall count is the same within one-seed noise, and the day-6 tide is, if anything, harder (the staggered front is overtaken by the bodies behind it (§10 `walkLane`) and the crowd reaches the planks bunched, as the `stagger 62 → 85` note in `impact.ts` says). Day 8 passive is the one cell that held (−184), and a second seed fell, so the §10 target "passive breaks by day 6–8" still stands. The decent leader losing the day-6 tide outright is harsher than §10 (−45 / −279). Watch it, but its cause is crowd bunching and the guards, not stun-lock.
+- **No perma-stun.** On-screen bodies spend 0.5–3% of their time staggered or down on early and mid nights, and ≤ 6.6% on the day-18/20 stocks (autoshot, AR-15, scoped). Of that, 2–3 points were already there without reactions (the old `fx.stagger` roll, blasts, the Ferryman's knee). The `REPEAT 0.62` diminishing return and the head-hit cap keep rifles and shotguns from pinning a body.
+- **Visible where it should be.** The guards' rifles and pumps (the passive rows) give 0.3–0.5 staggers and 0.1–0.7 stumbles per kill, so a fall shows up every few bodies. Knockdowns stay rare outside blasts (≤ 0.01 per kill). The leader's pistols almost never stagger before the kill (rx/k ≈ 0.0–0.1), so heavy rounds stand out.
+- Trying `at.stumble 170` (fewer falls from the guards' rifles) changed nothing on days 6 and 8 (2 seeds): the day-8 passive night fell both times, and the day-6 decent night held once at −316.
+
+**Change.** None to `IMPACT` beyond `at.stagger 85` (already in code). No `DIRECTOR_TUNE` or `Battle.tune` change is proposed. If the day-6 tide should again cost the decent leader planks rather than the wall, the lever to try is §10's `tideMid` (director, e.g. 2 → 1.7; untested), not the reactions.
