@@ -3,7 +3,7 @@ import { G, R, setState, save, loadSave, clearSave, log, dateLabel, ICE_DAY } fr
 import { loadAssets, spriteUrl } from './assets';
 import { newGame } from './sim/newgame';
 import { renderDay } from './ui/day';
-import { resolveDayWork, dawnTick, nextWeather, prepareRun, tomorrowTeaser } from './sim/day';
+import { resolveDayWork, dawnTick, nextWeather, prepareRun, tomorrowTeaser, restoreRunMate } from './sim/day';
 import { dailySeed, parseSeed } from './rng';
 import { planNight, afterNight, PERSONAS } from './sim/director';
 import { rollIncident, resolveEvent, returnsTick } from './sim/events';
@@ -128,6 +128,7 @@ function run(site: string) {
 }
 
 function afterRun(r: ExpeditionResult) {
+  restoreRunMate();
   const lines: string[] = [];
   const loot = Object.entries(r.loot).filter(([, v]) => v).map(([k, v]) => `${v} ${k}`).join(', ');
   if (r.died) lines.push('They did not come back. Whatever they carried is out there in the road.');

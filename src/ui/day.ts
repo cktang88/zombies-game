@@ -13,7 +13,7 @@ import {
 } from '../sim/survivors';
 import {
   buildingLevel, queueRecipe, WEATHER_LABEL, DAY_HOURS, DEFAULT_HOURS, jobHours, setJobHours, hoursAvailable, travelHours, survivorSite,
-  searchHours, searchFactor, planConfirmed, confirmPlan, ranToday, runDaylightFor, prepareRun, clockLabel, heatNeed,
+  searchHours, searchFactor, planConfirmed, confirmPlan, ranToday, onRunToday, runDaylightFor, prepareRun, clockLabel, heatNeed,
   drillPlan, emplacements, tomorrowTeaser,
 } from '../sim/day';
 import { persona, forecast, threatPoints } from '../sim/director';
@@ -187,7 +187,7 @@ function hoursBar(s: Survivor) {
     cells.push(`<i class="${k}" title="${clockLabel(i)}"></i>`);
   }
   const job = JOBS.find((j) => j.id === s.job)?.label ?? s.job;
-  const away = s.isLeader && ranToday();
+  const away = onRunToday(s);
   let label: string;
   if (s.job === 'rest') label = away ? `Out on a run from ${clockLabel(avail)}` : 'Rest all day';
   else if (s.job === 'scavenge') label = `${travel}h walking · ${Math.max(0, h - travel)}h searching${avail - h > 0 ? ` · rest ${avail - h}h` : ''}${h - travel <= 0 ? ' — <b>no time to search</b>' : ''}`;
@@ -213,7 +213,7 @@ function survivorCard(s: Survivor) {
   const sites = SITES.filter((x) => x.minDay <= G.day);
   const freeWeapons = G.weapons.filter((x) => x.uid === s.weapon || !living().some((o) => o.weapon === x.uid));
   const disabled = !canWork(s);
-  const stale = !disabled && G.day > 1 && !planConfirmed(s) && !(s.isLeader && ranToday());
+  const stale = !disabled && G.day > 1 && !planConfirmed(s) && !(onRunToday(s));
   const hp = heldProf(s);
   return `<div class="card surv ${stale ? 'stale' : ''}" data-id="${s.id}">
     <img class="portrait" src="${spriteUrl(s.sprite)}" alt="">
@@ -547,7 +547,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
   const fc = forecast();
   const eat = living().length;
   const sel = detail ? byId(detail) : null;
-  const stale = living().filter((s) => canWork(s) && G.day > 1 && !planConfirmed(s) && !(s.isLeader && ranToday()));
+  const stale = living().filter((s) => canWork(s) && G.day > 1 && !planConfirmed(s) && !(onRunToday(s)));
   const heat = heatNeed();
   // threatPoints() rolls the director's jitter; peek without advancing the seeded RNG so re-renders stay deterministic
   const r0 = R.s;
@@ -594,7 +594,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
   juiceAfterRender(root);
   // Going to the wall with jobs nobody looked at today: the first press highlights them, the second goes.
   const goDusk = () => {
-    const left = living().filter((s) => canWork(s) && G.day > 1 && !planConfirmed(s) && !(s.isLeader && ranToday()));
+    const left = living().filter((s) => canWork(s) && G.day > 1 && !planConfirmed(s) && !(onRunToday(s)));
     if (left.length && !duskArmed) {
       duskArmed = true;
       sfx.ui();

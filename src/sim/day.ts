@@ -67,9 +67,13 @@ export function clockLabel(h: number) {
 export function ranToday() {
   return G.flags.ranToday === G.day;
 }
-/** Daylight hours this survivor has for house work today (the leader loses the hours after leaving on a run). */
+/** True for the leader and the companion (G.flags.ranMate) once today's run is booked. */
+export function onRunToday(s: Survivor) {
+  return ranToday() && (s.isLeader || G.flags.ranMate === s.id);
+}
+/** Daylight hours this survivor has for house work today (the run party loses the hours after leaving). */
 export function hoursAvailable(s: Survivor) {
-  if (s.isLeader && ranToday()) return Math.max(0, Math.min(DAY_HOURS, (G.flags.runLeave as number) ?? 0));
+  if (onRunToday(s)) return Math.max(0, Math.min(DAY_HOURS, (G.flags.runLeave as number) ?? 0));
   return DAY_HOURS;
 }
 /** Hours booked on the survivor's job (Rest books none: the whole day is rest). */
@@ -117,7 +121,26 @@ export function prepareRun(siteId: string, leave: number) {
     if (leave <= 0) l.job = 'rest';
     l.rest = Math.max(0, l.rest - 0.2); // a run is a hard day's walking
   }
+  // the companion (G.flags.runMate, read and cleared by the run code) keeps the same hours as the leader;
+  // the run code sets their job to Rest, so remember the morning job to restore at dusk
+  delete G.flags.ranMate;
+  delete G.flags.ranMateJob;
+  const mate = living().find((s) => s.id === G.flags.runMate && !s.isLeader && canWork(s));
+  if (mate) {
+    G.flags.ranMate = mate.id;
+    if (leave > 0 && mate.job !== 'rest') G.flags.ranMateJob = mate.job;
+    else mate.job = 'rest';
+    mate.rest = Math.max(0, mate.rest - 0.2);
+  }
   return G.flags.runDaylight as number;
+}
+
+/** Give the run companion back the job they worked before leaving (the run code set it to Rest). Idempotent. */
+export function restoreRunMate() {
+  const job = G.flags.ranMateJob;
+  const mate = ranToday() && typeof job === 'string' ? living().find((s) => s.id === G.flags.ranMate) : undefined;
+  if (mate) mate.job = job as Survivor['job'];
+  delete G.flags.ranMateJob;
 }
 
 /** Fuel the stove burns tonight: frost and snow cost 1 per 3 people; late in the year every night costs a little. */
@@ -133,8 +156,9 @@ export function resolveDayWork(): string[] {
   const out: string[] = [];
   const workers = living();
   const siteRuns: Record<string, Survivor[]> = {};
+  restoreRunMate(); // the run companion worked the morning before leaving
   for (const s of workers) {
-    const away = s.isLeader && ranToday();
+    const away = onRunToday(s);
     const hours = jobHours(s);
     const free = Math.max(0, hoursAvailable(s) - hours);
     if (!canWork(s)) {
