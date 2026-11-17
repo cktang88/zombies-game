@@ -26,7 +26,7 @@ import { ZOMBIES } from '../data/zombies';
 import { VARIANT_TINT, FOG_TINT, depthScale, type Look } from './render';
 import type { BattleHook, SortedDraw } from './hook';
 import type { Battle, Zombie, Guard } from './battle';
-import { LANES, DEF_LANES, LOOK, WALL_X, wallX, nearestLane } from './battle';
+import { LANES, DEF_LANES, LOOK, wallX, nearestLane } from './battle';
 
 const WARM = '#f0c98a', COOL = '#8fa6c8', DARK = '#0a0b10', BURN = '#ff7a2a';
 const ZS = 1.3; // battle.ts actor scale for the Turned
@@ -230,7 +230,8 @@ export class BattleActors implements BattleHook {
 
   // ---- simulation → animation (a hook: runs every step after the Turned moved)
   update(dt: number) {
-    if (!rigsOn() || dt <= 0) return;
+    if (!rigsOn()) { if (this.corpses.length) this.onEnd(); return; } // fell back: the dead go into the road now
+    if (dt <= 0) return;
     const t0 = performance.now();
     this.t += dt;
     const b = this.b;

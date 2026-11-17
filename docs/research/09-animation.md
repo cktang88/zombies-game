@@ -2,7 +2,7 @@
 
 Status: prototype in `src/anim/` + dev page `animlab.html` (`npm run dev`, then `/animlab.html`;
 `?debug` draws the skeleton, `?bench=1`, `?bench=ragdoll`, `&lod`, `&sync`, `&flat` run benchmarks).
-Nothing in the game (`src/night`, `src/main.ts`, `src/ui`) uses it yet; the integration API is at the end.
+Integrated into the night battle and the daylight run through `src/night/actors.ts` (§9), behind Settings → Graphics → "Animation: rigged" (default on; Classic single images otherwise).
 
 ## 1. Decision
 
@@ -232,3 +232,40 @@ chest (visible with arms overhead); support-hand art is a little lighter than th
 hands sheet toward the body palette); revolver cylinder and pump fore-end are drawn procedurally /
 not moved; the bow icon is drawn lying along its length so it reads small when upright; no far-side
 hand pose for the trigger hand in reload close-ups.
+
+## 9. In the game (`src/night/actors.ts`)
+
+`BattleActors` is the battle's last hook (night/hook.ts); `RunActors` serves expedition.ts. The
+simulation is untouched: rigs are driven by polling it each step (ground speed from x deltas,
+`windup`/`stun`/`down`/`crippled`/`leap`/`climb` edges, `g.reload` edges, wounds) plus a few
+one-line calls: `noteHit` / `noteBlast` (killing-hit impulse), `deferPile` (pile mass added where
+the ragdoll settles), `reload` (leader's reloads: the clip runs over the real reload time and
+its events voice `sfx.reload(kind, stage)` instead of `sfx.reloadFor` timers; shell by shell per
+`startReload` call, pump/lever to close an empty tube; firing cancels), `onFire` (recoil),
+`onSwing` (melee.ts: the hand weapon comes out for a chop/sweep timed so 'hit' lands with the
+blow), `muzzle`/`head`/`weak` (shots leave the rig's muzzle; hitbox head and weakspot rings ride
+the bones).
+
+- Looks: lane grade + fog + variant tint + unlit shade are baked into atlas copies (`gradedAtlas`),
+  the ink outline into the same copies as a dilated silhouette under each part (no extra pass),
+  the rim light is one silhouette pass (only where it is > 30% α). Flipbook frames bake the whole
+  look and are keyed by it; `lodScale` bakes at the lane's scale.
+- LOD: the 40 Turned nearest the wall draw full rigs, the rest walk from the flipbook (idles off).
+- Deaths: `die()` with world impulse from the shooter's direction, magnitude 70 + 6·knock + 1.2·dmg
+  summed over pellets (explosions 320 + 3·knock, upward; melee small), zone and kind from the hit;
+  `calm` with Reduce gore; headshot pops hide the head; authored deaths by style (Pulper's burst
+  fast-forwarded to 0.3 s, Crier choke, Ferryman/Bellwether/Sleeper collapse). ≤ 24 live ragdolls;
+  settled (or 3.2 s) bodies are baked darkened into the battle's ground canvas.
+- Ragdoll fix (ragdoll.ts `collapse` + `tipOver`): muscle-driven joints no longer bleed velocity
+  (bodies toppled in slow motion and sat down), the trunk gets a torque past the feet, folded
+  knees/hips relax toward a straight body. `npx tsx tools/ragdoll-check.ts` checks 54 deaths
+  (6 rigs × 9 hit kinds) all settle flat.
+- Camera: `draw(…, cam)` composes every part transform with the caller's transform (shake).
+- Fallback: parts that fail to load stay Classic per sprite (3 failures and no success → all
+  Classic); frames > 25 ms for 3 s while the rigs carry > 25% of the frame → Classic for the
+  session (logged once). Debug: `globalThis.__anim.state()`, `__story.night(day)`, `__story.run()`.
+
+Measured (headless Chromium, SwiftShader software raster, this container; avg frame over 10 s):
+night 1 rigged 19.1 ms vs Classic 17.0 ms; 150 Turned (day 23 + injected crowd) rigged 90.6 ms
+(rig work 42 ms: update 1.9, full rigs 19.6, flipbook blits 9.2) vs Classic 53.1 ms. On such a
+machine the Crossing trips the automatic fallback; with GPU raster the fill cost mostly vanishes.
