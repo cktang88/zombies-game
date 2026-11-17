@@ -251,6 +251,66 @@
       "height": 72,
       "prompt": "two capped steel pipe bombs with short fuses, wrapped in tape.",
       "kind": "icon"
+    },
+    {
+      "id": "icon_m_hatchet",
+      "height": 72,
+      "prompt": "a small hatchet with a worn hickory handle, lying horizontally, head on the right.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_m_fellingaxe",
+      "height": 72,
+      "prompt": "a long felling axe with a hickory helve, lying horizontally, axe head on the right.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_m_crowbar",
+      "height": 72,
+      "prompt": "a long steel crowbar with a curved claw end, lying horizontally.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_m_bat",
+      "height": 72,
+      "prompt": "a dented aluminum baseball bat, lying horizontally, fat end on the right.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_m_machete",
+      "height": 72,
+      "prompt": "a long brush machete with a black handle, lying horizontally, blade pointing right.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_m_fireaxe",
+      "height": 72,
+      "prompt": "a red-handled firefighter pick-head axe, lying horizontally, axe head on the right.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_m_sledge",
+      "height": 72,
+      "prompt": "a heavy sledgehammer with a long wooden handle, lying horizontally, head on the right.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_m_boathook",
+      "height": 72,
+      "prompt": "a long wooden boat hook pole with a bronze hook and spike tip, lying horizontally, hook on the right.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_m_knife",
+      "height": 72,
+      "prompt": "a thin flexible fillet knife with a wooden handle, lying horizontally, blade pointing right.",
+      "kind": "icon"
+    },
+    {
+      "id": "icon_m_chainsaw",
+      "height": 72,
+      "prompt": "an orange and grey gas chainsaw, side view, bar pointing right.",
+      "kind": "icon"
     }
   ]
 }
