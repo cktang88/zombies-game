@@ -300,7 +300,7 @@ function modSlotsHtml(w: WeaponItem) {
     const spare = stock.filter((m) => MODS[m.def]?.slot === slot && MODS[m.def].fits(w.def));
     const name = MOD_SLOTS.find((x) => x.id === slot)!.name;
     return `<span title="${esc(md ? `${md.name}: ${md.niche}` : `${name}: empty`)}" style="display:inline-flex;align-items:center;gap:4px;border:1px ${md ? 'solid #6a5d45' : 'dashed #4a4235'};padding:2px 4px;border-radius:3px">
-      ${md ? `<img src="${spriteUrl(md.icon)}" alt="" style="width:34px;height:20px;object-fit:contain">` : `<i style="width:34px;text-align:center;opacity:.5">${name}</i>`}
+      ${md ? `<img src="${spriteUrl(md.icon)}" alt="" style="width:34px;height:20px;object-fit:contain">` : `<i style="min-width:34px;white-space:nowrap;text-align:center;opacity:.5">${name}</i>`}
       <select data-act="mod" data-w="${w.uid}" data-slot="${slot}" style="max-width:150px;font-size:12px">
         <option value="">${md ? '— detach —' : '— empty —'}</option>
         ${cur ? `<option value="${cur.uid}" selected>${esc(md!.name)}${cur.cond < 1 ? ` ${Math.round(cur.cond * 100)}%` : ''}</option>` : ''}
@@ -321,7 +321,7 @@ function modDeltaHtml(w: WeaponItem) {
   const out: string[] = [];
   for (const [k, label, up] of rows) {
     const x = a[k] as number, y = b[k] as number;
-    if (Math.abs(x - y) < 1e-6) continue;
+    if (x === y || Math.abs(x - y) < 1e-6) continue;
     const better = up ? y > x : y < x;
     let txt: string;
     if (k === 'switchTime') txt = `${y > x ? '+' : '−'}${Math.abs(y - x).toFixed(2)}s`;
@@ -371,7 +371,7 @@ function armoryHtml() {
     return `<div class="gun"><img src="${spriteUrl(d.icon)}" alt=""><div><b>${w.name ? `"${esc(w.name)}" ` : ''}${d.name}</b> <span class="dim">${Math.round(w.cond * 100)}% · ${w.kills} kills · ${holder ? first(holder) : 'on the rack'}</span>
       ${d.niche ? `<div class="bd"><i>${esc(d.niche)}</i></div>` : ''}
       <div class="bd dim">${esc(d.desc)}</div>
-      <div class="stats">dmg ${Math.round(p.dmg)}${p.pellets > 1 ? `×${p.pellets}` : ''} · ${p.rof}/s · mag ${p.mag} · reload ${p.reloadPerRound ? `${p.reload.toFixed(2)}s/round` : `${p.reload}s`}${p.pierce ? ` · pierce ${p.pierce}` : ''}${p.perShot !== 1 ? ` · ${p.perShot} ${ammoLabel(p.ammoRes).toLowerCase()}/shot` : ''}${tags.length ? ` · ${tags.join(' · ')}` : ''}</div>
+      <div class="stats">dmg ${Math.round(p.dmg)}${p.pellets > 1 ? `×${p.pellets}` : ''} · ${+p.rof.toFixed(2)}/s · mag ${p.mag} · reload ${p.reloadPerRound ? `${p.reload.toFixed(2)}s/round` : `${+p.reload.toFixed(1)}s`}${p.pierce ? ` · pierce ${p.pierce}` : ''}${p.perShot !== 1 ? ` · ${p.perShot} ${ammoLabel(p.ammoRes).toLowerCase()}/shot` : ''}${tags.length ? ` · ${tags.join(' · ')}` : ''}</div>
       <div class="stats">${types.length > 1 ? `loaded with ${ammoSelect(w)}` : `ammo: ${esc(ammoLabel(p.ammoRes).toLowerCase())} (${Math.floor(G.stores[p.ammoRes!] ?? 0)})`}${p.ammoRes && AMMO_TYPES[p.ammoRes] ? ` <span class="dim">— ${esc(AMMO_TYPES[p.ammoRes]!.desc)}</span>` : ''}</div>
       ${modSlotsHtml(w)}${modDeltaHtml(w)}</div></div>`;
   }).join('')}
