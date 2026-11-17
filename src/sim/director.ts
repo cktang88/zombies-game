@@ -33,8 +33,8 @@ export function campWealth() {
 
 /** Balance knobs (docs/balance.md §9–10): days for the early ramp to reach full strength, and how long each surge takes to arrive (share of the night).
  *  late: from day 13 (eased in from day 9) the nights are × this (tide nights × lateTide: they stay the big nights); crossing: the Crossing's × on threat.
- *  tideMid: the tide's middle wave × this, arriving as tideSub sub-waves tideGap of the night apart. dark / darkBig: share of a later surge (ordinary nights from darkDay / tide, horde, Crossing) that forms up close in the dark. */
-export const DIRECTOR_TUNE = { rampDays: 9, span: 0.08, mul: 1, early: 0.6, at: [0.0, 0.42, 0.78], share: [0.25, 0.4, 0.35], tideMid: 1.45, tideSub: 1, tideGap: 0.1, dark: 0.25, darkDay: 6, darkBig: 0.6, late: 0.7, lateTide: 0.85, crossing: 2.2 };
+ *  tideMid: the tide's middle wave × this, arriving as tideSub sub-waves tideGap of the night apart (tides up to day tideSubTo; later tides stay one bunched wave). dark / darkBig: share of a later surge (ordinary nights from darkDay / tide, horde, Crossing) that forms up close in the dark. */
+export const DIRECTOR_TUNE = { rampDays: 9, span: 0.08, mul: 1, early: 0.6, at: [0.0, 0.42, 0.78], share: [0.25, 0.4, 0.35], tideMid: 1.45, tideSub: 3, tideGap: 0.1, tideSubTo: 12, dark: 0.25, darkDay: 6, darkBig: 0.6, late: 0.7, lateTide: 0.85, crossing: 2.2 };
 (globalThis as unknown as { __directorTune: typeof DIRECTOR_TUNE }).__directorTune = DIRECTOR_TUNE; // debug handle (balance harness)
 export function threatPoints(day = G.day) {
   const p = persona();
@@ -100,7 +100,7 @@ export function planNight(): NightPlan {
   for (let s = 0; s < 3; s++) {
     const n0 = spawns.length;
     // the tide's middle wave comes as tideSub sub-waves, tideGap of the night apart (a trickle, not one wall of bodies)
-    const subs = special === 'tide' && s === 1 ? Math.max(1, DIRECTOR_TUNE.tideSub) : 1;
+    const subs = special === 'tide' && s === 1 && day <= DIRECTOR_TUNE.tideSubTo ? Math.max(1, DIRECTOR_TUNE.tideSub) : 1;
     for (let k = 0; k < subs; k++) {
       let sb = (pts * surgeShare[s] * (special === 'tide' && s === 1 ? DIRECTOR_TUNE.tideMid : 1)) / subs;
       const t0 = duration * (surgeAt[s] + k * DIRECTOR_TUNE.tideGap);
