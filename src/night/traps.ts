@@ -816,19 +816,19 @@ export class Traps implements BattleHook {
         const im = sprite('trap_bear');
         const w = 54 * s, shut = tr.hold !== undefined;
         const h = (w * 40) / 92 * (shut ? 0.55 : 1);
-        if (im) c.drawImage(im, tr.x - w / 2, tr.y - h + 2, w, h);
+        // graded by lane like every other prop (a raw sprite read brighter than the road around it)
+        if (!drawProp(c, 'trap_bear', tr.x, tr.y + 2, h, look, { w })) { if (im) c.drawImage(im, tr.x - w / 2, tr.y - h + 2, w, h); }
         if (tr.rearm > 0) { c.fillStyle = 'rgba(200,190,160,0.5)'; c.fillRect(tr.x - 2, tr.y - h - 6, 4, 4); }
       } });
       else if (id === 'propane' && tr.armed) out.push({ y: tr.y - 0.4, f: () => {
         const im = sprite('trap_propane');
         const h = 46 * s, w = (h * 42) / 64;
-        c.save();
-        // white rim so it reads in the dark
-        c.shadowColor = 'rgba(235,235,225,0.9)';
-        c.shadowBlur = 5;
-        if (im) c.drawImage(im, tr.x - w / 2, tr.y - h, w, h);
-        else { c.fillStyle = '#ddd'; c.fillRect(tr.x - w / 2, tr.y - h, w, h); }
-        c.restore();
+        // lane-graded and a touch brighter than the road so it still reads as the thing to shoot;
+        // no per-frame shadowBlur halo (it read as a white blob and cost a blur pass every frame)
+        if (!drawProp(c, 'trap_propane', tr.x, tr.y, h, look, { w, b: 1.1 })) {
+          if (im) c.drawImage(im, tr.x - w / 2, tr.y - h, w, h);
+          else { c.fillStyle = '#ddd'; c.fillRect(tr.x - w / 2, tr.y - h, w, h); }
+        }
         if (this.b.hover === undefined && this.onTank(tr)) {
           c.strokeStyle = 'rgba(255,220,150,0.7)'; c.lineWidth = 1.5;
           c.strokeRect(tr.x - w / 2 - 3, tr.y - h - 3, w + 6, h + 6);
@@ -837,7 +837,7 @@ export class Traps implements BattleHook {
       else if (id === 'barrels' && (tr.on || !tr.spent)) out.push({ y: tr.y - 0.3, f: () => {
         const im = sprite('trap_barrel');
         const h = 58 * s, w = (h * 56) / 110;
-        for (let k = -1; k <= 1; k++) if (im) c.drawImage(im, tr.x + k * w * 0.8 - w / 2, tr.y - h + Math.abs(k) * 2 * s, w, h);
+        for (let k = -1; k <= 1; k++) if (!drawProp(c, 'trap_barrel', tr.x + k * w * 0.8, tr.y + Math.abs(k) * 2 * s, h, look, { w, b: tr.on ? 1.15 : 1 }) && im) c.drawImage(im, tr.x + k * w * 0.8 - w / 2, tr.y - h + Math.abs(k) * 2 * s, w, h);
         if (tr.on) {
           c.save(); c.globalCompositeOperation = 'lighter';
           const g = c.createRadialGradient(tr.x, tr.y - h, 0, tr.x, tr.y - h, 40 * s);
@@ -852,7 +852,7 @@ export class Traps implements BattleHook {
         c.save();
         c.translate(tr.x, tr.y);
         c.transform(1, 0, -0.18 * load, 1, 0, 0);
-        if (im) c.drawImage(im, -w / 2 + load * 6, -h, w, h);
+        if (!drawProp(c, 'trap_net', load * 6, 0, h, look, { w }) && im) c.drawImage(im, -w / 2 + load * 6, -h, w, h);
         c.restore();
       } });
       else if (id === 'tincan' && !tr.spent && has('trap_tincan')) out.push({ y: tr.y - 0.2, f: () => {
