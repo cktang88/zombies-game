@@ -1,0 +1,25 @@
+{
+  "sprites": [
+    { "id": "icon_trap_bear", "kind": "icon", "height": 96, "prompt": "an open rusty steel leg-hold bear trap with serrated jaws spread flat and a short heavy chain with a stake, seen from a three-quarter top angle." },
+    { "id": "icon_trap_nails", "kind": "icon", "height": 96, "prompt": "a small scattered pile of bent galvanized roofing nails twisted into spiky caltrops, sharp points sticking up, on nothing." },
+    { "id": "icon_trap_flare", "kind": "icon", "height": 96, "prompt": "a red road flare stick taped inside an old dented coffee can, a loop of thin fishing line tied to its striker cap." },
+    { "id": "icon_trap_oil", "kind": "icon", "height": 96, "prompt": "a battered square metal motor-oil can tipped over with dark black oil glugging out into a glossy puddle." },
+    { "id": "icon_trap_propane", "kind": "icon", "height": 96, "prompt": "a twenty-pound barbecue propane tank with a valve and collar, painted white, scuffed and dented, standing upright." },
+    { "id": "icon_trap_barrel", "kind": "icon", "height": 96, "prompt": "a rusted steel oil drum with the top cut off, full of burning wood and an old tire, orange flames and black smoke rising." },
+    { "id": "icon_trap_tincan", "kind": "icon", "height": 96, "prompt": "a short wooden fence post hung with many empty tin cans on strings and a dented brass cowbell, a pull cord trailing away." },
+    { "id": "icon_trap_radio", "kind": "icon", "height": 96, "prompt": "a battered 1980s silver boombox radio with two speakers, wired with jumper cables to a car battery." },
+    { "id": "icon_trap_snare", "kind": "icon", "height": 96, "prompt": "a coil of galvanized steel clothesline wire with a wooden porch post and a tensioning turnbuckle." },
+    { "id": "icon_trap_pit", "kind": "icon", "height": 96, "prompt": "a bundle of sharpened wooden punji stakes bound together with twine, points up, fresh pale cut wood tips." },
+    { "id": "icon_trap_electric", "kind": "icon", "height": 96, "prompt": "a grey farm electric fence charger box with a red warning lightning-bolt label, insulated wire and a white ceramic insulator." },
+    { "id": "icon_trap_deadfall", "kind": "icon", "height": 96, "prompt": "a whole detached rusty 1970s sedan car door with window glass and door handle, seen flat from the side, a grey cinder block lashed to it with thick frayed rope." },
+    { "id": "icon_trap_net", "kind": "icon", "height": 96, "prompt": "a rolled-up section of galvanized chain-link fence mesh with two steel tent stakes." },
+    { "id": "icon_trap_sludge", "kind": "icon", "height": 96, "prompt": "a glass mason jar full of thick murky green-brown pond sludge, lid rusted, a handwritten masking-tape label, faintly glowing ochre." },
+    { "id": "icon_trap_pipemine", "kind": "icon", "height": 96, "prompt": "a curved homemade steel-plate directional mine on two bent wire legs, black electrical tape, roofing nails glued on its front face, a detonator wire." },
+    { "id": "icon_trap_glass", "kind": "icon", "height": 96, "prompt": "an open burlap feed sack spilling broken brown and green beer-bottle glass shards." },
+    { "id": "trap_bear", "kind": "icon", "height": 40, "prompt": "an open steel bear trap lying flat on the ground, jaws spread wide, seen from the side at a low angle, chain behind it." },
+    { "id": "trap_propane", "kind": "icon", "height": 64, "prompt": "a white twenty-pound barbecue propane tank standing upright, side view, dented and scuffed." },
+    { "id": "trap_barrel", "kind": "icon", "height": 110, "prompt": "a rusted open-top oil drum with fire and an old tire burning inside, orange flames, side view." },
+    { "id": "trap_net", "kind": "icon", "height": 110, "prompt": "a low freestanding section of sagging chain-link fence on two leaning metal posts, side view, wide." },
+    { "id": "trap_pit", "kind": "icon", "height": 50, "prompt": "a shallow trench dug in dark earth bristling with sharpened wooden stakes pointing up and outward, side cross-section view, wide and low." }
+  ]
+}

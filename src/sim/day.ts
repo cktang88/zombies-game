@@ -198,6 +198,7 @@ export function finishRecipe(id: string, by?: Survivor): string {
   const r = RECIPES.find((x) => x.id === id)!;
   const who = by ? first(by) : 'Someone';
   if (r.gives) for (const [k, v] of Object.entries(r.gives)) add(k as Res, v ?? 0);
+  if (r.trap) { const st = (G.trapStock ??= {}); st[r.trap] = (st[r.trap] ?? 0) + (r.trapCount ?? 1); }
   if (r.mod) (G.modStock ??= []).push({ uid: uid('m'), def: r.mod, cond: 1 });
   if (r.weapon) {
     const w = newWeapon(r.weapon, 0.9);

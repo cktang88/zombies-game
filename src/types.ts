@@ -156,6 +156,8 @@ export interface GameState {
   graves: Survivor[];
   weapons: WeaponItem[];
   modStock?: ModItem[]; // spare attachments on the bench
+  trapStock?: Record<string, number>; // trap kits by TRAPS key (data/traps.ts); read with `?? {}`
+  deploy?: { trap: string; x: number; lane: number }[]; // tonight's road placements (= traps.ts Placement[]); set at dusk, cleared at dawn
   buildings: Building[];
   fort: { hp: number; maxHp: number; level: number; spikes: number; wire: number; lights: number; traps: number; turrets?: number };
   craftQueue: { recipe: string; progress: number }[];
