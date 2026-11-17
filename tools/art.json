@@ -1,0 +1,54 @@
+{
+  "model": "google/gemini-3.1-flash-lite-image",
+  "style": "Mature graphic-novel cel-shaded painting in the style of a dark comic book: thick confident black-brown ink outlines, two-tone hard-edged shadows with Mignola-style spot blacks, dry-brush texture and paper grain, limited desaturated palette of cold grey-brown, slate and bone, with one sparing warm sodium-orange accent. Grounded realistic proportions, melancholic and serious, not cartoony. No text, no lettering, no logos, no border, no frame, no UI.",
+  "items": [
+    {
+      "id": "key_title",
+      "w": 1920,
+      "h": 1080,
+      "aspect": "16:9",
+      "position": "centre",
+      "prompt": "Wide cinematic key art, side-on view at dusk in late November: a lone two-storey red-brick house on a riverbank road, its ground floor barricaded with planks, sheet metal and a sandbagged firestep, one warm lamp lit in an upstairs window. Behind it a wide grey river with the first plates of ice, a paper mill with tall smokestacks and a steel truss bridge in fog on the far bank. Bare birches, a leaning power pole. Far down the road, tiny dark shambling silhouettes of the dead approaching. Heavy bruised overcast sky, thin band of sodium orange light at the horizon. Plenty of quiet empty sky in the upper half for a title."
+    },
+    {
+      "id": "end_ferry",
+      "w": 1600,
+      "h": 640,
+      "aspect": "21:9",
+      "position": "centre",
+      "prompt": "Wide panoramic illustration at night: a small open wooden river boat crowded with silhouetted people in coats pushing off from a dark landing into black water, thin skins of ice on the water, no lights on the boat. On the far shore behind, on a low bank, a single brick house with one warm lamp in the window. Cold blue-grey moonlit fog."
+    },
+    {
+      "id": "end_mill",
+      "w": 1600,
+      "h": 640,
+      "aspect": "21:9",
+      "position": "centre",
+      "prompt": "Wide panoramic illustration: a small group of people in heavy coats carrying bundles walk up a snowy road at dawn toward the open steel gate of a huge brick paper mill, its smokestacks steaming, warm light spilling from the gate. Chain-link fence. Snow falling."
+    },
+    {
+      "id": "end_spring",
+      "w": 1600,
+      "h": 640,
+      "aspect": "21:9",
+      "position": "centre",
+      "prompt": "Wide panoramic illustration: early spring morning, a wide river breaking up, great slabs of grey ice jostling and flowing downstream. On the near bank a battered red-brick house with a patched barricade and a porch; a few small figures stand on the porch watching the river. Pale cold sunlight breaking through clouds, mud and old snow."
+    },
+    {
+      "id": "end_ice",
+      "w": 1600,
+      "h": 640,
+      "aspect": "21:9",
+      "position": "centre",
+      "prompt": "Wide panoramic illustration: first light on a frozen river, the ice white and scarred with countless dark footprints leading toward the near bank. A battered brick house with a broken barricade stands on the bank, a thin thread of chimney smoke. Cold pale grey-blue dawn, low mist."
+    },
+    {
+      "id": "end_fell",
+      "w": 1600,
+      "h": 640,
+      "aspect": "21:9",
+      "position": "centre",
+      "prompt": "Wide panoramic illustration: grey morning after, a small red-brick house on a riverbank road with its barricade torn open and windows dark, a door hanging off. Beside the house in the yard, a row of simple wooden grave markers. Crows on a power line. No people. Bleak, quiet, overcast."
+    }
+  ]
+}
