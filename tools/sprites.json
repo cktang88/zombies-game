@@ -296,6 +296,26 @@
       "id": "z_runner2",
       "height": 240,
       "prompt": "A fast recently turned zombie, a young man in a torn high school letterman jacket, grey skin, ochre-yellow eyes, mouth open, sprinting hunched forward to the left, facing left."
+    },
+    {
+      "id": "z_raider",
+      "height": 240,
+      "prompt": "A hard-faced living man in his forties, a County raider, wearing a stolen brown county sheriff's deputy jacket with a torn star patch over a hunting hoodie, a balaclava pushed up on his head, jeans and boots, crouched and aiming a lever-action rifle to the left, facing left."
+    },
+    {
+      "id": "z_raider2",
+      "height": 240,
+      "prompt": "A lean bearded living man in his thirties, a County raider, wearing a tan county deputy uniform jacket with an orange armband, a trucker cap and a scarf over his lower face, holding a pump shotgun pointed to the left at the ready, walking to the left, facing left."
+    },
+    {
+      "id": "z_bellwether",
+      "height": 340,
+      "prompt": "A horribly tall gaunt emaciated undead figure from a church bell tower, once the old sexton, impossibly long limbs, stooped, wearing torn black cassock robes, a frayed bell rope wound around its neck and arms, dragging a cracked bronze bell fragment on a rope, grey skin cracked with ochre-yellow fungal infection growths, hollow eyes, walking slowly to the left, facing left, unsettling, dignified dread."
+    },
+    {
+      "id": "dog",
+      "height": 120,
+      "prompt": "A scruffy German shepherd mix dog with a torn red collar, alert and tense, standing and barking to the right, side view, facing right."
     }
   ],
   "iconPrefix": "Single game inventory icon of an object (no people, no hands, no characters), centered, mature graphic-novel cel-shaded style, thick black ink outlines, two-tone hard shadows, gritty worn texture, muted desaturated palette with a sparing accent colour, realistic not cartoony."
