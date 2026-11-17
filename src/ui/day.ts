@@ -2,7 +2,7 @@ import type { Survivor, JobId, Res, WeaponItem, ModSlot } from '../types';
 import { G, R, dateLabel, ICE_DAY, has, pay, ordinal, docsFound, rep } from '../state';
 import { DOCS, FACTIONS } from '../data/lore';
 import { spriteUrl } from '../assets';
-import { WEAPONS, CLASS_NAMES, CALIBERS, AMMO_TYPES, MODS, MOD_SLOTS, fireProfile, ammoTypesFor, ammoLabel, selectedAmmo, slotsFor, attachMod, detachMod, type FireProfile } from '../data/weapons';
+import { WEAPONS, MELEE, meleeProfile, CLASS_NAMES, CALIBERS, AMMO_TYPES, MODS, MOD_SLOTS, fireProfile, ammoTypesFor, ammoLabel, selectedAmmo, slotsFor, attachMod, detachMod, type FireProfile } from '../data/weapons';
 import { TRAITS } from '../data/traits';
 import { SKILL_NAMES } from '../data/names';
 import { SITES, BUILDINGS, RECIPES, RES_LABEL, RES_ICON } from '../data/world';
@@ -242,6 +242,7 @@ function survivorCard(s: Survivor) {
           ${freeWeapons.map((x) => `<option value="${x.uid}" ${x.uid === s.weapon ? 'selected' : ''}>${esc(x.name ? `"${x.name}"` : WEAPONS[x.def].name)} (${Math.round(x.cond * 100)}%)</option>`).join('')}
         </select>
         ${ammoSelect(G.weapons.find((x) => x.uid === s.weapon), true)}
+        ${meleeSelect(s)}
         ${hp ? `<span class="prof" title="${esc(first(s))}'s proficiency with ${esc(CLASS_NAMES[hp.cls].toLowerCase())} (0–10). Grows with drill and use.">${esc(CLASS_SHORT[hp.cls])} ${hp.v}</span>` : ''}
         <span class="aim" title="Aim on the wall">aim ${Math.round(aimFactor(s) * 100)}</span>
         ${s.armor ? `<button class="mini" data-act="unarmor" data-id="${s.id}" title="Mill-plate vest: wounds 30% lighter. Take it off.">vest ✓</button>` : (G.flags.armorStock as number) > 0 ? `<button class="mini" data-act="armor" data-id="${s.id}" title="Give a mill-plate vest">+ vest</button>` : ''}
@@ -392,6 +393,16 @@ function wallHtml() {
   </div>`;
 }
 
+// Hand weapon carried alongside the gun (Survivor.melee → G.melee).
+function meleeSelect(s: Survivor) {
+  const all = G.melee ?? [];
+  if (!all.length && !s.melee) return '';
+  const free = all.filter((k) => k.uid === s.melee || !living().some((o) => o !== s && o.melee === k.uid));
+  return `<select data-act="melee" data-id="${s.id}" title="Hand weapon: [V] on runs; at the wall when the gun runs dry" style="flex:0 1 auto;min-width:0">
+    <option value="">fists</option>
+    ${free.map((k) => `<option value="${k.uid}" ${k.uid === s.melee ? 'selected' : ''}>${esc(MELEE[k.def].name)} ${Math.round(k.cond * 100)}%</option>`).join('')}</select>`;
+}
+
 // Bullet-type dropdown for one gun (only when its caliber has more than one type).
 function ammoSelect(w: WeaponItem | undefined, compact = false) {
   if (!w) return '';
@@ -492,7 +503,25 @@ function armoryHtml() {
       <div class="stats">${types.length > 1 ? `loaded with ${ammoSelect(w)}` : `ammo: ${esc(ammoLabel(p.ammoRes).toLowerCase())} (${Math.floor(G.stores[p.ammoRes!] ?? 0)})`}${p.ammoRes && AMMO_TYPES[p.ammoRes] ? ` <span class="dim">— ${esc(AMMO_TYPES[p.ammoRes]!.desc)}</span>` : ''}</div>
       ${modSlotsHtml(w)}${modDeltaHtml(w)}</div></div>`;
   }).join('')}
-  <p class="dim">Weapons on the rack can be picked up on the wall at night with [Q] or number keys. Worn guns jam. On a daylight run, [T] switches bullet type.</p></div>`;
+  <h3>Hand weapons <span class="dim">one per survivor, beside the gun · [V] / right-click on runs</span></h3>
+  ${(G.melee ?? []).length ? (G.melee ?? []).map((k) => {
+    const d = MELEE[k.def];
+    const p = meleeProfile(k);
+    const holder = living().find((s) => s.melee === k.uid);
+    const tags: string[] = [];
+    if (p.arc > 1) tags.push(`hits ${p.arc}`);
+    if (p.reach >= 90) tags.push('long reach');
+    if (p.bleed) tags.push('bleed');
+    if (p.finisher) tags.push('silent finisher');
+    if (p.pry > 1) tags.push(`pries ×${p.pry}`);
+    if (p.fuel) tags.push(`${p.fuel} fuel/swing`);
+    if (p.noise >= 1) tags.push('loud');
+    return `<div class="gun"><img src="${spriteUrl(d.icon)}" alt=""><div><b>${esc(d.name)}</b> <span class="dim">melee · ${Math.round(k.cond * 100)}% · ${k.kills} kills · ${holder ? first(holder) : 'on the rack'}</span>
+      <div class="bd"><i>${esc(d.niche)}</i></div>
+      <div class="bd dim">${esc(d.desc)}</div>
+      <div class="stats">dmg ${p.dmg} · reach ${p.reach}px · swing ${+(p.swingTime + p.recovery).toFixed(2)}s · shove ${p.knock} · stagger ${Math.round(p.stagger * 100)}% · overhead ×${p.crit} · stamina ${p.stamina}${tags.length ? ` · ${tags.join(' · ')}` : ''}</div></div></div>`;
+  }).join('') : '<p class="dim">None. Hatchets and crowbars turn up at the hardware store and the mill; the forge can make a few.</p>'}
+  <p class="dim">Weapons on the rack can be picked up on the wall at night with [Q] or number keys. Worn guns jam. On a daylight run, [T] switches bullet type. Blades and handles wear: sharpen and re-haft at the workbench.</p></div>`;
 }
 
 function chronicleHtml() {
@@ -648,6 +677,11 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
     if (t.dataset.act === 'site') {
       G.flags[`site_${s.id}`] = t.value;
       confirmPlan(s);
+    }
+    if (t.dataset.act === 'melee') {
+      const prev = living().find((o) => o.melee === t.value && o !== s);
+      if (prev) prev.melee = null;
+      s.melee = t.value || null;
     }
     if (t.dataset.act === 'weapon') {
       const prev = living().find((o) => o.weapon === t.value && o !== s);
