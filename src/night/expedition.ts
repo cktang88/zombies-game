@@ -8,6 +8,7 @@ import { depthScale, canvas, bakeSprite, bakeLayer, bakeGround, fgStrip, type Lo
 import { sfx, wind, gunSoundFor, type Surface } from '../audio';
 import { reduceGore, shakeScale } from '../ui/settings';
 import { flashKind, gunFeel, drawFlash, casingLook, voiceOf, panOf, isSuppressed, type FlashKind } from './gunfx';
+import { RunActors } from './actors'; // rigged bodies (src/anim)
 
 /** What underfoot sounds like at each site (footsteps). */
 const SURFACE: Record<string, Surface> = {
@@ -194,6 +195,7 @@ export class Expedition {
   rummageT = 0;
   surface: Surface = 'asphalt';
   decals: { x: number; y: number; w: number; h: number; rot: number; color: string }[] = [];
+  actors = new RunActors(); // rigged bodies: night/actors.ts
 
   constructor(canvas: HTMLCanvasElement, s: Survivor, siteId: string, onEnd: (r: ExpeditionResult) => void) {
     this.canvas = canvas;
@@ -482,6 +484,7 @@ export class Expedition {
     // zombies
     for (const z of this.zs) this.updZ(z, dt);
     this.zs = this.zs.filter((z) => !(z.state === 'dying' && z.dieT > 0.6));
+    this.animate(dt);
     // noise wakes sleepers
     if (this.noise > 0) {
       for (const z of this.zs) if (z.state === 'sleep' && Math.abs(z.x - this.px) < this.noise * 260) z.state = 'walk';
@@ -762,7 +765,10 @@ export class Expedition {
     const armHurt = this.s.wounds.some((w) => w.part === 'larm' || w.part === 'rarm') ? 1.35 : 1;
     this.reload = p.reload * armHurt;
     this.reloadSfx?.cancel();
-    if (p.reloadPerRound) sfx.reload(gunSoundFor(this.w.def).reload, 'shell');
+    // the rig plays it over the reload time and its events voice each stage (Classic: scheduled sfx)
+    const anim = this.actors.reload('p', this.w.def, this.reload, { empty: this.mag <= 0, perRound: p.reloadPerRound, rounds: p.mag - this.mag });
+    if (anim) this.reloadSfx = anim;
+    else if (p.reloadPerRound) sfx.reload(gunSoundFor(this.w.def).reload, 'shell');
     else this.reloadSfx = sfx.reloadFor(this.w.def, this.reload, p.mag - this.mag);
   }
 
@@ -781,6 +787,8 @@ export class Expedition {
   }
 
   muzzle() {
+    const rm = this.actors.muzzle('p');
+    if (rm) return rm;
     return { x: this.px - this.cam + this.face * SH * 0.45, y: GROUND - SH * 0.68 };
   }
 
@@ -970,6 +978,7 @@ export class Expedition {
   kill(z: EZ) {
     if (z.state === 'dying') return;
     const wasOn = z.state === 'grab' ? z.grabWho : undefined;
+    this.actors.onKill(z, this.shooter === 'm' ? { x: this.mateX, y: 0 } : { x: this.px, y: 0 }, this.shooter === 'k');
     z.state = 'dying';
     z.dieT = 0;
     G.stats.kills++;
@@ -1005,6 +1014,7 @@ export class Expedition {
     this.stamina = Math.max(0, this.stamina - p.stamina);
     sfx.melee('swing', this.kn?.def ?? 'fists', { volume: this.swingTired ? 0.7 : 1 });
     this.swingT = Math.max(0.01, p.swingTime * (this.swingTired ? 1.5 : 1));
+    this.actors.swing('p', this.swingT, this.kn?.def);
   }
   fuelNag = -9;
 
@@ -1292,6 +1302,7 @@ export class Expedition {
     // actors, y-sorted by feet (id epsilon breaks ties)
     const list: { y: number; f: () => void }[] = [];
     for (const z of this.zs) list.push({ y: z.y + z.id * 1e-4, f: () => this.drawZ(z) });
+    list.push(...this.actors.drawCorpses(c, this.cam, LANE_LOOK, (y) => Math.max(0, Math.min(2, Math.round((y - LANES[0]) / 24)))));
     list.push({ y: GROUND + 0.5, f: () => this.drawP() });
     if (this.found) list.push({ y: LANES[0] + 0.4, f: () => this.drawFollower() });
     if (this.mate) list.push({ y: LANES[0] + 0.6, f: () => this.drawMate() });
@@ -1351,6 +1362,35 @@ export class Expedition {
     this.hud();
   }
 
+  /** Drive the rigs (night/actors.ts) from this frame of the run. */
+  animate(dt: number) {
+    if (dt <= 0) return;
+    const A = this.actors;
+    const p = A.body('p', this.s.sprite, 11);
+    if (p) A.driveBody(p, dt, {
+      x: this.px, weapon: this.w?.def ?? null, aimX: this.mouse.x, aimY: this.mouse.y, searching: !!this.searching,
+      down: this.downed > 0 || this.dragging, reload: this.reload, mag: this.mag, wounds: this.s.wounds.length,
+    });
+    if (this.mate) {
+      const m = A.body('m', this.mate.sprite, 23);
+      const tz = this.zs.find((z) => z.state !== 'dying' && z.state !== 'sleep' && z.state !== 'kin' && Math.abs(z.x - this.mateX) < 620);
+      const k = depthScale(LANES[0]);
+      if (m) A.driveBody(m, dt, {
+        x: this.mateX, weapon: this.mateW?.def ?? null,
+        aimX: tz ? tz.x - this.cam : this.mateX - this.cam + this.face * 400, aimY: tz ? tz.y - this.zh(tz) * 0.75 : LANES[0] - SH * k * 0.65,
+        searching: false, down: this.mateDown > 0, reload: this.mateReload, mag: this.mateMag, wounds: this.mate.wounds.length,
+        reloadOf: () => { const pf = this.mateProf(); return pf ? { seconds: this.mateReload / (pf.reloadPerRound ? pf.mag : 1), rounds: pf.reloadPerRound ? pf.mag : 1, perRound: pf.reloadPerRound, empty: true } : null; },
+      });
+    }
+    if (this.found && this.fx) {
+      const f = A.body('f', this.found.sprite, 37);
+      if (f) A.driveBody(f, dt, { x: this.fx, weapon: null, aimX: this.fx - this.cam + this.face * 300, aimY: LANES[0] - 100, searching: false, down: false, reload: 0, mag: 0, wounds: 0 });
+    }
+    const alive = new Set<number>();
+    for (const z of this.zs) if (z.state !== 'dying') { alive.add(z.id); A.driveZed(z, dt); }
+    A.update(dt, alive);
+  }
+
   drawP() {
     const c = this.c;
     const im = img(this.s.sprite);
@@ -1359,13 +1399,15 @@ export class Expedition {
     const x = this.px - this.cam;
     const moving = this.keys.has('a') || this.keys.has('d') || this.keys.has('arrowleft') || this.keys.has('arrowright');
     const bob = moving ? -Math.abs(Math.sin(this.t * 9)) * 4 : 0;
-    c.save();
-    c.translate(x - this.face * this.recoil * this.recoil * this.kick * 0.7, GROUND + bob);
-    if (this.downed > 0 || this.dragging) c.rotate(1.45);
-    c.scale(this.face, 1);
-    if (this.kick >= 10 && this.recoil > 0) c.rotate(-this.recoil * this.recoil * 0.035 * (this.kick / 18));
-    c.drawImage(im, -w / 2, -h, w, h);
-    c.restore();
+    if (!this.actors.drawBody(c, 'p', x, GROUND, h, this.face < 0 ? -1 : 1, LANE_LOOK[2])) {
+      c.save();
+      c.translate(x - this.face * this.recoil * this.recoil * this.kick * 0.7, GROUND + bob);
+      if (this.downed > 0 || this.dragging) c.rotate(1.45);
+      c.scale(this.face, 1);
+      if (this.kick >= 10 && this.recoil > 0) c.rotate(-this.recoil * this.recoil * 0.035 * (this.kick / 18));
+      c.drawImage(im, -w / 2, -h, w, h);
+      c.restore();
+    }
     if (this.slashT > 0) {
       const p = this.mprof();
       c.strokeStyle = `rgba(240,230,210,${this.slashT * 6})`;
@@ -1394,13 +1436,16 @@ export class Expedition {
     const h = SH, w = (im.width / im.height) * h;
     const k = depthScale(LANES[0]);
     const x = Math.round(this.mateX - this.cam);
-    c.save();
-    c.translate(x, LANES[0]);
-    if (this.mateDown > 0) { c.rotate(-1.45); c.globalAlpha = 0.9; }
     const tz = this.zs.find((z) => z.state !== 'dying' && z.state !== 'sleep' && Math.abs(z.x - this.mateX) < 620);
-    c.scale((tz ? Math.sign(tz.x - this.mateX) || 1 : this.face) * k, k);
-    c.drawImage(im, -w / 2, -h, w, h);
-    c.restore();
+    const mf = (tz ? Math.sign(tz.x - this.mateX) || 1 : this.face) < 0 ? -1 : 1;
+    if (!this.actors.drawBody(c, 'm', x, LANES[0], h * k, mf, LANE_LOOK[0])) {
+      c.save();
+      c.translate(x, LANES[0]);
+      if (this.mateDown > 0) { c.rotate(-1.45); c.globalAlpha = 0.9; }
+      c.scale(mf * k, k);
+      c.drawImage(im, -w / 2, -h, w, h);
+      c.restore();
+    }
     c.font = '11px "Special Elite", monospace';
     c.textAlign = 'center';
     c.fillStyle = this.mateDown > 0 ? '#c04030' : '#c9b27a';
@@ -1419,6 +1464,7 @@ export class Expedition {
     this.fx = this.fx ? this.fx + (target - this.fx) * 0.05 : target;
     const h = SH, w = (im.width / im.height) * h;
     const k = depthScale(LANES[0]);
+    if (this.actors.drawBody(c, 'f', Math.round(this.fx - this.cam), LANES[0], h * k, this.face < 0 ? -1 : 1, LANE_LOOK[0])) return;
     c.save();
     c.translate(Math.round(this.fx - this.cam), LANES[0]);
     c.scale(this.face * k, k);
@@ -1436,6 +1482,10 @@ export class Expedition {
     const w = (bk.cv.width - bk.pad * 2) * k;
     const x = Math.round(z.x - this.cam);
     if (x < -200 || x > W + 200) return;
+    if (this.actors.drawZed(c, z, this.cam, LANE_LOOK[lane], z.state === 'kin')) {
+      if (z.state === 'sleep') { c.font = '11px "Special Elite", monospace'; c.fillStyle = 'rgba(200,190,170,0.6)'; c.textAlign = 'center'; c.fillText('standing still', x, z.y - h - 8); c.textAlign = 'left'; }
+      return;
+    }
     c.save();
     let rot = 0, dy = 0;
     if (z.state === 'walk') { rot = Math.sin(z.phase * 3.2) * 0.04; dy = -Math.abs(Math.sin(z.phase * 3.2)) * 2.5 * z.sc; }

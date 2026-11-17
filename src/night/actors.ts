@@ -704,5 +704,202 @@ function has(rig: Rig, id: string) { return rig.actions.some((a) => a.clip.id ==
 /** Stop an additive (or any) clip by id. */
 function stopAdd(rig: Rig, id: string) { if (has(rig, id)) rig.stop(id); }
 
-// keep the imports honest for the expedition half (expedition.ts)
-export { WALL_X };
+
+
+
+// ------------------------------------------------------------------ daylight run (expedition.ts)
+/** The run's view of a Turned (expedition.ts EZ). Coordinates: world x, screen y. */
+export interface RunZed { id: number; def: { id: string; height: number; crawl?: boolean; lunge?: boolean }; sprite: string; x: number; y: number; state: string; dir: number; sc: number; lane: number; variant: number; flash: number; headless?: boolean; stun?: number; burn?: number; lungeT: number }
+interface RunBody { rig: Rig; px: number; v: number; weapon: string | null; swingT: number; reload: number; mag: number; wounds: number }
+interface RunCorpse { rig: Rig; x: number; y: number; scale: number; facing: 1 | -1; t: number }
+type RunZR = ZR & { lastState: string };
+const W_RUN = 1280;
+
+export class RunActors {
+  bodies = new Map<string, RunBody>(); // 'p' leader, 'm' companion, 'f' the one found
+  zs = new Map<number, RunZR>();
+  corpses: RunCorpse[] = [];
+  dead = new Set<number>();
+  watch = new FrameWatch();
+  rigMs = 0;
+
+  body(key: string, sprite: string, seed: number): RunBody | null {
+    if (!rigsOn()) return null;
+    let b = this.bodies.get(key);
+    if (b && b.rig.spriteId === sprite) return b;
+    if (!SPRITE_RIGS[sprite] || badSprites.has(sprite)) return null;
+    const rig = createRig('survivor', sprite, { seed });
+    if (getRig(sprite) === undefined) loadRig(sprite).then((a) => noteLoad(sprite, !!a));
+    b = { rig, px: 0, v: 0, weapon: null, swingT: 0, reload: 0, mag: 0, wounds: 0 };
+    this.bodies.set(key, b);
+    return b;
+  }
+  private zr(z: RunZed): RunZR | null {
+    let r = this.zs.get(z.id);
+    if (r) return r;
+    const sr = SPRITE_RIGS[z.sprite];
+    if (!sr || badSprites.has(z.sprite) || sr.kind !== 'turned') return null;
+    const rig = createRig('turned', z.sprite, { seed: z.id * 7919 + 3, style: STYLES[z.def.id] ? z.def.id : sr.style });
+    rig.autoIdle = true;
+    if (getRig(z.sprite) === undefined) loadRig(z.sprite).then((a) => noteLoad(z.sprite, !!a));
+    r = { rig, px: z.x, v: 0, stun: 0, down: 0, wind: 0, crip: false, state: z.state, attack: null, gap: 0, tolled: false, pant: false, seen: 0, ready: false, lastState: '' };
+    this.zs.set(z.id, r);
+    return r;
+  }
+  zH(z: RunZed) { return (z.def.crawl ? ZOMBIES.sleeper.height : z.def.height) * ZS * z.sc; }
+
+  /**
+   * One survivor's frame: weapon (a hand weapon while swinging), ground speed, aim, poses
+   * (rummage while searching, down / dragged), reloads (rising edge of `reload`), shots
+   * (a falling `mag`), a flinch per new wound.
+   */
+  driveBody(b: RunBody, dt: number, o: { x: number; weapon: string | null; aimX: number; aimY: number; searching: boolean; down: boolean; reload: number; reloadOf?: () => { seconds: number; rounds: number; perRound: boolean; empty: boolean } | null; mag: number; wounds: number }) {
+    const rig = b.rig;
+    b.swingT = Math.max(0, b.swingT - dt);
+    if (b.swingT <= 0 && o.weapon !== b.weapon) { rig.setWeapon(o.weapon); b.weapon = o.weapon; }
+    const moved = Math.abs(o.x - b.px) / dt;
+    b.px = o.x;
+    b.v += (Math.min(moved, 300) - b.v) * Math.min(1, dt * 10);
+    rig.setSpeed(b.v);
+    if (!rig.ready) { rig.update(dt); return; }
+    rig.aimAt(o.aimX, o.aimY);
+    if (o.searching && !rig.isPlaying('rummage')) rig.play('rummage');
+    else if (!o.searching && rig.isPlaying('rummage')) rig.stop('rummage');
+    if (o.down) { if (!rig.isPlaying('downed')) rig.play(clip('downed')); }
+    else if (rig.isPlaying('downed')) rig.stop('downed');
+    if (o.reload > 0 && b.reload <= 0 && o.weapon && o.reloadOf) {
+      const r = o.reloadOf();
+      if (r) {
+        if (r.perRound) rig.play('shellIn', { duration: r.seconds, repeat: r.rounds });
+        else rig.reload(r.seconds, { empty: r.empty, rounds: r.rounds });
+      }
+    }
+    b.reload = o.reload;
+    if (o.mag < b.mag && b.swingT <= 0) { rig.fire(1); rig.flashMuzzle = 0; }
+    b.mag = o.mag;
+    if (o.wounds > b.wounds) rig.hit('torso');
+    b.wounds = o.wounds;
+    rig.update(dt);
+  }
+  swing(key: string, wind: number, meleeDef: string | undefined) {
+    const b = this.bodies.get(key);
+    if (!b || !b.rig.ready) return;
+    const wid = meleeDef && MELEE[meleeDef] ? meleeDef : 'hatchet';
+    b.rig.setWeapon(wid);
+    b.weapon = wid;
+    const dur = Math.max(0.25, wind / 0.52);
+    b.swingT = dur + 0.1;
+    b.rig.play(Math.random() < 0.7 ? 'chop' : 'sweep', { duration: dur });
+  }
+  /** The leader's reload, voiced by the rig's events (null: no rig: schedule the sfx). */
+  reload(key: string, weapon: string, seconds: number, o: { empty: boolean; perRound: boolean; rounds: number }): { cancel(): void } | null {
+    if (!rigsOn()) return null;
+    const b = this.bodies.get(key);
+    if (!b || !b.rig.ready || b.weapon !== weapon || !b.rig.anchors) return null;
+    const ev = reloadEventSfx(weapon);
+    const ok = o.perRound ? b.rig.play('shellIn', { duration: seconds, onEvent: (n) => ev(n) }) : b.rig.reload(seconds, { empty: o.empty, rounds: o.rounds, onEvent: (n) => ev(n) });
+    if (!ok) return null;
+    b.reload = seconds; // the rising edge is handled here, not in driveBody
+    return { cancel: () => b.rig.stop() };
+  }
+
+  driveZed(z: RunZed, dt: number) {
+    if (!rigsOn()) return;
+    const r = this.zr(z);
+    if (!r) return;
+    const rig = r.rig;
+    const moved = Math.abs(z.x - r.px) / dt;
+    r.px = z.x;
+    const still = z.state !== 'walk' || (z.stun ?? 0) > 0;
+    r.v += ((still ? 0 : Math.min(moved, 400)) - r.v) * Math.min(1, dt * 10);
+    rig.setSpeed(r.v);
+    if (rig.ready) {
+      if (!r.ready) { r.ready = true; rig.phase = (z.id * 0.6180339) % 1; }
+      if (z.flash > 0.05) rig.flashT = Math.max(rig.flashT, 0.06);
+      if ((z.stun ?? 0) > r.stun + 0.05) rig.play(clip('stagger'), { duration: 0.6 });
+      r.stun = z.stun ?? 0;
+      if (z.state === 'grab') { if (!rig.isPlaying('grabBite')) rig.play('grabBite'); }
+      else if (rig.isPlaying('grabBite')) rig.stop('grabBite');
+      if (z.def.lunge && z.state === 'walk') {
+        const pant = z.lungeT < 0;
+        if (pant && !r.pant) rig.play('pantStop');
+        if (!pant && r.pant) { rig.stop('pantStop'); rig.play('lunge', { duration: 0.8 }); }
+        r.pant = pant;
+      }
+      rig.autoIdle = z.state !== 'grab';
+      rig.hideHead = !!z.headless;
+    }
+    r.lastState = z.state;
+    rig.update(dt);
+  }
+
+  /** After the Turned moved: drop rigs of the gone, step the dead. */
+  update(dt: number, alive: Set<number>) {
+    for (const id of this.zs.keys()) if (!alive.has(id)) this.zs.delete(id);
+    for (const cp of this.corpses) { cp.t += dt; cp.rig.update(dt); }
+    // the run keeps its dead where they fell (no ground canvas): the oldest go first
+    while (this.corpses.length > MAX_RAGDOLLS) this.corpses.shift();
+  }
+
+  onKill(z: RunZed, from: { x: number; y: number } | null, melee: boolean) {
+    const r = this.zs.get(z.id);
+    if (!rigsOn() || !r || !r.rig.ready) return;
+    this.zs.delete(z.id);
+    const rig = r.rig;
+    const dx = from ? Math.sign(z.x - from.x) || 1 : -z.dir || 1;
+    const mag = melee ? 90 : 220;
+    rig.stop();
+    rig.die({ worldImpulse: { x: dx * mag, y: -mag * 0.25 }, at: 'torso', kind: melee ? 'melee' : 'shot', calm: reduceGore(), authored: z.def.id === 'pulper' ? true : undefined, authoredDur: z.def.id === 'pulper' ? 0.3 : undefined });
+    this.dead.add(z.id);
+    this.corpses.push({ rig, x: z.x, y: z.y, scale: this.zH(z) / (rig.asset?.meta.height ?? 240), facing: z.dir >= 0 ? 1 : -1, t: 0 });
+  }
+
+  /** Draw a survivor rig at screen x (true), or leave it to the Classic image. */
+  drawBody(c: CanvasRenderingContext2D, key: string, x: number, y: number, h: number, facing: 1 | -1, look: Look): boolean {
+    if (!rigsOn()) return false;
+    const b = this.bodies.get(key);
+    if (!b || !b.rig.ready) return false;
+    const t0 = performance.now();
+    const scale = h / 240;
+    applyLook(b.rig, { look, variant: 0, lit: true, shade: false, rimColor: WARM, rimA: 0, rimDx: 0, rimDy: 0 }, scale, facing);
+    b.rig.overlay = null;
+    b.rig.draw(c, x, y, scale, facing, undefined, c.getTransform());
+    b.rig.hasDrawn = true;
+    this.rigMs += performance.now() - t0;
+    return true;
+  }
+  drawZed(c: CanvasRenderingContext2D, z: RunZed, cam: number, look: Look, kin: boolean): boolean {
+    if (!rigsOn()) return false;
+    if (z.state === 'dying') return this.dead.has(z.id);
+    const r = this.zs.get(z.id);
+    if (!r || !r.rig.ready) return false;
+    const t0 = performance.now();
+    const rig = r.rig;
+    const scale = this.zH(z) / (rig.asset?.meta.height ?? 240);
+    const facing: 1 | -1 = z.dir >= 0 ? 1 : -1;
+    applyLook(rig, { look: kin ? { ...look, b: look.b * 0.8, s: look.s * 0.4 } : look, variant: z.variant, lit: true, shade: false, rimColor: WARM, rimA: 0, rimDx: 0, rimDy: 0 }, scale, facing);
+    rig.overlay = z.burn && z.burn > 0 ? { src: silAtlas(rig.asset!, BURN), alpha: 0.3 } : null;
+    rig.draw(c, z.x - cam, z.y, scale, facing, undefined, c.getTransform());
+    rig.hasDrawn = true;
+    this.rigMs += performance.now() - t0;
+    return true;
+  }
+  /** The dead in the road, to sort among the actors. Also ticks the frame-time watch. */
+  drawCorpses(c: CanvasRenderingContext2D, cam: number, looks: Look[], laneOf: (y: number) => number): { y: number; f: () => void }[] {
+    this.watch.tick(this.rigMs);
+    this.rigMs = 0;
+    if (!rigsOn()) return [];
+    return this.corpses.filter((cp) => cp.x - cam > -300 && cp.x - cam < W_RUN + 300).map((cp) => ({ y: cp.y - 0.3, f: () => {
+      applyLook(cp.rig, { look: { ...looks[laneOf(cp.y)], b: 0.6, s: 0.6 }, variant: 0, lit: false, shade: false, rimColor: COOL, rimA: 0, rimDx: 0, rimDy: 0 }, cp.scale, cp.facing);
+      cp.rig.overlay = null;
+      cp.rig.draw(c, cp.x - cam, cp.y, cp.scale, cp.facing, undefined, c.getTransform());
+    } }));
+  }
+  /** Where the rig holds the muzzle (screen space), null for Classic. */
+  muzzle(key: string): { x: number; y: number } | null {
+    if (!rigsOn()) return null;
+    const b = this.bodies.get(key);
+    const m = b?.rig.ready && b.rig.hasDrawn ? b.rig.muzzleWorld() : null;
+    return m ? { x: m[0], y: m[1] } : null;
+  }
+}
