@@ -4,7 +4,8 @@ import { openPause } from '../ui/pause';
 import { G, R, log, add, newWeapon, findDoc, uid } from '../state';
 import { ZOMBIES, type ZombieDef } from '../data/zombies';
 import { WEAPONS, fireProfile, ammoTypesFor, ammoLabel, AMMO_TYPES, armorDamage, roundsInStores, shotSound, BURN, FLARE_LIGHT, MODS, wearMods, blastDamage, MELEE, meleeProfile, FISTS, BLEED_TIME, type FireProfile, type MeleeProfile } from '../data/weapons';
-import { SITES, RES_LABEL, type Site } from '../data/world';
+import { SITES, RES_LABEL, RES_ICON, type Site } from '../data/world';
+import { Ticker, caps, hintRow, keycap, capOf, dot, FONT, type Hint } from './hud';
 import { img, flashImg, shadeImg } from '../assets';
 import { depthScale, canvas, bakeSprite, bakeLayer, bakeGround, fgStrip, type Look, type Baked } from './render';
 import { sfx, wind, gunSoundFor, type Surface } from '../audio';
@@ -161,7 +162,8 @@ export class Expedition {
   loot: Partial<Record<Res, number>> = {};
   weapons: string[] = [];
   lines: string[] = [];
-  msgs: { text: string; life: number }[] = [];
+  /** one line of news at a time (night/hud.ts) */
+  msgs = new Ticker();
   found?: Survivor;
   ended = false;
   raf = 0;
@@ -217,7 +219,7 @@ export class Expedition {
   surface: Surface = 'asphalt';
   decals: { x: number; y: number; w: number; h: number; rot: number; color: string }[] = [];
   /** this frame's search prompt (drawn over the actors) */
-  prompt: { text: string; x: number; y: number } | null = null;
+  prompt: { hints: Hint[]; x: number; y: number } | null = null;
   actors = new RunActors(); // rigged bodies: night/actors.ts
 
   /** the road's own decal layer, in world space (brass, blood, chips stay where they land); the
@@ -389,8 +391,7 @@ export class Expedition {
   }
 
   say(text: string, life = 4) {
-    this.msgs.push({ text, life });
-    if (this.msgs.length > 3) this.msgs.shift();
+    this.msgs.push(text, life);
   }
 
   start() {
@@ -553,8 +554,7 @@ export class Expedition {
     this.parts = this.parts.filter((p) => p.life > 0);
     for (const t of this.tracers) t.life -= dt;
     this.tracers = this.tracers.filter((t) => t.life > 0);
-    for (const m of this.msgs) m.life -= dt;
-    this.msgs = this.msgs.filter((m) => m.life > 0);
+    this.msgs.tick(dt);
     if (this.px <= 22 && this.t > 2 && !this.downed && (this.dragging || this.held('run.left'))) this.finish(false);
   }
 
@@ -1336,20 +1336,20 @@ export class Expedition {
       const [id, h] = SPR[sp.kind];
       if (sp.kind === 'drop' && img('obj_duffel')) {
         drawSpot(c, 'obj_duffel', h, false, dusk, x, GROUND - h + 4);
-        if (Math.abs(sp.x - this.px) < 60) { c.font = '13px "Special Elite", monospace'; c.fillStyle = '#efe2c2'; c.textAlign = 'center'; c.fillText(`${keyCap('run.search')} pick up: ${(sp.items ?? []).map(itemLabel).join(', ')}`, x, GROUND - 40); c.textAlign = 'left'; }
+        if (Math.abs(sp.x - this.px) < 60) { c.font = '13px "Special Elite", monospace'; c.fillStyle = '#efe2c2'; c.textAlign = 'center'; c.textAlign = 'left'; this.prompt = { hints: [{ key: 'run.search', label: 'pick up', n: (sp.items ?? []).length }], x, y: GROUND - 40 }; }
         continue;
       }
       if (sp.kind === 'drop') {
         c.fillStyle = '#4a3a26';
         c.beginPath(); c.ellipse(x, GROUND - 10, 18, 12, 0, 0, 7); c.fill();
         c.fillStyle = '#2a2016'; c.fillRect(x - 3, GROUND - 26, 6, 8);
-        if (Math.abs(sp.x - this.px) < 60) { c.font = '13px "Special Elite", monospace'; c.fillStyle = '#efe2c2'; c.textAlign = 'center'; c.fillText(`${keyCap('run.search')} pick up: ${(sp.items ?? []).map(itemLabel).join(', ')}`, x, GROUND - 40); c.textAlign = 'left'; }
+        if (Math.abs(sp.x - this.px) < 60) { c.font = '13px "Special Elite", monospace'; c.fillStyle = '#efe2c2'; c.textAlign = 'center'; c.textAlign = 'left'; this.prompt = { hints: [{ key: 'run.search', label: 'pick up', n: (sp.items ?? []).length }], x, y: GROUND - 40 }; }
         continue;
       }
       drawSpot(c, id, h, sp.searched, dusk, x, GROUND - h + (sp.kind === 'body' ? 6 : 4));
       if (!sp.searched && Math.abs(sp.x - this.px) < 60) {
         // the prompt is drawn after the people, so nobody's head covers it
-        this.prompt = { text: sp.kind === 'truck' ? `${keyCap('run.search')} hotwire the pickup and drive home (2 fuel, 1 part; loud)` : `${keyCap('run.search')} search ${sp.label}${sp.kind === 'cache' ? ' (slow, loud)' : ''}`, x, y: GROUND - h - 14 };
+        this.prompt = { hints: [sp.kind === 'truck' ? { key: 'run.search', label: 'drive home', icon: 'icon_fuel', hot: true } : { key: 'run.search', label: `search ${sp.label}`, icon: sp.kind === 'cache' ? 'icon_st_noise' : undefined }], x, y: GROUND - h - 14 };
       } else if (!sp.searched) {
         c.fillStyle = 'rgba(232,200,120,0.7)';
         c.beginPath(); c.arc(x, GROUND - h - 10, 3, 0, 7); c.fill();
@@ -1389,14 +1389,11 @@ export class Expedition {
     for (const l of list) l.f();
     if (this.prompt) {
       const pr = this.prompt;
-      c.font = '13px "Special Elite", monospace';
-      c.textAlign = 'center';
-      const tw = c.measureText(pr.text).width;
+      c.font = `11px ${FONT}`;
+      const tw = pr.hints.reduce((a, h) => a + c.measureText(h.label).width + 50, 0);
       const px = Math.min(W - 10 - tw / 2, Math.max(10 + tw / 2, pr.x));
-      c.fillStyle = 'rgba(10,9,8,0.55)'; c.fillRect(px - tw / 2 - 5, pr.y - 13, tw + 10, 18);
-      c.fillStyle = '#efe2c2';
-      c.fillText(pr.text, px, pr.y);
-      c.textAlign = 'left';
+      c.fillStyle = 'rgba(10,9,8,0.55)'; c.beginPath(); c.roundRect(px - tw / 2 - 6, pr.y - 16, tw + 12, 22, 4); c.fill();
+      hintRow(c, pr.hints, px, pr.y, 'center');
       this.prompt = null;
     }
     // foreground strip at 1.3x camera speed
@@ -1607,86 +1604,95 @@ export class Expedition {
 
   hud() {
     const c = this.c;
-    c.font = '15px "Special Elite", monospace';
-    c.fillStyle = '#e8dcc0';
     c.textAlign = 'left';
-    c.fillText(`${this.site.name} · ${first(this.s)}`, 20, 30);
+    // top left: where and who (small caps), then the bars with their pictures, no words
+    c.fillStyle = 'rgba(10,9,8,0.55)';
+    c.beginPath(); c.roundRect(14, 12, 236, this.mate ? 106 : 92, 4); c.fill();
+    caps(c, `${this.site.name}`, 22, 26, '#c9a95a');
+    caps(c, `${first(this.s)}  ·  ${ZONE_NAMES[this.zoneOf(this.px)]}`, 22, 38, '#a89c84');
+    const bar = (icon: string, y: number, f: number, col: string, word?: string, wordCol = '#c04030') => {
+      const ic = img(icon);
+      if (ic) c.drawImage(ic, 22, y - 7, 14, 14 * (ic.height / ic.width));
+      c.fillStyle = 'rgba(0,0,0,0.6)'; c.fillRect(42, y - 2, 150, 5);
+      c.fillStyle = col; c.fillRect(42, y - 2, 150 * Math.max(0, Math.min(1, f)), 5);
+      if (word) caps(c, word, 198, y + 4, wordCol);
+    };
     const dl = Math.max(0, this.daylight);
-    c.fillStyle = 'rgba(0,0,0,0.6)';
-    c.fillRect(20, 40, 200, 8);
-    c.fillStyle = dl > 40 ? '#c9b27a' : '#b0502c';
-    c.fillRect(20, 40, 200 * (dl / this.dayMax), 8);
-    c.font = '11px "Special Elite", monospace';
-    c.fillStyle = '#a89c84';
-    c.fillText(this.daylight > 0 ? 'daylight left' : 'DUSK — get home', 228, 48);
+    bar('icon_st_time', 52, dl / this.dayMax, dl > 40 ? '#c9b27a' : '#b0502c', this.daylight > 0 ? undefined : 'dusk');
     const hp = Math.max(0, 1 - pain(this.s) / 1.45);
-    c.fillStyle = 'rgba(0,0,0,0.6)';
-    c.fillRect(20, 56, 200, 6);
-    c.fillStyle = hp > 0.5 ? '#9db070' : '#c04030';
-    c.fillRect(20, 56, 200 * hp, 6);
+    bar('icon_st_wound', 66, hp, hp > 0.5 ? '#9db070' : '#c04030');
+    bar('icon_st_tired', 80, this.stamina / 100, this.stamina < 25 ? '#b0502c' : '#8aa6c0');
+    bar('icon_st_noise', 94, this.heat / 6, this.heat >= 2 ? '#c04030' : '#8a7a5a', this.heat >= 2 ? 'followed' : undefined);
+    if (this.mate) {
+      const mh = Math.max(0, 1 - pain(this.mate) / 1.45);
+      dot(c, 26, 106, this.mateDown ? '#c04030' : mh > 0.5 ? '#9db070' : '#d0a040', 3);
+      c.font = `11px ${FONT}`; c.fillStyle = '#cfc3a6'; c.fillText(first(this.mate), 36, 110);
+      if (this.mateW) { c.textAlign = 'right'; c.fillText(`${this.mateMag}`, 192, 110); c.textAlign = 'left'; }
+    }
     // progress along the street
     c.fillStyle = 'rgba(0,0,0,0.5)';
     c.fillRect(W / 2 - 150, 24, 300, 4);
     c.fillStyle = '#d9c9a0';
     c.fillRect(W / 2 - 150 + 300 * (this.px / this.len) - 2, 20, 4, 12);
     for (const sp of this.spots) { c.fillStyle = sp.searched ? '#555' : '#c9b27a'; c.fillRect(W / 2 - 150 + 300 * (sp.x / this.len), 25, 2, 2); }
-    // stamina
-    c.fillStyle = 'rgba(0,0,0,0.6)';
-    c.fillRect(20, 63, 200, 3);
-    c.fillStyle = this.stamina < 25 ? '#b0502c' : '#8aa6c0';
-    c.fillRect(20, 63, 2 * this.stamina, 3);
-    c.textAlign = 'right';
-    c.fillStyle = '#a89c84';
-    c.fillText(`${this.kn ? `${MELEE[this.kn.def].name} ${Math.round(this.kn.cond * 100)}%` : 'fists'} ${keyCap('run.swing')}`, W - 20, H - 64);
-    c.textAlign = 'left';
-    // heat & zone
-    c.fillStyle = 'rgba(0,0,0,0.6)';
-    c.fillRect(20, 68, 200, 6);
-    c.fillStyle = this.heat >= 2 ? '#c04030' : '#8a7a5a';
-    c.fillRect(20, 68, 200 * Math.min(1, this.heat / 6), 6);
-    c.fillStyle = '#a89c84';
-    c.fillText(this.heat >= 2 ? 'NOISE — they are following you' : 'noise', 228, 74);
-    c.fillText(`zone ${this.zoneOf(this.px) + 1}: ${ZONE_NAMES[this.zoneOf(this.px)]}`, 20, 90);
     for (const bx of this.zoneB) { c.fillStyle = '#b0502c'; c.fillRect(W / 2 - 150 + 300 * (bx / this.len) - 1, 18, 2, 14); }
-    if (this.mate) {
-      const mh = Math.max(0, 1 - pain(this.mate) / 1.45);
-      c.fillStyle = 'rgba(0,0,0,0.6)'; c.fillRect(20, 98, 120, 5);
-      c.fillStyle = this.mateDown ? '#c04030' : '#9db070'; c.fillRect(20, 98, 120 * mh, 5);
-      c.fillStyle = '#a89c84'; c.fillText(`${first(this.mate)}${this.mateW ? ` · ${this.mateMag}` : ' · unarmed'}`, 148, 104);
-    }
-    // the pack
+    // the pack: a row of pictures with counts; the selected one boxed; words on the selected only
     const used = this.slots(), cap = this.cap();
-    c.font = '12px "Special Elite", monospace';
-    c.fillStyle = used > cap ? '#c04030' : '#c9b27a';
-    c.fillText(`pack ${used}/${cap}${used > cap ? ' — OVERLOADED, slowed' : ''}${this.pack.length ? `  ${keyCap('run.pack')} pick · ${keyCap('run.drop')} leave it` : ''}`, 20, H - 40);
+    caps(c, `pack ${used}/${cap}`, 20, H - 52, used > cap ? '#e05040' : '#c9b27a');
+    if (used > cap) caps(c, 'overloaded', 100, H - 52, '#e05040');
+    const iconOf = (it: PackItem) => (it.kind === 'res' ? RES_ICON[it.res] : it.kind === 'gun' ? WEAPONS[it.def].icon : it.kind === 'melee' ? MELEE[it.def].icon : MODS[it.def]?.icon) ?? '';
     let px = 20;
+    const selI = this.sel % Math.max(1, this.pack.length);
     this.pack.forEach((it, i) => {
-      const t = `${itemLabel(it)} (${itemSlots(it)})`;
-      c.fillStyle = i === this.sel % Math.max(1, this.pack.length) ? '#efe2c2' : '#8a7e66';
-      if (i === this.sel % Math.max(1, this.pack.length)) c.fillRect(px - 2, H - 16, c.measureText(t).width + 4, 1);
-      c.fillText(t, px, H - 20);
-      px += c.measureText(t).width + 12;
+      const ic = img(iconOf(it));
+      const ih = 24, iw = ic ? Math.min(56, (ic.width / ic.height) * ih) : 24;
+      const on = i === selI;
+      c.fillStyle = on ? 'rgba(80,66,40,0.75)' : 'rgba(10,9,8,0.55)';
+      c.strokeStyle = on ? '#e0c070' : 'rgba(200,190,160,0.25)';
+      c.beginPath(); c.roundRect(px, H - 44, iw + 10, 32, 3); c.fill(); c.stroke();
+      if (ic) c.drawImage(ic, px + 5, H - 40, iw, iw * (ic.height / ic.width) > ih ? ih : iw * (ic.height / ic.width));
+      else caps(c, itemLabel(it).slice(0, 4), px + 4, H - 24, '#cfc3a6');
+      if (it.kind === 'res') { c.font = `11px ${FONT}`; c.textAlign = 'right'; c.fillStyle = '#efe2c2'; c.fillText(`${it.n}`, px + iw + 8, H - 15); c.textAlign = 'left'; }
+      px += iw + 14;
     });
-    if (!this.pack.length) { c.fillStyle = '#8a7e66'; c.fillText('empty', 20, H - 20); }
+    if (!this.pack.length) caps(c, 'empty', 20, H - 24, '#8a7e66');
+    else {
+      const it = this.pack[selI];
+      if (it) { c.font = `11px ${FONT}`; c.fillStyle = '#cfc3a6'; c.fillText(itemLabel(it), px + 6, H - 24); px += c.measureText(itemLabel(it)).width + 16; }
+      hintRow(c, [{ key: 'run.pack', label: '' }, { key: 'run.drop', label: 'drop' }], px, H - 23, 'left', 0.6);
+    }
+    // the gun: icon, big mag, small reserve, ammo picture; melee as keycap + picture
+    c.shadowColor = 'rgba(0,0,0,0.9)'; c.shadowBlur = 3;
     if (this.w) {
       const def = WEAPONS[this.w.def];
       const p = this.prof()!;
       const left = roundsInStores(p, G.stores);
+      const gi = img(def.icon);
+      if (gi) { const ih = 36, iw = Math.min(120, (gi.width / gi.height) * ih); c.drawImage(gi, W - 290, H - 66, iw, (gi.height / gi.width) * iw); }
+      const magX = W - 84;
       c.textAlign = 'right';
-      c.font = `${Math.round(20 + this.ammoPunch * 4)}px "Special Elite", monospace`;
+      c.font = `${Math.round(34 + this.ammoPunch * 5)}px ${FONT}`;
       c.fillStyle = this.mag ? (this.ammoPunch > 0.5 ? '#fff6dc' : '#efe2c2') : '#c04030';
-      c.fillText(`${this.mag} / ${Number.isFinite(left) ? left : '∞'}`, W - 20, H - 20 - this.ammoPunch * 2);
-      c.font = '12px "Special Elite", monospace';
-      c.fillStyle = '#a89c84';
-      const multi = ammoTypesFor(this.w.def).length > 1;
-      c.fillText(this.reload > 0 ? 'reloading…' : `${def.name} · ${ammoLabel(p.ammoRes).toLowerCase()}${multi ? ` ${keyCap('run.ammo')}` : ''}`, W - 20, H - 46);
+      c.fillText(`${this.mag}`, magX, H - 20 - this.ammoPunch * 2);
+      c.textAlign = 'left';
+      c.font = `14px ${FONT}`; c.fillStyle = '#a89c84';
+      c.fillText(`/${Number.isFinite(left) ? left : '∞'}`, magX + 6, H - 22);
+      caps(c, this.reload > 0 ? 'reloading…' : def.name, W - 20, H - 70, '#9a8e76', 'right');
+      const at = p.ammoRes ? AMMO_TYPES[p.ammoRes] : undefined;
+      const aw = caps(c, at?.short ?? ammoLabel(p.ammoRes), W - 20, H - 54, '#b8ab90', 'right');
+      const aic = at ? img(at.icon) : undefined;
+      if (aic) { const iw = (aic.width / aic.height) * 13; c.drawImage(aic, W - 24 - aw - iw, H - 64, iw, 13); }
+      if (ammoTypesFor(this.w.def).length > 1 && this.mag === 0) hintRow(c, [{ key: 'run.ammo', label: 'ammo', hot: true }], W - 20, H - 92, 'right');
     }
-    c.textAlign = 'center';
-    this.msgs.forEach((m, i) => {
-      c.font = '16px "Special Elite", monospace';
-      c.fillStyle = `rgba(232,220,192,${Math.min(1, m.life)})`;
-      c.fillText(m.text, W / 2, 80 + i * 24);
-    });
+    {
+      const kx = W - 290, ky = H - 76;
+      const kw = keycap(c, capOf('run.swing'), kx, ky);
+      const mi = this.kn ? img(MELEE[this.kn.def].icon) : undefined;
+      if (mi) { const iw = Math.min(44, (mi.width / mi.height) * 16); c.drawImage(mi, kx + kw + 5, ky - 13, iw, 16); if (this.kn!.cond < 0.35) caps(c, 'worn', kx + kw + iw + 10, ky - 1, '#c08040'); }
+      else caps(c, this.kn ? MELEE[this.kn.def].name : 'fists', kx + kw + 5, ky - 1);
+    }
+    c.shadowBlur = 0; c.shadowColor = 'transparent';
+    this.msgs.draw(c, W, 84, 16);
     // crosshair
     if (this.w) {
       const p = this.prof()!;
