@@ -2060,6 +2060,7 @@ export class Battle {
     this.castShot(null as unknown as Guard, tu.x + 20, tu.y, tu.ang + R.gauss(0, 0.04), 18, 1, 2, false, false, undefined, tgt.y);
     tu.cd = 0.3;
     tu.flash = 0.05;
+    this.vfx.muzzle({ x: tu.x + 20, y: tu.y, ang: tu.ang, defId: 'nailer', key: tu });
     this.noise += 0.15;
     sfx.shoot('nailer', { far: 0.5, pan: panOf(tu.x) * 0.6, volume: 0.7 });
   }

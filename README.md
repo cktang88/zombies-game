@@ -82,7 +82,7 @@ One ledger page, reachable from the title, the day screen (⚙) and the **pause 
 Everything is TypeScript: the game is Vite + strict TS (`src/`), and the tooling scripts (`tools/*.ts`) run through `tsx` and are typechecked by `tools/tsconfig.json`.
 ```
 npm ci
-npm run dev                                   # http://localhost:5173 (also /animlab.html, /soundboard.html)
+npm run dev                                   # http://localhost:5173 (also /animlab.html, /fxlab.html, /soundboard.html)
 npm run typecheck                             # strict TS for src/ and tools/
 npm run build                                 # typecheck + vite build (game, anim lab, sound board)
 npm run simtest -- 9                          # headless 30-day soak of the sim layer (+ economy check)
@@ -103,7 +103,7 @@ Debug handles in the browser console: `__G` (the state), `__story` (`night(day)`
 - **Rig parts** (`tools/gen-parts.ts`, `tools/segment.ts`, `tools/rigs/`): a reference-guided "rig pose" image per character, cut into parts by nearest bone from the joints placed in `tools/rigs/<sprite>.json`. See [research 09](docs/research/09-animation.md).
 - **Sound** (`tools/sfx-fetch.py`, `tools/sfx-build.py`): fetches CC0 packs from OpenGameArt (refuses anything that isn't CC0), trims, loudness-matches and encodes them to `public/sfx/`, and regenerates `src/audio/sample-manifest.ts` and `CREDITS.md`.
 - **Balance** (`tools/balance.ts`), **sim soak** (`tools/simtest.ts`), **ragdoll check** (`tools/ragdoll-check.ts`), **staged save** (`tools/stage-save.ts`).
-- **Pages:** `animlab.html` (every rig, gait, clip, death; `?bench=1` runs the 150-Turned benchmark) and `soundboard.html` (every procedural and recorded sound).
+- **Pages:** `animlab.html` (every rig, gait, clip, death; `?bench=1` runs the 150-Turned benchmark), `fxlab.html` (fire every gun and set off every effect, lit or unlit, any Effects quality; docs/research/10-vfx.md) and `soundboard.html` (every procedural and recorded sound).
 
 ## Docs
 - [Design document](docs/DESIGN.md) (with the roadmap) · [Balance](docs/balance.md)

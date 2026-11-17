@@ -42,6 +42,8 @@ export interface FlashSpec {
   tint?: number;
   /** flame cone particles (dragon's breath) */
   cone?: number;
+  /** two barrels side by side: the plume doubled this many px apart (the coach gun's both-barrels blast) */
+  twin?: number;
 }
 
 export type RoundKind = 'bullet' | 'pellet' | 'slug' | 'ball' | 'arrow' | 'bolt' | 'nail' | 'rivet' | 'flare' | 'rocket' | 'dragon' | 'none';
@@ -76,7 +78,7 @@ export const FLASHES = {
   rifle: F({ core: 14, plume: 70, plumeW: 22, petals: 2, petalLen: 22, petalA: 0.55, ball: 22, ballOff: 40, disc: 10, bloom: 120, sparks: 4, smoke: 3, smokeSize: 12, light: 300, wash: 0.05, life: 0.06 }),
   marksman: F({ core: 15, plume: 78, plumeW: 22, petals: 4, petalLen: 24, petalA: 0.45, ball: 24, ballOff: 44, disc: 10, bloom: 130, sparks: 4, smoke: 3, smokeSize: 13, light: 310, wash: 0.06, life: 0.06 }),
   shotgun: F({ core: 16, plume: 52, plumeW: 34, petals: 4, petalLen: 22, petalA: 0.75, ball: 30, ballOff: 30, disc: 9, bloom: 130, sparks: 9, smoke: 4, smokeSize: 14, light: 300, wash: 0.06, life: 0.065 }),
-  coach: F({ core: 20, plume: 70, plumeW: 44, petals: 6, petalLen: 28, petalA: 0.8, ball: 42, ballOff: 38, disc: 12, bloom: 170, sparks: 16, smoke: 7, smokeSize: 18, light: 380, wash: 0.1, life: 0.08 }),
+  coach: F({ twin: 4, core: 20, plume: 70, plumeW: 44, petals: 6, petalLen: 28, petalA: 0.8, ball: 42, ballOff: 38, disc: 12, bloom: 170, sparks: 16, smoke: 7, smokeSize: 18, light: 380, wash: 0.1, life: 0.08 }),
   snake: F({ core: 11, plume: 34, plumeW: 24, petals: 2, petalLen: 16, petalA: 0.8, ball: 18, ballOff: 20, disc: 6, bloom: 90, sparks: 6, smoke: 3, smokeSize: 10, light: 230, life: 0.055 }),
   pipe: F({ core: 15, plume: 48, plumeW: 36, petals: 5, petalLen: 24, petalA: 1.0, ball: 30, ballOff: 26, disc: 8, bloom: 130, sparks: 22, smoke: 7, smokeSize: 15, smokeCol: 'dark', light: 300, wash: 0.07, life: 0.08 }),
   muzzle: F({ core: 18, plume: 84, plumeW: 34, petals: 2, petalLen: 26, petalA: 0.5, ball: 46, ballOff: 48, disc: 12, bloom: 180, sparks: 28, smoke: 18, smokeSize: 20, smokeCol: 'powder', light: 360, gap: 40, wash: 0.1, life: 0.1 }),
@@ -137,7 +139,8 @@ export function gunLook(defId: string | undefined, p: FireProfile | undefined, s
   const key = `${id}|${p?.cls ?? ''}|${p?.pellets ?? 0}|${p?.incendiary ? 1 : 0}|${p?.flare ? 1 : 0}|${suppressed ? 1 : 0}`;
   const hit = cache.get(key);
   if (hit) return hit;
-  let L0 = BY_ID[id] ?? (p ? BY_CLS[p.cls] : undefined) ?? BY_ID.service9;
+  // no gun and no profile: the battle's own nail turret
+  let L0 = BY_ID[id] ?? (p ? BY_CLS[p.cls] : undefined) ?? (defId ? BY_ID.service9 : BY_ID.nailer);
   if (p) {
     const shotgun = L0.round === 'pellet';
     if (shotgun && p.incendiary && p.pellets > 1) L0 = { ...L0, flash: FLASHES.dragon, round: 'dragon', speed: 2600, width: 1.6 };

@@ -402,6 +402,7 @@ export class Emplacements implements BattleHook {
     b.castShot(null as unknown as Guardian, mz.x, mz.y, m.ang + R.gauss(0, m.def.spread), m.def.dmg, m.def.pierce, m.def.knock, false, false, m.fx, tgt.y);
     m.cd = 1 / m.def.rof;
     m.flash = 0.05;
+    b.vfx.muzzle({ x: mz.x, y: mz.y, ang: m.ang, defId: 'nailer', prof: m.fx, key: m });
     b.noise += m.def.noise;
     sfx.shoot('nailer', { far: 0.5, volume: 0.7 });
   }

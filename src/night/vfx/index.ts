@@ -652,7 +652,7 @@ export class Vfx {
       // trails
       if (!r.arrived && (r.kind === 'flare' || r.kind === 'rocket' || r.fire)) {
         r.emit += dt;
-        const step = r.kind === 'rocket' ? 0.008 : r.kind === 'flare' ? 0.01 : 0.016;
+        const step = (r.kind === 'rocket' ? 0.005 : r.kind === 'flare' ? 0.01 : 0.016) / Math.max(0.4, this.qk);
         while (r.emit > step) {
           r.emit -= step;
           // spread the sub-steps back along the path, so the trail is a ribbon, not beads
@@ -660,9 +660,11 @@ export class Vfx {
           if (r.kind === 'rocket') {
             const j = P.add(SMOKE, hx - r.dx * 14, hy - r.dy * 14, rr(1.6, 2.8));
             P.vx[j] = -r.dx * 40 + rr(-10, 10); P.vy[j] = -r.dy * 40 + rr(-14, 4); P.drag[j] = 1.5; P.grav[j] = -8;
-            P.s0[j] = 7; P.s1[j] = rr(24, 38); P.a0[j] = 0.45; P.col[j] = pc('steam'); P.flags[j] = F_WIND; P.rot[j] = rr(0, 6);
-            const k = P.add(FIRE, hx - r.dx * 12, hy - r.dy * 12, 0.09);
-            P.vx[k] = -r.dx * 300; P.vy[k] = -r.dy * 300; P.s0[k] = 6; P.s1[k] = 12; P.col[k] = 0;
+            P.s0[j] = 11; P.s1[j] = rr(26, 40); P.a0[j] = 0.4; P.col[j] = pc('steam'); P.flags[j] = F_WIND; P.rot[j] = rr(0, 6);
+            if (this.chance(0.3)) {
+              const k = P.add(FIRE, hx - r.dx * 12, hy - r.dy * 12, 0.06);
+              P.vx[k] = -r.dx * 300; P.vy[k] = -r.dy * 300; P.s0[k] = 5; P.s1[k] = 9; P.col[k] = 0;
+            }
           } else if (r.kind === 'flare') {
             const j = P.add(SMOKE, hx, hy, rr(1.2, 2));
             P.vy[j] = -10; P.s0[j] = 4; P.s1[j] = rr(12, 18); P.a0[j] = 0.35; P.col[j] = pc('flare'); P.flags[j] = F_WIND; P.rot[j] = rr(0, 6);
@@ -1109,6 +1111,7 @@ export class Vfx {
         const L = sp.plume * s * (0.75 + 0.5 * Math.min(1, k * 2.5));
         const W = sp.plumeW * s * (1 + 0.3 * k);
         rot(c, m, S.plume[v], f.x, f.y, L, W, f.ang + (f.seed - 0.5) * 0.08, 0.03, 0.5, I);
+        if (sp.twin) rot(c, m, S.plume[(v + 2) % 6], f.x - sa * sp.twin * s, f.y + ca * sp.twin * s, L * 0.92, W * 0.9, f.ang - 0.05, 0.03, 0.5, I);
         rot(c, m, S.plume[(v + 3) % 6], f.x, f.y, L * 0.55, W * 0.7, f.ang, 0.03, 0.5, I);
       }
       // side petals: the star (pistols), the birdcage prongs (AR, LMG), the brake jets
