@@ -1,4 +1,5 @@
 import type { Res } from '../types';
+import { TRAP_RECIPES } from './traps';
 
 // ---------- scavenging sites around Vessey ----------
 export interface Site {
@@ -64,6 +65,8 @@ export interface Recipe {
   weapon?: string;
   melee?: string; // MELEE key: a hand weapon goes into G.melee
   mod?: string; // MODS key: an attachment goes onto the bench (G.modStock)
+  trap?: string; // TRAPS key: makes trap kits into G.trapStock (see data/traps.ts)
+  trapCount?: number; // kits per craft (default 1)
   special?: 'spikes' | 'wire' | 'light' | 'trap' | 'armor' | 'molotov' | 'liquor' | 'fortify' | 'repair' | 'turret' | 'duffel' | 'repairMelee';
   desc: string;
 }
@@ -126,6 +129,8 @@ export const RECIPES: Recipe[] = [
   { id: 'fuel', name: 'Distill fuel ×4', needs: 'still', cost: { food: 3, wood: 2 }, work: 3, gives: { fuel: 4 }, desc: 'Rot and sawdust to ethanol.' },
   { id: 'bandage', name: 'Field dressings', needs: 'infirmary', cost: { cloth: 3, fuel: 1 }, work: 2, gives: { meds: 1 }, desc: 'Boiled linen and moonshine.' },
 ];
+// --- trap kits (data/traps.ts): placed on the road at dusk with the deployment planner ---
+RECIPES.push(...TRAP_RECIPES);
 
 export const RES_LABEL: Record<Res, string> = {
   food: 'Food', scrap: 'Scrap', wood: 'Timber', parts: 'Parts', meds: 'Medicine', fuel: 'Fuel', cloth: 'Cloth', light: 'Pistol ammo', shell: 'Shells', rifle: 'Rifle ammo', liquor: 'Liquor', molotov: 'Firebombs',
