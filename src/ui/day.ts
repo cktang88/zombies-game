@@ -376,7 +376,7 @@ function detailHtml(s: Survivor) {
   const body = fold(`<span class="t-l">Body</span><span class="sv-meta">${wounds.length ? `${ico('st_wound', '', 'sm')}${wounds.length} wound${wounds.length > 1 ? 's' : ''}` : 'whole'} · rested ${Math.round(s.rest * 100)}%</span>`,
     `${wounds.map((w) => `<div class="sv-wound"${tip(`<b>${esc(woundLabel(w))}</b><br>${Math.round(w.severity * 100)}% severe${w.tended ? ' · tended' : ' · untended'}${w.bleeding ? '<br>Bleeding.' : ''}${w.infected ? (w.kind === 'bite' ? '<br>The Turn.' : '<br>Infected.') : ''}`)}>${ico(w.kind === 'bite' ? 'st_bite' : 'st_wound', '', 'sm')}<span>${esc(woundLabel(w))}</span><span class="xpbar sev"><i style="width:${w.severity * 100}%"></i></span>${w.bleeding ? '<b class="neg">bleeding</b>' : ''}${w.infected ? `<b class="neg">${w.kind === 'bite' ? 'the Turn' : 'infected'}</b>` : ''}${w.tended ? '<span class="t-xs">tended</span>' : ''}</div>`).join('') || '<div class="t-s">Whole, for now.</div>'}
     ${s.scars.length ? `<div class="sv-chips">${s.scars.map((sc) => `<span class="chip"${tip('<b>Scar</b><br>For good.')}><b>${esc(sc.label)}</b></span>`).join('')}</div>` : ''}
-    <div class="sv-chips">${stChip('tired', `${Math.round(s.rest * 100)}%`, `<b>Rested ${Math.round(s.rest * 100)}%</b>`)}${stChip('hungry', `${Math.round(s.hunger * 100)}%`, `<b>Fed ${Math.round(s.hunger * 100)}%</b>`)}</div>`,
+    <div class="sv-chips">${stChip('hungry', `${Math.round(s.hunger * 100)}%`, `<b>Fed ${Math.round(s.hunger * 100)}%</b>`)}</div>`,
     { id: 'sv-body', open: wounds.length > 0, cls: 'sv-fold' });
 
   const people = fold(`<span class="t-l">People</span><span class="sv-meta">${rels.length}</span>`,
@@ -403,7 +403,7 @@ function detailHtml(s: Survivor) {
         <h2 class="t-xl">${esc(displayName(s))}</h2>
         ${s.titles?.length ? `<div class="titles t-s">${s.titles.map((t) => `<span>“${esc(t)}”</span>`).join(' ')}</div>` : ''}
         <div class="t-s sv-line"><span${tip(`${s.sex === 'm' ? 'Man' : 'Woman'}, ${s.age}`)}>${s.age}</span> · <span${tip('Arrived at the house')}>since ${dateLabel(s.arrivedDay)}</span> · <span${tip('Turned put down, all told')}>${s.kills} put down</span>${s.dead ? ` · <b>died ${dateLabel(s.dead.day)}</b>` : ''}</div>
-        <div class="sv-state">${s.dead ? '' : moodChip(s)}${s.dead ? '' : statusTags(s)}</div>
+        ${s.dead ? '' : `<div class="sv-state">${statusTags(s)}</div>`}
         ${s.dead ? `<p class="story epitaph">${esc(s.dead.cause)}. <i>${esc(s.dead.epitaph)}</i></p>` : ''}
       </div>
     </div>
