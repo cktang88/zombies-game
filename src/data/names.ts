@@ -62,6 +62,16 @@ export const OUTBREAK: string[] = [
   'Heard the All Saints\' bell ring for forty minutes and walked toward it, then thought better.',
 ];
 
+/** One line per skill: the job it does and the decision it drives (shown on the survivor sheet). */
+export const SKILL_LINES: Record<SkillId, string> = {
+  shooting: 'Aim, reloads and jams on any gun, and the gun nests. Who stands the wall.',
+  building: 'Wall repairs and bench work. Who keeps the house up.',
+  medicine: 'Wounds dressed a day; dressed, they heal 3× faster. Who tends.',
+  scavenging: 'A bigger haul and less trouble on a search. Who goes out.',
+  social: 'The radio at dusk and talking the frayed down. Who counsels.',
+};
+export const COURAGE_LINE = 'Holds the wall when it breaks; panics less. Grows each night held.';
+
 export const SKILL_NAMES: Record<SkillId, string> = {
   shooting: 'Shooting', building: 'Building', medicine: 'Medicine', scavenging: 'Scavenging', social: 'Social',
 };

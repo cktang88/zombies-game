@@ -6,7 +6,7 @@ import { spriteUrl } from '../assets';
 import { portraitImg } from './portrait';
 import { WEAPONS, MELEE, meleeProfile, CLASS_NAMES, CALIBERS, AMMO_TYPES, MODS, MOD_SLOTS, fireProfile, ammoTypesFor, ammoLabel, selectedAmmo, slotsFor, attachMod, detachMod, type FireProfile } from '../data/weapons';
 import { TRAITS } from '../data/traits';
-import { SKILL_NAMES } from '../data/names';
+import { SKILL_NAMES, SKILL_LINES, COURAGE_LINE } from '../data/names';
 import { SITES, BUILDINGS, RECIPES, RES_LABEL, RES_ICON, FORT_CAP } from '../data/world';
 import {
   living, displayName, first, moodBreakdown, computeMood, moodWord, breakThresholds, pain, woundLabel, byId, canWork, canFight,
@@ -329,14 +329,14 @@ function survivorCard(s: Survivor, dots: Set<string> = new Set()) {
 }
 
 // one row on the survivor sheet: icon, pips (dark = at arrival, bright = learned here), the xp bar; numbers on hover
-function progRow(s: Survivor, k: ProgressKey, name: string, icon: string, passion = false) {
+function progRow(s: Survivor, k: ProgressKey, name: string, icon: string, passion = false, line = '') {
   const cur = level(s, k);
   const base = Math.min(cur, (s.base?.[k] as number | undefined) ?? cur);
   const xp = xpProgress(s, k);
   const t = `<b>${esc(name)} ${cur}</b><br>${base} at arrival${cur > base ? `, +${cur - base} learned here` : ''}<br>${cur >= 10 ? 'Mastered' : `${Math.round(xp * 100)}% to ${cur + 1}`}${passion ? '<br>Passion: learns 50% faster' : ''}`;
   return `<div class="sv-prog"${tip(t)}><span class="sv-pi">${ico(icon, '', 'sm')}${passion ? '<i class="pas">♦</i>' : ''}</span><span class="sv-pn t-s">${esc(name)}</span>
     <span class="pips sv-pips">${'<i class="on"></i>'.repeat(base)}${'<i class="on new"></i>'.repeat(cur - base)}${'<i></i>'.repeat(Math.max(0, 10 - cur))}</span>
-    <b class="sv-lv">${cur}</b><span class="xpbar"><i style="width:${xp * 100}%"></i></span></div>`;
+    <b class="sv-lv">${cur}</b><span class="xpbar"><i style="width:${xp * 100}%"></i></span>${line ? `<span class="sv-pl t-s">${esc(line)}</span>` : ''}</div>`;
 }
 
 // Perks kept (chips), and offers waiting (a skill reached 4 or 7): pick one, or they pick at the second dawn.
@@ -364,15 +364,15 @@ function detailHtml(s: Survivor) {
   const best = topSkills(s, 1)[0];
   const mp = (p: { label: string; v: number }) => `<div class="mp ${p.v >= 0 ? 'pos' : 'neg'}"><span>${esc(p.label)}</span><b>${signed(p.v)}</b></div>`;
 
-  const traits = fold(`<span class="t-l">Traits</span><span class="sv-meta">${s.traits.map((t) => esc(TRAITS[t].name)).join(' · ')}</span>`,
-    `<div class="sv-chips">${s.traits.map((t) => `<span class="chip"${tip(`<b>${esc(TRAITS[t].name)}</b><br>${esc(TRAITS[t].desc)}`)}>${ico('st_trait', '', 'sm')}<b>${esc(TRAITS[t].name)}</b></span>`).join('')}</div>`,
+  const traits = fold(`<span class="t-l">Traits</span><span class="sv-meta">${s.traits.filter((t) => TRAITS[t]).map((t) => esc(TRAITS[t].name)).join(' · ')}</span>`,
+    `<div class="sv-chips">${s.traits.filter((t) => TRAITS[t]).map((t) => `<span class="chip" tabindex="0"${tip(`<b>${esc(TRAITS[t].name)}</b><br>${esc(TRAITS[t].desc)}`)}>${ico('st_trait', '', 'sm')}<b>${esc(TRAITS[t].name)}</b></span>`).join('') || '<span class="t-s">Nothing that stands out.</span>'}</div>`,
     { id: 'sv-traits', open: true, cls: 'sv-fold' });
 
   const skills = fold(`<span class="t-l">Skills</span><span class="sv-meta">best ${esc(SKILL_NAMES[best])} ${s.skills[best]}</span>`,
-    `${SKILLS.map((k) => progRow(s, k, SKILL_NAMES[k], 'skill_' + k, s.passions.includes(k))).join('')}
-    <div class="t-xs sv-sub">Nerve and body</div>
-    ${progRow(s, 'courage', ATTR_NAMES.courage, 'st_courage')}
-    ${s.fav ? `<div class="sv-chips"><span class="chip sv-gun good"${tip(`<b>Favourite: ${esc(CLASS_NAMES[s.fav])}</b><br>Handles one as if Shooting were ${FAV_BONUS} higher (${handling(s, s.fav)}): faster reloads, fewer jams${s.fav === 'heavy' ? ', a steadier gun nest' : ''}. Give them one.`)}><b>★ ${esc(CLASS_SHORT[s.fav])}</b></span></div>` : ''}`,
+    `${SKILLS.map((k) => progRow(s, k, SKILL_NAMES[k], 'skill_' + k, s.passions.includes(k), SKILL_LINES[k])).join('')}
+    <div class="t-xs sv-sub">Nerve</div>
+    ${progRow(s, 'courage', ATTR_NAMES.courage, 'st_courage', false, COURAGE_LINE)}
+    ${s.fav ? `<div class="sv-chips"><span class="chip sv-gun good"${tip(`<b>Favourite: ${esc(CLASS_NAMES[s.fav])}</b><br>Handles one as if Shooting were ${FAV_BONUS} higher (${handling(s, s.fav)}): faster reloads, fewer jams${s.fav === 'heavy' ? ', a steadier gun nest' : ''}. Give them one.`)}><b>★ ${esc(CLASS_SHORT[s.fav])}</b></span><span class="t-s sv-pl">Favourite gun: Shooting +${FAV_BONUS} with one. Give them one.</span></div>` : ''}`,
     { id: 'sv-skills', open: true, cls: 'sv-fold' });
 
   const mood = fold(`<span class="t-l">Mood</span><span class="sv-meta"><b class="sv-big ${moodTone(s)}">${Math.round(s.mood)}</b> ${esc(moodWord(s.mood))}</span>`,
