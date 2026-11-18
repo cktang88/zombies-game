@@ -13,7 +13,7 @@ export interface EmplacementDef {
   short: string;
   desc: string;
   niche: string;
-  /** what it eats: a stores key (r556, rifle, fuel, salvage) and how much per round (or per second for flame) */
+  /** what it eats: a stores key (rifle, fuel, salvage) and how much per round (or per second for flame) */
   ammo: Res;
   perShot: number;
   /** rounds in a belt / box / magazine before a reload (flame: seconds of fuel in the tank) */
@@ -41,10 +41,10 @@ export interface EmplacementDef {
 
 export const EMPLACEMENTS: Record<string, EmplacementDef> = {
   mgnest: {
-    id: 'mgnest', name: 'MG nest', short: 'MG', ammo: 'r556', perShot: 1, mag: 100, reload: 5, rof: 12, auto: true,
+    id: 'mgnest', name: 'MG nest', short: 'MG', ammo: 'rifle', perShot: 0.5, mag: 100, reload: 5, rof: 12, auto: true,
     dmg: 38, pierce: 1, knock: 10, spread: 0.035, armorPen: 0.3, noise: 3.2, heat: 0.03, cool: 0.2, swap: 3,
     crew: true, posts: ['firestep', 'roof'], wear: 0.0004, sound: 'lmg',
-    niche: 'Belt-fed 5.56 from the Line: the most fire on the road, if the crew can keep it cool.',
+    niche: 'Belt-fed 5.56 from the Line, half a rifle round a shot: the most fire on the road, if the crew can keep it cool.',
     desc: 'The Corliss gun on a sandbagged tripod, a spare barrel in an asbestos glove. Short bursts, or it cooks.',
   },
   swivel: {

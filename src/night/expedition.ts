@@ -3,7 +3,7 @@ import { keyOf, normKey, keyCap, keyLabel } from '../ui/keys';
 import { openPause } from '../ui/pause';
 import { G, R, log, add, newWeapon, findDoc, uid } from '../state';
 import { ZOMBIES, type ZombieDef } from '../data/zombies';
-import { WEAPONS, fireProfile, ammoTypesFor, ammoLabel, AMMO_TYPES, armorDamage, roundsInStores, shotSound, BURN, FLARE_LIGHT, MODS, wearMods, blastDamage, MELEE, meleeProfile, FISTS, BLEED_TIME, type FireProfile, type MeleeProfile } from '../data/weapons';
+import { WEAPONS, fireProfile, ammoLabel, AMMO_TYPES, armorDamage, roundsInStores, shotSound, BURN, FLARE_LIGHT, MODS, wearMods, blastDamage, MELEE, meleeProfile, FISTS, BLEED_TIME, type FireProfile, type MeleeProfile } from '../data/weapons';
 import { SITES, RES_LABEL, RES_ICON, type Site } from '../data/world';
 import { Ticker, caps, hintRow, keycap, capOf, dot, panel, worldLabel, keySheet, keyHintsOn, FONT, type Hint } from './hud';
 import { img, flashImg, shadeImg } from '../assets';
@@ -38,8 +38,7 @@ const RUN_YIELD = 0.22; // per-search loot scale: clearing the whole street ≈ 
 // how many of a resource fit in one pack slot (bulky things take more room)
 const STACK: Partial<Record<Res, number>> = {
   food: 6, salvage: 8, meds: 3, fuel: 3, molotov: 2,
-  light: 20, light_hp: 20, r22: 50, shell: 8, shell_slug: 8, shell_flech: 8, shell_fire: 8, rifle: 12, rifle_sp: 12, rifle_ap: 12,
-  r556: 30, ball: 15, bolt: 12, bolt_fire: 8, flare: 4, rocket: 1, g40: 3, g40_buck: 3, pipebomb: 2,
+  pistol: 20, shell: 8, rifle: 12, bolt: 12, rocket: 1, g40: 3, pipebomb: 2,
 };
 type PackItem = { kind: 'res'; res: Res; n: number } | { kind: 'gun'; def: string; cond: number } | { kind: 'mod'; def: string; cond: number } | { kind: 'melee'; def: string; cond: number };
 const itemSlots = (it: PackItem) => (it.kind === 'gun' ? 3 : it.kind === 'melee' ? 2 : it.kind === 'mod' ? 1 : Math.ceil(it.n / (STACK[it.res] ?? 5)));
@@ -420,7 +419,6 @@ export class Expedition {
     if (!down) return;
     if (k === 'Escape' || k === keyOf('run.pause')) { e.preventDefault(); this.pause(); return; }
     if (k === keyOf('run.reload')) this.startReload();
-    if (k === keyOf('run.ammo')) this.cycleAmmo();
     if (k === keyOf('run.pack')) { this.sel = this.pack.length ? (this.sel + 1) % this.pack.length : 0; e.preventDefault(); }
     if (k === keyOf('run.drop')) this.dropSelected();
     if (k === keyOf('run.swing')) this.swing();
@@ -431,7 +429,7 @@ export class Expedition {
   keyGroups(): { title: string; rows: Hint[] }[] {
     return [
       { title: 'move', rows: [{ key: `${keyLabel(keyOf('run.left'))}/${keyLabel(keyOf('run.right'))}`, label: 'walk (left: home)' }, { key: 'run.search', label: 'search / revive' }, { key: 'run.pause', label: 'pause' }, { key: 'F1', label: 'this sheet' }] },
-      { title: 'fight', rows: [{ key: 'LMB', label: 'fire' }, { key: 'run.reload', label: 'reload' }, { key: 'run.ammo', label: 'ammo' }, { key: 'run.swing', label: `${this.kn ? MELEE[this.kn.def].name.toLowerCase() : 'fists'} (RMB)` }, { key: 'run.shove', label: 'shove' }] },
+      { title: 'fight', rows: [{ key: 'LMB', label: 'fire' }, { key: 'run.reload', label: 'reload' }, { key: 'run.swing', label: `${this.kn ? MELEE[this.kn.def].name.toLowerCase() : 'fists'} (RMB)` }, { key: 'run.shove', label: 'shove' }] },
       { title: 'the pack', rows: [{ key: 'run.pack', label: 'next item' }, { key: 'run.drop', label: 'drop it' }] },
     ];
   }
@@ -859,23 +857,6 @@ export class Expedition {
     return this.w ? fireProfile(this.w) : null;
   }
 
-  // [T]: next bullet type for this caliber; unloads the magazine back into stores
-  cycleAmmo() {
-    if (!this.w) return;
-    const types = ammoTypesFor(this.w.def);
-    if (types.length < 2) return;
-    const cur = this.prof()!.ammoRes;
-    const have = types.filter((t) => t === cur || (G.stores[t] ?? 0) > 0);
-    const next = have[(have.indexOf(cur!) + 1) % have.length];
-    if (!next || next === cur) { this.say(`No other ammunition for the ${WEAPONS[this.w.def].name.toLowerCase()}.`, 2); return; }
-    this.unload();
-    this.reloadSfx?.cancel();
-    this.w.ammoType = next;
-    this.say(`Loading ${ammoLabel(next).toLowerCase()}.`, 2);
-    this.reload = 0;
-    this.startReload();
-  }
-
   unload() {
     if (!this.w || !this.magRes || this.mag <= 0) { this.mag = 0; return; }
     add(this.magRes, this.mag * this.prof()!.perShot);
@@ -887,7 +868,7 @@ export class Expedition {
     const p = this.prof()!;
     if (this.magRes !== p.ammoRes) this.unload();
     if (this.mag >= p.mag) return;
-    if (roundsInStores(p, G.stores) < 1) { this.say(`No ${ammoLabel(p.ammoRes).toLowerCase()}. ${ammoTypesFor(this.w.def).length > 1 ? `${keyCap('run.ammo')} switch ammo, or shove` : `Shove ${keyCap('run.shove')}`} and run.`, 2); sfx.dry(); return; }
+    if (roundsInStores(p, G.stores) < 1) { this.say(`No ${ammoLabel(p.ammoRes).toLowerCase()}. Shove ${keyCap('run.shove')} and run.`, 2); sfx.dry(); return; }
     const armHurt = this.s.wounds.some((w) => w.part === 'larm' || w.part === 'rarm') ? 1.35 : 1;
     this.reload = p.reload * armHurt;
     this.reloadSfx?.cancel();
@@ -1319,7 +1300,7 @@ export class Expedition {
       if (this.w) for (const l of wearMods(this.w, this.roundsFired)) this.lines.push(l);
       const rec = this.prof()?.recoverable ?? 0;
       for (const [k, v] of Object.entries(this.spent)) {
-        const back = Math.floor((v ?? 0) * (AMMO_TYPES[k as Res]?.recoverable ?? rec));
+        const back = Math.floor((v ?? 0) * rec);
         if (back > 0) { add(k as Res, back); this.lines.push(`${first(this.s)} pulled ${back} ${ammoLabel(k as Res).toLowerCase()} back out of the dead.`); }
       }
       const total = Object.values(this.loot).reduce((a, b) => a + (b ?? 0), 0);
@@ -1755,11 +1736,10 @@ export class Expedition {
       c.font = `14px ${FONT}`; c.fillStyle = '#a89c84';
       c.fillText(`/${Number.isFinite(left) ? left : '∞'}`, magX + 6, H - 22);
       if (this.reload > 0) caps(c, 'reloading…', W - 20, H - 70, '#9a8e76', 'right'); // the picture is the gun: no name
-      const at = p.ammoRes ? AMMO_TYPES[p.ammoRes] : undefined;
+      const at = p.ammoRes ? AMMO_TYPES[p.ammoRes] : undefined; // the pool's picture
       const aw = caps(c, at?.short ?? ammoLabel(p.ammoRes), W - 20, H - 54, '#b8ab90', 'right');
       const aic = at ? img(at.icon) : undefined;
       if (aic) { const iw = (aic.width / aic.height) * 13; c.drawImage(aic, W - 24 - aw - iw, H - 64, iw, 13); }
-      if (ammoTypesFor(this.w.def).length > 1 && this.mag === 0) hintRow(c, [{ key: 'run.ammo', label: 'ammo', hot: true }], W - 20, H - 92, 'right');
     }
     {
       const kx = W - 290, ky = H - 76;

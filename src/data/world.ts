@@ -18,20 +18,20 @@ export interface Site {
 }
 
 export const SITES: Site[] = [
-  { id: 'route9', name: 'Route 9 houses', desc: 'Split-levels and trailers along the county road. Somebody\'s kitchen, somebody\'s garage.', risk: 0.12, loot: { food: 5, salvage: 14, light: 6, shell: 2, r22: 20 }, weaponChance: 0.06, weapons: ['revolver', 'r22', 'r22', 'snake410'], melee: ['hatchet', 'bat', 'hatchet'], mods: ['flashlight', 'sling'], survivorChance: 0.1, minDay: 1, stock: 8 },
+  { id: 'route9', name: 'Route 9 houses', desc: 'Split-levels and trailers along the county road. Somebody\'s kitchen, somebody\'s garage.', risk: 0.12, loot: { food: 5, salvage: 14, pistol: 16, shell: 2 }, weaponChance: 0.06, weapons: ['revolver', 'r22', 'r22', 'snake410'], melee: ['hatchet', 'bat', 'hatchet'], mods: ['flashlight', 'sling'], survivorChance: 0.1, minDay: 1, stock: 8 },
   { id: 'diner', name: 'Ferry Diner', desc: 'The walk-in cooler stopped humming a week ago. The whiteboard still says SOUP.', risk: 0.15, loot: { food: 9, fuel: 1, salvage: 1 }, weaponChance: 0.03, weapons: ['service9', 'snake410'], melee: ['knife'], survivorChance: 0.08, minDay: 1, stock: 5 },
   { id: 'rexall', name: 'Rexall pharmacy', desc: 'Looted twice. Not everything was understood by the looters.', risk: 0.25, loot: { meds: 4, food: 2, salvage: 2 }, weaponChance: 0.02, weapons: ['service9', 'm1911'], survivorChance: 0.06, minDay: 1, stock: 5 },
-  { id: 'millyard', name: 'Aubin mill yard', desc: 'Pallets, drums, the maintenance shop. Pond 2 smells like bread gone off.', risk: 0.3, loot: { salvage: 24, fuel: 3, flare: 2 }, weaponChance: 0.05, weapons: ['nailer', 'rivet', 'pipe', 'flaregun'], melee: ['crowbar', 'sledge', 'crowbar'], mods: ['flashlight', 'hatchet', 'suppressor'], survivorChance: 0.08, minDay: 2, stock: 9 },
-  { id: 'legion', name: 'Legion hall', desc: 'Bingo cards on the floor. A doe walked in here once, during bingo.', risk: 0.2, loot: { food: 3, fuel: 2, light: 14, salvage: 2, shell_slug: 4 }, weaponChance: 0.12, weapons: ['revolver', 'pump', 'coach', 'm1911'], melee: ['bat'], mods: ['speedloader', 'sling'], survivorChance: 0.1, minDay: 2, stock: 5 },
-  { id: 'boathouse', name: 'Halvorsen boathouse', desc: 'Ferry family stores: rope, outboard parts, jerry cans, duck guns.', risk: 0.25, loot: { fuel: 6, salvage: 8, shell: 10, flare: 4 }, weaponChance: 0.12, weapons: ['pump', 'coach', 'flaregun', 'flaregun', 'snake410'], melee: ['boathook', 'knife', 'boathook'], mods: ['flashlight', 'choke'], survivorChance: 0.1, minDay: 3, stock: 6 },
-  { id: 'deercamp', name: 'Nils\'s deer camp', desc: 'A plywood shack two miles up the Ox Creek trail. Blaze orange on every nail; the buck pole is empty.', risk: 0.3, loot: { food: 5, rifle_sp: 10, ball: 8, bolt: 10, fuel: 2, salvage: 2 }, weaponChance: 0.25, weapons: ['lever', 'hunting', 'muzzle', 'compound', 'crossbow', 'r22'], melee: ['hatchet', 'fellingaxe', 'knife'], mods: ['scope', 'scope', 'bipod', 'sling', 'choke'], survivorChance: 0.06, minDay: 3, stock: 4 },
+  { id: 'millyard', name: 'Aubin mill yard', desc: 'Pallets, drums, the maintenance shop. Pond 2 smells like bread gone off.', risk: 0.3, loot: { salvage: 24, fuel: 3, shell: 2 }, weaponChance: 0.05, weapons: ['nailer', 'rivet', 'pipe', 'flaregun'], melee: ['crowbar', 'sledge', 'crowbar'], mods: ['flashlight', 'hatchet', 'suppressor'], survivorChance: 0.08, minDay: 2, stock: 9 },
+  { id: 'legion', name: 'Legion hall', desc: 'Bingo cards on the floor. A doe walked in here once, during bingo.', risk: 0.2, loot: { food: 3, fuel: 2, pistol: 14, salvage: 2, shell: 4 }, weaponChance: 0.12, weapons: ['revolver', 'pump', 'coach', 'm1911'], melee: ['bat'], mods: ['speedloader', 'sling'], survivorChance: 0.1, minDay: 2, stock: 5 },
+  { id: 'boathouse', name: 'Halvorsen boathouse', desc: 'Ferry family stores: rope, outboard parts, jerry cans, duck guns.', risk: 0.25, loot: { fuel: 6, salvage: 8, shell: 14 }, weaponChance: 0.12, weapons: ['pump', 'coach', 'flaregun', 'flaregun', 'snake410'], melee: ['boathook', 'knife', 'boathook'], mods: ['flashlight', 'choke'], survivorChance: 0.1, minDay: 3, stock: 6 },
+  { id: 'deercamp', name: 'Nils\'s deer camp', desc: 'A plywood shack two miles up the Ox Creek trail. Blaze orange on every nail; the buck pole is empty.', risk: 0.3, loot: { food: 5, rifle: 18, bolt: 10, fuel: 2, salvage: 2 }, weaponChance: 0.25, weapons: ['lever', 'hunting', 'muzzle', 'compound', 'crossbow', 'r22'], melee: ['hatchet', 'fellingaxe', 'knife'], mods: ['scope', 'scope', 'bipod', 'sling', 'choke'], survivorChance: 0.06, minDay: 3, stock: 4 },
   { id: 'hardware', name: 'Lindqvist Hardware & Feed', desc: 'Tools on pegboard, seed in sacks, a rental counter. The bell over the door still rings.', risk: 0.28, loot: { salvage: 24, fuel: 3 }, weaponChance: 0.05, weapons: ['nailer', 'r22'], melee: ['hatchet', 'fellingaxe', 'sledge', 'machete', 'crowbar', 'chainsaw', 'bat'], mods: ['flashlight', 'sling'], survivorChance: 0.06, minDay: 2, stock: 6 },
-  { id: 'firehouse', name: 'Vessey Fire Hall', desc: 'Engine 2 is still in the bay, doors open. The volunteers went out on a call and did not come back.', risk: 0.35, loot: { meds: 4, fuel: 5, salvage: 8, flare: 4 }, weaponChance: 0.06, weapons: ['flaregun', 'service9'], melee: ['fireaxe', 'fireaxe', 'crowbar', 'chainsaw', 'boathook'], mods: ['flashlight'], survivorChance: 0.1, minDay: 3, stock: 5 },
+  { id: 'firehouse', name: 'Vessey Fire Hall', desc: 'Engine 2 is still in the bay, doors open. The volunteers went out on a call and did not come back.', risk: 0.35, loot: { meds: 4, fuel: 5, salvage: 8, shell: 4 }, weaponChance: 0.06, weapons: ['flaregun', 'service9'], melee: ['fireaxe', 'fireaxe', 'crowbar', 'chainsaw', 'boathook'], mods: ['flashlight'], survivorChance: 0.1, minDay: 3, stock: 5 },
   { id: 'manor', name: 'St. Aubin Manor', desc: 'The nursing home. The residents are still in residence.', risk: 0.45, loot: { meds: 6, food: 3, salvage: 4 }, weaponChance: 0.02, weapons: ['service9', 'r22'], survivorChance: 0.12, minDay: 4, stock: 5 },
   { id: 'school', name: 'Vessey High', desc: 'The gym was the Parish kitchen until it wasn\'t. Chem lab upstairs.', risk: 0.35, loot: { food: 6, fuel: 2, salvage: 7, meds: 1, bolt: 6 }, weaponChance: 0.04, weapons: ['hunting', 'compound'], melee: ['bat', 'crowbar'], survivorChance: 0.18, minDay: 4, stock: 6 },
-  { id: 'gunshop', name: 'Strand Sporting Goods', desc: 'Deer season opened the week everything ended. Shelves mostly bare.', risk: 0.4, loot: { light: 16, light_hp: 10, shell: 10, shell_slug: 6, rifle: 6, rifle_sp: 8, r22: 60, r556: 10, bolt: 6, salvage: 2 }, weaponChance: 0.3, weapons: ['hunting', 'pump', 'revolver', 'lever', 'scoped', 'ar15', 'compound', 'coach', 'r22'], mods: ['scope', 'reddot', 'choke', 'extmag', 'bipod', 'sling', 'brake'], survivorChance: 0.06, minDay: 5, stock: 4 },
-  { id: 'courthouse', name: 'County courthouse', desc: 'The deputies held it with lists and quarantine. Now the lists are all that hold.', risk: 0.55, loot: { light: 22, light_hp: 10, rifle: 6, shell_flech: 6, shell_slug: 4, meds: 2, salvage: 4, g40_buck: 1.2 }, weaponChance: 0.35, weapons: ['smg', 'service9', 'autoshot', 'mp93', 'scoped', 'pump', 'm79'], melee: ['crowbar'], mods: ['drum', 'extmag', 'flashlight', 'taped', 'speedloader', 'reddot'], survivorChance: 0.1, minDay: 8, stock: 4 },
-  { id: 'corliss', name: 'The Line at Corliss', desc: 'Thirty kilometres downriver. Sandbags, a dropped bridge, and whatever the Guard left behind.', risk: 0.7, loot: { r556: 60, rifle_ap: 12, light: 16, flare: 4, meds: 4, salvage: 8, fuel: 4, rocket: 0.6, g40: 2 }, weaponChance: 0.5, weapons: ['carbine', 'carbine', 'lmg', 'smg', 'ar15', 'law', 'm79'], mods: ['reddot', 'reddot', 'drum', 'bipod', 'extmag', 'brake', 'taped'], survivorChance: 0.12, minDay: 12, stock: 3 },
+  { id: 'gunshop', name: 'Strand Sporting Goods', desc: 'Deer season opened the week everything ended. Shelves mostly bare.', risk: 0.4, loot: { pistol: 56, shell: 16, rifle: 19, bolt: 6, salvage: 2 }, weaponChance: 0.3, weapons: ['hunting', 'pump', 'revolver', 'lever', 'scoped', 'ar15', 'compound', 'coach', 'r22'], mods: ['scope', 'reddot', 'choke', 'extmag', 'bipod', 'sling', 'brake'], survivorChance: 0.06, minDay: 5, stock: 4 },
+  { id: 'courthouse', name: 'County courthouse', desc: 'The deputies held it with lists and quarantine. Now the lists are all that hold.', risk: 0.55, loot: { pistol: 32, rifle: 6, shell: 10, meds: 2, salvage: 4, g40: 1.2 }, weaponChance: 0.35, weapons: ['smg', 'service9', 'autoshot', 'mp93', 'scoped', 'pump', 'm79'], melee: ['crowbar'], mods: ['drum', 'extmag', 'flashlight', 'taped', 'speedloader', 'reddot'], survivorChance: 0.1, minDay: 8, stock: 4 },
+  { id: 'corliss', name: 'The Line at Corliss', desc: 'Thirty kilometres downriver. Sandbags, a dropped bridge, and whatever the Guard left behind.', risk: 0.7, loot: { rifle: 42, pistol: 16, shell: 4, meds: 4, salvage: 8, fuel: 4, rocket: 0.6, g40: 2 }, weaponChance: 0.5, weapons: ['carbine', 'carbine', 'lmg', 'smg', 'ar15', 'law', 'm79'], mods: ['reddot', 'reddot', 'drum', 'bipod', 'extmag', 'brake', 'taped'], survivorChance: 0.12, minDay: 12, stock: 3 },
 ];
 
 // ---------- workshop machinery ----------
@@ -75,22 +75,11 @@ export interface Recipe {
 }
 
 export const RECIPES: Recipe[] = [
-  // --- ammunition: workbench (reloading press), forge (casting), still (incendiaries) ---
-  { id: 'ammo_light', name: 'Pistol rounds ×40', needs: 'workbench', cost: { salvage: 2, fuel: 1 }, work: 2, gives: { light: 40 }, desc: 'Reloaded brass, powder cut from shotshells and road flares.' },
-  { id: 'ammo_light_hp', name: 'Hollow-points ×24', needs: 'workbench', cost: { light: 24, salvage: 2 }, work: 2, gives: { light_hp: 24 }, desc: 'Drill the noses of 24 pistol rounds. More damage; worthless on plate.' },
-  { id: 'ammo_shell', name: 'Buckshot ×16', needs: 'workbench', cost: { salvage: 3, fuel: 1 }, work: 2, gives: { shell: 16 }, desc: 'Nail-and-washer buckshot in hand-crimped hulls.' },
-  { id: 'ammo_slug', name: 'Slugs ×10', needs: 'forge', cost: { salvage: 5, fuel: 1 }, work: 3, gives: { shell_slug: 10 }, desc: 'Wheel weights melted and poured in a muffin tin. One heavy hit; pierces.' },
-  { id: 'ammo_flech', name: 'Flechettes ×10', needs: 'workbench', level: 2, cost: { salvage: 6, fuel: 1 }, work: 3, gives: { shell_flech: 10 }, desc: 'Roofing nails clipped headless and packed in wax. They go through.' },
-  { id: 'ammo_dragon', name: "Dragon's breath ×8", needs: 'still', cost: { fuel: 2, salvage: 3 }, work: 3, gives: { shell_fire: 8 }, desc: 'Magnesium shavings from the mill shop. Sets them burning.' },
-  { id: 'ammo_r22', name: '.22 re-primed ×50', needs: 'workbench', level: 2, cost: { salvage: 4 }, work: 3, gives: { r22: 50 }, desc: 'Rimfire is not supposed to be reloadable. Cap-gun caps say otherwise.' },
-  { id: 'ammo_rifle', name: 'Rifle FMJ ×15', needs: 'workbench', level: 2, cost: { salvage: 5, fuel: 1 }, work: 2, gives: { rifle: 15 }, desc: 'Careful work. A bad load takes fingers.' },
-  { id: 'ammo_rifle_sp', name: 'Soft-points ×12', needs: 'workbench', level: 2, cost: { salvage: 6, fuel: 2 }, work: 4, gives: { rifle_sp: 12 }, desc: 'Deer loads: more damage and shove, but they stop in the first body.' },
-  { id: 'ammo_rifle_ap', name: 'AP rounds ×8', needs: 'forge', level: 2, cost: { salvage: 10, fuel: 2 }, work: 5, gives: { rifle_ap: 8 }, desc: 'Hardened drill-bit cores turned on the lathe. For Deputies.' },
-  { id: 'ammo_r556', name: '5.56 ×40', needs: 'workbench', level: 3, cost: { salvage: 5, fuel: 1 }, work: 3, gives: { r556: 40 }, desc: 'Reformed .223 brass from Strand\'s range bucket.' },
-  { id: 'ammo_ball', name: '.50 ball & powder ×10', needs: 'forge', cost: { salvage: 2, fuel: 1 }, work: 2, gives: { ball: 10 }, desc: 'Cast ball, greased patches, homemade black powder.' },
+  // --- ammunition: three pools, all at the workbench (rifle rounds need the bench at level 2) ---
+  { id: 'ammo_light', name: 'Pistol rounds ×40', needs: 'workbench', cost: { salvage: 2, fuel: 1 }, work: 2, gives: { pistol: 40 }, desc: 'Reloaded brass, powder cut from shotshells and road flares. Feeds every handgun, the SMG and the farm .22.' },
+  { id: 'ammo_shell', name: 'Shotgun shells ×16', needs: 'workbench', cost: { salvage: 3, fuel: 1 }, work: 2, gives: { shell: 16 }, desc: 'Nail-and-washer buckshot in hand-crimped hulls. Feeds every shotgun and the flare pistol.' },
+  { id: 'ammo_rifle', name: 'Rifle rounds ×15', needs: 'workbench', level: 2, cost: { salvage: 5, fuel: 1 }, work: 2, gives: { rifle: 15 }, desc: 'Careful work; a bad load takes fingers. Feeds every rifle, the muzzleloader, and the AR, carbine and MG at half a round a shot.' },
   { id: 'ammo_bolt', name: 'Broadheads ×12', needs: 'workbench', cost: { salvage: 5 }, work: 3, gives: { bolt: 12 }, desc: 'Dowel shafts, heads ground from saw teeth. For bows and crossbows.' },
-  { id: 'ammo_bolt_fire', name: 'Fire bolts ×8', needs: 'still', cost: { salvage: 3, fuel: 1 }, work: 2, gives: { bolt_fire: 8 }, desc: 'Rag-wrapped, still-fuel soaked. They burn, and they do not come back.' },
-  { id: 'ammo_flare', name: 'Flare shells ×4', needs: 'still', cost: { fuel: 2, salvage: 3 }, work: 3, gives: { flare: 4 }, desc: 'Road-flare composition packed into 12-gauge hulls.' },
   { id: 'duffel', name: 'Duffel bag', needs: 'workbench', cost: { salvage: 6 }, work: 3, special: 'duffel', desc: 'A canvas duffel for runs: +4 pack slots for whoever leads them. One is enough.' },
   // --- attachments (go onto the bench; fit them in the armory) ---
   { id: 'mod_suppressor', name: 'Oil-filter suppressor', needs: 'workbench', cost: { salvage: 5 }, work: 3, mod: 'suppressor', desc: 'A truck oil filter on a threaded adapter. Quiet, for a few nights.' },
@@ -111,8 +100,8 @@ export const RECIPES: Recipe[] = [
   { id: 'm_sawblade', name: 'Saw-blade machete', needs: 'forge', cost: { salvage: 6 }, work: 4, melee: 'sawblade', desc: 'Cut from a broken mill bandsaw blade.' },
   { id: 'm_hatchet', name: 'Hatchet', needs: 'forge', level: 2, cost: { salvage: 6 }, work: 4, melee: 'hatchet', desc: 'Forge a head from a leaf spring, fit a hickory handle.' },
   // --- improvised guns ---
-  { id: 'pipe', name: 'Pipe shotgun', needs: 'workbench', cost: { salvage: 12 }, work: 4, weapon: 'pipe', desc: 'Two pipes and a nail. Takes any shell. Jams.' },
-  { id: 'flaregun', name: 'Flare pistol', needs: 'workbench', level: 2, cost: { salvage: 12 }, work: 5, weapon: 'flaregun', desc: 'A drilled-out signal pistol body on a pipe barrel. Fires flare shells.' },
+  { id: 'pipe', name: 'Pipe shotgun', needs: 'workbench', cost: { salvage: 12 }, work: 4, weapon: 'pipe', desc: 'Two pipes and a nail. Eats shotgun shells. Jams.' },
+  { id: 'flaregun', name: 'Flare pistol', needs: 'workbench', level: 2, cost: { salvage: 12 }, work: 5, weapon: 'flaregun', desc: 'A drilled-out signal pistol body on a pipe barrel. Packs road-flare composition into two shotgun shells a shot.' },
   { id: 'crossbow', name: 'Crossbow', needs: 'forge', cost: { salvage: 18 }, work: 8, weapon: 'crossbow', desc: 'Leaf-spring limbs off a Ford, a winch, a walnut stock. Silent.' },
   { id: 'muzzle', name: '.50 muzzleloader', needs: 'forge', level: 2, cost: { salvage: 24 }, work: 10, weapon: 'muzzle', desc: 'A rifled barrel from a fence-post driver. One huge shot.' },
   { id: 'pipemortar', name: 'Pipe-bomb mortar', needs: 'workbench', level: 2, cost: { salvage: 20 }, work: 8, weapon: 'pipemortar', desc: 'A fence-post tube on a shotgun stock. Lobs pipe bombs over the dead.' },
@@ -137,7 +126,7 @@ export const RECIPES: Recipe[] = [
 RECIPES.push(...TRAP_RECIPES);
 // --- crew-served emplacements (data/emplacements.ts): manned at night from the firestep or the roof scaffold ---
 RECIPES.push(
-  { id: 'emp_mgnest', name: 'MG nest', needs: 'forge', level: 2, cost: { salvage: 42 }, work: 10, emplacement: 'mgnest', desc: 'Belt-fed 5.56 from the Line on a sandbagged tripod, with a spare barrel. Huge fire; overheats in untrained hands. Eats 5.56.' },
+  { id: 'emp_mgnest', name: 'MG nest', needs: 'forge', level: 2, cost: { salvage: 42 }, work: 10, emplacement: 'mgnest', desc: 'Belt-fed 5.56 from the Line on a sandbagged tripod, with a spare barrel. Huge fire; overheats in untrained hands. Eats rifle rounds (half a round a shot).' },
   { id: 'emp_swivel', name: 'Swivel deer rifle', needs: 'forge', cost: { salvage: 18 }, work: 6, emplacement: 'swivel', desc: 'A .30-06 on a pontoon-boat seat bolted to a post: slow, braced, through four in a line. Eats rifle rounds.' },
   { id: 'emp_flamer', name: 'Propane flame projector', needs: 'workbench', level: 2, cost: { salvage: 18, fuel: 4 }, work: 8, emplacement: 'flamer', desc: 'A weed burner on two grill tanks over the barricade: a short cone that sets everything burning. Drinks fuel.' },
   { id: 'emp_repair', name: 'Overhaul a gun nest', needs: 'forge', cost: { salvage: 8 }, work: 3, empRepair: true, desc: 'New springs, a cleaned feed tray, the sandbags restacked (+50% condition on the most worn emplacement).' },
@@ -151,14 +140,10 @@ RECIPES.push(
 export const FORT_CAP: Partial<Record<string, number>> = { light: 3, wire: 3, turret: 2 };
 
 export const RES_LABEL: Record<Res, string> = {
-  food: 'Food', salvage: 'Salvage', meds: 'Medicine', fuel: 'Fuel', light: 'Pistol ammo', shell: 'Shells', rifle: 'Rifle ammo', molotov: 'Firebombs',
-  r22: '.22 ammo', light_hp: 'Hollow-points', shell_slug: 'Slugs', shell_flech: 'Flechettes', shell_fire: "Dragon's breath", rifle_sp: 'Soft-points', rifle_ap: 'AP rounds',
-  r556: '5.56 ammo', ball: '.50 ball', bolt: 'Broadheads', bolt_fire: 'Fire bolts', flare: 'Flare shells',
-  rocket: 'Rockets', g40: '40mm HE', g40_buck: '40mm buckshot', pipebomb: 'Pipe bombs',
+  food: 'Food', salvage: 'Salvage', meds: 'Medicine', fuel: 'Fuel', pistol: 'Pistol rounds', shell: 'Shotgun shells', rifle: 'Rifle rounds', molotov: 'Firebombs',
+  bolt: 'Broadheads', rocket: 'Rockets', g40: '40mm HE', pipebomb: 'Pipe bombs',
 };
 export const RES_ICON: Record<Res, string> = {
-  food: 'icon_food', salvage: 'icon_scrap', meds: 'icon_meds', fuel: 'icon_fuel', light: 'icon_ammo', shell: 'icon_ammo', rifle: 'icon_ammo', molotov: 'icon_molotov',
-  r22: 'icon_r22', light_hp: 'icon_ammo', shell_slug: 'icon_slug', shell_flech: 'icon_shells', shell_fire: 'icon_dragon', rifle_sp: 'icon_ammo', rifle_ap: 'icon_ammo',
-  r556: 'icon_r556', ball: 'icon_ball', bolt: 'icon_bolts', bolt_fire: 'icon_bolts', flare: 'icon_flares',
-  rocket: 'icon_rocket', g40: 'icon_g40', g40_buck: 'icon_g40', pipebomb: 'icon_pipebomb',
+  food: 'icon_food', salvage: 'icon_scrap', meds: 'icon_meds', fuel: 'icon_fuel', pistol: 'icon_ammo', shell: 'icon_shells', rifle: 'icon_r556', molotov: 'icon_molotov',
+  bolt: 'icon_bolts', rocket: 'icon_rocket', g40: 'icon_g40', pipebomb: 'icon_pipebomb',
 };

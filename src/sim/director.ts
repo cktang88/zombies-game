@@ -24,7 +24,7 @@ export function cyclePos(day = G.day) {
 // Camp "wealth" invites the dead: noise, light, smell of cooking.
 export function campWealth() {
   const s = G.stores;
-  const goods = s.food * 1 + s.salvage * 0.55 + s.meds * 3 + s.fuel * 1.5 + (s.light + s.shell * 2 + s.rifle * 2) * 0.15;
+  const goods = s.food * 1 + s.salvage * 0.55 + s.meds * 3 + s.fuel * 1.5 + (s.pistol + s.shell * 2 + s.rifle * 2) * 0.15;
   const guns = G.weapons.reduce((a, w) => a + 25 + WEAPONS[w.def].dmg * 0.4, 0);
   const builds = G.buildings.reduce((a, b) => a + 30 * b.level, 0);
   const fort = (G.fort.maxHp - 300) * 0.2 + G.fort.lights * 15;

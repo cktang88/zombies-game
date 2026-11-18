@@ -409,25 +409,17 @@ function build(): SystemDef[] {
 export interface MatrixRow { label: string; icon: string; spend: Amt[]; get: Amt[]; catch: string; sys?: string }
 export interface MatrixBlock { title: string; rows: MatrixRow[] }
 
-/** Per round cost of a special round vs its batch (from its recipe). */
+/** One ammo pool: what a batch costs at the bench, what it feeds. */
 function ammoRow(res: Res): MatrixRow | null {
   const a = AMMO_TYPES[res];
   if (!a) return null;
   const r = RECIPES.find((x) => x.gives && x.gives[res]);
   const n = r?.gives?.[res] ?? 0;
-  const get: Amt[] = [];
-  const dmg = a.dmgSet ? null : a.dmgMul ?? 1;
-  if (dmg !== null && dmg !== 1) get.push({ i: 'st_danger', n: `×${dmg}`, t: 'damage', s: 'dmg' });
-  if (a.pierceAdd) get.push({ i: 'st_xp', n: `${a.pierceAdd > 0 ? '+' : ''}${a.pierceAdd}`, t: 'pierce (bodies it goes through)', s: 'pierce' });
-  if (a.pierceSet === 0) get.push({ i: 'st_xp', n: '0', t: 'pierce: stops in the first body', s: 'pierce' });
-  if (a.armorPen) get.push({ i: 'st_wall', n: `${a.armorPen > 0 ? '+' : ''}${a.armorPen}`, t: 'vs plate (Deputies)', s: 'plate' });
-  if (a.knockMul && a.knockMul !== 1) get.push({ i: 'st_break', n: `×${a.knockMul}`, t: 'shove', s: 'shove' });
-  if (a.incendiary) get.push({ i: 'molotov', t: 'sets them burning', s: 'burns' });
-  if (!get.length) get.push({ i: a.icon.replace(/^icon_/, ''), t: 'the baseline round', s: 'baseline' });
+  const icon = a.icon.replace(/^icon_/, '');
   return {
-    label: a.name, icon: a.icon.replace(/^icon_/, ''),
-    spend: r ? [...costAmts(r.cost), { i: 'job_craft', n: r.work, t: 'bench work' }, { i: a.icon.replace(/^icon_/, ''), n: `→${n}`, t: 'rounds per batch' }] : [{ i: 'st_danger', t: 'found only' }],
-    get, catch: a.desc,
+    label: a.name, icon,
+    spend: r ? [...costAmts(r.cost), { i: 'job_craft', n: r.work, t: 'bench work' }, { i: icon, n: `→${n}`, t: 'rounds per batch' }] : [{ i: 'st_danger', t: 'found only' }],
+    get: [{ i: icon, t: a.guns, s: 'feeds' }], catch: a.desc,
   };
 }
 
@@ -457,8 +449,7 @@ export function matrix(): MatrixBlock[] {
         row('fortify', 'Reinforce (once)'),
       ],
     },
-    { title: 'Shotgun shells', rows: (['shell', 'shell_slug', 'shell_flech', 'shell_fire'] as Res[]).map(ammoRow).filter((x): x is MatrixRow => !!x) },
-    { title: 'Pistol and rifle rounds', rows: (['light', 'light_hp', 'rifle', 'rifle_sp', 'rifle_ap'] as Res[]).map(ammoRow).filter((x): x is MatrixRow => !!x) },
+    { title: 'Ammunition: three pools', rows: (['pistol', 'shell', 'rifle'] as Res[]).map(ammoRow).filter((x): x is MatrixRow => !!x) },
     { title: 'At the wall', rows: [row('sally'), row('nerve'), row('firebombs'), row('rally')] },
   ];
 }

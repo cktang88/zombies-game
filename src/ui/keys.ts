@@ -16,7 +16,6 @@ export const ACTIONS: KeyAction[] = [
   // ---- the wall at night
   { id: 'night.reload', ctx: 'night', label: 'Reload / clear a jam (hold: speed reload)', def: 'r', hold: true },
   { id: 'night.weapon', ctx: 'night', label: 'Next gun from the rack', def: 'q' },
-  { id: 'night.ammo', ctx: 'night', label: 'Ammunition / slug swap', def: 't' },
   { id: 'night.selector', ctx: 'night', label: 'Fire selector', def: 'b' },
   { id: 'night.firebomb', ctx: 'night', label: 'Throw a firebomb', def: 'f' },
   { id: 'night.duck', ctx: 'night', label: 'Duck under the parapet (hold)', def: 's', hold: true },
@@ -39,7 +38,6 @@ export const ACTIONS: KeyAction[] = [
   { id: 'run.right', ctx: 'run', label: 'Walk right', def: 'd', hold: true },
   { id: 'run.search', ctx: 'run', label: 'Search / revive (hold)', def: 'e', hold: true },
   { id: 'run.reload', ctx: 'run', label: 'Reload', def: 'r' },
-  { id: 'run.ammo', ctx: 'run', label: 'Ammunition swap', def: 't' },
   { id: 'run.swing', ctx: 'run', label: 'Swing the hand weapon', def: 'v', hold: true },
   { id: 'run.shove', ctx: 'run', label: 'Shove', def: ' ' },
   { id: 'run.pack', ctx: 'run', label: 'Next item in the pack', def: 'Tab' },
@@ -152,7 +150,6 @@ export const PAD: Record<'night' | 'run', PadBind[]> = {
     { btn: 0, to: 'run.search', label: 'Search / revive (hold)' },
     { btn: 1, to: 'run.shove', label: 'Shove' },
     { btn: 3, to: 'run.pack', label: 'Next item in the pack' },
-    { btn: 4, to: 'run.ammo', label: 'Ammunition swap' },
     { btn: 5, to: 'run.drop', label: 'Drop the selected item' },
     { btn: 9, to: '@pause', label: 'Pause' },
   ],

@@ -86,7 +86,7 @@ export function noiseOfHouse(): { level: number; pct: number; reasons: string[] 
     { v: guns, why: `Gun oil: ${G.weapons.length} gun${G.weapons.length === 1 ? '' : 's'} in the house` },
     { v: G.buildings.reduce((a, b) => a + 30 * b.level, 0), why: 'The bench and the forge ringing all day' },
     { v: s.meds * 3 + s.salvage * 0.15, why: 'Medicine and a salvage pile, the things worth stealing' },
-    { v: (s.light + s.shell * 2 + s.rifle * 2) * 0.15, why: 'Ammunition stacked in the hall' },
+    { v: (s.pistol + s.shell * 2 + s.rifle * 2) * 0.15, why: 'Ammunition stacked in the hall' },
     { v: (G.fort.maxHp - 300) * 0.2, why: 'A wall big enough to be seen from the river' },
   ];
   const reasons = parts.filter((x) => x.v > 8).sort((a, b) => b.v - a.v).slice(0, 3).map((x) => x.why);

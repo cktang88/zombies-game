@@ -53,8 +53,8 @@ function bodyBox(d: Dummy) {
 
 // ---------- firing ----------
 let wpn = 'ar15';
-function prof(id: string, ammo?: string): FireProfile {
-  const w: WeaponItem = { uid: 'lab', def: id, cond: 1, kills: 0, mods: {}, ammoType: ammo as WeaponItem['ammoType'] };
+function prof(id: string, _ammo?: string): FireProfile {
+  const w: WeaponItem = { uid: 'lab', def: id, cond: 1, kills: 0, mods: {} };
   return fireProfile(w);
 }
 const AMMO: Record<string, string | undefined> = {};

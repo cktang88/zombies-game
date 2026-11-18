@@ -114,16 +114,16 @@ export const INCIDENTS: Incident[] = [
     id: 'trader',
     weight: () => (G.day > 2 ? 1.2 : 0),
     make: () => {
-      const wants: Res = R.pick(['fuel', 'food', 'meds', 'light'] as Res[]);
+      const wants: Res = R.pick(['fuel', 'food', 'meds', 'pistol'] as Res[]);
       const offers = R.pick([{ r: 'rifle', n: 18 }, { r: 'shell', n: 20 }, { r: 'salvage', n: 16 }, { r: 'meds', n: 3 }, { r: 'food', n: 12 }].filter((o) => o.r !== wants)) as { r: Res; n: number };
       // friends of the Ferry families get the family price
       const friend = rep('ferry') >= 40 ? 0.6 : rep('ferry') >= 10 ? 0.8 : rep('ferry') <= -40 ? 1.5 : 1;
-      const price = Math.max(1, Math.round({ fuel: 6, food: 10, meds: 3, light: 40 }[wants as 'fuel'] * friend));
+      const price = Math.max(1, Math.round({ fuel: 6, food: 10, meds: 3, pistol: 40 }[wants as 'fuel'] * friend));
       const gun = R.chance(0.3) ? R.pick(['revolver', 'pump', 'hunting', 'smg']) : null;
       // sometimes something special from under the tarp: an attachment or a box of odd ammunition
       const special = R.chance(0.45) ? (R.chance(0.5)
         ? { kind: 'mod' as const, id: R.pick(['scope', 'reddot', 'suppressor', 'choke', 'extmag', 'speedloader', 'flashlight'].filter((m) => MODS[m])) }
-        : { kind: 'ammo' as const, ...R.pick([{ id: 'shell_slug', n: 12 }, { id: 'rifle_ap', n: 10 }, { id: 'shell_fire', n: 8 }, { id: 'r556', n: 30 }]) }) : null;
+        : { kind: 'ammo' as const, ...R.pick([{ id: 'rifle', n: 30 }, { id: 'shell', n: 30 }]) }) : null;
       const specialPrice = special ? Math.max(1, Math.round(price * (special.kind === 'mod' ? 1.8 : 1.3))) : 0;
       const specialName = special ? (special.kind === 'mod' ? MODS[special.id]?.name.toLowerCase() ?? special.id : `${(special as { n: number }).n} ${RES_LABEL[special.id as Res].toLowerCase()}`) : '';
       const specialPitch = special ? (special.kind === 'mod'
@@ -331,7 +331,7 @@ export const INCIDENTS: Incident[] = [
   },
   {
     id: 'raiders',
-    weight: () => (G.day > 6 && G.stores.food + G.stores.light / 5 > 40 ? 0.8 : 0),
+    weight: () => (G.day > 6 && G.stores.food + G.stores.pistol / 5 > 40 ? 0.8 : 0),
     make: () => {
       const want: Res = R.pick(['food', 'fuel', 'meds'] as Res[]);
       const n = Math.max(2, Math.round(G.stores[want] * 0.4));

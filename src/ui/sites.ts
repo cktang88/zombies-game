@@ -12,9 +12,9 @@ export const FIND_ICON: Record<Find, string> = {
 };
 // a "normal" haul of each per trip: a site's amount against this says whether it is a good place for it
 const TYPICAL: Record<Exclude<Find, 'guns'>, number> = { food: 5, salvage: 10, meds: 3, fuel: 3, ammo: 20 };
-const AMMO: Res[] = ['light', 'shell', 'rifle', 'r22', 'light_hp', 'shell_slug', 'shell_flech', 'shell_fire', 'rifle_sp', 'rifle_ap', 'r556', 'ball', 'bolt', 'bolt_fire', 'flare'];
-// heavy rounds count for more than .22s
-const AMMO_W: Partial<Record<Res, number>> = { r22: 0.4, shell: 1.5, shell_slug: 1.8, shell_flech: 1.8, flare: 2, bolt: 1.5, ball: 1.2 };
+const AMMO: Res[] = ['pistol', 'shell', 'rifle', 'bolt'];
+// shells and bolts count for more than pistol rounds
+const AMMO_W: Partial<Record<Res, number>> = { shell: 1.5, bolt: 1.5 };
 
 export interface SiteFind { k: Find; score: number; level: 'lots' | 'some' | 'a little' }
 
@@ -25,7 +25,7 @@ export function siteFinds(site: Site): SiteFind[] {
   for (const k of ['food', 'salvage', 'meds', 'fuel'] as const) if (l[k]) amt[k] = l[k]!;
   let ammo = 0;
   for (const r of AMMO) ammo += (l[r] ?? 0) * (AMMO_W[r] ?? 1);
-  ammo += ((l.rocket ?? 0) + (l.g40 ?? 0) + (l.g40_buck ?? 0)) * 15;
+  ammo += ((l.rocket ?? 0) + (l.g40 ?? 0)) * 15;
   if (ammo) amt.ammo = ammo;
   const out: SiteFind[] = [];
   for (const [k, v] of Object.entries(amt) as [Exclude<Find, 'guns'>, number][]) {

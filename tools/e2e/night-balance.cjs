@@ -36,6 +36,9 @@ const PREP = {
   20: { n: 6, sh: 6, stores: { light: 150, shell: 45, rifle: 35, r556: 100, r22: 140, scrap: 45, fuel: 7, parts: 14, molotov: 6 }, guns: ['m1911', 'autoshot', 'pump', 'lever', 'scoped', 'ar15'], fort: { maxHp: 540, lights: 3, wire: 2, spikes: 2 } },
   13: { n: 6, sh: 5, stores: { light: 140, shell: 30, rifle: 40, r556: 60, r22: 120, scrap: 57, fuel: 18, parts: 14, molotov: 5 }, guns: ['service9', 'm1911', 'pump', 'lever', 'hunting', 'ar15'], fort: { maxHp: 480, lights: 2, wire: 2, spikes: 1 } },
 };
+// the snapshots keep their old numbers; fold them into today's pools (src/state.ts STORE_FOLD)
+const FOLD = { light: ['pistol', 1], r22: ['pistol', 0.5], r556: ['rifle', 0.5], scrap: ['salvage', 1], parts: ['salvage', 2] };
+const folded = (st) => { const o = {}; for (const [k, v] of Object.entries(st)) { const [to, per] = FOLD[k] ?? [k, 1]; o[to] = (o[to] ?? 0) + v * per; } return o; };
 async function night(day, seed, mode) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   page.on('pageerror', (e) => errs.push(`${day}/${mode}: ${e.message}`));
@@ -45,7 +48,8 @@ async function night(day, seed, mode) {
   await page.fill('[data-seed]', String(1000 + seed * 7));
   await page.click('[data-act=new][data-id=siege]');
   await page.waitForSelector('.dusk', { timeout: 10000 });
-  const snap = (mode === 'prep' && PREP[day]) || SNAP[day] || SNAP[13];
+  const snap0 = (mode === 'prep' && PREP[day]) || SNAP[day] || SNAP[13];
+  const snap = { ...snap0, stores: folded(snap0.stores) };
   await page.evaluate((dt) => Object.assign(globalThis.__directorTune, dt), JSON.parse(process.env.DTUNE || "{}"));
   await page.evaluate((im) => { const I = globalThis.__impact; for (const [k, v] of Object.entries(im)) { if (v && typeof v === 'object' && !Array.isArray(v)) Object.assign(I[k], v); else I[k] = v; } }, JSON.parse(process.env.IMP || "{}"));
   await page.evaluate(([day, snap]) => {
@@ -57,7 +61,7 @@ async function night(day, seed, mode) {
     G.weapons = [];
     snap.guns.forEach((d, i) => { const uid = `bw${i}`; G.weapons.push({ uid, def: d, cond: 0.85, kills: 0 }); if (ppl[i]) ppl[i].weapon = uid; });
     for (const s of ppl) { s.skills.shooting = snap.sh + (s.isLeader ? 0 : -1); s.wounds = []; s.infection = 0; s.mood = 60; s.thoughts = []; s.breakState = null; s.job = 'rest'; }
-    for (const k of Object.keys(G.stores)) if (!['food', 'wood', 'cloth', 'meds'].includes(k)) G.stores[k] = 0;
+    for (const k of Object.keys(G.stores)) if (!['food', 'meds'].includes(k)) G.stores[k] = 0;
     Object.assign(G.stores, snap.stores);
     G.stores.food = 60;
     G.fort.maxHp = snap.fort.maxHp; G.fort.hp = snap.fort.maxHp; G.fort.lights = snap.fort.lights; G.fort.wire = snap.fort.wire; G.fort.spikes = snap.fort.spikes;
@@ -79,7 +83,7 @@ async function night(day, seed, mode) {
     cancelAnimationFrame(b.raf);
     b.ended = true; // the page's loop stops drawing; we step it ourselves
     b.intro = 0;
-    const ammo0 = {}; for (const k of ['light', 'shell', 'rifle', 'r556', 'r22', 'molotov']) ammo0[k] = G.stores[k] ?? 0;
+    const ammo0 = {}; for (const k of ['pistol', 'shell', 'rifle', 'molotov']) ammo0[k] = G.stores[k] ?? 0;
     const wall0 = G.fort.hp;
     const dt = 1 / 30;
     let shots = 0, autoHeld = 0, lastFire = -9, ax = 800, ay = 500, tid = -1, ready = 0;

@@ -281,16 +281,16 @@ console.log('  heir text:', living()[living().length - 1].tales.join(' '), '| bo
 
 // Peltier's tarp: attachments and odd ammunition
 newGame('siege', 55);
-G.day = 5; G.stores.food = 200; G.stores.fuel = 200; G.stores.meds = 200; G.stores.light = 999;
+G.day = 5; G.stores.food = 200; G.stores.fuel = 200; G.stores.meds = 200; G.stores.pistol = 999;
 let specials = 0;
 const trader = INCIDENTS.find((i) => i.id === 'trader')!;
 for (let i = 0; i < 40; i++) {
   const ev = trader.make()!;
   const si = ev.choices.findIndex((c) => c.effect === 's');
   if (si < 0) continue;
-  const before = (G.modStock ?? []).length + G.stores.shell_slug + G.stores.rifle_ap + G.stores.shell_fire + G.stores.r556;
+  const before = (G.modStock ?? []).length + G.stores.shell + G.stores.rifle;
   const out = resolveEvent(ev, si);
-  const after = (G.modStock ?? []).length + G.stores.shell_slug + G.stores.rifle_ap + G.stores.shell_fire + G.stores.r556;
+  const after = (G.modStock ?? []).length + G.stores.shell + G.stores.rifle;
   check(after > before, `trader special gave nothing: ${out}`);
   if (!specials) console.log('tarp:', ev.choices[si].label, '—', out.slice(0, 60));
   specials++;

@@ -4,7 +4,7 @@ import { G, R, dateLabel, ICE_DAY, has, pay, ordinal, docsFound, rep } from '../
 import { DOCS, FACTIONS } from '../data/lore';
 import { spriteUrl } from '../assets';
 import { portraitImg } from './portrait';
-import { WEAPONS, MELEE, meleeProfile, CLASS_NAMES, CALIBERS, AMMO_TYPES, MODS, MOD_SLOTS, fireProfile, ammoTypesFor, ammoLabel, selectedAmmo, slotsFor, attachMod, detachMod, type FireProfile } from '../data/weapons';
+import { WEAPONS, MELEE, meleeProfile, CLASS_NAMES, AMMO_TYPES, AMMO_RES, MODS, MOD_SLOTS, fireProfile, ammoLabel, selectedAmmo, slotsFor, attachMod, detachMod, type FireProfile } from '../data/weapons';
 import { TRAITS } from '../data/traits';
 import { SKILL_NAMES, SKILL_LINES, COURAGE_LINE } from '../data/names';
 import { SITES, BUILDINGS, RECIPES, RES_LABEL, RES_ICON, FORT_CAP } from '../data/world';
@@ -201,7 +201,7 @@ function needs(): Set<Find> {
   if (G.stores.fuel < heatNeed() + 2) n.add('fuel');
   if (living().some((x) => x.wounds.length)) n.add('meds');
   if (G.stores.salvage < 12 || (G.fort.hp < G.fort.maxHp * 0.6 && G.stores.salvage < 20)) n.add('salvage');
-  const shortGun = living().some((x) => { const w = G.weapons.find((g) => g.uid === x.weapon); const a = w ? (w.ammoType ?? WEAPONS[w.def]?.ammo) : null; return a && a !== 'salvage' && (G.stores[a as Res] ?? 0) < 25; });
+  const shortGun = living().some((x) => { const w = G.weapons.find((g) => g.uid === x.weapon); const a = w ? WEAPONS[w.def]?.ammo : null; return a && a !== 'salvage' && (G.stores[a as Res] ?? 0) < 25; });
   if (shortGun) n.add('ammo');
   return n;
 }
@@ -319,7 +319,6 @@ function survivorCard(s: Survivor, dots: Set<string> = new Set()) {
           <option value="">— unarmed —</option>
           ${freeWeapons.map((x) => `<option value="${x.uid}" ${x.uid === s.weapon ? 'selected' : ''}>${esc(x.name ? `"${x.name}"` : WEAPONS[x.def].name)} (${Math.round(x.cond * 100)}%)</option>`).join('')}
         </select>
-        ${ammoSelect(G.weapons.find((x) => x.uid === s.weapon), true)}
         ${meleeSelect(s)}
         ${hp?.fav ? `<span class="chip good"${tip(`<b>Favourite gun</b><br>${esc(first(s))} handles a ${esc(CLASS_NAMES[hp.cls].toLowerCase())} as if Shooting were ${FAV_BONUS} higher: faster reloads, fewer jams.`)}><b>★ ${esc(CLASS_SHORT[hp.cls])}</b></span>` : ''}
         ${s.armor ? `<button class="mini" data-act="unarmor" data-id="${s.id}"${tip('Mill-plate vest: wounds 30% lighter. Click to take it off.')}>vest ✓</button>` : (G.flags.armorStock as number) > 0 ? `<button class="mini" data-act="armor" data-id="${s.id}"${tip('Give a mill-plate vest: wounds 30% lighter.')}>+ vest</button>` : ''}
@@ -514,7 +513,7 @@ function workshopHtml() {
     </div>`;
   }).join('');
   // ammo for guns people carry first (shortest-lasting first), then what you can afford
-  const rank = (r: (typeof RECIPES)[number]) => { const k = ammoOf(r); if (!k) return 2; const u = ammoUse(k); return u.loaded.length ? 0 : u.fits.length ? 1 : 2; };
+  const rank = (r: (typeof RECIPES)[number]) => { const k = ammoOf(r); if (!k) return 2; const u = ammoUse(k); return u.loaded.length ? 0 : 2; };
   const recipes = RECIPES.filter((r) => !r.hidden && !(r.special === 'roofnest' && G.flags.roofNest) && buildingLevel(r.needs) >= (r.level ?? 1))
     .sort((a, b) => rank(a) - rank(b) || +has(b.cost) - +has(a.cost));
   const locked = RECIPES.filter((r) => !r.hidden && buildingLevel(r.needs) < (r.level ?? 1));
@@ -534,14 +533,13 @@ function workshopHtml() {
   const useLine = (res: Res) => {
     const u = ammoUse(res);
     if (u.nights === null) return { badge: '', html: `<div class="cuse t-s dim">${u.have} · no gun</div>`, t: 'No carried gun takes these.', unused: true };
-    const who = u.loaded.length ? u.loaded : u.fits;
-    const w0 = G.weapons.find((x) => x.uid === who[0].weapon);
+    const w0 = G.weapons.find((x) => x.uid === u.loaded[0].weapon);
     const badge = w0 ? `<img class="gunbadge" src="${spriteUrl(WEAPONS[w0.def].icon)}" alt="">` : '';
-    const end = u.loaded.length ? `<span class="${u.nights < 1 ? 'neg' : ''}">${nightsWord(u.nights)}</span>` : 'fits';
+    const end = `<span class="${u.nights < 1 ? 'neg' : ''}">${nightsWord(u.nights)}</span>`;
     return {
       badge,
       html: `<div class="cuse t-s">${u.have} · ${end}</div>`,
-      t: `${u.have} on hand.${u.loaded.length ? ` Loaded: ${esc(u.loaded.map((s) => `${first(s)}'s ${WEAPONS[G.weapons.find((x) => x.uid === s.weapon)!.def].name.toLowerCase()}`).join(', '))}: ${nightsWord(u.nights)}.` : ''}${u.fits.length ? ` Also fits: ${esc(u.fits.map(first).join(', '))}.` : ''} About ${SHOTS_PER_GUN_NIGHT} shots a gun is an ordinary night; a tide is 2–3×.`,
+      t: `${u.have} on hand. Drawn by ${esc(u.loaded.map((s) => `${first(s)}'s ${WEAPONS[G.weapons.find((x) => x.uid === s.weapon)!.def].name.toLowerCase()}`).join(', '))}: ${nightsWord(u.nights)}. About ${SHOTS_PER_GUN_NIGHT} shots a gun is an ordinary night; a tide is 2–3×.`,
       unused: false,
     };
   };
@@ -626,18 +624,6 @@ function meleeSelect(s: Survivor) {
     ${free.map((k) => `<option value="${k.uid}" ${k.uid === s.melee ? 'selected' : ''}>${esc(MELEE[k.def].name)} ${Math.round(k.cond * 100)}%</option>`).join('')}</select>`;
 }
 
-// Bullet-type dropdown for one gun (only when its caliber has more than one type).
-function ammoSelect(w: WeaponItem | undefined, compact = false) {
-  if (!w) return '';
-  const types = ammoTypesFor(w.def);
-  if (types.length < 2) return '';
-  const cur = selectedAmmo(w);
-  return `<select data-act="ammo" data-w="${w.uid}" title="Bullet type" ${compact ? 'style="flex:0 1 auto;min-width:0"' : ''}>${types.map((t) => {
-    const n = Math.floor(G.stores[t] ?? 0);
-    return `<option value="${t}" ${t === cur ? 'selected' : ''}>${esc(compact ? AMMO_TYPES[t]!.short : ammoLabel(t))} (${n})</option>`;
-  }).join('')}</select>`;
-}
-
 // Attachment slots for one gun: a small icon per slot; an invisible dropdown over it attaches/detaches.
 function modSlotsHtml(w: WeaponItem) {
   const slots = slotsFor(w.def);
@@ -701,13 +687,11 @@ const condBar = (c: number) => `<span class="cond ${c < 0.4 ? 'bad' : c < 0.7 ? 
 
 function armoryHtml() {
   let total = 0;
-  const stock = Object.values(CALIBERS).map((c) => {
-    const items = c.types.map((t) => {
-      const n = Math.floor(G.stores[t] ?? 0);
-      total += t === 'salvage' ? 0 : n;
-      return `<span class="chip ${n ? '' : 'none'}"${tip(`<b>${esc(ammoLabel(t))}</b><br>${esc(AMMO_TYPES[t]!.desc)}`)}><img src="${spriteUrl(AMMO_TYPES[t]!.icon)}" alt=""><b>${n}</b></span>`;
-    }).join('');
-    return `<div class="calrow"><span class="t-s">${esc(c.name.replace(/\s*\(.*\)/, ''))}</span>${items}</div>`;
+  const stock = AMMO_RES.filter((t) => (G.stores[t] ?? 0) >= 1 || ['pistol', 'shell', 'rifle'].includes(t)).map((t) => {
+    const n = Math.floor(G.stores[t] ?? 0);
+    total += n;
+    const a = AMMO_TYPES[t]!;
+    return `<div class="calrow"><span class="t-s">${esc(a.name)}</span><span class="chip ${n ? '' : 'none'}"${tip(`<b>${esc(a.name)}</b><br>${esc(a.desc)}<br><span class="dim">Feeds ${esc(a.guns)}.</span>`)}><img src="${spriteUrl(a.icon)}" alt=""><b>${n}</b></span></div>`;
   }).join('');
   const order = Object.keys(WEAPONS);
   const guns = [...G.weapons].sort((a, b) => order.indexOf(a.def) - order.indexOf(b.def));
@@ -731,11 +715,10 @@ function armoryHtml() {
     if (p.noise <= 0.6) tags.push('quiet');
     else if (p.noise >= 2.5) tags.push('loud');
     if (p.jam >= 0.02) tags.push(`jams ${Math.round(p.jam * 100)}%`);
-    const types = ammoTypesFor(w.def);
     const stats = `dmg ${Math.round(p.dmg)}${p.pellets > 1 ? `×${p.pellets}` : ''} · ${+p.rof.toFixed(2)}/s · mag ${p.mag} · reload ${p.reloadPerRound ? `${p.reload.toFixed(2)}s/round` : `${+p.reload.toFixed(1)}s`}${p.pierce ? ` · pierce ${p.pierce}` : ''}${p.perShot !== 1 ? ` · ${p.perShot} ${ammoLabel(p.ammoRes).toLowerCase()}/shot` : ''}`;
     const t = `<b>${esc(d.name)}</b> · ${esc(CLASS_NAMES[d.cls].toLowerCase())}${d.niche ? `<br><i>${esc(d.niche)}</i>` : ''}<br>${stats}${tags.length ? `<br>${tags.join(' · ')}` : ''}${modDeltaHtml(w)}<br><span class="dim">${esc(d.desc)}</span>`;
     const n = p.ammoRes ? Math.floor(G.stores[p.ammoRes] ?? 0) : 0;
-    const ammo = types.length > 1 ? ammoSelect(w, true) : p.ammoRes ? `<span class="chip ${n ? '' : 'warn'}"${tip(`${esc(ammoLabel(p.ammoRes))}${AMMO_TYPES[p.ammoRes] ? `<br>${esc(AMMO_TYPES[p.ammoRes]!.desc)}` : ''}`)}><img src="${spriteUrl(RES_ICON[p.ammoRes] ?? 'icon_ammo')}" alt=""><b>${n}</b></span>` : '';
+    const ammo = p.ammoRes ? `<span class="chip ${n ? '' : 'warn'}"${tip(`${esc(ammoLabel(p.ammoRes))}${AMMO_TYPES[p.ammoRes] ? `<br>${esc(AMMO_TYPES[p.ammoRes]!.desc)}` : ''}`)}><img src="${spriteUrl(RES_ICON[p.ammoRes] ?? 'icon_ammo')}" alt=""><b>${n}</b></span>` : '';
     return `<div class="gcard ${holder ? 'held' : ''}">
       <div class="gpic"${tip(t)}><img src="${spriteUrl(d.icon)}" alt="${esc(d.name)}"></div>
       <div class="gname"${tip(t)}>${w.name ? `"${esc(w.name)}"` : esc(d.name)}</div>
@@ -807,17 +790,14 @@ const STORE_USE: Partial<Record<Res, string>> = {
   molotov: 'Firebombs: [F] or right-click at night.',
 };
 
-// One compact chip for every round in the house, with a per-caliber breakdown on hover/focus.
-function ammoChip() {
-  const rows = Object.values(CALIBERS).map((c) => {
-    const types = c.types.filter((t) => t !== 'salvage');
-    const n = types.reduce((a, t) => a + Math.floor(G.stores[t] ?? 0), 0);
-    return { c, types, n };
-  }).filter((r) => r.types.length);
-  const total = rows.reduce((a, r) => a + r.n, 0);
-  const keys = rows.flatMap((r) => r.types).join(' ');
-  const t = `<b>Ammunition</b><br>${rows.filter((r) => r.n).map((r) => `${esc(r.c.name.replace(/\s*\(.*\)/, ''))}: ${r.types.filter((x) => (G.stores[x] ?? 0) >= 1).map((x) => `${Math.floor(G.stores[x] ?? 0)} ${esc((AMMO_TYPES[x]?.short ?? ammoLabel(x)).toLowerCase())}`).join(' · ')}`).join('<br>')}`;
-  return `<span class="chip lg" data-res-group="${keys}"${tip(t)}><img src="${spriteUrl(RES_ICON.light)}" alt="rounds"><span class="n">${total}</span></span>`;
+// One chip per ammo pool the house uses: rounds on hand, what it feeds, how long it lasts.
+function ammoChips() {
+  return AMMO_RES.filter((r) => (G.stores[r] ?? 0) >= 1 || ammoUse(r).loaded.length).map((r) => {
+    const a = AMMO_TYPES[r]!, u = ammoUse(r), n = Math.floor(G.stores[r] ?? 0);
+    const low = u.nights !== null && u.nights < 1;
+    const t = `<b>${esc(a.name)}</b><br>${esc(a.desc)}<br><span class="dim">Feeds ${esc(a.guns)}.</span>${u.nights !== null ? `<br>About ${u.nights < 0.75 ? 'less than one night' : `${Math.round(u.nights)} night${Math.round(u.nights) === 1 ? '' : 's'}`} for the guns that draw on it.` : ''}`;
+    return `<span class="chip lg ${low ? 'warn' : ''}" data-res="${r}"${tip(t)}><img src="${spriteUrl(a.icon)}" alt="${esc(a.name)}"><span class="n">${n}</span></span>`;
+  }).join('');
 }
 
 /** One click: every guard who can't shoot gets the best free gun for them. */
@@ -871,7 +851,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
         const low = (r === 'food' && G.stores.food < eat * 2) || (r === 'fuel' && G.stores.fuel < heat);
         const use = r === 'food' ? foodTip(eatN, half) : r === 'fuel' && heat ? `The stove burns ${heat} tonight.` : '';
         return `<span data-res="${r}" class="chip lg ${low ? 'warn' : ''}"${tip(`<b>${RES_LABEL[r]}</b><br>${STORE_USE[r] ?? ''}${use ? `<br>${use}` : ''}`)}><img src="${spriteUrl(RES_ICON[r])}" alt="${RES_LABEL[r]}"><span class="n">${Math.floor(G.stores[r] ?? 0)}</span>${r === 'fuel' && heat ? `<em>−${heat}</em>` : r === 'food' && eat ? `<em>−${eatN}${half ? ' · ½' : ''}</em>` : ''}</span>`;
-      }).join('')}${ammoChip()}</div>
+      }).join('')}${ammoChips()}</div>
     </header>
     ${strip}
     <main>
@@ -949,13 +929,6 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
     if (t.dataset.act === 'give') {
       const s = byId(t.value);
       if (s && G.weapons.some((x) => x.uid === t.dataset.w)) { s.weapon = t.dataset.w!; sfx.ui('stamp'); }
-      h.rerender();
-      return;
-    }
-    if (t.dataset.act === 'ammo') {
-      const w = G.weapons.find((x) => x.uid === t.dataset.w);
-      if (w) w.ammoType = t.value as Res;
-      sfx.ui();
       h.rerender();
       return;
     }

@@ -1,5 +1,6 @@
 import type { GameState, ChronicleEntry, Res, WeaponItem } from './types';
 import { Rng } from './rng';
+import { RECIPES } from './data/world';
 
 const KEY = 'vessey-save-v1';
 
@@ -36,28 +37,68 @@ export function loadSave(): GameState | null {
   }
 }
 
-/** Version 2 folded nine materials into four (food, salvage, fuel, medicine); see docs/research/19-simplify-resources.md. */
+/**
+ * Version 2: nine materials became four (food, salvage, fuel, medicine) and nineteen kinds of ammunition
+ * became three pools; see docs/research/19-simplify-resources.md. Loading folds any old store key into
+ * its new one, so a save from any step of that change comes up clean.
+ */
 export const SAVE_VERSION = 2;
-/** Salvage per unit of each old material: one pile for timber, scrap, parts and cloth (parts were rarer, so they count double). */
-const TO_SALVAGE: Record<string, number> = { scrap: 1, wood: 1, cloth: 1, parts: 2 };
+/** Old store key -> [new key, units of the new per unit of the old]. */
+export const STORE_FOLD: Record<string, [Res, number]> = {
+  // one salvage pile (parts were rarer, so they count double); a bottle of liquor back to the food it was
+  scrap: ['salvage', 1], wood: ['salvage', 1], cloth: ['salvage', 1], parts: ['salvage', 2], liquor: ['food', 1.5],
+  // special loads fold into their pool; .22 and 5.56 at the half-round a shot those guns now draw
+  light: ['pistol', 1], light_hp: ['pistol', 1], r22: ['pistol', 0.5],
+  shell_slug: ['shell', 1], shell_flech: ['shell', 1], shell_fire: ['shell', 1], flare: ['shell', 1],
+  rifle_sp: ['rifle', 1], rifle_ap: ['rifle', 1], r556: ['rifle', 0.5], ball: ['rifle', 1],
+  bolt_fire: ['bolt', 1], g40_buck: ['g40', 1],
+};
+/** Old recipe ids still sitting in a craft queue -> the recipe that replaced them. */
+const RECIPE_FOLD: Record<string, string> = {
+  liquor: 'drink', ammo_light_hp: 'ammo_light', ammo_r22: 'ammo_light',
+  ammo_slug: 'ammo_shell', ammo_flech: 'ammo_shell', ammo_dragon: 'ammo_shell', ammo_flare: 'ammo_shell',
+  ammo_rifle_sp: 'ammo_rifle', ammo_rifle_ap: 'ammo_rifle', ammo_r556: 'ammo_rifle', ammo_ball: 'ammo_rifle',
+  ammo_bolt_fire: 'ammo_bolt',
+};
 
 /** Bring an older save up to SAVE_VERSION in place, or null when it cannot be read. */
 export function migrateSave(s: GameState | null): GameState | null {
-  if (!s || typeof s !== 'object' || !s.stores) return null;
-  if (s.version === SAVE_VERSION) return s;
-  if (s.version !== 1) return null;
-  const old = s.stores as unknown as Record<string, number>;
-  const n = (k: string) => (typeof old[k] === 'number' && isFinite(old[k]) ? Math.max(0, old[k]) : 0);
+  if (!s || typeof s !== 'object' || !s.stores || (s.version !== 1 && s.version !== SAVE_VERSION)) return null;
   const st = s.stores as unknown as Record<string, number>;
-  st.salvage = Math.round(n('salvage') + Object.entries(TO_SALVAGE).reduce((a, [k, w]) => a + n(k) * w, 0));
-  // liquor: each bottle back to the 1.5 food it was made from (the still now pours food straight into courage)
-  st.food = Math.round((n('food') + n('liquor') * 1.5) * 10) / 10;
-  for (const k of [...Object.keys(TO_SALVAGE), 'liquor']) delete st[k];
-  // queued liquor becomes a round from the still
-  for (const q of s.craftQueue ?? []) if (q.recipe === 'liquor') q.recipe = 'drink';
+  const num = (v: unknown) => (typeof v === 'number' && isFinite(v) ? Math.max(0, v) : 0);
+  for (const [k, [to, per]] of Object.entries(STORE_FOLD)) {
+    if (!(k in st)) continue;
+    st[to] = Math.round((num(st[to]) + num(st[k]) * per) * 10) / 10;
+    delete st[k];
+  }
+  for (const k of Object.keys(STORE_FOLD)) delete st[k];
+  for (const k of STORE_KEYS) st[k] = num(st[k]);
+  for (const k of Object.keys(st)) if (!(STORE_KEYS as string[]).includes(k)) delete st[k];
+  // the load choice is gone: each gun draws from its own pool
+  for (const w of s.weapons ?? []) delete (w as { ammoType?: unknown }).ammoType;
+  // an open event card may name old keys (Peltier's trades, costs and gains on the chips)
+  const fold = (k: unknown) => (typeof k === 'string' && STORE_FOLD[k] ? STORE_FOLD[k][0] : k);
+  const foldRec = (o?: Partial<Record<Res, number>>) => {
+    if (!o) return o;
+    const out: Record<string, number> = {};
+    for (const [k, v] of Object.entries(o)) out[fold(k) as string] = (out[fold(k) as string] ?? 0) + (v ?? 0);
+    return out as Partial<Record<Res, number>>;
+  };
+  const ev = s.pendingEvent;
+  if (ev) {
+    const d = (ev.data ?? {}) as Record<string, unknown>;
+    if (d.wants) d.wants = fold(d.wants);
+    const o = d.offers as { r?: string } | undefined, sp = d.special as { kind?: string; id?: string } | undefined;
+    if (o?.r) o.r = fold(o.r) as string;
+    if (sp?.kind === 'ammo' && sp.id) sp.id = fold(sp.id) as string;
+    for (const c of ev.choices ?? []) if (c.fx) { c.fx.cost = foldRec(c.fx.cost); c.fx.gain = foldRec(c.fx.gain); }
+  }
+  s.craftQueue = (s.craftQueue ?? []).map((q) => ({ ...q, recipe: RECIPE_FOLD[q.recipe] ?? q.recipe })).filter((q) => RECIPES.some((r) => r.id === q.recipe));
   s.version = SAVE_VERSION;
   return s;
 }
+/** Every stores key, in header order. */
+export const STORE_KEYS: Res[] = ['food', 'salvage', 'fuel', 'meds', 'pistol', 'shell', 'rifle', 'molotov', 'bolt', 'rocket', 'g40', 'pipebomb'];
 
 export function clearSave() {
   try {

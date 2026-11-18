@@ -5,7 +5,7 @@
 import type { Survivor, WeaponItem, Res } from '../types';
 import { G } from '../state';
 import { living, canFight, handling } from './survivors';
-import { fireProfile, roundsInStores, weaponClass, ammoTypesFor } from '../data/weapons';
+import { fireProfile, roundsInStores, weaponClass } from '../data/weapons';
 
 /** About this many shots per gun is one ordinary night on the wall (a tide is 2–3×). */
 export const SHOTS_PER_GUN_NIGHT = 25;
@@ -105,19 +105,21 @@ export function canArmAnyone(): boolean {
 }
 
 /**
- * One ammo type against the guns people carry: rounds on hand, who has it loaded, who could load it,
- * and about how many ordinary nights it lasts at SHOTS_PER_GUN_NIGHT a gun (loaded guns, else the ones
- * that fit). nights is null when no carried gun takes it.
+ * One ammo pool against the guns people carry: rounds on hand, who draws on it, and about how many
+ * ordinary nights it lasts at SHOTS_PER_GUN_NIGHT shots a gun (each gun's perShot counted). nights is null
+ * when no carried gun takes it.
  */
 export function ammoUse(res: Res) {
   const have = Math.floor(G.stores[res] ?? 0);
-  const loaded: Survivor[] = [], fits: Survivor[] = [];
+  const loaded: Survivor[] = [];
+  let perNight = 0;
   for (const s of living()) {
     const w = gunOf(s);
     if (!w) continue;
-    if (fireProfile(w).ammoRes === res) loaded.push(s);
-    else if (ammoTypesFor(w.def).includes(res)) fits.push(s);
+    const p = fireProfile(w);
+    if (p.ammoRes !== res) continue;
+    loaded.push(s);
+    perNight += SHOTS_PER_GUN_NIGHT * p.perShot;
   }
-  const guns = loaded.length || fits.length;
-  return { have, loaded, fits, nights: guns ? have / (SHOTS_PER_GUN_NIGHT * guns) : null };
+  return { have, loaded, nights: perNight ? have / perNight : null };
 }

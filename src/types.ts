@@ -1,10 +1,10 @@
 // Core data model. Everything in GameState is plain JSON so it can be saved.
 
 // Four materials: food, salvage (timber, scrap, parts and cloth in one pile), fuel, medicine. Then ammunition.
-export type Res = 'food' | 'salvage' | 'meds' | 'fuel' | 'light' | 'shell' | 'rifle' | 'molotov'
-  // ammunition by caliber & bullet type (see src/data/weapons.ts CALIBERS / AMMO_TYPES)
-  | 'r22' | 'light_hp' | 'shell_slug' | 'shell_flech' | 'shell_fire' | 'rifle_sp' | 'rifle_ap' | 'r556' | 'ball' | 'bolt' | 'bolt_fire' | 'flare'
-  | 'rocket' | 'g40' | 'g40_buck' | 'pipebomb';
+export type Res = 'food' | 'salvage' | 'meds' | 'fuel'
+  // ammunition: three pools (src/data/weapons.ts AMMO_TYPES); every gun draws from one
+  | 'pistol' | 'shell' | 'rifle'
+  | 'molotov' | 'bolt' | 'rocket' | 'g40' | 'pipebomb';
 export type Stores = Record<Res, number>;
 
 // Five skills (docs/research/19b-simplify-survivors.md). Old saves had crafting, farming and psych: migrateSurvivor folds them in.
@@ -121,7 +121,7 @@ export interface WeaponDef {
   // --- arsenal extensions (all optional; read them through fireProfile() in data/weapons.ts) ---
   cls: WeaponClass;
   niche?: string; // one line: what this gun is FOR
-  caliber?: string; // CALIBERS key; decides which ammo types it can load
+  caliber?: string; // CALIBERS key: the physical cartridge (sound, tracer); CALIBERS maps it to an ammo pool
   armorPen?: number; // 0..1 fraction of a Deputy's body armour ignored (negative = armour hurts more)
   reloadPerRound?: boolean; // loads one round at a time; `reload` stays the full-magazine time
   burst?: number; // rounds fired per trigger pull (default 1)
@@ -146,7 +146,6 @@ export interface WeaponItem {
   cond: number; // 0..1 condition
   name?: string; // given a name after a memorable event
   kills: number;
-  ammoType?: Res; // selected bullet type for this gun (must match its caliber); default = WeaponDef.ammo
   mods?: Partial<Record<ModSlot, ModItem>>; // attachments (see MODS in data/weapons.ts)
 }
 

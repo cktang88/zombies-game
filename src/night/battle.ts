@@ -1,7 +1,7 @@
 import type { Survivor, WeaponItem, Res, NightPlan } from '../types';
 import { G, R, log, add } from '../state';
 import { ZOMBIES, WEAKSPOTS, EYES, paceMul, sizeVar, DASH_T, type ZombieDef, type WeakKind } from '../data/zombies';
-import { WEAPONS, fireProfile, armorDamage, roundsInStores, ammoLabel, ammoTypesFor, selectedAmmo, shotSound, wearMods, blastDamage, AMMO_RES, AMMO_TYPES, BURN, FLARE_LIGHT, type FireProfile } from '../data/weapons';
+import { WEAPONS, fireProfile, armorDamage, roundsInStores, ammoLabel, selectedAmmo, shotSound, wearMods, blastDamage, AMMO_RES, AMMO_TYPES, BURN, FLARE_LIGHT, type FireProfile } from '../data/weapons';
 import { img, flashImg, shadeImg } from '../assets';
 import { sfx, wind, gunSoundFor, muffle, ambienceLayer } from '../audio';
 import { flashKind, gunFeel, voiceOf, panOf, isSuppressed, type FlashKind } from './gunfx';
@@ -430,7 +430,6 @@ export class Battle {
   heat = new Map<string, number>(); // per gun uid
   modes = new Map<string, FireMode>(); // fire selector per gun uid
   pouch = new Map<string, number[]>(); // partial magazines kept on tactical reloads, by `${uid}|${ammo}`
-  tube = new Map<string, Res[]>(); // shell order in tube guns
   jam: { kind: Malfunction | 'barrel'; clearing: number } | null = null;
   reloadKind: 'tac' | 'empty' | 'speed' = 'tac';
   reloadTotal = 1;
@@ -691,7 +690,6 @@ export class Battle {
     else if (/^[1-9]$/.test(k)) this.selectGuard(+k - 1);
     else if (k === 'Tab') { e.preventDefault(); this.selectGuard(e.shiftKey ? Math.max(0, this.sel) - 1 : this.sel + 1, true); }
     else if (k === keyOf('night.weapon')) this.cycleWeapon(1);
-    else if (k === keyOf('night.ammo')) this.cycleAmmo();
     else if (k === keyOf('night.selector')) this.cycleMode();
     else if (k === keyOf('night.rally')) this.useRally();
     else if (k === keyOf('night.mark')) this.markTarget();
@@ -1150,39 +1148,27 @@ export class Battle {
     p.flash = Math.max(0, p.flash - dt);
   }
 
-  // fireProfile is pure; cache it per gun (and shooter, and load) until its condition changes
+  // fireProfile is pure; cache it per gun (and shooter) until its condition changes
   profCache = new Map<string, { cond: number; p: FireProfile }>();
-  prof(w: WeaponItem, s?: Survivor, ammo?: Res): FireProfile {
-    const key = `${w.uid}|${s?.id ?? ''}|${ammo ?? w.ammoType ?? ''}`;
+  prof(w: WeaponItem, s?: Survivor): FireProfile {
+    const key = `${w.uid}|${s?.id ?? ''}`;
     const c = this.profCache.get(key);
     if (c && Math.abs(c.cond - w.cond) < 0.02) return c.p;
-    const item = ammo ? { ...w, ammoType: ammo } : w;
     const cls = WEAPONS[w.def]?.cls ?? 'improvised';
-    const p = fireProfile(item, s ? { shooter: shooterMods(s, cls, !s.isLeader || s !== this.player?.s) } : {});
+    const p = fireProfile(w, s ? { shooter: shooterMods(s, cls, !s.isLeader || s !== this.player?.s) } : {});
     this.profCache.set(key, { cond: w.cond, p });
     return p;
   }
-  /** The leader's profile as the selector and the tube make it: semi / burst / auto, and the next shell's type. */
-  eff(p: Guard, ammo?: Res): FireProfile {
+  /** The leader's profile as the selector makes it: semi / burst / auto. */
+  eff(p: Guard): FireProfile {
     const w = p.w!;
-    const base = this.prof(w, p.s, ammo);
+    const base = this.prof(w, p.s);
     const mode = this.modes.get(w.uid);
     if (!mode || mode === fireModes(w, base)[0]) return base;
     if (mode === 'semi') return { ...base, auto: false, burst: 1 };
     // burst on an automatic: three rounds at its cyclic rate
     return { ...base, auto: false, burst: base.burst > 1 ? base.burst : 3, burstGap: base.burst > 1 ? base.burstGap : 1 / base.rof };
   }
-  /** Shell types in a tube gun's magazine, top (next to fire) last. Kept the same length as the round count. */
-  tubeOf(w: WeaponItem, n: number): Res[] {
-    let t = this.tube.get(w.uid);
-    if (!t) { t = []; this.tube.set(w.uid, t); }
-    const def = selectedAmmo(w);
-    while (t.length < n && def) t.unshift(def);
-    if (t.length > n) t.splice(0, t.length - n);
-    return t;
-  }
-  usesTube(w: WeaponItem, p: FireProfile) { return p.reloadPerRound && ammoTypesFor(w.def).length > 1; }
-
   // take up to `want` rounds of this profile's ammunition out of the stores
   loadFromStores(prof: FireProfile, want: number) {
     if (!prof.ammoRes) return want;
@@ -1254,11 +1240,9 @@ export class Battle {
     const prof = this.prof(g.w, g.s);
     const mag = this.playerMag.get(g.w.uid) ?? 0;
     if (prof.reloadPerRound) {
-      // one shell at a time, of whatever type is selected for the next load
-      const tube = this.usesTube(g.w, prof) ? this.tubeOf(g.w, mag) : null;
+      // one shell at a time
       const got = this.loadFromStores(prof, 1);
       this.playerMag.set(g.w.uid, mag + got);
-      if (tube && got && prof.ammoRes) tube.push(prof.ammoRes);
       if (mag + got < prof.mag && got > 0) this.startReload();
       return;
     }
@@ -1272,41 +1256,6 @@ export class Battle {
     else got = this.loadFromStores(prof, prof.mag);
     this.pouch.set(pouchKey, pouch);
     this.playerMag.set(g.w.uid, mag + got);
-  }
-
-  /** [T]: the next bullet type. Box mags: the next magazine. A tube: the next shell — and if the tube is full, swap the top shell for it (slug swap). */
-  cycleAmmo() {
-    const p = this.player;
-    if (!p || !p.w) return;
-    const types = ammoTypesFor(p.w.def);
-    if (types.length < 2) return;
-    const prof0 = this.prof(p.w, p.s);
-    const cur = prof0.ammoRes;
-    const have = types.filter((t) => t === cur || (G.stores[t] ?? 0) > 0);
-    const next = have[(have.indexOf(cur!) + 1) % have.length];
-    if (!next || next === cur) { this.say(`No other ammunition for the ${WEAPONS[p.w.def].name.toLowerCase()}.`, 2); return; }
-    p.burstLeft = 0;
-    if (this.usesTube(p.w, prof0)) {
-      const m = this.playerMag.get(p.w.uid) ?? 0;
-      const tube = this.tubeOf(p.w, m);
-      p.w.ammoType = next;
-      this.say(`Next shell: ${ammoLabel(next).toLowerCase()}.`, 2);
-      if (m >= prof0.mag && this.playerReload <= 0 && tube.length) {
-        // thumb the top shell out, feed the new one in
-        const out = tube.pop()!;
-        add(out, this.prof(p.w, p.s, out).perShot);
-        this.playerMag.set(p.w.uid, m - 1);
-        this.startReload();
-      } else if (this.playerReload <= 0) this.startReload();
-      return;
-    }
-    const m = this.playerMag.get(p.w.uid) ?? 0;
-    if (cur && m > 0) add(cur, m * prof0.perShot);
-    this.playerMag.set(p.w.uid, 0);
-    p.w.ammoType = next;
-    this.playerReload = 0;
-    this.say(`Loading ${ammoLabel(next).toLowerCase()}.`, 2);
-    this.startReload();
   }
 
   /** [B]: the fire selector, where the gun has one. */
@@ -1413,10 +1362,7 @@ export class Battle {
     do {
       const mag = this.playerMag.get(p.w.uid) ?? 0;
       if (mag <= 0) { p.burstLeft = 0; break; }
-      // a tube gun fires whatever shell is on top
-      const tube = this.usesTube(p.w, prof0) ? this.tubeOf(p.w, mag) : null;
-      const top = tube?.pop();
-      const prof = top && top !== prof0.ammoRes ? this.eff(p, top) : prof0;
+      const prof = prof0;
       this.playerMag.set(p.w.uid, mag - 1);
       p.burstLeft--;
       const mz = this.muzzle(p);
@@ -4404,7 +4350,6 @@ export class Battle {
       const mag = this.playerMag.get(p.w.uid) ?? 0;
       const reserve = prof.ammoRes ? roundsInStores(prof, G.stores) : Infinity;
       if (reserve > 0 && mag <= Math.max(0, Math.floor(prof.mag * 0.3))) out.push({ key: 'night.reload', label: 'reload', hot: mag === 0 });
-      else if (mag === 0 && ammoTypesFor(p.w.def).length > 1) out.push({ key: 'night.ammo', label: 'other ammo', hot: true });
     }
     for (const h of this.hooks) out.push(...(h.hints?.() ?? []));
     if (this.rally > 0 && this.rallyT <= 0) out.push({ key: 'night.rally', label: 'rally', hot: true });
@@ -4466,9 +4411,8 @@ export class Battle {
   }
   /** The full key sheet ([F1] held / paused), grouped. */
   keyGroups(): { title: string; rows: Hint[] }[] {
-    const multiAmmo = !!(this.player?.w && ammoTypesFor(this.player.w.def).length > 1);
     return [
-      { title: 'your gun', rows: [{ key: 'LMB', label: 'fire' }, { key: 'RMB', label: 'focus' }, { key: 'night.reload', label: 'reload (hold: speed)' }, { key: 'night.weapon', label: 'next gun' }, ...(multiAmmo ? [{ key: 'night.ammo', label: 'ammo' }] : []), { key: 'night.selector', label: 'selector' }] },
+      { title: 'your gun', rows: [{ key: 'LMB', label: 'fire' }, { key: 'RMB', label: 'focus' }, { key: 'night.reload', label: 'reload (hold: speed)' }, { key: 'night.weapon', label: 'next gun' }, { key: 'night.selector', label: 'selector' }] },
       { title: 'you', rows: [{ key: 'night.duck', label: 'duck' }, { key: 'night.firebomb', label: `firebomb ×${G.stores.molotov}` }, { key: 'night.melee', label: 'melee' }, { key: 'night.nest', label: 'gun nest' }, { key: 'night.rally', label: 'rally' }, { key: 'night.sally', label: 'sally' }] },
       { title: 'the guards', rows: [{ key: '1-9', label: 'select (Tab: next)' }, { key: 'night.free', label: 'free fire' }, { key: 'night.hold', label: 'hold' }, { key: 'night.heads', label: 'heads' }, { key: 'night.wall', label: 'wall (Shift: all)' }, { key: 'night.post', label: 'post' }] },
       { title: 'the night', rows: [{ key: 'night.lure', label: 'lure' }, { key: 'night.trap', label: 'spring trap' }, { key: 'night.mark', label: 'mark target' }, { key: 'night.hurry', label: 'hurry' }, { key: 'night.pause', label: 'pause' }, { key: 'F1', label: 'this sheet' }] },
@@ -4604,11 +4548,6 @@ export class Battle {
         ax -= 8;
         c.fillStyle = '#d9cdb0';
         for (let i = 0; i < n; i++) c.fillRect(ax - i * (m === 'auto' ? 3 : 5), hb - 78, m === 'auto' ? 2 : 3, 8);
-      }
-      if (this.usesTube(p.w, prof) && !hard) {
-        const tube = this.tubeOf(p.w, mag);
-        const col: Partial<Record<Res, string>> = { shell: '#b04030', shell_slug: '#a0a0a0', shell_fire: '#d08030', shell_flech: '#6080c0' };
-        tube.forEach((r, i) => { c.fillStyle = col[r] ?? '#c9b88a'; c.fillRect(rx - 200 + i * 9, hb - 58, 7, 10); });
       }
       if (p.w.cond < 0.4) caps(c, 'worn', magX - 50, hb - 30, '#c08040', 'right');
       // reload / clearing bar
@@ -4750,12 +4689,12 @@ export class Battle {
       const m = g === pl ? this.playerMag.get(g.w.uid) ?? 0 : g.mag;
       if (prof.ammoRes) add(prof.ammoRes, m * prof.perShot);
     }
-    // partial magazines in the pouch, and shells in a tube, go back in the stores as rounds
+    // partial magazines in the pouch go back in the stores as rounds
     for (const [key, mags] of this.pouch) {
       const res = key.split('|')[1] as Res;
       const w = G.weapons.find((x) => x.uid === key.split('|')[0]);
       const n = mags.reduce((a, b) => a + b, 0);
-      if (w && res && n > 0) add(res, n * this.prof(w, undefined, res).perShot);
+      if (w && res && n > 0) add(res, n * this.prof(w).perShot);
     }
     // dropped magazines: picked out of the snow at first light if the wall held (never on Hardcore)
     const drop = Object.entries(this.dropped) as [Res, number][];

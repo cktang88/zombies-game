@@ -12,7 +12,7 @@
 // The data half of the patch (weapons, ammo, Turned, recipes, sites, start stores, switchTime) is
 // now in src/ itself, so BASE reads it directly; only the battle.ts model is still patched here.
 // Nothing in src/ is modified on disk.
-import { WEAPONS, WEAPON_ORDER, AMMO_TYPES, ammoTypesFor, fireProfile, weaponClass, BURN, type FireProfile } from '../src/data/weapons';
+import { WEAPONS, WEAPON_ORDER, AMMO_TYPES, fireProfile, weaponClass, BURN, type FireProfile } from '../src/data/weapons';
 import { ZOMBIES, type ZombieDef } from '../src/data/zombies';
 import { RECIPES, SITES } from '../src/data/world';
 import { newGame } from '../src/sim/newgame';
@@ -314,11 +314,9 @@ function profiles(): Prof[] {
   for (const id of WEAPON_ORDER) {
     const def = WEAPONS[id];
     if (!def || def.explosive) continue; // area weapons (launchers) need a blast model: not simulated
-    const types = ammoTypesFor(id);
-    const list: (Res | null)[] = types.length ? types : [null];
+    const list: (Res | null)[] = [def.ammo];
     for (const a of list) {
-      if (a === 'flare' && def.caliber === 'shot') continue;
-      const w: WeaponItem = { uid: 'b', def: id, cond: 1, kills: 0, ammoType: a ?? undefined };
+      const w: WeaponItem = { uid: 'b', def: id, cond: 1, kills: 0 };
       const p = fireProfile(w);
       p.switchTime += SWITCH_PATCH[id] ?? 0;
       out.push({ key: a && a !== def.ammo ? `${id}/${AMMO_TYPES[a]?.short ?? a}` : id, gun: id, ammo: a, p, def });
@@ -592,7 +590,7 @@ function economy(seeds: number, N: number): { days: EconDay[]; md: string } {
       if (day >= 6) addR('fuel', 2); // the still: rot and sawdust to fuel
       const needs = [...calibers].filter((c): c is Res => !!c).sort((a, b) => (stores[a] ?? 0) / perNight(a) - (stores[b] ?? 0) / perNight(b));
       for (const res of needs) {
-        const r = RECIPES.find((x) => x.gives?.[res] && !Object.keys(x.cost).some((k) => k !== 'scrap' && AMMO_TYPES[k as Res]));
+        const r = RECIPES.find((x) => x.gives?.[res] && !Object.keys(x.cost).some((k) => k !== 'salvage' && AMMO_TYPES[k as Res]));
         if (!r || (r.level ?? 1) > (day >= 11 ? 3 : day >= 5 ? 2 : 1) || (r.needs !== 'workbench' && day < 4)) continue;
         while (work >= r.work && (stores[res] ?? 0) < (day >= 19 ? 6 : 3) * perNight(res) && Object.entries(r.cost).every(([k, v]) => (stores[k as Res] ?? 0) * 0.5 >= (v ?? 0))) {
           for (const [k, v] of Object.entries(r.cost)) stores[k as Res] -= v ?? 0;
@@ -626,25 +624,25 @@ function economy(seeds: number, N: number): { days: EconDay[]; md: string } {
       row.pts += plan.points / seeds; row.zombies += n / seeds; row.hp += hp / seeds; row.stragglers += strag / seeds;
       for (const [k, v] of Object.entries(spent)) row.spent[k as Res] = (row.spent[k as Res] ?? 0) + (v ?? 0) / seeds;
       for (const [k, v] of Object.entries(gained)) row.gained[k as Res] = (row.gained[k as Res] ?? 0) + (v ?? 0) / seeds;
-      for (const k of ['light', 'shell', 'rifle', 'r556', 'r22'] as Res[]) row.stock[k] = (row.stock[k] ?? 0) + (stores[k] ?? 0) / seeds;
+      for (const k of ['pistol', 'shell', 'rifle'] as Res[]) row.stock[k] = (row.stock[k] ?? 0) + (stores[k] ?? 0) / seeds;
       row.scrap += stores.salvage / seeds; row.fuel += stores.fuel / seeds;
       acc[day - 1] = row;
     }
     void crafted;
   }
   const L: string[] = [];
-  L.push('| day | threat | Turned | HP total | stragglers | spent light/shell/rifle/5.56/.22 | gained (same) | stock (same) | scrap/fuel/parts | verdict |');
+  L.push('| day | threat | Turned | HP total | stragglers | spent pistol/shell/rifle | gained (same) | stock (same) | salvage/fuel | verdict |');
   L.push('|---|---|---|---|---|---|---|---|---|---|');
   for (const r of acc) {
-    const k: Res[] = ['light', 'shell', 'rifle', 'r556', 'r22'];
+    const k: Res[] = ['pistol', 'shell', 'rifle'];
     const g = (o: Partial<Record<Res, number>>) => k.map((x) => Math.round(o[x] ?? 0)).join('/');
     const nights = k.filter((x) => (r.spent[x] ?? 0) > 1).map((x) => (r.stock[x] ?? 0) / (r.spent[x] ?? 1));
     const minN = nights.length ? Math.min(...nights) : 9;
     const verdict = minN < 0.5 ? 'BROKE' : minN < 1.5 ? 'tight' : minN < 4 ? 'hover' : 'HOARD';
-    L.push(`| ${r.day} | ${Math.round(r.pts)} | ${Math.round(r.zombies)} | ${Math.round(r.hp)} | ${r.stragglers.toFixed(1)} | ${g(r.spent)} | ${g(r.gained)} | ${g(r.stock)} | ${Math.round(r.scrap)}/${Math.round(r.fuel)}/${Math.round(r.parts)} | ${verdict} (${minN.toFixed(1)} nights) |`);
+    L.push(`| ${r.day} | ${Math.round(r.pts)} | ${Math.round(r.zombies)} | ${Math.round(r.hp)} | ${r.stragglers.toFixed(1)} | ${g(r.spent)} | ${g(r.gained)} | ${g(r.stock)} | ${Math.round(r.scrap)}/${Math.round(r.fuel)} | ${verdict} (${minN.toFixed(1)} nights) |`);
   }
   return { days: acc, md: L.join('\n') };
-  function perNight(res: Res) { return Math.max(10, lastSpent[res] ?? (res === 'light' ? 40 : 15)); }
+  function perNight(res: Res) { return Math.max(10, lastSpent[res] ?? (res === 'pistol' ? 40 : 15)); }
 }
 
 // ---------------------------------------------------------------- feel numbers (derived, for the integrator)

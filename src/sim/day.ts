@@ -805,7 +805,7 @@ function breaksTick(): string[] {
       case 'smash': G.craftQueue = []; out.push(`${name} smashed up the workbench. The queue is lost.`); log('break', `${displayName(s)} took a hammer to the workbench.`); break;
       case 'hidebite': for (const w of s.wounds) if (w.kind === 'bite') w.hidden = true; break;
       case 'desert': {
-        const took: Partial<Record<Res, number>> = { food: Math.min(G.stores.food, 6), meds: Math.min(G.stores.meds, 2), light: Math.min(G.stores.light, 20) };
+        const took: Partial<Record<Res, number>> = { food: Math.min(G.stores.food, 6), meds: Math.min(G.stores.meds, 2), pistol: Math.min(G.stores.pistol, 20) };
         pay(took);
         log('break', breakLine(s, 'desert'));
         out.push(`${name} deserted with supplies.`);

@@ -51,7 +51,7 @@ async function toNight(page, place) {
   return 'night';
 }
 async function nightFrom(page, day, opt = {}) {
-  await boot(page, (G) => { G.day = day; if (opt.wall) G.fort.hp = G.fort.maxHp; if (opt.lights) G.fort.lights = opt.lights; G.stores.r556 = 400; });
+  await boot(page, (G) => { G.day = day; if (opt.wall) G.fort.hp = G.fort.maxHp; if (opt.lights) G.fort.lights = opt.lights; G.stores.rifle = 400; });
   await cont(page);
   await toNight(page);
 }

@@ -48,7 +48,7 @@ const night = (page, o = {}) => boot(page, (G) => {
   if (o.hp != null) G.fort.hp = Math.round(G.fort.maxHp * o.hp);
   if (o.emp) G.flags.emplacements = JSON.stringify(o.emp);
   if (o.crew) G.flags.empCrew = JSON.stringify(o.crew);
-  G.stores.r556 = 600; G.stores.rifle = 80; G.stores.fuel = 20;
+  G.stores.rifle = 380; G.stores.fuel = 20;
   G.trapStock = {};
   G.deploy = [];
   o.mut?.(G);

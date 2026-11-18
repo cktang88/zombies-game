@@ -232,7 +232,7 @@ export class Emplacements implements BattleHook {
   startReload(m: Mount) {
     if (m.def.id === 'flamer' || m.reload > 0 || m.mag >= m.def.mag) return;
     if ((G.stores[m.def.ammo] ?? 0) < m.def.perShot) {
-      if (m.byPlayer || this.msgT <= 0) { this.b.say(`No ${m.def.ammo === 'r556' ? '5.56' : m.def.ammo} for the ${lc(m.def.name)}.`, 2); this.msgT = 6; }
+      if (m.byPlayer || this.msgT <= 0) { this.b.say(`No ${m.def.ammo === 'rifle' ? 'rifle rounds' : m.def.ammo} for the ${lc(m.def.name)}.`, 2); this.msgT = 6; }
       m.cd = 2;
       return;
     }
