@@ -291,8 +291,7 @@ const ART: Record<StationId, () => string> = {
     return pic('calendar', 788, 460, 58) + svg(788, 460, 58, 66, rings);
   },
   bench: () => img('obj_shed', 934, 492, 146)
-    + svg(1062, 556, 112, 84, `<rect x="2" y="16" width="108" height="12" fill="#5a4630" ${INK}/><path d="M10 28 v54 M100 28 v54 M10 62 h90" fill="none" stroke="#2a2119" stroke-width="6"/>
-      <rect x="66" y="4" width="26" height="12" fill="#3d4136" stroke="#070605" stroke-width="2"/><path d="M14 16 l18 -12 l6 6 l-14 6z" fill="#6b5b45" stroke="#070605" stroke-width="2"/><circle cx="50" cy="12" r="4" fill="#9a8f7a" stroke="#070605" stroke-width="2"/>`),
+    + pic('workbench', 1048, 564, 120),
   board: () => svg(1176, 498, 72, 142, `<path d="M12 30 v110 M60 30 v110" stroke="#2a2119" stroke-width="7"/><rect x="2" y="2" width="68" height="62" fill="#4a3c2c" ${INK}/><path d="M2 2 l34 -0 l34 0" stroke="#070605" stroke-width="3"/>
       <rect x="8" y="10" width="22" height="26" fill="#d8ccad" transform="rotate(-4 19 23)" stroke="#070605" stroke-width="1.5"/><rect x="36" y="8" width="26" height="20" fill="#cbbf9f" transform="rotate(3 49 18)" stroke="#070605" stroke-width="1.5"/><rect x="14" y="40" width="40" height="18" fill="#bfb08a" stroke="#070605" stroke-width="1.5"/><path d="M18 46 h30 M18 51 h24" stroke="#4a4235" stroke-width="1.5"/>`),
   wall: () => img('emp_scaffold', 1252, 506, 150, 'hv-back') + img('fort_light', 1232, 430, 58, 'hv-back') + img('barricade', 1262, 450, 196),
