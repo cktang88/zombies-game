@@ -1424,7 +1424,7 @@ export class Expedition {
         c.fillRect(x - 4, GROUND - 230, 8, 232);
         c.fillRect(x - 70, GROUND - 236, 140, 34);
       }
-      c.font = '12px "Special Elite", monospace';
+      c.font = '13px "Special Elite", monospace';
       c.fillStyle = '#d8c89a';
       c.textAlign = 'center';
       c.fillText(ZONE_NAMES[i + 1], x, py - 20);
@@ -1443,7 +1443,7 @@ export class Expedition {
     for (const l of list) l.f();
     if (this.prompt) {
       const pr = this.prompt;
-      c.font = `11px ${FONT}`;
+      c.font = `13px ${FONT}`;
       const tw = pr.hints.reduce((a, h) => a + c.measureText(h.label).width + 50, 0);
       const px = Math.min(W - 10 - tw / 2, Math.max(10 + tw / 2, pr.x));
       c.fillStyle = 'rgba(10,9,8,0.55)'; c.beginPath(); c.roundRect(px - tw / 2 - 6, pr.y - 16, tw + 12, 22, 4); c.fill();
@@ -1589,7 +1589,7 @@ export class Expedition {
       c.drawImage(im, -w / 2, -h, w, h);
       c.restore();
     }
-    c.font = '11px "Special Elite", monospace';
+    c.font = '13px "Special Elite", monospace';
     c.textAlign = 'center';
     c.fillStyle = this.mateDown > 0 ? '#c04030' : '#c9b27a';
     c.fillText(this.mateDown > 0 ? `${first(m)} — DOWN ${Math.ceil(this.mateDown)}s · hold ${keyCap('run.search')}` : first(m), x, LANES[0] - h * k - 8);
@@ -1626,7 +1626,7 @@ export class Expedition {
     const x = Math.round(z.x - this.cam);
     if (x < -200 || x > W + 200) return;
     if (this.actors.drawZed(c, z, this.cam, this.looks[lane], z.state === 'kin')) {
-      if (z.state === 'sleep') { c.font = '11px "Special Elite", monospace'; c.fillStyle = 'rgba(200,190,170,0.6)'; c.textAlign = 'center'; c.fillText('standing still', x, z.y - h - 8); c.textAlign = 'left'; }
+      if (z.state === 'sleep') { c.font = '13px "Special Elite", monospace'; c.fillStyle = 'rgba(200,190,170,0.6)'; c.textAlign = 'center'; c.fillText('standing still', x, z.y - h - 8); c.textAlign = 'left'; }
       return;
     }
     c.save();
@@ -1648,7 +1648,7 @@ export class Expedition {
     if (z.burn && z.burn > 0) { const f = shadeImg(z.sprite, '#ff7a2a'); if (f) { c.globalAlpha = 0.25 + Math.sin(this.t * 24 + z.id) * 0.1; c.drawImage(f, -w / 2, -h, w, h); } }
     c.restore();
     if (z.state === 'sleep') {
-      c.font = '11px "Special Elite", monospace';
+      c.font = '13px "Special Elite", monospace';
       c.fillStyle = 'rgba(200,190,170,0.6)';
       c.textAlign = 'center';
       c.fillText('standing still', x, z.y - h - 8);
@@ -1680,7 +1680,7 @@ export class Expedition {
     if (this.mate) {
       const mh = Math.max(0, 1 - pain(this.mate) / 1.45);
       dot(c, 26, 106, this.mateDown ? '#c04030' : mh > 0.5 ? '#9db070' : '#d0a040', 3);
-      c.font = `11px ${FONT}`; c.fillStyle = '#cfc3a6'; c.fillText(first(this.mate), 36, 110);
+      c.font = `13px ${FONT}`; c.fillStyle = '#cfc3a6'; c.fillText(first(this.mate), 36, 110);
       if (this.mateW) { c.textAlign = 'right'; c.fillText(`${this.mateMag}`, 192, 110); c.textAlign = 'left'; }
     }
     // progress along the street
@@ -1706,13 +1706,13 @@ export class Expedition {
       c.beginPath(); c.roundRect(px, H - 44, iw + 10, 32, 3); c.fill(); c.stroke();
       if (ic) c.drawImage(ic, px + 5, H - 40, iw, iw * (ic.height / ic.width) > ih ? ih : iw * (ic.height / ic.width));
       else caps(c, itemLabel(it).slice(0, 4), px + 4, H - 24, '#cfc3a6');
-      if (it.kind === 'res') { c.font = `11px ${FONT}`; c.textAlign = 'right'; c.fillStyle = '#efe2c2'; c.fillText(`${it.n}`, px + iw + 8, H - 15); c.textAlign = 'left'; }
+      if (it.kind === 'res') { c.font = `13px ${FONT}`; c.textAlign = 'right'; c.fillStyle = '#efe2c2'; c.fillText(`${it.n}`, px + iw + 8, H - 15); c.textAlign = 'left'; }
       px += iw + 14;
     });
     if (!this.pack.length) caps(c, 'empty', 20, H - 24, '#8a7e66');
     else {
       const it = this.pack[selI];
-      if (it) { c.font = `11px ${FONT}`; c.fillStyle = '#cfc3a6'; c.fillText(itemLabel(it), px + 6, H - 24); px += c.measureText(itemLabel(it)).width + 16; }
+      if (it) { c.font = `13px ${FONT}`; c.fillStyle = '#cfc3a6'; c.fillText(itemLabel(it), px + 6, H - 24); px += c.measureText(itemLabel(it)).width + 16; }
       hintRow(c, [{ key: 'run.pack', label: '' }, { key: 'run.drop', label: 'drop' }], px, H - 23, 'left', 0.6);
     }
     // the gun: icon, big mag, small reserve, ammo picture; melee as keycap + picture

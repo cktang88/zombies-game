@@ -9,7 +9,7 @@
 .sv-card .body { gap: 5px; }
 .sv-card .name a { font-size: var(--fs-l); font-weight: 600; }
 .sv-card .name .age { font-weight: normal; }
-.sv-card .tag.sv-perknew { font-size: 10px; padding: 1px 5px; }
+.sv-card .tag.sv-perknew { font-size: 13px; padding: 1px 5px; }
 .sv-perknew { display: inline-flex; align-items: center; gap: 2px; color: var(--ochre); border-color: #8a6a2a; text-decoration: none; }
 .sv-perknew .ico { width: 14px; height: 14px; }
 .sv-state { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
@@ -30,7 +30,7 @@
 .sv-sk { display: inline-flex; align-items: center; gap: 4px; }
 .sv-sk .ico.sm, .sv-pi .ico.sm { width: 22px; height: 22px; }
 .sv-sk .pips i, .sv-pips i { width: 5px; height: 5px; }
-.pas { color: var(--ochre); font-style: normal; font-size: 10px; margin-left: -3px; }
+.pas { color: var(--ochre); font-style: normal; font-size: 13px; margin-left: -3px; }
 .sv-attrs { display: inline-flex; gap: 4px; }
 .sv-attr { border-color: transparent; background: none; color: var(--dim); }
 
@@ -46,7 +46,7 @@
 .sv-hours .hlabel { min-width: 2.2em; font-family: var(--type); }
 .sv-hours .hlabel.bad { color: #f08070; }
 .sv-gear .chip { font-size: var(--fs-xs); }
-.surv .stock { font-size: 11px; letter-spacing: 1px; color: var(--ochre); width: max-content; }
+.surv .stock { font-size: 13px; letter-spacing: 1px; color: var(--ochre); width: max-content; }
 
 /* ---- the sheet */
 .sv-sheet { max-width: 920px; }

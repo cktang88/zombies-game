@@ -549,7 +549,7 @@ export class Emplacements implements BattleHook {
     const crewable = this.mounts.filter((m) => m.def.crew);
     if (!crewable.length) return;
     c.save();
-    c.font = '11px "Special Elite", monospace';
+    c.font = '13px "Special Elite", monospace';
     c.textAlign = 'left';
     let y = 98; // below the nerve bar
     // one compact row per nest: the gun in small caps, who is on it, the rounds big; full words on the forge screen
@@ -559,7 +559,7 @@ export class Emplacements implements BattleHook {
       c.fillStyle = 'rgba(10,9,8,0.55)';
       c.beginPath(); c.roundRect(20, y - 13, 210, 24, 3); c.fill();
       caps(c, m.def.short, 26, y + 2, m.crew ? '#c9a95a' : '#7a6e58');
-      c.font = '11px "Special Elite", monospace';
+      c.font = '13px "Special Elite", monospace';
       c.fillStyle = m.crew ? '#d9cdb0' : '#7a6e58';
       c.fillText(who, 62, y + 2);
       c.textAlign = 'right';

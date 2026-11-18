@@ -3676,7 +3676,7 @@ export class Battle {
     const focus = (g: Guard) => g === hovered || g === sel;
     for (const g of gs) {
       const isP = g === this.player;
-      c.font = '11px "Special Elite", monospace';
+      c.font = '13px "Special Elite", monospace';
       const name = first(g.s) + (isP ? ' ◆' : '');
       const lines: Lab['lines'] = [];
       if (g.dragging) lines.push({ t: `hauling ${first(g.dragging.s)}`, c: '#e0c080' });
@@ -3748,7 +3748,7 @@ export class Battle {
           const tw = c.measureText(q.t).width;
           c.fillStyle = 'rgba(8,8,10,0.55)';
           c.fillRect(x - tw / 2 - 4, line - 10, tw + 8, 13);
-        } else c.font = '11px "Special Elite", monospace';
+        } else c.font = '13px "Special Elite", monospace';
         if (!q.info && !q.moodle) dot(c, x - c.measureText(q.t).width / 2 - 7, line - 4, q.c, 2.6);
         c.fillStyle = q.c;
         c.fillText(q.t, x, line);
@@ -3759,7 +3759,7 @@ export class Battle {
   }
 
   drawDownedLabel(c: CanvasRenderingContext2D, g: Guard) {
-    c.font = '11px "Special Elite", monospace';
+    c.font = '13px "Special Elite", monospace';
     c.textAlign = 'center';
     c.fillStyle = '#cfc6b0';
     const lh = 46;
@@ -3827,7 +3827,7 @@ export class Battle {
         this.drawTells(c, z, Math.max(0, Math.min(1, (this.lightAt(z.x, z.y - this.zh(z) * 0.6, env)[0] - 0.12) / 0.2)));
         if (z.name && z.x < W + 10) {
           // a named one (someone they knew): the name stays on screen while it walks in from the edge
-          c.font = '12px "Special Elite", monospace'; c.fillStyle = '#c9a95a'; c.textAlign = 'center';
+          c.font = '13px "Special Elite", monospace'; c.fillStyle = '#c9a95a'; c.textAlign = 'center';
           const tw = c.measureText(z.name).width;
           c.fillText(z.name, Math.min(W - 8 - tw / 2, Math.max(8 + tw / 2, z.x)), z.y - this.zh(z) - 8);
         }
@@ -3935,7 +3935,7 @@ export class Battle {
     c.restore();
     if (z.state !== 'dying') this.drawTells(c, z, lit);
     if (z.name && z.state !== 'dying') {
-      c.font = '12px "Special Elite", monospace';
+      c.font = '13px "Special Elite", monospace';
       c.fillStyle = '#c9a95a';
       c.textAlign = 'center';
       c.fillText(z.name, z.x, z.y - h - 8);
@@ -4218,7 +4218,7 @@ export class Battle {
     else if (g.order === 'heads') { c.beginPath(); c.arc(x, y, 3.5, 0, 7); c.stroke(); c.beginPath(); c.arc(x, y, 1.4, 0, 7); c.fill(); }
     else c.strokeRect(x - 3.5, y - 3.5, 7, 7);
     if (post && g.post !== 'step') {
-      c.font = '9px "Special Elite", monospace';
+      c.font = '13px "Special Elite", monospace';
       c.textAlign = 'left';
       c.fillStyle = '#a89c84';
       c.fillText(g.post === 'roof' ? 'roof' : g.post === 'loop' ? 'loophole' : 'runner', x + 7, y + 3);
@@ -4335,7 +4335,7 @@ export class Battle {
     c.save();
     c.fillStyle = 'rgba(10,9,8,0.55)';
     c.fillRect(x0 - 8, y - 12, x1 - x0 + 16, 30);
-    c.font = '9px "Special Elite", monospace';
+    c.font = '13px "Special Elite", monospace';
     c.textAlign = 'left';
     c.fillStyle = '#7d7462';
     c.fillText(`ROAD ${look}s`, x0 - 4, y - 2);
@@ -4348,7 +4348,7 @@ export class Battle {
     };
     let lastPack = '';
     const close = up.find((s) => s.dark);
-    if (close) { c.font = '8px "Special Elite", monospace'; c.fillStyle = '#d06050'; c.textAlign = 'right'; c.fillText('CLOSE IN THE DARK', x1, y - 2); }
+    if (close) { c.font = '13px "Special Elite", monospace'; c.fillStyle = '#d06050'; c.textAlign = 'right'; c.fillText('CLOSE IN THE DARK', x1, y - 2); }
     for (const s of up) {
       const k = (s.t - this.t) / look;
       const x = x0 + 40 + k * (x1 - x0 - 40);
@@ -4359,13 +4359,13 @@ export class Battle {
         c.beginPath(); c.arc(x, y + 8, 2, 0, 7); c.fill();
       } else {
         c.fillStyle = col;
-        c.font = special ? 'bold 11px "Special Elite", monospace' : '10px "Special Elite", monospace';
+        c.font = special ? 'bold 13px "Special Elite", monospace' : '13px "Special Elite", monospace';
         c.textAlign = 'center';
         c.fillText(g, x, y + 12);
       }
       if (tier >= 2 && s.pack && s.pack !== lastPack) {
         lastPack = s.pack;
-        c.font = '8px "Special Elite", monospace';
+        c.font = '13px "Special Elite", monospace';
         c.fillStyle = '#c9a95a';
         c.textAlign = 'center';
         c.fillText(s.pack.toUpperCase(), x, y - 2);
@@ -4450,7 +4450,7 @@ export class Battle {
       c.fillRect(W / 2 - 210, 64, 420, 22);
       c.fillStyle = this.surge > 0 ? '#c99a3a' : '#8a6a2a';
       c.fillRect(W / 2 - 205, 76, 410 * f, 6);
-      c.font = '11px "Special Elite", monospace';
+      c.font = '13px "Special Elite", monospace';
       c.fillStyle = '#d8c08a';
       c.fillText('THE BELLWETHER', W / 2, 74);
     }

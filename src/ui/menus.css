@@ -24,7 +24,7 @@
 .stile { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; border: 1px solid var(--line); background: rgba(0,0,0,.18); cursor: help; text-align: center; }
 .stile .ico { width: 28px; height: 28px; }
 .stile > b { font-family: var(--type); font-weight: normal; font-size: 20px; color: #e6dcc6; }
-.stile .t-xs { font-size: 9px; line-height: 1.2; }
+.stile .t-xs { font-size: 13px; line-height: 1.2; }
 .over .unlock { cursor: help; }
 .grave .gd .ico.sm { width: 14px; height: 14px; margin: 0 2px 0 6px; }
 .grave .fold { border-top-color: rgba(90,79,60,.4); margin-top: 6px; }

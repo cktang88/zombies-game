@@ -979,7 +979,7 @@ export class Traps implements BattleHook {
     if (this.list.some((t) => t.def.id === 'propane' && t.armed)) parts.push('shoot the propane');
     if (!parts.length) return;
     c.save();
-    c.font = '12px "Special Elite", monospace';
+    c.font = '13px "Special Elite", monospace';
     c.textAlign = 'left';
     c.fillStyle = `rgba(216,196,140,${0.6 + 0.4 * Math.min(1, this.hint)})`;
     c.fillText(`traps: ${parts.join('   ·   ')}`, 20, 720 - 40);

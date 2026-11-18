@@ -67,11 +67,11 @@ export type Hint = { key: string; label: string; hot?: boolean; icon?: string; n
 export function hintRow(c: CanvasRenderingContext2D, hints: Hint[], x: number, y: number, align: 'left' | 'center' | 'right' = 'left', alpha = 1): number {
   c.save();
   c.globalAlpha = alpha;
-  c.font = `11px ${FONT}`;
+  c.font = `13px ${FONT}`;
   const parts = hints.map((h) => {
-    c.font = `11px ${FONT}`;
+    c.font = `13px ${FONT}`;
     const lw = c.measureText(h.label).width;
-    c.font = `10px ${FONT}`;
+    c.font = `13px ${FONT}`;
     const kw = Math.max(16, c.measureText(capOf(h.key)).width + 8);
     return { h, w: kw + 5 + (h.icon ? 18 : 0) + lw + (h.n !== undefined ? 16 : 0) };
   });
@@ -83,7 +83,7 @@ export function hintRow(c: CanvasRenderingContext2D, hints: Hint[], x: number, y
     let px = cx + keycap(c, capOf(p.h.key), cx, y, { hot: p.h.hot }) + 5;
     const ic = p.h.icon ? img(p.h.icon) : undefined;
     if (ic) { const ih = 14, iw = Math.min(16, (ic.width / ic.height) * ih); c.drawImage(ic, px, y - 11, iw, ih); px += 18; } else if (p.h.icon) px += 18;
-    c.font = `11px ${FONT}`;
+    c.font = `13px ${FONT}`;
     c.textAlign = 'left';
     c.fillStyle = p.h.hot ? '#ecd9a2' : '#cfc3a6';
     c.fillText(p.h.label, px, y);
@@ -162,7 +162,7 @@ export class Ticker {
     c.beginPath(); c.roundRect(W / 2 - tw / 2 - 12, y - size, tw + 24, size + 10, 4); c.fill();
     c.fillStyle = `rgba(236,224,196,${a})`;
     c.fillText(m.text, W / 2, y, W - 60);
-    if (this.q.length > 1) { c.fillStyle = `rgba(200,180,140,${0.6 * a})`; c.font = `9px ${FONT}`; c.fillText('•'.repeat(Math.min(3, this.q.length - 1)), W / 2, y + 12); }
+    if (this.q.length > 1) { c.fillStyle = `rgba(200,180,140,${0.6 * a})`; c.font = `13px ${FONT}`; c.fillText('•'.repeat(Math.min(3, this.q.length - 1)), W / 2, y + 12); }
     c.restore();
   }
 }
