@@ -67,6 +67,9 @@ type HandT = { x: number; y: number; rho: number; pose: string } | null;
 const ADDITIVE_ALWAYS: Partial<Record<NumCh, true>> = { px: true, py: true };
 /** how far (0..1) each unit drawing leans toward the other's gun angle while aim and low ready cross-dissolve */
 const UNIT_SWING = 0.4;
+/** recoil: the gun slides back KICK_GUN rig px per unit of spring, the body rocks KICK_BODY times the stance's
+ * recoilLean/recoilBack; each shot raises the muzzle CLIMB_SHOT rad × strength (capped at CLIMB_MAX) */
+const KICK_GUN = 9, KICK_BODY = 6, CLIMB_SHOT = 0.045, CLIMB_MAX = 0.2;
 let nextSeed = 1;
 
 export function createRig(kind: RigKind, spriteId: string, opts: CreateOpts = {}): Rig {
@@ -130,6 +133,9 @@ export class Rig {
   /** closed-loop hip height: px the pelvis is raised so the straighter knee sits at a natural soft bend */
   legTrim = 0;
   recoil = 0; recoilV = 0;
+  /** muzzle climb (radians, the barrel rises): each shot adds to it, it settles back in ~0.3 s; under
+   * sustained fire it recovers slower, so an automatic walks up a little */
+  climb = 0;
   flashT = 0;
   private lastFlashT = -9;
   /** The hit flash, at most every 0.22 s: under sustained fire (an MG on a big body) it would
@@ -271,6 +277,10 @@ export class Rig {
   /** A shot: recoil kick (strength ~ weapon knock/caliber), muzzle flash flag, casing out. */
   fire(strength = 1) {
     this.recoilV += 9 * strength;
+    const hold = this.anchors?.hold;
+    // handguns flip at the wrist; a stock in the shoulder climbs less
+    const flip = this.stance.id === 'pistol' || this.stance.id === 'pistol1' ? 1.35 : this.stance.id === 'hip' ? 1.1 : hold === 'bow' ? 0 : 0.8;
+    this.climb = Math.min(CLIMB_MAX, this.climb + CLIMB_SHOT * strength * flip * (0.85 + this.r() * 0.3));
     this.lastFire = this.t;
     this.ch.flash = 1;
     this.flashMuzzle = 0.06;
@@ -360,6 +370,8 @@ export class Rig {
     // recoil spring (critically-damped-ish)
     this.recoilV += (-this.recoil * 260 - this.recoilV * 26) * dt;
     this.recoil += this.recoilV * dt;
+    // climb recovers fast between aimed shots, slowly while the trigger stays down
+    this.climb *= Math.exp(-dt * (this.t - this.lastFire < 0.16 ? 2.2 : 7));
     this.ch.flash = Math.max(0, this.ch.flash - dt * 12);
     // 5. solve
     this.prevPts.set(this.pts);
@@ -482,8 +494,8 @@ export class Rig {
       ch.lean += st.lean * aimW * (1 - 0.45 * lr) + aim * st.leanAim * raise;
       ch.head += aim * st.headAim * raise + 0.12 * lr * aimW;
       // recoil rocks the shoulder back (the feet stay planted)
-      ch.lean -= this.recoil * st.recoilLean;
-      ch.px -= this.recoil * st.recoilBack;
+      ch.lean -= this.recoil * st.recoilLean * KICK_BODY;
+      ch.px -= this.recoil * st.recoilBack * KICK_BODY;
     }
     // ---- trunk
     const crouchDrop = ch.crouch * g.legLen * 0.5;
@@ -565,15 +577,15 @@ export class Rig {
       const rX = pelX + ux * g.torsoLen * 0.5 + vx * 22 + ch.gunDX, rY = pelY + uy * g.torsoLen * 0.5 + vy * 22 + ch.gunDY;
       const rA = (a!.hold === 'bow' ? -Math.PI / 2 + 0.3 : 0.12) + ch.gunTilt;
       const rw = ch.ready;
-      this.ga = lerpAngle(gAimA + ch.gunTilt * 0.3, rA, rw) - this.recoil * 0.03;
-      this.gx = lerp(gX, rX, rw) - Math.cos(this.ga) * this.recoil * 0.9;
-      this.gy = lerp(gY, rY, rw) - Math.sin(this.ga) * this.recoil * 0.9;
+      this.ga = lerpAngle(gAimA + ch.gunTilt * 0.3, rA, rw) - this.recoil * 0.03 - this.climb * (1 - rw);
+      this.gx = lerp(gX, rX, rw) - Math.cos(this.ga) * this.recoil * KICK_GUN;
+      this.gy = lerp(gY, rY, rw) - Math.sin(this.ga) * this.recoil * KICK_GUN;
       if (this.unit) {
         // the drawn gun: the muzzle from the leading unit, the gun frame along its barrel (muzzleWorld, flashes,
         // casings, the mag in the reload clip)
         const u = this.unit, c = Math.cos(this.unitRot), s = Math.sin(this.unitRot);
         const mx = u.muzzle[0] - u.pelvis[0], my = u.muzzle[1] - u.pelvis[1];
-        const kick = this.recoil * 0.9;
+        const kick = this.recoil * KICK_GUN;
         this.ga = this.unitRot + u.bore;
         const wx = this.unitX + mx * c - my * s - Math.cos(this.ga) * kick, wy = this.unitY + mx * s + my * c - Math.sin(this.ga) * kick;
         this.gx = wx - (muz[0] * Math.cos(this.ga) - muz[1] * Math.sin(this.ga));
@@ -583,7 +595,8 @@ export class Rig {
       if (this.hasAim && rw < 0.05 && aimW > 0.95 && a!.hold !== 'bow') {
         const lx = ((this.aimWX - this.dx) * this.df) / this.ds, ly = (this.aimWY - this.dy) / this.ds;
         const [mx, my] = this.gunPt(muz);
-        const bore = this.ga + this.recoil * 0.03 + (muz[0] < 0 ? Math.PI : 0);
+        // the climb is the shot's kick, not an aiming error: leave it out or the trim fights it
+        const bore = this.ga + this.recoil * 0.03 + this.climb + (muz[0] < 0 ? Math.PI : 0);
         const d = Math.hypot(lx - mx, ly - my);
         const ahead = (lx - mx) * Math.cos(bore) + (ly - my) * Math.sin(bore);
         if (d > 20 && ahead > 12) {
@@ -681,7 +694,7 @@ export class Rig {
     if (!(UA || UR || UX) || !holding || !this.gun || this.gunState !== 'held' || this.anchors!.hold === 'melee') return false;
     const sm = (e0: number, e1: number, x: number) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
     const wLow = sm(0.3, 0.7, lr), wX = sm(0.28, 0.5, ch.ready);
-    const kick = this.recoil * st.recoilLean * 2;
+    const kick = this.recoil * st.recoilLean * 2 * KICK_BODY + this.climb;
     // the guns' angles where each drawing would rest on its own, and the shared one while they swing
     const rotA = UA ? clamp(wrapAngle(aim - UA.bore), -0.61, 0.61) - kick : 0;
     const lowTo = Math.max(aim, st.lowAngle);
