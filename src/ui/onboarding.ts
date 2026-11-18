@@ -9,27 +9,22 @@ const KEY = 'vessey-onboarding-v1';
 /** short: the one line on the note; text: the full explanation, on hover / long press of the (?) */
 export interface Hint { target: string; icon: string; title: string; short: string; text: string }
 
+// The workshop and the run used to have a note each here; they now open on later days with their
+// own one-line note (src/ui/today.ts REVEAL), so day 1 teaches only the list, the jobs and dusk.
 export const HINTS: Hint[] = [
+  {
+    target: '.today',
+    icon: 'st_time',
+    title: 'Today',
+    short: 'What needs doing, most urgent first. Click one to go there.',
+    text: 'The list under the date is worked out from the house each morning: a low wall, short food, idle hands, a bad night on the calendar. Click an item to jump to where you fix it; it ticks off when it is done. A yellow dot marks anything with something waiting.',
+  },
   {
     target: '.people',
     icon: 'job_guard',
     title: 'Everyone gets one job',
     short: 'Pick a job for each person. Skills set the output.',
-    text: 'Pick a job for each person in the house. Their skills decide how much gets done; the line under each job is what to expect. Hurt, sulking or catatonic people can\'t work.',
-  },
-  {
-    target: '.center',
-    icon: 'job_craft',
-    title: 'The workshop needs hands',
-    short: 'Queue ammo, traps and repairs; someone must work the bench.',
-    text: 'Queue ammunition, traps and repairs here, and build machinery to unlock more. Nothing in the queue moves unless somebody is assigned to the Workshop job.',
-  },
-  {
-    target: '.run',
-    icon: 'job_scavenge',
-    title: 'Or go yourself',
-    short: 'Lead a daylight run down one street. Back before dark.',
-    text: 'The leader can lead a run in daylight: walk one street, search doors and cars, and come back off the left edge before dark. More loot than scavenging, at your own risk.',
+    text: 'Pick a job for each person in the house. Their skills decide how much gets done; the line in each job list is what to expect. Hurt, sulking or catatonic people can\'t work. Open the line under a person for their gun, skills and hours.',
   },
   {
     target: '.dusk',
