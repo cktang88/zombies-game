@@ -17,7 +17,8 @@
 // Setting: ui/settings animationSetting() 'rigged' | 'classic'. rigsOn() also honours the
 // automatic fallback to Classic (parts that fail to load, or frames consistently > 25 ms for
 // 3 s while the rigs carry a real share of the frame) — logged once.
-import { createRig, CLIPS, SPRITE_RIGS, STYLES, gradedAtlas, outlineAtlas, silAtlas, getRig, loadRig, flipbookStats, type Clip, type Rig } from '../anim';
+import { skinCanvas, ATLAS_PAD } from '../anim/assets';
+import { createRig, CLIPS, SPRITE_RIGS, STYLES, gradedAtlas, outlineAtlas, silAtlas, getRig, loadRig, flipbookStats, type Clip, type Rig, type RigAsset } from '../anim';
 import type { DeathKind } from '../anim';
 import { animationSetting, reduceGore } from '../ui/settings';
 import { sfx, gunSoundFor, type ReloadStage } from '../audio';
@@ -31,15 +32,18 @@ import { LANES, DEF_LANES, LOOK, TURNED_LOOK, GUARD_LOOK, SODIUM, LANTERN, wallX
 import { G } from '../state';
 import { fxQuality } from '../ui/settings';
 
+/** the key on a lit body's near side: sodium-warm, pale enough to lift the value */
+const KEYLIT = '#ffd9a8';
 const WARM = '#f0c98a', COOL = '#8fa6c8', DARK = '#0a0b10', BURN = '#ff7a2a', MOON = '#c9d6e4';
-/** the cool tint of a body's shadow side: moonlight fill, not grey (split toning on the figure) */
-const SHADOW_HAZE = '#2c3a66';
 const ZS = 1.3; // battle.ts actor scale for the Turned
 const SH = 158; // survivor display height
 const FULL_RIGS = 40; // Turned drawn with the full rig; the rest use the flipbook unless acting
 const MIN_FULL_RIGS = 8; // the adaptive budget's floor before falling back to Classic
 /** Full-rig budget: shrinks while frames run long, grows back slowly when there's headroom. */
 let fullRigs = FULL_RIGS;
+/** The cel shadow bands redraw a body in a clip (one or two extra rig passes): the first thing to go
+ * under frame pressure, before the full-rig budget shrinks (and long before the Classic fallback). */
+export const bandsOk = () => !dbg.noBands && (dbg.forceBands || (fullRigs === FULL_RIGS && dbg.frameMs < 20));
 const MAX_RAGDOLLS = 24;
 
 // ------------------------------------------------------------------ on / off, fallback
@@ -54,7 +58,7 @@ export function animFallback(reason: string) {
   fallback = reason;
   console.warn(`[anim] rigged animation off, using Classic: ${reason}`);
 }
-type Dbg = { budget?: number; upd: number; drawFull: number; drawLod: number; noFallback?: boolean; frameMs: number; rigMs: number; fullRigs: number; lodRigs: number; ragdolls: number; acc: { n: number; frame: number; rig: number; max: number } };
+type Dbg = { budget?: number; noBands?: boolean; forceBands?: boolean; upd: number; drawFull: number; drawLod: number; noFallback?: boolean; frameMs: number; rigMs: number; fullRigs: number; lodRigs: number; ragdolls: number; acc: { n: number; frame: number; rig: number; max: number } };
 const dbg: Dbg = { upd: 0, drawFull: 0, drawLod: 0, frameMs: 0, rigMs: 0, fullRigs: 0, lodRigs: 0, ragdolls: 0, acc: { n: 0, frame: 0, rig: 0, max: 0 } };
 /** debug handle for tests: globalThis.__anim */
 (globalThis as unknown as { __anim: unknown }).__anim = {
@@ -205,6 +209,44 @@ function applyLook(rig: Rig, L: LookSpec, scale: number, facing: number) {
   // the far, unlit lanes is left out on full rigs (a whole extra pass for a 15% band)
   rig.rim = L.rimA > 0.3 ? { src: silAtlas(a, L.rimColor), dx: L.rimDx * facing, dy: L.rimDy, alpha: L.rimA } : null;
   rig.lookKey = `${key}|${grow}|${rig.rim ? `${L.rimColor}|${L.rimA}|${L.rimDx * facing}|${L.rimDy}` : ''}`;
+}
+
+/**
+ * Cel bands by light direction through the rig's overlay hook (docs/research/04 §5): a copy of the
+ * part atlas where every part is split by hard horizontal steps in its own (source-art) frame into
+ * three tones — a light band on the side facing the key (the light's colour, strongest on the very
+ * edge), a clear midtone, then a cool shadow band past the terminator and, at High, a deeper band on
+ * the far edge (the bevel / inner shadow where the form turns away). One silhouette pass per body,
+ * baked once per rig asset, side and light colour; `side` +1 puts the shadow on the art's +x (its
+ * front), -1 on its back.
+ */
+const SHADE_TINT = '#0b1230';
+function shadeAtlas(a: RigAsset, side: 1 | -1, bevel: boolean, light: string | null, edgeA: number, midA: number, sk: number): HTMLCanvasElement {
+  return skinCanvas(a, `cel|${side}|${bevel ? 1 : 0}|${light ?? ''}|${edgeA}|${midA}|${sk}`, (_src, w, h, x) => {
+    const layer = (color: string, stops: [number, number][]) => {
+      const [mc, m] = canvasOf(w, h);
+      for (const p of Object.values(a.meta.parts)) {
+        const x0 = p.x - ATLAS_PAD, x1 = p.x + p.w + ATLAS_PAD;
+        // u = 0 on the lit edge, 1 on the far edge
+        const g = m.createLinearGradient(side > 0 ? x0 : x1, 0, side > 0 ? x1 : x0, 0);
+        for (const [u, al] of stops) g.addColorStop(u, `rgba(0,0,0,${al})`);
+        m.fillStyle = g;
+        m.fillRect(x0, p.y - ATLAS_PAD, x1 - x0, p.h + ATLAS_PAD * 2);
+      }
+      const [lc, l] = canvasOf(w, h);
+      l.drawImage(silAtlas(a, color), 0, 0);
+      l.globalCompositeOperation = 'destination-in';
+      l.drawImage(mc, 0, 0);
+      x.drawImage(lc, 0, 0);
+    };
+    const S = 0.55 * sk;
+    layer(SHADE_TINT, bevel ? [[0, 0], [0.5, 0], [0.5, S], [0.8, S], [0.8, 1], [1, 1]] : [[0, 0], [0.5, 0], [0.5, S], [1, S]]);
+    if (light) layer(light, [[0, edgeA], [0.18, edgeA], [0.18, midA], [0.4, midA], [0.4, 0], [1, 0]]);
+  });
+}
+function canvasOf(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  return [c, c.getContext('2d')!];
 }
 
 // ------------------------------------------------------------------ battle
@@ -709,6 +751,9 @@ export class BattleActors implements BattleHook {
     const edge = (flash ? 0.3 : 0) + (b.hover === z ? 0.35 : 0);
     if (z.burn > 0) rig.overlay = { src: silAtlas(rig.asset!, BURN), alpha: 0.35 };
     else if (edge > 0) rig.overlay = { src: silAtlas(rig.asset!, WARM), alpha: edge * 0.5 };
+    // lit from the line (it faces the light): the back of every part in the cel shadow bands; only
+    // on a body the full rig draws anyway (an overlay would turn a flipbook walker into a full rig)
+    else if (lit && !rig.lod && !z.leap && fxQuality() === 'high' && bandsOk()) rig.overlay = { src: shadeAtlas(rig.asset!, -1, false, KEYLIT, 1, 0.48, 0.55), alpha: 0.65 };
     else rig.overlay = null;
     // where the simulation puts the body: in the air over the wall, up the ramp, half out of the drain / behind cover
     let dy = 0;
@@ -727,21 +772,6 @@ export class BattleActors implements BattleHook {
     c.globalAlpha = a0 * fog;
     rig.draw(c, z.x, z.y + dy + sink, scale, facing, undefined, this.cam);
     rig.hasDrawn = true;
-    if (lit && !flash && !clip && fxQuality() === 'high' && !z.leap) {
-      // lit from the line: the far half (away from the barricade) in the shaded, cooler grade, one
-      // hard cel terminator (the Turned's value stays: the band only takes the back third down)
-      const x0 = z.x + h * 0.06, lean = h * 0.06, top = z.y + dy - h * 1.3;
-      c.save();
-      c.beginPath();
-      c.moveTo(x0 + lean, top); c.lineTo(x0 + h, top); c.lineTo(x0 + h, z.y + 4); c.lineTo(x0 - lean, z.y + 4);
-      c.closePath();
-      c.clip();
-      applyLook(rig, { look: { ...look, b: +(look.b * 0.8).toFixed(3), fog: look.fog + 0.14, haze: SHADOW_HAZE }, variant: z.variant, lit: true, shade: false, rimColor: MOON, rimA: 0, rimDx: 0, rimDy: 0 }, scale, facing);
-      const ov = rig.overlay; rig.overlay = null;
-      rig.draw(c, z.x, z.y + dy + sink, scale, facing, undefined, this.cam);
-      rig.overlay = ov;
-      c.restore();
-    }
     c.globalAlpha = a0;
     // the Buck's eyes catch the light as it coils
     if (z.def.leap && (z.windup ?? 0) > 0) {
@@ -779,39 +809,23 @@ export class BattleActors implements BattleHook {
     const look = GUARD_LOOK[near ? 1 : 0];
     const scale = (SH * g.sc) / 240;
     // the key is behind the line: the sodium floodlights over the step, or only the lantern (x≈120).
-    // A saturated rim on the side facing it, a shade on the side away (two cel bands), unless a
-    // muzzle flash lights the body from the front this frame.
+    // Cel bands by light direction (shadeAtlas, Medium+): a lit edge in the light's colour on the side
+    // facing it, the far side of every part in the cool shadow band, and at High a deeper far-edge band
+    // (the bevel) plus a saturated rim outside the ink. All of it is one or two silhouette passes, so it
+    // goes when the frame is under pressure (bandsOk) or a muzzle flash lights the body from the front.
+    const q = fxQuality();
     const flood = Math.min(3, G.fort.lights);
+    const key = flood > 0 ? SODIUM : LANTERN;
     const left = flood > 0 || g.x > 120; // the light is to the left of this body (screen space)
-    const rimA = (look.rim ?? 0) * (flood > 0 ? 1 : Math.max(0.55, 1 - Math.abs(g.x - 120) / 420));
+    const cel = q !== 'low' && bandsOk() && !this.frontFlash(g.x, g.y - SH * g.sc * 0.6);
+    const rimA = cel && q === 'high' ? (look.rim ?? 0) * (flood > 0 ? 1 : Math.max(0.55, 1 - Math.abs(g.x - 120) / 420)) : 0;
     const d = +(look.outline * 0.9).toFixed(1);
-    applyLook(rig, { look, variant: 0, lit: true, shade: false, rimColor: flood > 0 ? SODIUM : LANTERN, rimA: +rimA.toFixed(2), rimDx: left ? -d : d, rimDy: -d * 0.4 }, scale, g.face);
-    rig.overlay = this.b.selected() === g ? { src: silAtlas(rig.asset!, LANTERN), alpha: 0.16 } : null;
+    applyLook(rig, { look, variant: 0, lit: true, shade: false, rimColor: key, rimA: +rimA.toFixed(2), rimDx: left ? -d : d, rimDy: -d * 0.4 }, scale, g.face);
+    const shadeSide = ((left ? 1 : -1) * g.face) as 1 | -1; // the far side, in the art's own frame
+    rig.overlay = this.b.selected() === g ? { src: silAtlas(rig.asset!, LANTERN), alpha: 0.16 }
+      : cel ? { src: shadeAtlas(rig.asset!, shadeSide, q === 'high', key, 0.5, 0.1, 1), alpha: 0.55 } : null;
     rig.draw(c, g.x, g.y, scale, g.face, undefined, this.cam);
     rig.hasDrawn = true;
-    const q = fxQuality();
-    if (q !== 'low' && !this.frontFlash(g.x, g.y - SH * g.sc * 0.6)) {
-      // cel bands by light direction (docs/research/04 §5): the far half of the body (from the light)
-      // redrawn in the shaded, cooler grade, clipped to a slanted half-plane (one hard terminator, no
-      // per-pixel work); at High a third, deepest band on the far edge stands in for a normal-mapped
-      // falloff (the bevel: the silhouette turning away from the light)
-      const h = SH * g.sc, dir = left ? 1 : -1;
-      const band = (from: number, lean: number, shadeLook: Look) => {
-        const x0 = g.x + dir * h * from, l = dir * h * lean;
-        c.save();
-        c.beginPath();
-        c.moveTo(x0 + l, g.y - h * 1.25); c.lineTo(x0 + dir * h, g.y - h * 1.25);
-        c.lineTo(x0 + dir * h, g.y + 4); c.lineTo(x0 - l, g.y + 4);
-        c.closePath();
-        c.clip();
-        applyLook(rig, { look: shadeLook, variant: 0, lit: false, shade: true, rimColor: DARK, rimA: 0, rimDx: 0, rimDy: 0 }, scale, g.face);
-        rig.overlay = null;
-        rig.draw(c, g.x, g.y, scale, g.face, undefined, this.cam);
-        c.restore();
-      };
-      band(0.03, 0.08, { ...look, fog: look.fog + 0.2, haze: SHADOW_HAZE });
-      if (q === 'high') band(0.12, 0.05, { ...look, b: +(look.b * 0.72).toFixed(3), fog: look.fog + 0.34, haze: SHADOW_HAZE });
-    }
     this.rigMs += performance.now() - t0;
     return true;
   }

@@ -201,35 +201,38 @@ c.fill();
 The complaint: figures standing close blended together, and the frame was one bland dark, every surface at about the same saturation and value. The fix is a faux-HDR balance: real highlights (lamp heads, flash cores, sodium rims, lit faces) near-white and saturated, deep darks elsewhere, and hue that varies across the frame. Everything is cached or a handful of blend layers. There is no per-pixel JS and no per-frame `ctx.filter`.
 
 **Per figure** (`night/actors.ts`, `battle.ts` `GUARD_LOOK` / `occlude*`):
-- *Key from behind the line.* Defenders get a saturated rim on the side facing the light: sodium `#ffa040` when floodlights are up, the lantern otherwise, weakening with distance from it. It sits over the ink line (`rig.rim`, about 0.9× the outline width).
-- *Cel bands by light direction.* Through the rig's existing hooks, with no rig edits, the body is redrawn inside a slanted half-plane clip using a shaded, blue-hazed grade. That gives one hard terminator. At High, a third and deepest band on the far edge stands in for a normal-mapped falloff (the bevel / inner shadow). A muzzle flash in front of the body cancels the bands for that frame, because the body is front-lit. Medium draws one band and Low draws none. The Turned get the two-band version at High when lit.
-- *Row value stagger.* The far row is cooler, darker and blue-hazed (b 0.84, s 0.72); the near row is warm and saturated (b 1.1, s 1.25). Two defenders side by side on alternate rows never share a value.
-- *Occlusion halo.* A body that overlaps one standing behind it draws a soft dark blob just before itself in the sorted pass, so the figure behind darkens round its silhouette.
+- *Cel bands by light direction* (`shadeAtlas`). The rig's existing overlay hook is used, with no rig edits. A copy of the part atlas is baked once per asset, side and light colour: each part is split by hard horizontal steps in its own source-art frame into three bands. On the side facing the key there is a light band in the light's colour, strongest on the outer 18% (an inner rim). Then a clear midtone. Past the terminator comes a cool shadow band (`#0b1230`), and at High a deeper far-edge band, the bevel or inner shadow where the form turns away. A body costs one silhouette pass. Because the bands sit in part space, an arm or a leg turns its light with it.
+  - Defenders are back-lit by the sodium floodlights or the lantern, so the bands land on the far side, worked out from where the key is and which way they face. Medium and High; a muzzle flash in front of the body cancels them for that frame.
+  - The Turned, lit from the line (High, lit bodies only): a pale warm key on the near side, the shadow on the back. Flipbook walkers are skipped, because an overlay would force the full rig.
+- *Sodium / lantern rim outside the ink* on the defenders, at High only.
+- *Row value stagger.* The far row is cooler, darker and blue-hazed (b 0.84, s 0.72); the near row is warm and saturated (b 1.1, s 1.25).
+- *Occlusion halo.* A body that overlaps one standing behind it draws a soft dark blob just before itself in the sorted pass, so the figure behind darkens round its silhouette. Medium and High.
+- *Governor.* The bands, rims and halos go first under frame pressure (`bandsOk`: the full-rig budget is intact and the smoothed frame time is under 20 ms). That happens before the full-rig budget shrinks and long before the Classic fallback. Tests can force them with `__anim.dbg.forceBands` or switch them off with `noBands`.
 
-**Practicals:** the sodium floodlight pools have an orange skirt and a hot pale core; the beams are warm; the lamp heads use cached soft dots; a flash gets a white-hot core. These go in the additive pass (emissive only, so nothing else blooms). The GL bloom in `vfx/gl.ts` stays as it was.
+**Practicals:** the sodium floodlight pools have an orange skirt and a hot pale core; the beam is a warm additive shaft. Its hole in the darkness mask was cut from 0.85 to 0.5 so the road behind the Turned keeps its dark. The lamp heads use cached soft dots, and a flash gets a white-hot core. These are additive and emissive only, so nothing else blooms; the GL bloom in `vfx/gl.ts` is unchanged.
 
 **Frame** (`battle.ts` `drawGlow`, `drawGrade`):
 - The darkness veil is moonlit blue rather than grey, and the lantern opens a lit island up the firestep.
-- A cached half-res vignette with a top-down sky falloff, plus a dull ember sky glow over the far town (one cached 320×60 strip, additive). The sky stops being a single flat blue.
+- A cached half-res vignette with a top-down sky falloff (it replaces a per-frame radial gradient), and a dull ember sky glow over the far town (a cached 320×60 strip, additive). The sky stops being a single flat blue.
 - *Grade, Effects High only, four full-frame blend layers:*
   1. A blue soft-light wash (shadow leg of the split tone).
   2. A colour-burn by a near-white (levels black point k ≈ 0.05, at 65%; the S-curve toe).
   3. The frame added onto itself at 38% (exposure / shoulder: highlights clip toward white).
   4. A colour-dodge by a dark amber (R ×1.12, G ×1.05), the highlight leg. Being proportional, it warms the lit areas and leaves the blue darks alone.
 
-  A self-governor turns the grade off for the night if its smoothed cost passes 1.5 ms, which happens on a software-rastered canvas. The Canvas2D path is used even when the GL effects layer is on, because a GL grade would need the whole 2D frame uploaded as a texture every frame.
+  A self-governor turns the grade off for the night if its smoothed cost passes 1.5 ms. The Canvas2D path is used even when the GL effects layer is on, because a GL grade would need the whole 2D frame uploaded as a texture every frame.
 
-**Measured** on staged frames: the packed firestep (all six defenders, alternate rows 40 px apart) and a cluster of 15 Turned, with 0 and 2 floodlights, at dpr 2. Values are relative luminance; "con" is a figure against the same pixels with the figure removed.
+**Measured** on staged frames: the packed firestep (all six defenders, alternate rows 40 px apart) and a cluster of 15 Turned, with 0 and 2 floodlights, rigs held on. Values are relative luminance; "con" is a figure against the same pixels with the figure removed. "Governed" is what a slow machine shows once the governors have switched the grade, bands, rims and halos off.
 
-| | before (dark / lit) | after, High (dark / lit) | after, grade off (dark / lit) |
+| | before (dark / lit) | after, High (dark / lit) | after, governed (dark / lit) |
 |---|---|---|---|
-| frame L p5 / p50 / p95 | .052 .122 .264 / .068 .170 .327 | .033 .113 .356 / .040 .160 .467 | .048 .117 .293 / .055 .151 .380 |
-| L spread p95−p5 | .212 / .259 | .323 / .427 | .245 / .325 |
-| saturation mean / sd | .253 .078 / .196 .082 | .570 .190 / .449 .176 | .395 .132 / .301 .117 |
-| Turned vs road (con) | +.129 / +.136 | +.204 / +.153 | +.161 / +.131 |
-| defender neighbour ΔL / Δhue (dark · lit) | .063 / 74° · .039 / 11° | .058 / 44° · .066 / 35° | .039 / 24° · .039 / 20° |
-| Turned cluster edges (mean ∣∇L∣ / share > .12) | .113 .353 / .125 .412 | .137 .457 / .148 .474 | .112 .373 / .124 .408 |
+| frame L p5 / p50 / p95 | .052 .122 .255 / .064 .168 .307 | .031 .111 .316 / .039 .158 .422 | .047 .114 .281 / .054 .149 .340 |
+| L spread p95−p5 | .203 / .243 | .285–.302 / .383–.395 | .234 / .286 |
+| saturation mean / sd | .253 .078 / .195 .079 | .58 .18 / .45 .17 | .40 .13 / .30 .12 |
+| Turned vs road (con) | +.115 / +.085 | +.133–.145 / +.101–.133 | +.131 / +.100 |
+| defender neighbour ΔL / Δhue | .058 / 68° · .059 / 83° | .042 / 33° · .072 / 62° | .068 / 91° · .070 / 90° |
+| Turned cluster edges (mean ∣∇L∣ / share > .12) | .120 .377 / .129 .411 | .147 .466 / .168 .512 | .114 .361 / .150 .475 |
 
-With the grade on, the darks go deeper and the highlights brighter: the luminance spread grows 52–65% and the saturation spread more than doubles. Edge strength inside the Turned cluster, a measure of where one body stops and the next starts, rises by about 20–30%. The Turned stay at +0.15 or more against the road. Lit-scene defender neighbours now differ by about 0.07 in value and 35° in hue; before they shared a hue (11°). In the unlit scene the hue gap narrows from 74° to 44° because everything takes the moon cast. Without the grade (Medium, Low, or governed off), the spread and saturation still widen, but neighbour ΔL stays at the old level.
+With everything on, the luminance spread grows about 45–60% and the saturation spread more than doubles. Edge strength inside the Turned cluster, a measure of where one body stops and the next starts, rises 20–30%. The lit Turned move from +0.085 to +0.10–0.13 against the road. Lit defender neighbours differ more in value (.059 → .072). In the unlit scene the hue gap shrinks because the bands put a shared cool tint on every far side.
 
-*Cost.* Measured in headless Chromium, which rasterises the canvas in software (dpr 1, 24 Turned plus the firestep, median of 5×30 frames). With the four grade layers, the whole High frame costs 6–7 ms more than with every new piece off. In that environment the governor turns the grade off within 20 frames. The other new pieces together (cel bands, occlusion halos, rims, sky glow, pools) cost about 0.5 ms at Medium, which is within noise. On a GPU-composited canvas the grade is four blend draws. The previous frame-wide per-frame radial-gradient vignette is now a cached bitmap.
+*Cost* was measured in this environment's headless Chromium, which rasterises the canvas in software: the base frame is about 55 ms at dpr 1 with 24 Turned and the firestep, and figures are medians of 7×30 frames, alternating builds. Governed, the default state on such a machine, the night costs **+1.9 ms** over main. Forcing every piece on costs about +26 ms there: each silhouette pass is roughly 0.6–1 ms of software raster, and the grade is about 5 ms. That is why every piece has a governor. On a GPU-composited canvas the same work is a few hundred drawImage calls and four blend draws.

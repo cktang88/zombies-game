@@ -26,7 +26,7 @@ import { meleeGuard } from './melee';
 import { depthScale, VARIANTS, bakeSprite, bakeComposite, bakeEdge, bakeLayer, bakeGround, fgStrip, shadowEllipse, type Look } from './render';
 import { drawProp, drawGunBase, drawGunPart, has, propW } from './props';
 import { QuadRig } from '../anim'; // the dog's quadruped rig
-import { BattleActors } from './actors'; // rigged bodies (src/anim): drawing, deaths, corpses
+import { BattleActors, bandsOk } from './actors'; // rigged bodies (src/anim): drawing, deaths, corpses
 import { Sally, SALLY } from './sally';
 import { Ticker, caps, hintRow, keySheet, keyHintsOn, coarsePointer, dot, weaponPanel, FONT, type Hint } from './hud'; // the sortie over the wall
 import { react, slideStep, classicPose, IMPACT, type Reaction } from './impact'; // flinch / stagger / stumble / knockdown
@@ -3266,6 +3266,7 @@ export class Battle {
     c.globalAlpha = 1;
   }
   occlude(c: CanvasRenderingContext2D, z: Zombie) {
+    if (fxQuality() === 'low' || !bandsOk()) return;
     if (z.state === 'dying' || z.emerge !== undefined || z.leap) return;
     const w = this.zw(z) * 0.95;
     let n = 0;
@@ -3273,6 +3274,7 @@ export class Battle {
     if (n) this.occlusionBlob(c, z.x, z.y, w, this.zh(z), Math.min(0.5, 0.3 + 0.08 * n) * this.fogAlpha(z));
   }
   occludeGuard(c: CanvasRenderingContext2D, g: Guard) {
+    if (fxQuality() === 'low' || !bandsOk()) return;
     if (g.downed || g.post === 'roof') return;
     const w = 46 * g.sc;
     if (this.guards.some((o) => o !== g && !o.s.dead && !o.fled && !o.downed && o.y < g.y - 4 && Math.abs(o.x - g.x) < w * 1.1)) this.occlusionBlob(c, g.x, g.y, w, SH * g.sc, 0.36);
@@ -4086,7 +4088,9 @@ export class Battle {
     for (let i = 0; i < Math.min(3, G.fort.lights); i++) {
       // floodlight cone down onto the road
       const g = d.createLinearGradient(260 * s, 0, 1100 * s, 0);
-      g.addColorStop(0, 'rgba(0,0,0,0.85)');
+      // a shaft through the air, not a lifted wedge of background: the road keeps its dark so the
+      // Turned walking into it stand out (≥ +0.10 against it); the warm beam is added in drawGlow
+      g.addColorStop(0, 'rgba(0,0,0,0.5)');
       g.addColorStop(1, 'rgba(0,0,0,0.1)');
       d.fillStyle = g;
       d.beginPath();
@@ -4126,7 +4130,7 @@ export class Battle {
     for (let i = 0; i < flood; i++) {
       const px = 260 - i * 90;
       const bg = c.createLinearGradient(px, 0, 1100, 0);
-      bg.addColorStop(0, 'rgba(255,150,60,0.1)');
+      bg.addColorStop(0, 'rgba(255,150,60,0.07)');
       bg.addColorStop(1, 'rgba(255,150,60,0)');
       c.fillStyle = bg;
       c.beginPath();
