@@ -417,7 +417,6 @@ button.mini.link:hover:not(:disabled) { background: none; color: var(--ink); }
 .fold > summary::before { content: '▸'; color: var(--dim); transition: transform .15s; display: inline-block; width: 10px; }
 .fold[open] > summary::before { transform: rotate(90deg); }
 .fold > .fold-body { padding: 2px 0 10px 18px; }
-.calendar .calhead { color: #c9bc9e; margin-bottom: 3px; text-transform: uppercase; letter-spacing: .08em; cursor: default; }
 .calendar .calday .cw { font-size: 13px; color: #a89c80; white-space: nowrap; overflow: hidden; }
 .calendar .calday.red .cw { color: #e0705a; }
 .calendar .calday.ice .cw { color: #a8d0e4; }

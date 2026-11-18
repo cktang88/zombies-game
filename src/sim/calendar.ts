@@ -208,7 +208,7 @@ export function calendarHtml(x: CalExtra = {}): string {
     ? (cal.some((c) => c.kind === 'unknown') ? '<b>No telling.</b> Any night could be big: keep the wall up.' : '<b>No big night this week.</b> A good time to stock up and build.')
     : `<b>${when}: ${esc(BIG[cal[bi].kind]!)}.</b>${bi <= 2 ? ' Get ready: wall up, traps set, ammo made.' : ''}`;
   return `<div class="calendar">
-    <div class="calhead t-s"${tip('What the next nights look like. Plain nights are quiet; red ones are big. Prepare the day before a red one.')}>Coming nights</div>
+    <div class="sechead"><span class="t-l">Coming nights</span><span class="qi"${tip('Plain nights are quiet; red ones are big. Hover a day for more. Prepare the day before a red one.')}>i</span></div>
     <div class="calstrip">${cal.map(cell).join('')}</div>
     <div class="calnext ${bi >= 0 && bi <= 1 ? 'warn' : ''}"${tip(x.flavour ? `<i>${esc(x.flavour)}</i>` : '')}>${next}</div>
     <div class="smell"${tip(`<b>Smell of the house</b><br>The more you hoard, the more of them come.${n.reasons.length ? '<br>' + esc(n.reasons.join('. ')) + '.' : ''}`)}>
