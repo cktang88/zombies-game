@@ -37,7 +37,7 @@ const PREP = {
   13: { n: 6, sh: 5, stores: { light: 140, shell: 30, rifle: 40, r556: 60, r22: 120, scrap: 57, fuel: 18, parts: 14, molotov: 5 }, guns: ['service9', 'm1911', 'pump', 'lever', 'hunting', 'ar15'], fort: { maxHp: 480, lights: 2, wire: 2, spikes: 1 } },
 };
 // the snapshots keep their old numbers; fold them into today's pools (src/state.ts STORE_FOLD)
-const FOLD = { molotov: ['explosive', 1], light: ['pistol', 1], r22: ['pistol', 0.5], r556: ['rifle', 0.5], scrap: ['salvage', 1], parts: ['salvage', 2] };
+const FOLD = { molotov: ['explosive', 1], light: ['pistol', 1], r22: ['pistol', 0.25], r556: ['rifle', 0.5], scrap: ['salvage', 1], parts: ['salvage', 2] };
 const folded = (st) => { const o = {}; for (const [k, v] of Object.entries(st)) { const [to, per] = FOLD[k] ?? [k, 1]; o[to] = (o[to] ?? 0) + v * per; } return o; };
 async function night(day, seed, mode) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
