@@ -11,6 +11,7 @@ import { byId, displayName, first } from '../sim/survivors';
 import { tip, ico, fold } from './kit';
 import { sfx, stinger } from '../audio';
 import { countUp } from './juice';
+import type { Advice } from '../sim/tomorrow';
 
 export interface DawnData {
   r: NightResult;
@@ -19,6 +20,7 @@ export interface DawnData {
   lines: string[]; // the morning's news (night lines + dawn tick)
   teaser?: string; // title-only teaser of today's incident or omen
   night: number; // the day number of the night just fought
+  tomorrow?: Advice[]; // 1–3 things to do differently today (sim/tomorrow.ts)
 }
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -56,6 +58,7 @@ export function showDawnReport(app: HTMLElement, d: DawnData, onClose: () => voi
     <div class="st wallrow" data-pause="1100" data-wall="1">${ico('st_wall')}
       <div class="wallbar"${tip(`${wallTip} It stands at ${Math.ceil(hpNow)} of ${max}${lost ? `, ${lost} lost tonight` : ''}.`)}><div style="width:${(before / max) * 100}%"></div><span>${Math.ceil(hpNow)} / ${max}${lost ? ` · −${lost}` : ''}</span></div>
     </div>
+    ${d.tomorrow?.length ? `<div class="st tomorrow" data-pause="900"><b>For today</b>${d.tomorrow.map((a) => `<p${tip(esc(a.tip))}>${ico(a.icon)}<span>${esc(a.text)}</span></p>`).join('')}</div>` : ''}
     ${mvp ? `<div class="st mvp" data-pause="900"${tip(`${top[1]} put down${r.kills ? `, ${Math.round((top[1] / r.kills) * 100)}% of the night` : ''}.${mvp.dead ? ' Buried this morning.' : ''}`)}>${portraitImg(mvp.sprite, `portrait${mvp.dead ? ' dead' : ''}`)}<div><small>Carried the night</small><b>${esc(displayName(mvp))}</b> <span class="t-s">${top[1]} put down</span></div></div>` : ''}
     ${d.lines.length ? `<div class="st lines" data-pause="500">${fold(`<span class="t-s">The night's log</span> <span class="t-xs">${d.lines.length} entries</span>`, d.lines.map((l) => `<p>${esc(l)}</p>`).join(''), { id: 'dawn-log' })}</div>` : ''}
     ${d.teaser ? `<div class="st teaser" data-pause="300"><b>This morning</b>${esc(d.teaser)}</div>` : ''}

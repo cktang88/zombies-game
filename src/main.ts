@@ -14,6 +14,7 @@ import { Expedition, type ExpeditionResult } from './night/expedition';
 import { wallLine } from './sim/readiness';
 import { living, displayName, first, byId, canFight, migrateSurvivor, gainXp, gainProf, heldProf, closeTo, drainLevelUps, makeSurvivor } from './sim/survivors';
 import { showDawnReport } from './ui/dawn';
+import { forTomorrow } from './sim/tomorrow';
 import { AMMO_RES, AMMO_TYPES, fireProfile, WEAPONS } from './data/weapons';
 import { morningSummary, fateLine, type Fate } from './sim/chronicle';
 import { parseIds } from './sim/incident';
@@ -519,6 +520,7 @@ function dawn(r: NightResult) {
     lines: report,
     teaser,
     night: nightDay,
+    tomorrow: forTomorrow(r, panicked),
   }, () => day());
 }
 

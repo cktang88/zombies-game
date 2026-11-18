@@ -150,3 +150,8 @@
 .modal.event .choices button.cant { opacity: .55; cursor: not-allowed; }
 .modal.event .evfx .chip.warn { border-color: #9a6a20; }
 .modal.event .evfx .chip.warn b { color: #6a4210; }
+/* dawn: what to do differently today */
+.dawnrep .tomorrow { margin: 10px 0 4px; padding: 8px 12px; border: 1px solid rgba(201, 169, 90, .45); background: rgba(201, 169, 90, .07); }
+.dawnrep .tomorrow > b { display: block; font-family: var(--type); font-size: 13px; letter-spacing: .2em; text-transform: uppercase; color: var(--dim); font-weight: normal; margin-bottom: 4px; }
+.dawnrep .tomorrow p { display: flex; gap: 8px; align-items: center; margin: 3px 0; font-size: 15px; }
+.dawnrep .tomorrow .ico { width: 22px; height: 22px; object-fit: contain; flex: none; }
