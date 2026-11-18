@@ -294,7 +294,7 @@ function survivorCard(s: Survivor, dots: Set<string> = new Set()) {
   return `<div class="card surv sv-card ${stale ? 'stale' : ''}" data-id="${s.id}"${dots.has(`surv:${s.id}`) ? ' data-dot' : ''}>
     ${portraitImg(s.sprite, `portrait${s.isLeader ? ' lead' : ''}`)}
     <div class="body">
-      <div class="name"><a data-act="detail" data-id="${s.id}">${esc(displayName(s))}</a> <span class="age t-xs">${s.age}</span>${s.perkOffers?.length ? `<a class="tag warn" data-act="detail" data-id="${s.id}"${tip(`<b>New perk</b><br>${esc(progressName(s.perkOffers[0].skill))} reached ${s.perkOffers[0].tier}: pick one on the sheet.`)}>${ico('st_perk', '', 'sm')}perk</a>` : ''}${stale ? `<span class="tag carried"${tip("Yesterday's job carried over. Change it, or press Keep to confirm.")}>same?</span>` : ''}</div>
+      <div class="name"><a data-act="detail" data-id="${s.id}">${esc(displayName(s))}</a> <span class="age t-xs">${s.age}</span>${s.perkOffers?.length ? `<a class="tag warn" data-act="detail" data-id="${s.id}"${tip(`<b>New perk</b><br>${esc(progressName(s.perkOffers[0].skill))} reached ${s.perkOffers[0].tier}: pick one on the sheet.`)}>${ico('st_perk', '', 'sm')}perk</a>` : ''}</div>
       <div class="sv-state">${moodChip(s)}${statusTags(s)}</div>
       <div class="row sv-jobrow">
         <span class="sv-job"${tip(jobTip)}>${ico('job_' + s.job, '', '')}</span>
@@ -801,8 +801,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
     ${strip}
     <main>
       <section class="people">
-        <h2 class="t-l">The house <span class="t-xs"${tip(`${living().length} living · eat ${eat}/day${G.flags.dog ? ` · and ${esc(String(G.flags.dog))}` : ''} · daylight ${clockLabel(0)}–${clockLabel(DAY_HOURS)}`)}>${living().length} living${G.flags.dog ? ' + dog' : ''}</span></h2>
-        ${stale.length ? `<div class="carryover ${duskArmed ? 'flash' : ''}"><span>${stale.length === 1 ? `${esc(first(stale[0]))}'s job` : `${stale.length} jobs`} carried over from yesterday.</span><button class="mini" data-act="keepplans">Keep ${stale.length === 1 ? 'it' : 'them'}</button></div>` : ''}
+        <h2 class="t-l">The house <span class="t-xs"${tip(`${living().length} living · eat ${eat}/day${G.flags.dog ? ` · and ${esc(String(G.flags.dog))}` : ''} · daylight ${clockLabel(0)}–${clockLabel(DAY_HOURS)}`)}>${living().length} living${G.flags.dog ? ' + dog' : ''}</span>${stale.length ? `<button class="mini keepbtn ${duskArmed ? 'flash' : ''}" data-act="keepplans"${tip(`Yesterday's job${stale.length === 1 ? '' : 's'} carried over (the gold edge): ${esc(stale.map(first).join(', '))}. Keep, or change each one.`)}>Keep ${stale.length === 1 ? `${esc(first(stale[0]))}'s job` : `all ${stale.length}`} ✓</button>` : ''}</h2>
         ${living().map((s) => survivorCard(s, dots)).join('')}
       </section>
       <section class="center">
@@ -818,7 +817,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
         ${threadsHtml()}
         ${isOpen('calendar') ? `<div class="weather"${tip(`<b>How big tonight is</b>: the dots, out of 5.<br>The season's pace: ${esc(persona().name)}.${heat ? `<br>The stove will want ${heat} fuel.` : ''}`)}><span class="t-xs">Tonight</span> <b>${tp > 60 ? 'a long one' : tp > 30 ? 'a bad one' : 'light'}</b> ${pips(Math.min(5, Math.ceil(tp / 20)), 5, tp > 60 ? 'red' : '')}</div>` : ''}
         ${runOpen() ? `<div class="runwrap"${dots.has('run') ? ' data-dot' : ''}>${revealNote('run')}${runHtml()}</div>` : ''}
-        <button class="dusk" data-act="dusk">${duskArmed && stale.length ? 'Yesterday\'s jobs are marked. Go anyway ›' : 'Go to the wall at dusk ›'}<small>${esc(keyLabel(keyOf('day.dusk')))}</small></button>
+        <button class="dusk" data-act="dusk">${duskArmed && stale.length ? 'Go anyway ›' : 'Go to the wall at dusk ›'}<small>${esc(keyLabel(keyOf('day.dusk')))}</small></button>
       </section>
     </main>
     ${G.pendingEvent ? eventModal(G.pendingEvent) : ''}

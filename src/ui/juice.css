@@ -28,8 +28,8 @@
 
 /* carried-over plans */
 .card.surv.stale { box-shadow: inset 3px 0 0 #b8862f; padding-left: 8px; background: linear-gradient(90deg, rgba(184,134,47,.07), transparent 60%); }
-.carryover { display: flex; align-items: center; gap: 8px; justify-content: space-between; border: 1px dashed #8a6a2a; padding: 4px 8px; margin: 4px 0 6px; font-size: 14px; color: #e0c58a; }
-.carryover.flash { animation: carryflash .9s ease-in-out 2; }
+.keepbtn { margin-left: auto; align-self: center; border-color: #8a6a2a; color: #e0c58a; }
+.keepbtn.flash { animation: carryflash .9s ease-in-out 2; }
 @keyframes carryflash { 50% { background: rgba(184,134,47,.25); border-color: #e0b060; } }
 .day.armed .card.surv.stale { animation: carryflash .9s ease-in-out 2; }
 
@@ -112,7 +112,7 @@
   .modal.ledger.dawnrep { padding: 16px 14px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .floatnum, .carryover.flash, .day.armed .card.surv.stale { animation: none; }
+  .floatnum, .keepbtn.flash, .day.armed .card.surv.stale { animation: none; }
   .dawnrep .st { transition: none; }
 }
 

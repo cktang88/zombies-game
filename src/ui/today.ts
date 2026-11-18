@@ -165,7 +165,7 @@ function openTodos(): Todo[] {
     t.push({ id: 'tend', icon: 'job_doctor', text: `Tend the wounded · ${hurt}`, tip: 'Untended wounds bleed, fester and slow people down.', sel: jobSel(s), dot: s ? `surv:${s.id}` : undefined, prio: 32 });
   }
   const stale = people.filter((s) => canWork(s) && G.day > 1 && !planConfirmed(s) && !onRunToday(s));
-  if (stale.length) t.push({ id: 'stale', icon: 'job_guard', text: stale.length === 1 ? `Check ${first(stale[0])}'s job` : `Check ${stale.length} jobs from yesterday`, tip: 'Yesterday\'s jobs carried over. Change them, or press Keep.', sel: '.carryover', prio: 35 });
+  if (stale.length) t.push({ id: 'stale', icon: 'job_guard', text: stale.length === 1 ? `Check ${first(stale[0])}'s job` : `Check ${stale.length} jobs from yesterday`, tip: 'Yesterday\'s jobs carried over. Change them, or press Keep.', sel: '[data-act=keepplans]', prio: 35 });
   for (const s of people) {
     if (!canWork(s) || onRunToday(s) || stale.includes(s)) continue;
     const idle = (s.job === 'rest' && s.rest > 0.6) || (s.job === 'craft' && !G.craftQueue.length && ws);
