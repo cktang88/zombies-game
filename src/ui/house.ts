@@ -104,7 +104,7 @@ const STATIONS: Station[] = [
   { id: 'table', name: 'Table', icon: 'job_counsel', x: 596, y: 446, w: 150, h: 166, feet: DOWN, sx: [620, 720], job: 'counsel', tab: 'chronicle', dot: 'tab:chronicle', reveal: 'jobs' },
   { id: 'calendar', name: 'Calendar', icon: 'st_danger', x: 756, y: 452, w: 132, h: 110, feet: DOWN, sx: [800, 860], dot: 'calendar', reveal: 'calendar' },
   { id: 'bench', name: 'Workbench', icon: 'job_craft', x: 928, y: 440, w: 240, h: 200, feet: YARD, sx: [1010, 1130], job: 'craft', tab: 'workshop', dot: 'tab:workshop', reveal: 'workshop', wide: true },
-  { id: 'board', name: 'Noticeboard', icon: 'st_faction', x: 1174, y: 486, w: 76, h: 154, feet: YARD, sx: [1200, 1220], tab: 'town', dot: 'tab:town', reveal: 'town', wide: true },
+  { id: 'board', name: 'Noticeboard', icon: 'st_faction', x: 1168, y: 500, w: 86, h: 140, feet: YARD, sx: [1200, 1220], tab: 'town', dot: 'tab:town', reveal: 'town', wide: true },
   { id: 'wall', name: 'The wall', icon: 'st_wall', x: 1254, y: 400, w: 182, h: 242, feet: YARD, sx: [1270, 1330], job: 'repair', tab: 'wall', dot: 'tab:wall' },
   { id: 'gate', name: 'The gate', icon: 'job_scavenge', x: 1440, y: 430, w: 160, h: 212, feet: YARD, sx: [1470, 1560], job: 'scavenge', dot: 'run' },
   { id: 'graves', name: 'Graves', icon: 'st_dead', x: 24, y: 520, w: 150, h: 122, feet: YARD, sx: [90, 120], tab: 'graves', dot: 'tab:graves', reveal: 'graves' },
@@ -292,8 +292,7 @@ const ART: Record<StationId, () => string> = {
   },
   bench: () => img('obj_shed', 934, 492, 146)
     + pic('workbench', 1048, 564, 120),
-  board: () => svg(1176, 498, 72, 142, `<path d="M12 30 v110 M60 30 v110" stroke="#2a2119" stroke-width="7"/><rect x="2" y="2" width="68" height="62" fill="#4a3c2c" ${INK}/><path d="M2 2 l34 -0 l34 0" stroke="#070605" stroke-width="3"/>
-      <rect x="8" y="10" width="22" height="26" fill="#d8ccad" transform="rotate(-4 19 23)" stroke="#070605" stroke-width="1.5"/><rect x="36" y="8" width="26" height="20" fill="#cbbf9f" transform="rotate(3 49 18)" stroke="#070605" stroke-width="1.5"/><rect x="14" y="40" width="40" height="18" fill="#bfb08a" stroke="#070605" stroke-width="1.5"/><path d="M18 46 h30 M18 51 h24" stroke="#4a4235" stroke-width="1.5"/>`),
+  board: () => pic('noticeboard', 1168, 512, 86),
   wall: () => img('emp_scaffold', 1252, 506, 150, 'hv-back') + img('fort_light', 1232, 430, 58, 'hv-back') + img('barricade', 1262, 450, 196),
   gate: () => svg(1452, 470, 54, 172, `<path d="M6 0 v172 M48 0 v172" stroke="#1d1813" stroke-width="8"/><g ${INK} stroke-width="2"><rect x="8" y="20" width="38" height="150" fill="#54442f"/></g>
       <path d="M8 40 L46 120 M8 120 L46 40" stroke="#3a2e20" stroke-width="5"/><path d="M18 20 v150 M28 20 v150 M38 20 v150" stroke="#2a2016" stroke-width="1.5"/><rect x="40" y="88" width="5" height="12" fill="#9a8f7a" stroke="#070605" stroke-width="1"/><path d="M8 60 h38 M8 100 h38 M8 140 h38" stroke="#070605" stroke-width="2"/>`)
