@@ -23,6 +23,7 @@
   padding: 2px 8px 2px 4px; background: rgba(14, 12, 10, .82); border: 1px solid #4a4235; font-family: var(--type); font-size: 13px; color: #d8cdb2; opacity: .8; transition: opacity .15s; }
 .hv-label .hv-lab { bottom: auto; top: 0; }
 .hv-label.above .hv-lab { top: auto; bottom: 4px; }
+.hv-label.corner .hv-lab { transform: none; }
 .hv-lab .ico.sm { width: 20px; height: 20px; }
 .hv-lab b { font-weight: normal; letter-spacing: .03em; }
 .hv-sum, .hv-assign { display: none; font-family: var(--serif); font-size: 14px; color: #b9ad94; }
@@ -132,4 +133,6 @@ p.hv-here { display: block; }
 }
 @media (prefers-reduced-motion: reduce) { .hv-scene.anim { transition: none; } .hv-dot { animation: none; } }
 .hv-bar .keepbtn { margin: 0; }
-.day.hv .hint { right: auto; left: 14px; bottom: 76px; }
+.day.hv .hint { right: auto; left: 14px; top: 72px; bottom: auto; }
+.hv-people.hint-target { outline: 0; }
+.hv-people.hint-target .hv-sv { outline: calc(2px / var(--k)) dashed var(--ochre); outline-offset: -6px; }

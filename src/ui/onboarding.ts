@@ -23,8 +23,8 @@ export const HINTS: Hint[] = [
     target: '.people',
     icon: 'job_guard',
     title: 'Everyone gets one job',
-    short: 'Pick a job for each person. Skills set the output.',
-    text: 'Pick a job for each person in the house. Their skills decide how much gets done; the line in each job list is what to expect. Hurt, sulking or catatonic people can\'t work. Open the line under a person for their gun, skills and hours.',
+    short: 'Drag each person to a place in the house: that is their job. Skills set the output.',
+    text: 'Each person stands where they work. Drag one onto a place (the wall, the kitchen, the gate) to give them that job, or click them and pick from their list; hovering a place with someone picked says what they would do there. Their skills decide how much gets done. Hurt, sulking or catatonic people can\'t work. Click a person for their gun, skills and hours. (In the ledger view, L, the same lists are in the left column.)',
   },
   {
     target: '.dusk',

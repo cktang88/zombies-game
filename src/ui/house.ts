@@ -109,8 +109,8 @@ const STATIONS: Station[] = [
   { id: 'gate', name: 'The gate', icon: 'job_scavenge', x: 1440, y: 430, w: 160, h: 212, feet: YARD, sx: [1470, 1560], job: 'scavenge', dot: 'run' },
   { id: 'graves', name: 'Graves', icon: 'st_dead', x: 24, y: 520, w: 150, h: 122, feet: YARD, sx: [90, 120], tab: 'graves', dot: 'tab:graves', reveal: 'graves' },
 ];
-/** where a station's name plaque sits, from the top of its hotspot (inside rooms: under the ceiling) */
-const LABEL_DY: Record<StationId, number> = { infirmary: 22, bunks: 22, radio: 22, kitchen: 22, rack: 22, table: 22, calendar: 0, bench: 0, board: 0, wall: 0, gate: 0, graves: 0 };
+/** where a station's name plaque sits, from the top of its hotspot (inside rooms: the top-left corner, clear of heads; 0 = above it) */
+const LABEL_DY: Record<StationId, number> = { infirmary: 8, bunks: 8, radio: 8, kitchen: 8, rack: 8, table: 8, calendar: 0, bench: 0, board: 0, wall: 0, gate: 0, graves: 0 };
 const ST = (id: string) => STATIONS.find((s) => s.id === id);
 const JOB_STATION: Record<string, StationId> = Object.fromEntries(STATIONS.filter((s) => s.job).map((s) => [s.job!, s.id]));
 const TAB_STATION: Record<string, StationId> = { workshop: 'bench', wall: 'wall', armory: 'rack', town: 'board', chronicle: 'table', graves: 'graves' };
@@ -380,7 +380,7 @@ function stationHtml(st: Station, dots: Set<string>): string {
   const assign = pick && st.job && jobOpen(st.job) && canWork(pick) ? `<span class="hv-assign">Put ${esc(first(pick))} here: ${esc(ctxRef?.jobs.find((j) => j.id === st.job)?.label ?? st.job)} · ${esc(ctxRef?.jobOutlook(pick, st.job) ?? '')}</span>` : '';
   return `<div class="hv-st ${sel ? 'on' : ''}" data-st="${st.id}">${art}
     <button class="hv-hs" data-hs="${st.id}" style="left:${st.x}px;top:${st.y}px;width:${st.w}px;height:${st.h}px" aria-label="${esc(st.name)}: ${esc(summary(st))}"></button>
-    <span class="hv-label ${LABEL_DY[st.id] ? '' : 'above'}" style="left:${st.x + st.w / 2}px;top:${st.y + LABEL_DY[st.id]}px"><span class="hv-lab">${dot ? '<i class="hv-dot"></i>' : ''}${ico(st.icon, '', 'sm')}<b>${esc(st.name)}</b><span class="hv-sum">${esc(summary(st))}</span>${assign}</span></span>
+    <span class="hv-label ${LABEL_DY[st.id] ? 'corner' : 'above'}" style="left:${LABEL_DY[st.id] ? st.x + 8 : st.x + st.w / 2}px;top:${st.y + LABEL_DY[st.id]}px"><span class="hv-lab">${dot ? '<i class="hv-dot"></i>' : ''}${ico(st.icon, '', 'sm')}<b>${esc(st.name)}</b><span class="hv-sum">${esc(summary(st))}</span>${assign}</span></span>
   </div>`;
 }
 
