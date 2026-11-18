@@ -3775,15 +3775,9 @@ export class Battle {
   }
 
   drawDownedLabel(c: CanvasRenderingContext2D, g: Guard) {
-    c.font = '13px "Special Elite", monospace';
-    c.textAlign = 'center';
-    c.fillStyle = '#cfc6b0';
-    const lh = 46;
-    c.fillText(first(g.s), g.x, g.y - lh - 8);
-    let st = g.safe ? 'down' : 'DOWN';
-    if (!g.safe && g.mauledT > 0) st = 'DOWN · they are on ' + them(g.s);
-    c.fillStyle = g.safe ? '#a8a08a' : '#e05040';
-    c.fillText(st, g.x, g.y - lh - 22);
+    // one label (hud worldLabel): the name and the state on one line
+    const st = g.safe ? 'down' : g.mauledT > 0 ? 'DOWN · they are on ' + them(g.s) : 'DOWN';
+    worldLabel(c, `${first(g.s)} — ${st}`, g.x, g.y - 54, g.safe ? '#a8a08a' : '#e05040');
   }
 
   // Where the light is this frame, for the rim/silhouette treatment of each body.
@@ -3843,9 +3837,7 @@ export class Battle {
         this.drawTells(c, z, Math.max(0, Math.min(1, (this.lightAt(z.x, z.y - this.zh(z) * 0.6, env)[0] - 0.12) / 0.2)));
         if (z.name && z.x < W + 10) {
           // a named one (someone they knew): the name stays on screen while it walks in from the edge
-          c.font = '13px "Special Elite", monospace'; c.fillStyle = '#c9a95a'; c.textAlign = 'center';
-          const tw = c.measureText(z.name).width;
-          c.fillText(z.name, Math.min(W - 8 - tw / 2, Math.max(8 + tw / 2, z.x)), z.y - this.zh(z) - 8);
+          worldLabel(c, z.name, z.x, z.y - this.zh(z) - 8, '#c9a95a');
         }
       }
       return;
@@ -3950,12 +3942,7 @@ export class Battle {
     }
     c.restore();
     if (z.state !== 'dying') this.drawTells(c, z, lit);
-    if (z.name && z.state !== 'dying') {
-      c.font = '13px "Special Elite", monospace';
-      c.fillStyle = '#c9a95a';
-      c.textAlign = 'center';
-      c.fillText(z.name, z.x, z.y - h - 8);
-    }
+    if (z.name && z.state !== 'dying') worldLabel(c, z.name, z.x, z.y - h - 8, '#c9a95a');
   }
 
   /** Weakspots (subtle pulsing ochre/bone, brighter with Focus), the Crier's wind-up ring, the Biler's swelling throat, a marked target. */
@@ -4450,8 +4437,7 @@ export class Battle {
       c.font = `15px ${FONT}`;
       const tw = c.measureText(l.text).width + 60;
       const x = W / 2 - tw / 2;
-      c.fillStyle = 'rgba(10,9,8,0.62)';
-      c.beginPath(); c.roundRect(x - 8, y - 18, tw + 16, 26, 4); c.fill();
+      panel(c, x - 8, y - 18, tw + 16, 26);
       dot(c, x + 6, y - 5, '#e8c040', 4, 0.5 + 0.5 * Math.sin(this.t * 5));
       hintRow(c, [{ key: l.key, label: l.text, hot: true }], x + 18, y);
       c.restore();
@@ -4506,8 +4492,7 @@ export class Battle {
     const b = this.boss;
     if (b && b.state !== 'dying' && b.x < W + 20) {
       const f = Math.max(0, b.hp / b.maxHp);
-      c.fillStyle = 'rgba(10,9,8,0.75)';
-      c.fillRect(W / 2 - 210, 64, 420, 22);
+      panel(c, W / 2 - 210, 62, 420, 26);
       c.fillStyle = this.surge > 0 ? '#c99a3a' : '#8a6a2a';
       c.fillRect(W / 2 - 205, 76, 410 * f, 6);
       c.font = '13px "Special Elite", monospace';
