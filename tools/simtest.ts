@@ -5,7 +5,7 @@ import { resolveDayWork, dawnTick, nextWeather, queueRecipe, setJobHours, travel
 import { Rng } from '../src/rng';
 import { SITES } from '../src/data/world';
 import { fireProfile } from '../src/data/weapons';
-import { planNight, afterNight } from '../src/sim/director';
+import { planNight, afterNight, intelTier } from '../src/sim/director';
 import { rollIncident, resolveEvent, returnsTick, INCIDENTS } from '../src/sim/events';
 import { living, wound, killSurvivor, makeSurvivor, setBond, canFight, gainXp, choosePerk, settlePerkOffers, perkFx, aimFactor, breakThresholds, moodBreakdown, counsel, migrateSurvivor } from '../src/sim/survivors';
 import { PERK_LIST, perksFor } from '../src/data/perks';
@@ -398,6 +398,12 @@ G.director.mode = 'quiet'; G.day = 1; console.log('quiet:', calendar(10).map((c)
   check(sev('surgeon') < sev('clean_hands') && sev('clean_hands') < sev(null), 'dressing perks');
   const radio = (id: string | null) => { dayRun(id, (x) => { x.job = 'radio'; G.buildings.push({ id: 'radio', level: 1 }); G.flags.radioWork = 0; }); return G.flags.radioWork as number; };
   check(radio('the_voice') > radio('easy_talker') && radio('easy_talker') > radio(null), 'radio perks');
+  // radio work reaches tonight's intel: Social 4 alone is tier 1, with Easy talker a clear signal (tier 2)
+  const tier = (id: string | null) => { dayRun(id, (x) => { x.job = 'radio'; x.skills.social = 4; x.mood = 70; G.buildings.push({ id: 'radio', level: 1 }); }); return intelTier(); };
+  check(tier(null) === 1 && tier('easy_talker') === 2, `radio work counts for intel: ${tier(null)} → ${tier('easy_talker')}`);
+  // repairs need timber: none in the stores, a quarter of the wall
+  const patch = (w: number) => { let g = 0; dayRun(null, (x) => { x.job = 'repair'; G.fort.hp = 50; G.stores.wood = w; }); g = G.fort.hp - 50; return g; };
+  check(patch(0) > 0 && patch(0) <= Math.ceil(patch(99) * 0.3), `repair without timber is small: ${patch(0)} vs ${patch(99)}`);
   check(perkFx(w('packrat'), 'scav') > perkFx(w('deep_pockets'), 'scav') && perkFx(w('ghost'), 'scavDanger') < perkFx(w('light_step'), 'scavDanger'), 'scavenging perks');
   // the house: Warmth / Anchor lift everyone else; counselling goes deeper
   newGame('quiet', 4900);
