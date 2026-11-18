@@ -6,6 +6,7 @@ import { portraitImg } from './portrait';
 import { sfx } from '../audio';
 import { tip, ico, fold } from './kit';
 import { ACTIONS, FIXED, keyLabel, keyOf, type KeyCtx } from './keys';
+import { guideHtml, guideClick, guideFocus } from './guide';
 
 /** The bindings for a context, as the ledger's key list (live: rebinding shows here). */
 function keyList(ctx: KeyCtx): string {
@@ -13,8 +14,8 @@ function keyList(ctx: KeyCtx): string {
 }
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
-type Page = 'day' | 'night' | 'runs' | 'turned' | 'moods';
-let page: Page = 'day';
+type Page = 'guide' | 'day' | 'night' | 'runs' | 'turned' | 'moods';
+let page: Page = 'guide';
 
 /** A picture card: icon or portrait, a name, one line; the rest on hover / long press. */
 const card = (pic: string, name: string, line: string, more = '') =>
@@ -30,6 +31,7 @@ const JOBS: [string, string, string, string][] = [
 ];
 
 const PAGES: Record<Page, { label: string; html: () => string }> = {
+  guide: { label: 'How it works', html: guideHtml },
   day: {
     label: 'The day',
     html: () => `
@@ -118,6 +120,12 @@ export function openHelp(host: HTMLElement = document.body, start?: Page) {
     if (!b) return;
     sfx.ui();
     if (b.dataset.h === 'close') return close();
+    if (guideClick(b.dataset.h!)) {
+      draw();
+      (div.querySelector(guideFocus(b.dataset.h!)) as HTMLElement | null)?.focus();
+      div.querySelector('.modal')?.scrollIntoView({ block: 'start' });
+      return;
+    }
     page = b.dataset.h as Page;
     draw();
     (div.querySelector(`[data-h=${page}]`) as HTMLElement | null)?.focus();
