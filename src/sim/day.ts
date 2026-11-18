@@ -220,12 +220,12 @@ export function resolveDayWork(): string[] {
     if (s.job !== 'rest' && hours <= 0) continue;
     switch (s.job) {
       case 'repair': {
-        const amt = repairAmount(s, m * f);
-        const before = G.fort.hp;
-        G.fort.hp = Math.min(G.fort.maxHp, G.fort.hp + amt);
-        const wood = Math.min(G.stores.wood, Math.ceil(((G.fort.hp - before) / 25) * perkMul(s, 'repairWood')));
-        add('wood', -wood);
-        out.push(G.fort.hp > before ? `${first(s)} patched the wall for ${hours}h (+${G.fort.hp - before}).` : `${first(s)} walked the wall for ${hours}h and found nothing to patch.`);
+        const p = repairPlan(s, m * f);
+        G.fort.hp = Math.min(G.fort.maxHp, G.fort.hp + p.gain);
+        add('wood', -p.wood);
+        out.push(p.gain > 0
+          ? `${first(s)} patched the wall for ${hours}h (+${p.gain}${p.short ? ', out of timber: pulled boards off the shed' : ''}).`
+          : `${first(s)} walked the wall for ${hours}h and found nothing to patch.`);
         break;
       }
       case 'craft': {
@@ -352,6 +352,19 @@ export function resolveDayWork(): string[] {
 // Day yields per worker (m = workMult x hours/8). Perks scale them (src/data/perks.ts).
 export function repairAmount(s: Survivor, m: number) {
   return Math.round((40 + skillOf(s, 'building') * 9) * m * perkMul(s, 'repair'));
+}
+/** Wall per timber: 1 timber patches this much (a Thrifty builder uses less). */
+export const REPAIR_WOOD_PER = 25;
+/** Without timber a repairer only manages this fraction: boards pulled off the shed, the car door re-hung. */
+export const REPAIR_NO_WOOD = 0.25;
+/** What a repairer will do today: wall gained and timber used, from the timber in the stores. */
+export function repairPlan(s: Survivor, m: number, wood = G.stores.wood ?? 0, room = G.fort.maxHp - G.fort.hp) {
+  const full = Math.max(0, Math.min(room, repairAmount(s, m)));
+  const per = REPAIR_WOOD_PER / perkMul(s, 'repairWood'); // wall per timber for this builder
+  const need = Math.ceil(full / per);
+  if (wood >= need) return { gain: full, wood: need, short: false };
+  const timbered = Math.floor(wood) * per;
+  return { gain: Math.min(full, Math.round(timbered + (full - timbered) * REPAIR_NO_WOOD)), wood: Math.floor(wood), short: true };
 }
 export function craftPoints(s: Survivor, m: number) {
   return (3 + skillOf(s, 'crafting') * 0.9) * m * perkMul(s, 'craft');

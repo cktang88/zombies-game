@@ -18,7 +18,7 @@ import { TRAPS } from '../data/traps';
 import {
   buildingLevel, queueRecipe, WEATHER_LABEL, DAY_HOURS, DEFAULT_HOURS, jobHours, setJobHours, hoursAvailable, travelHours, survivorSite,
   searchHours, searchFactor, planConfirmed, confirmPlan, ranToday, onRunToday, runDaylightFor, prepareRun, clockLabel, heatNeed,
-  drillPlan, emplacements, tomorrowTeaser, oilGuns, clearPile, choreHand, craftPoints, fortCount, fortRoom, breakChance, counselPlan, COUNSEL_BREAK,
+  drillPlan, emplacements, tomorrowTeaser, oilGuns, clearPile, choreHand, craftPoints, repairPlan, fortCount, fortRoom, breakChance, counselPlan, COUNSEL_BREAK,
 } from '../sim/day';
 import { calendar } from '../sim/calendar';
 import { armEveryone, wallLine, gunRounds, ammoUse, SHOTS_PER_GUN_NIGHT } from '../sim/readiness';
@@ -36,7 +36,7 @@ import { sysTip, sysLine } from './guide';
 import { todayHtml, dotKeys, pickTodo, applyFlash, markSeen, setRevealAll, isOpen, revealNote, runOpen, JOB_REVEAL, type RevealId } from './today';
 
 const JOBS: { id: JobId; label: string; hint: string }[] = [
-  { id: 'repair', label: 'Repair the wall', hint: 'Building. Uses timber. Hard on the back.' },
+  { id: 'repair', label: 'Repair the wall', hint: 'Building. 1 timber per 25 wall; without timber, a quarter as much. Hard on the back.' },
   { id: 'scavenge', label: 'Scavenge', hint: 'Scavenging. Risky. The walk there and back eats the day.' },
   { id: 'craft', label: 'Workshop', hint: 'Crafting. Works the queue.' },
   { id: 'farm', label: 'Food', hint: 'Farming. Snares, cold frames.' },
@@ -58,7 +58,9 @@ function jobOutlook(s: Survivor, j: JobId): string {
   switch (j) {
     case 'repair': {
       const room = Math.max(0, G.fort.maxHp - G.fort.hp);
-      return room <= 0 ? 'wall is whole' : `+${Math.min(room, Math.round((40 + skillOf(s, 'building') * 9) * m * f))} wall`;
+      if (room <= 0) return 'wall is whole';
+      const p = repairPlan(s, m * f);
+      return p.short ? `+${p.gain} wall · out of timber` : `+${p.gain} wall · ${p.wood} timber`;
     }
     case 'craft':
       return G.craftQueue.length ? `${Math.round((3 + skillOf(s, 'crafting') * 0.9) * m * f)} work on the queue` : 'queue is empty';

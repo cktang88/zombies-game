@@ -11,7 +11,7 @@ import { RECIPES, BUILDINGS, RES_ICON, RES_LABEL, FORT_CAP } from './world';
 import { AMMO_TYPES, ammoLabel } from './weapons';
 import { EMPLACEMENTS } from './emplacements';
 import { TRAPS, placementsAllowed } from './traps';
-import { DAY_HOURS, DEFAULT_HOURS, DRILL_ROUNDS, SITE_TRAVEL, RUN_SEC_PER_HOUR } from '../sim/day';
+import { DAY_HOURS, DEFAULT_HOURS, DRILL_ROUNDS, SITE_TRAVEL, RUN_SEC_PER_HOUR, REPAIR_WOOD_PER, REPAIR_NO_WOOD } from '../sim/day';
 import { SALLY } from '../night/sally';
 
 /** One icon and an amount: "3 ×timber". `i` is an icon id (public/sprites/icon_<i>.png); `s` a word shown beside it even in compact rows. */
@@ -59,7 +59,7 @@ const tired: Amt = { i: 'st_tired', t: 'tiredness' };
 const range = (lo: number, hi: number) => (lo === hi ? `${lo}` : `${lo}–${hi}`);
 
 // Yields per 8-hour day, skill 0..10 (mirrors sim/day.ts repairAmount / craftPoints / farmAmount / careCount).
-const REPAIR = { base: 40, perSkill: 9, woodPer: 25 };
+const REPAIR = { base: 40, perSkill: 9, woodPer: REPAIR_WOOD_PER, noWood: REPAIR_NO_WOOD };
 const CRAFT = { base: 3, perSkill: 0.9 };
 const FARM = { base: 1.5, perSkill: 0.45, perFrame: 2.2, cold: 0.6 };
 const CARE = { base: 2, perSkill: 1 };
@@ -99,7 +99,7 @@ function build(): SystemDef[] {
       get: [{ i: 'st_wall', n: `+${range(REPAIR.base, REPAIR.base + 10 * REPAIR.perSkill)}`, t: 'wall (Building 0–10)' }],
       tradeoff: 'A whole worker-day and timber, but every point holds them back.',
       when: 'The wall is under two-thirds, or a big night is coming.',
-      key: `1 timber per ${REPAIR.woodPer} wall`,
+      key: `1 timber per ${REPAIR.woodPer} wall; none: ×${REPAIR.noWood}`,
     },
     {
       id: 'job_scavenge', group: 'jobs', icon: 'job_scavenge', name: 'Scavenge',
