@@ -4162,7 +4162,7 @@ export class Battle {
    *  · split toning, shadow leg: a cold blue soft-light wash (the darks go blue);
    *  · S-curve toe / black point: a colour-burn by a near-white, a touch bluer (levels: y = (x − k)/(1 − k)
    *    with k ≈ 0.05, at 65%), so the deep darks sink to near-black and keep a blue cast;
-   *  · S-curve shoulder / exposure: the frame added onto itself at 45%, so the gap between the deep
+   *  · S-curve shoulder / exposure: the frame added onto itself at 38%, so the gap between the deep
    *    darks and the lit grows and lamp heads, flash cores and sodium rims clip toward white;
    *  · split toning, highlight leg: a colour-dodge by a dark amber (R ×1.12, G ×1.05, B ×1): a
    *    proportional warm shift, so it shows in the highlights and leaves the blue darks alone.
@@ -4192,7 +4192,7 @@ export class Battle {
     c.fillStyle = 'rgb(242,243,249)';
     c.fillRect(0, 0, cw, ch);
     c.globalCompositeOperation = 'lighter';
-    c.globalAlpha = 0.45;
+    c.globalAlpha = 0.38;
     c.drawImage(this.canvas, 0, 0);
     c.globalCompositeOperation = 'color-dodge';
     c.globalAlpha = 1;
