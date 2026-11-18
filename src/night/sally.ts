@@ -4,7 +4,7 @@
 // The landing shoves back whatever is right under the wall. Out there, for SALLY.out seconds:
 //   - the leader walks toward the cursor along the near lane (and can still shoot);
 //   - [V] swings the hand weapon on the road (no wall in the way); a companion swings on its own;
-//   - a spent or sprung bear trap, snare or deadfall the leader stands over is re-set;
+//   - a spent or sprung bear trap or snare wire the leader stands over is re-set;
 //   - what dies within reach of the party may leave rounds to pick up (loot);
 //   - anything that reaches them bites: every body in arm's reach gets a go (Battle.maul), so a
 //     long stay ends with someone down.
@@ -46,7 +46,7 @@ export const SALLY = {
 };
 (globalThis as unknown as { __sally: unknown }).__sally = SALLY;
 
-const TRAP_RESET = new Set(['beartrap', 'snare', 'deadfall']);
+const TRAP_RESET = new Set(['beartrap', 'snare']);
 const LANE = 2; // the near lane, just past the wall
 
 interface Out { g: Guardian; orig: { x: number; y: number; sc: number; homeX: number }; swing: number; off: number }

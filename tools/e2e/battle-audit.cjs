@@ -112,7 +112,7 @@ const scenes = {
   },
   async traps(page) {
     await night(page, { lights: 1, mut: (G) => { G.buildings.push({ id: 'generator', level: 1 }); } });
-    const ids = ['beartrap', 'roofnails', 'flare', 'oil', 'propane', 'barrels', 'tincan', 'radio', 'snare', 'spikepit', 'electric', 'deadfall', 'net', 'sludge', 'pipemine', 'glass', 'nailbomb'];
+    const ids = ['snare', 'roofnails', 'beartrap', 'oil', 'tincan', 'nailbomb'];
     await placeTraps(page, ids.map((t, i) => ({ trap: t, x: 470 + (i % 9) * 80, lane: i % 4 })));
     await snap(page, 'set');
     await spawnAt(page, crowd(22, 820, 37).map(([t, x, l]) => [t, x + 120, l]));

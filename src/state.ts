@@ -2,6 +2,7 @@ import type { GameState, ChronicleEntry, Res, WeaponItem } from './types';
 import { Rng } from './rng';
 import { RECIPES } from './data/world';
 import { MELEE, MELEE_FOLD, MODS, MOD_FOLD } from './data/weapons';
+import { TRAPS, TRAP_FOLD } from './data/traps';
 
 const KEY = 'vessey-save-v1';
 
@@ -68,6 +69,8 @@ const RECIPE_FOLD: Record<string, string> = {
   mod_taped: 'mod_extmag', mod_speedloader: 'mod_extmag', mod_brake: 'mod_sling', mod_bipod: 'mod_sling',
   mod_choke: 'mod_flashlight', mod_sawedoff: 'mod_flashlight', mod_hatchet: 'mod_flashlight',
 };
+// trap kits folded by job: a queued kit makes the kit it became
+for (const [from, to] of Object.entries(TRAP_FOLD)) RECIPE_FOLD[`trap_${from}`] = `trap_${to}`;
 
 /** Bring an older save up to SAVE_VERSION in place, or null when it cannot be read. */
 export function migrateSave(s: GameState | null): GameState | null {
@@ -127,6 +130,18 @@ export function migrateSave(s: GameState | null): GameState | null {
       if (md.fits(w.def) && !w.mods[md.slot]) w.mods[md.slot] = m;
       else (s.modStock ??= []).push(m);
     }
+  }
+  // seventeen trap kits became six: kits on hand are summed into the one each became; tonight's and
+  // last night's plans keep their spots with the new kit
+  if (s.trapStock) {
+    const out: Record<string, number> = {};
+    for (const [k, v] of Object.entries(s.trapStock)) { const to = TRAP_FOLD[k] ?? k; if (TRAPS[to]) out[to] = (out[to] ?? 0) + num(v); }
+    s.trapStock = out;
+  }
+  const foldPlan = <T extends { trap: string }>(ps: T[]) => ps.map((p) => ({ ...p, trap: TRAP_FOLD[p.trap] ?? p.trap })).filter((p) => TRAPS[p.trap]);
+  if (s.deploy) s.deploy = foldPlan(s.deploy);
+  if (typeof s.flags?.lastPlan === 'string') {
+    try { s.flags.lastPlan = JSON.stringify(foldPlan(JSON.parse(s.flags.lastPlan))); } catch { delete s.flags.lastPlan; }
   }
   s.craftQueue = (s.craftQueue ?? []).map((q) => ({ ...q, recipe: RECIPE_FOLD[q.recipe] ?? q.recipe })).filter((q) => RECIPES.some((r) => r.id === q.recipe));
   s.version = SAVE_VERSION;

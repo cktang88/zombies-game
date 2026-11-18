@@ -20,7 +20,7 @@ export interface TrapArea {
   radius?: number;
   /** band length along the road in px, centred on x — slicks, strips, fences */
   length?: number;
-  /** directional cone (pipe mine): half-angle in degrees, reach in px, pointed away from the wall (+x) */
+  /** directional cone (none of the six kits uses it now): half-angle in degrees, reach in px, pointed away from the wall (+x) */
   cone?: { half: number; reach: number };
   /** true = the band covers every lane (strung across the road); otherwise only its own lane */
   allLanes: boolean;
@@ -75,7 +75,7 @@ export interface TrapDef {
   /** what comes back at dawn if it was not spent: 'yes' = the kit; 'partial' = a chance / a share of the cost; 'no' */
   retrieve: 'yes' | 'partial' | 'no';
   retrieveChance?: number; // for 'partial'
-  upkeep?: Partial<Record<Res, number>>; // paid each night it is placed (electric fence: fuel)
+  upkeep?: Partial<Record<Res, number>>; // paid each night it is placed (none of the six kits has one now)
   requires?: { building?: string; flag?: string }; // to craft (and to run, for the generator)
   good: TurnedId[];
   bad: TurnedId[];
@@ -83,200 +83,85 @@ export interface TrapDef {
   counter: string;
 }
 
+/**
+ * Six kits, one job each (docs/research/19c-simplify-items.md): trip, cut, hold, burn, pull, blow.
+ * Each is easy to read on its own; the depth is in the pairs (lure onto the bomb, trip into the nails,
+ * light the oil when the crowd is on it).
+ */
 export const TRAPS: Record<string, TrapDef> = {
-  nailbomb: {
-    id: 'nailbomb', name: 'Nail bomb', icon: 'icon_pipebomb', world: 'trap_nailbomb',
-    niche: 'Burst AoE on a pack. Loud.',
-    desc: 'Pipe, roofing nails, a clothespin tripwire. It goes off once, and everyone on Ferry Road hears it.',
-    recipe: { needs: 'workbench', cost: { salvage: 6, fuel: 2 }, work: 4 },
-    trigger: 'step', area: { radius: 130, allLanes: true },
-    fx: { dmg: 160, cripple: 0.5, knock: 40, ignites: true, light: { r: 180, time: 0.6 } },
-    noise: 12, uses: 1, usesUnit: 'trigger', minD: 150, maxD: 860, layer: 'object', retrieve: 'yes',
-    good: ['sleeper', 'deer', 'drag', 'crier'], bad: ['ferryman', 'deputy'],
-    counter: 'The first one through sets it off: a lone Deer spends it. Pair it with a lure so a crowd is standing on it.',
+  snare: {
+    id: 'snare', name: 'Snare wire', icon: 'icon_trap_snare', world: 'trap_snarepost',
+    niche: 'Trips the fast ones: Deer and Bucks go down, and everything wades through it slower.',
+    desc: 'Galvanized clothesline and fence wire strung shin-high between porch posts, across every lane. The fast ones never see it.',
+    recipe: { needs: 'workbench', cost: { salvage: 3 }, work: 2 },
+    trigger: 'always', area: { length: 50, allLanes: true },
+    fx: { knockdown: 2.5, slow: 0.6 },
+    noise: 0, uses: 8, usesUnit: 'trigger', minD: 80, maxD: 860, layer: 'object', retrieve: 'yes',
+    good: ['deer', 'leaper', 'raider', 'crier'], bad: ['ferryman', 'drag'],
+    counter: 'Eight trips and the wire is down. A Ferryman snaps it; Drags go under it.',
+  },
+  roofnails: {
+    id: 'roofnails', name: 'Nail strip', icon: 'icon_trap_nails', world: 'trap_roofnails',
+    niche: 'Hurts every one that crosses, and cripples legs: walkers become Drags.',
+    desc: 'Roofing nails bent into jacks with the vise and broken bottles from the Legion hall, raked across the lane. Points up whichever way they land.',
+    recipe: { needs: 'workbench', cost: { salvage: 3 }, work: 2 },
+    trigger: 'always', area: { length: 140, allLanes: false },
+    fx: { slow: 0.75, stepDmg: 10, cripple: 0.18 },
+    noise: 0, uses: 30, usesUnit: 'step', minD: 60, maxD: 860, layer: 'ground', retrieve: 'partial', retrieveChance: 0.6,
+    good: ['sleeper', 'deer', 'drag', 'leaper', 'tunneler'], bad: ['ferryman', 'deputy'],
+    counter: 'Boots go through (Deputies, Ferrymen). A Drag crawling across takes triple. Thirty footfalls and the nails are pressed flat.',
   },
   beartrap: {
     id: 'beartrap', name: 'Bear trap', icon: 'icon_trap_bear', world: 'trap_bear',
-    niche: 'Holds one big target in place: a Ferryman, a Buck landing.',
+    niche: 'Holds one big target in place: a Ferryman, a Buck landing, a Deputy.',
     desc: 'A #4 Newhouse from the Halvorsen barn, chain spiked to the road. It has held bigger animals than this.',
     recipe: { needs: 'forge', cost: { salvage: 8 }, work: 4 },
     trigger: 'step', area: { radius: 22, allLanes: false },
     fx: { dmg: 45, hold: 6, holdCount: 1, cripple: 0.6 },
     noise: 1, uses: 3, usesUnit: 'trigger', minD: 40, maxD: 700, layer: 'object', retrieve: 'yes',
     good: ['ferryman', 'leaper', 'deputy', 'pulper'], bad: ['drag', 'deer'],
-    counter: 'One jaw, one leg. A Ferryman pulls free in 4 s, not 6. Drags crawl over the pan.',
-  },
-  roofnails: {
-    id: 'roofnails', name: 'Roofing-nail spread', icon: 'icon_trap_nails', world: 'trap_roofnails',
-    niche: 'Slows a lane and cripples legs: walkers become Drags.',
-    desc: 'Two pounds of galvanized roofing nails, bent into jacks with the vise. Points up whichever way they land.',
-    recipe: { needs: 'workbench', cost: { salvage: 3 }, work: 2 },
-    trigger: 'always', area: { length: 140, allLanes: false },
-    fx: { slow: 0.7, stepDmg: 8, cripple: 0.18 },
-    noise: 0, uses: 30, usesUnit: 'step', minD: 60, maxD: 860, layer: 'ground', retrieve: 'partial', retrieveChance: 0.6,
-    good: ['sleeper', 'deer', 'leaper'], bad: ['ferryman', 'deputy', 'drag'],
-    counter: 'Boots go through (Deputies, Ferrymen). Drags only drag themselves across. Thirty footfalls and the nails are pressed flat.',
-  },
-  flare: {
-    id: 'flare', name: 'Tripwire flare', icon: 'icon_trap_flare', world: 'trap_flare',
-    niche: 'Lights the road and burns off fog where they come.',
-    desc: 'A road flare in a coffee can with a fishing-line pull. Red light for half a minute, and a shadow for every one of them.',
-    recipe: { needs: 'still', cost: { fuel: 1, salvage: 1 }, work: 2, makes: 2 },
-    trigger: 'step', area: { radius: 300, allLanes: true },
-    fx: { light: { r: 300, time: 30 }, burn: 1 },
-    noise: 2, uses: 1, usesUnit: 'trigger', minD: 200, maxD: 860, layer: 'object', retrieve: 'yes',
-    good: ['drag', 'crier', 'deputy', 'spitter'], bad: [],
-    counter: 'Light is not damage. On a clear moonlit night with floodlights up it is a wasted slot.',
+    counter: 'One jaw, one leg. A Ferryman pulls free in 4 s, not 6. Drags crawl over the pan. Re-sets itself three times.',
   },
   oil: {
     id: 'oil', name: 'Oil slick', icon: 'icon_trap_oil', world: 'trap_oil',
-    niche: 'Slows a band of road; light it and it burns.',
-    desc: 'Drained crankcase oil and still dregs, mopped across the asphalt. They slip. Then you throw the bottle.',
+    niche: 'Slows a band of road; light it with [G] when the crowd is on it, and it burns.',
+    desc: 'Drained crankcase oil and still dregs, mopped across the asphalt. They slip. Then you throw the match.',
     recipe: { needs: 'still', cost: { fuel: 2 }, work: 1 },
-    trigger: 'always', area: { length: 120, allLanes: true },
-    fx: { slow: 0.75, dps: 22, burn: 2, light: { r: 140, time: 12 } },
-    noise: 0, uses: 12, usesUnit: 'second', minD: 120, maxD: 860, layer: 'ground', retrieve: 'no',
-    good: ['sleeper', 'crier', 'drag'], bad: ['pulper'],
-    counter: 'Unlit it only slows. A Pulper bursting on it puts it out: the bile is wet. Burns 12 s once lit.',
-  },
-  propane: {
-    id: 'propane', name: 'Propane tank', icon: 'icon_trap_propane', world: 'trap_propane',
-    niche: 'A bomb you set off with a bullet, when you choose.',
-    desc: 'A twenty-pound grill tank from the hardware, painted white so you can find it in the dark. Shoot it.',
-    recipe: { needs: 'workbench', cost: { salvage: 4, fuel: 3 }, work: 3 },
-    trigger: 'shot', area: { radius: 160, allLanes: true },
-    fx: { dmg: 220, knock: 70, burn: 3, ignites: true, light: { r: 240, time: 1 } },
-    noise: 14, uses: 1, usesUnit: 'trigger', minD: 180, maxD: 860, layer: 'object', retrieve: 'yes',
-    good: ['sleeper', 'crier', 'deputy', 'pulper'], bad: ['drag'],
-    counter: 'Nothing sets it off but you. Miss it in the dark and it is a white can. Ferrymen kick it down the road.',
-  },
-  barrels: {
-    id: 'barrels', name: 'Burning barrel line', icon: 'icon_trap_barrel', world: 'trap_barrel',
-    niche: 'A persistent fire that closes a lane and lights the road.',
-    desc: 'Three oil drums with the tops cut out, full of pallet wood and tires. The smoke is black and smells of every car on Route 9.',
-    recipe: { needs: 'still', cost: { salvage: 8, fuel: 2 }, work: 3 },
-    trigger: 'timer', area: { length: 60, allLanes: false },
-    fx: { dps: 18, burn: 2, light: { r: 220, time: 0 } },
-    noise: 0, uses: 150, usesUnit: 'second', minD: 120, maxD: 760, layer: 'object', retrieve: 'partial', retrieveChance: 0.7,
-    good: ['sleeper', 'deer', 'crier'], bad: ['ferryman', 'drag'],
-    counter: 'The Turned balk and step into the next lane, which is the point. Ferrymen walk through and knock a drum over. Burns 150 s from dusk.',
+    trigger: 'manual', key: 'G', autoWhen: 'four or more Turned are on the slick',
+    area: { length: 120, allLanes: true },
+    fx: { slow: 0.75, dps: 22, burn: 2, light: { r: 200, time: 15 } },
+    noise: 0, uses: 15, usesUnit: 'second', minD: 120, maxD: 860, layer: 'ground', retrieve: 'no',
+    good: ['sleeper', 'crier', 'drag', 'deer'], bad: ['pulper'],
+    counter: 'Unlit it only slows. A Pulper bursting on it puts it out: the bile is wet. Burns 15 s once lit, and lights the road.',
   },
   tincan: {
-    id: 'tincan', name: 'Tin-can lure post', icon: 'icon_trap_tincan', world: 'trap_tincan',
-    niche: 'Pulls a crowd to one spot, on your key, for the combo.',
+    id: 'tincan', name: 'Tin-can lure', icon: 'icon_trap_tincan', world: 'trap_tincan',
+    niche: 'Pulls a crowd to one spot on [L], and drowns out a Crier while it rattles.',
     desc: 'A fence post hung with tin cans and a cowbell, and a pull-cord back to the wall. They turn toward it like cattle at feeding.',
     recipe: { needs: 'workbench', cost: { salvage: 3 }, work: 1 },
     trigger: 'manual', key: 'L', autoWhen: 'the first Turned comes within 120 px of the post',
-    area: { radius: 260, allLanes: true },
-    fx: { lure: { r: 260, time: 8 } },
+    area: { radius: 280, allLanes: true },
+    fx: { lure: { r: 280, time: 10 } },
     noise: 6, uses: 2, usesUnit: 'trigger', minD: 250, maxD: 860, layer: 'object', retrieve: 'yes',
     good: ['sleeper', 'pulper', 'crier', 'deer'], bad: ['ferryman', 'raider'],
-    counter: 'Eight seconds, then they remember you. Ferrymen do not turn their heads. The noise brings stragglers.',
+    counter: 'Ten seconds, then they remember you. Ferrymen do not turn their heads. A Crier inside it keens half as often, and its summons walk to the cans.',
   },
-  radio: {
-    id: 'radio', name: 'Radio lure', icon: 'icon_trap_radio', world: 'trap_radio',
-    niche: 'A long, loud lure that drowns out a Crier\'s call.',
-    desc: 'A Panasonic boombox on a car battery, playing WVSY\'s last tape: the hog report, then twenty minutes of polka. They stand and listen.',
-    recipe: { needs: 'generator', cost: { salvage: 8 }, work: 4 },
-    trigger: 'manual', key: 'L', autoWhen: 'a Crier begins to keen anywhere on the road',
-    area: { radius: 380, allLanes: true },
-    fx: { lure: { r: 380, time: 20 } },
-    noise: 10, uses: 1, usesUnit: 'trigger', minD: 300, maxD: 860, layer: 'object', retrieve: 'partial', retrieveChance: 0.5,
-    good: ['crier', 'sleeper', 'pulper', 'deer'], bad: ['ferryman', 'raider'],
-    counter: 'While it plays, a Crier\'s summons walk to the radio, not the wall. Then something smashes it: half the time it does not come back.',
+  nailbomb: {
+    id: 'nailbomb', name: 'Nail bomb', icon: 'icon_pipebomb', world: 'trap_nailbomb',
+    niche: 'A burst on a pack: the first one through sets it off, or shoot it when the crowd is on it.',
+    desc: 'Pipe, roofing nails, a clothespin tripwire. It goes off once, and everyone on Ferry Road hears it.',
+    recipe: { needs: 'workbench', cost: { salvage: 6, fuel: 2 }, work: 4 },
+    trigger: 'step', area: { radius: 140, allLanes: true },
+    fx: { dmg: 170, cripple: 0.5, knock: 50, burn: 1.5, ignites: true, light: { r: 220, time: 1 } },
+    noise: 12, uses: 1, usesUnit: 'trigger', minD: 150, maxD: 860, layer: 'object', retrieve: 'yes',
+    good: ['sleeper', 'deer', 'crier', 'pulper'], bad: ['ferryman', 'deputy'],
+    counter: 'The first one through sets it off: a lone Deer spends it. Pair it with the lure, or shoot it yourself when they bunch.',
   },
-  snare: {
-    id: 'snare', name: 'Clothesline snare', icon: 'icon_trap_snare', world: 'trap_snarepost',
-    niche: 'Trips anything running: Deer and Bucks go down.',
-    desc: 'Galvanized clothesline strung shin-high between two porch posts. The fast ones never see it.',
-    recipe: { needs: 'workbench', cost: { salvage: 3 }, work: 2 },
-    trigger: 'always', area: { length: 16, allLanes: true },
-    fx: { knockdown: 2.5, slow: 0.85 },
-    noise: 0, uses: 6, usesUnit: 'trigger', minD: 80, maxD: 860, layer: 'object', retrieve: 'yes',
-    good: ['deer', 'leaper', 'raider'], bad: ['drag', 'ferryman', 'sleeper'],
-    counter: 'Only trips what is moving fast. Sleepers step over it; Drags go under; a Ferryman snaps it. Six trips.',
-  },
-  spikepit: {
-    id: 'spikepit', name: 'Punji pit', icon: 'icon_trap_pit', world: 'trap_pit',
-    niche: 'Kills Drags and slow walkers outright, until it fills.',
-    desc: 'A trench cut through the shoulder with Vern\'s backhoe, sharpened stakes, a sheet of plywood and leaves. The deer camp way.',
-    recipe: { needs: 'workbench', cost: { salvage: 9 }, work: 5 },
-    trigger: 'step', area: { length: 70, allLanes: false },
-    fx: { dmg: 140, hold: 3, holdCount: 4 },
-    noise: 1, uses: 4, usesUnit: 'body', minD: 160, maxD: 760, layer: 'ground', retrieve: 'partial', retrieveChance: 0.5,
-    good: ['drag', 'sleeper', 'pulper', 'tunneler'], bad: ['deer', 'leaper', 'ferryman'],
-    counter: 'Four bodies fill it and the rest walk across them. Deer and Bucks jump it. A Ferryman climbs out.',
-  },
-  electric: {
-    id: 'electric', name: 'Electrified fence', icon: 'icon_trap_electric', world: 'trap_fencepost',
-    niche: 'All-night stuns at the kill zone. Needs the generator and fuel.',
-    desc: 'Chain-link on fence posts, wired to the diesel through a cattle-fence charger from the farm store. Do not lean on it.',
-    recipe: { needs: 'generator', cost: { salvage: 16 }, work: 6 },
-    trigger: 'always', area: { length: 24, allLanes: true },
-    fx: { dmg: 28, stun: 0.6 },
-    noise: 2, uses: 30, usesUnit: 'shock', minD: 50, maxD: 260, layer: 'object', retrieve: 'yes',
-    upkeep: { fuel: 1 }, requires: { building: 'generator' },
-    good: ['deputy', 'sleeper', 'crier', 'deer'], bad: ['pulper', 'ferryman'],
-    counter: 'A Pulper bursting on it shorts it for 15 s. Ferrymen are not stunned. Thirty shocks and the charger trips. 1 fuel a night.',
-  },
-  deadfall: {
-    id: 'deadfall', name: 'Car-door deadfall', icon: 'icon_trap_deadfall', world: 'trap_door',
-    niche: 'One crushing hit on whatever is climbing the wall.',
-    desc: 'A Buick door and a cinder block on a rope over the barricade. Cut the rope. Reset it at dawn.',
-    recipe: { needs: 'forge', cost: { salvage: 8 }, work: 3 },
-    trigger: 'manual', key: 'G', autoWhen: 'a Turned starts climbing over, or a Buck lands on the wall',
-    area: { length: 50, allLanes: false },
-    fx: { dmg: 260, knockdown: 2, knock: 30 },
-    noise: 4, uses: 1, usesUnit: 'trigger', minD: 0, maxD: 40, layer: 'wall', retrieve: 'partial', retrieveChance: 0.8,
-    good: ['leaper', 'ferryman', 'deputy', 'pulper'], bad: ['drag', 'spitter', 'raider'],
-    counter: 'One hit, one target, only at the wall. Anything that stays out on the road never meets it.',
-  },
-  net: {
-    id: 'net', name: 'Chain-link net', icon: 'icon_trap_net', world: 'trap_net',
-    niche: 'Holds a whole lane for a few seconds while you reload.',
-    desc: 'A section of the ballfield backstop, staked low across the lane. They push into it in a heap.',
-    recipe: { needs: 'forge', cost: { salvage: 9 }, work: 3 },
-    trigger: 'step', area: { length: 30, allLanes: false },
-    fx: { hold: 6, holdCount: 99, hp: 240 },
-    noise: 1, uses: 1, usesUnit: 'trigger', minD: 100, maxD: 600, layer: 'object', retrieve: 'partial', retrieveChance: 0.5,
-    good: ['sleeper', 'deer', 'pulper', 'crier'], bad: ['ferryman', 'leaper'],
-    counter: 'They tear at it with their wall strength: a Ferryman is through in a second. Bucks jump it. The heap is a gift for a nail bomb.',
-  },
-  sludge: {
-    id: 'sludge', name: 'Pond-sludge decoy', icon: 'icon_trap_sludge', world: 'trap_sludge',
-    niche: 'The Quiet\'s jar: inside the smear, the Turned lose interest.',
-    desc: 'Settling-pond sludge from Pond 2, smeared on the road the way the man from the Quiet showed you. It smells like bread gone off. They stop, and they listen to something.',
-    recipe: { needs: 'still', cost: { food: 2, fuel: 1 }, work: 3 },
-    trigger: 'always', area: { length: 160, allLanes: true },
-    fx: { calm: 0.35 },
-    noise: 0, uses: 40, usesUnit: 'second', minD: 80, maxD: 860, layer: 'ground', retrieve: 'no',
-    requires: { flag: 'quietJar' },
-    good: ['crier', 'deer', 'sleeper', 'spitter'], bad: ['ferryman', 'raider', 'bellwether'],
-    counter: 'Forty seconds of Turned standing in it, then it is trodden thin. Criers inside cannot keen. The bell overrides it. The living do not care.',
-  },
-  pipemine: {
-    id: 'pipemine', name: 'Pipe mine', icon: 'icon_trap_pipemine', world: 'trap_pipemine',
-    niche: 'A directional cone of nails down the road. Clears a lane-front.',
-    desc: 'A steel plate, a C4-shaped pack of black powder, and four hundred roofing nails in epoxy. FRONT TOWARD RIVER, in Marla\'s marker.',
-    recipe: { needs: 'workbench', level: 2, cost: { salvage: 10, fuel: 3 }, work: 5 },
-    trigger: 'manual', key: 'G', autoWhen: 'three or more Turned are inside the cone',
-    area: { cone: { half: 30, reach: 240 }, allLanes: true },
-    fx: { dmg: 150, cripple: 0.4, knock: 60 },
-    noise: 12, uses: 1, usesUnit: 'trigger', minD: 30, maxD: 220, layer: 'object', retrieve: 'yes',
-    good: ['sleeper', 'deer', 'crier', 'pulper'], bad: ['ferryman', 'drag'],
-    counter: 'The nails go one way. Anything already past it, or low under the cone (Drags), is safe. Fire too early and the road is empty.',
-  },
-  glass: {
-    id: 'glass', name: 'Glass-shard strip', icon: 'icon_trap_glass', world: 'trap_glass',
-    niche: 'Cheap, quiet attrition. Wears out.',
-    desc: 'Every bottle from the Legion hall, broken into a feed sack and raked across the shoulder. They walk barefoot now, most of them.',
-    recipe: { needs: 'workbench', cost: { salvage: 1 }, work: 1, makes: 2 },
-    trigger: 'always', area: { length: 100, allLanes: false },
-    fx: { stepDmg: 6, slow: 0.9 },
-    noise: 0, uses: 25, usesUnit: 'step', minD: 60, maxD: 860, layer: 'ground', retrieve: 'no',
-    good: ['drag', 'sleeper', 'tunneler'], bad: ['deputy', 'ferryman', 'raider'],
-    counter: 'Boots ignore it. Twenty-five footfalls grind it to sand. A Drag crossing it takes triple.',
-  },
+};
+/** Kits that were folded into the six above (old saves, old queues, last night's plan): old id -> new id. */
+export const TRAP_FOLD: Record<string, string> = {
+  glass: 'roofnails', spikepit: 'roofnails', net: 'beartrap', deadfall: 'beartrap', electric: 'beartrap',
+  barrels: 'oil', flare: 'oil', radio: 'tincan', sludge: 'tincan', propane: 'nailbomb', pipemine: 'nailbomb',
 };
 
 export const TRAP_IDS = Object.keys(TRAPS);
@@ -342,13 +227,11 @@ export function combos(ps: Placement[]): string[] {
     const A = TRAPS[a.trap], B = TRAPS[b.trap];
     if (!A || !B) continue;
     if (A.fx.lure && B.id === 'oil' && near(a, b, A.fx.lure.r * 0.5)) out.add('Lure on the oil: pull them in, then light it.');
-    if (A.fx.lure && (B.id === 'nailbomb' || B.id === 'propane') && near(a, b, (B.area.radius ?? 0) + 40)) out.add(`Lure beside the ${B.name.toLowerCase()}: a crowd standing on it.`);
+    if (A.fx.lure && B.id === 'nailbomb' && near(a, b, (B.area.radius ?? 0) + 40)) out.add('Lure beside the nail bomb: a crowd standing on it.');
     if (A.fx.ignites && B.id === 'oil' && near(a, b, (A.area.radius ?? 0) + (B.area.length ?? 0) / 2)) out.add(`The ${A.name.toLowerCase()} will light the oil.`);
-    if (A.id === 'barrels' && B.id === 'oil' && near(a, b, 90)) out.add('Barrels beside the oil: it will catch on its own.');
-    if (A.id === 'net' && (B.id === 'nailbomb' || B.id === 'propane') && b.x > a.x && near(a, b, (B.area.radius ?? 0))) out.add(`The net heaps them up on the ${B.name.toLowerCase()}.`);
-    if (A.id === 'flare' && B.id === 'propane' && near(a, b, A.fx.light!.r)) out.add('The flare lights the propane tank for your shot.');
-    if (A.id === 'snare' && B.id === 'spikepit' && b.x < a.x && near(a, b, 120)) out.add('Tripped Deer fall short of the pit, then crawl in.');
-    if (A.id === 'roofnails' && B.id === 'spikepit' && near(a, b, 140)) out.add('Crippled walkers crawl into the pit.');
+    if (A.id === 'snare' && B.id === 'roofnails' && b.x < a.x && near(a, b, 160)) out.add('Tripped Deer crawl the rest of the way over the nails.');
+    if (A.id === 'snare' && B.id === 'oil' && near(a, b, 140)) out.add('The wire holds them in the oil while it burns.');
+    if (A.id === 'beartrap' && B.id === 'nailbomb' && near(a, b, (B.area.radius ?? 0))) out.add('The bear trap holds a big one on the nail bomb.');
   }
   return [...out];
 }

@@ -212,7 +212,7 @@ export function renderDeploy(root: HTMLElement, opts: DeployOpts): DeployHandle 
           const fitTip = (good.length ? `<br><b>Good vs tonight's:</b> ${good.map((z) => esc(turnedName(z))).join(', ')}` : '') + (poor.length ? `<br><b>Poor vs tonight's:</b> ${poor.map((z) => esc(turnedName(z))).join(', ')}` : '') + (fit ? '<br>One of the best kits for tonight.' : '');
           return `<button type="button" class="dep-kit${kit === id ? ' on' : ''}${fit ? ' fit' : ''}" data-kit="${id}" ${n <= 0 ? 'aria-disabled="true"' : ''} ${tip(`<b>${esc(TRAPS[id].name)}</b><br>${esc(TRAPS[id].niche)}${fitTip}`)}>${fit ? '<i class="dep-fit" aria-label="suits tonight">tonight</i>' : ''}<img src="${spriteUrl(TRAPS[id].icon)}" alt="" draggable="false"><span>${esc(TRAPS[id].name)}</span><b>${n}</b></button>`;
         }).join('')
-      : '<p class="dep-none">No kits made. Traps are crafted at the workbench, forge, still and generator.</p>';
+      : '<p class="dep-none">No kits made. Traps are crafted at the workbench, forge and still.</p>';
     countEl.textContent = `${placed.length} / ${opts.placementsAllowed} placed`;
     countEl.classList.toggle('full', placed.length >= opts.placementsAllowed);
     msgEl.textContent = msg || (placed.length ? '' : 'Pick a kit, then tap the road.');
@@ -394,7 +394,7 @@ export function renderDeploy(root: HTMLElement, opts: DeployOpts): DeployHandle 
 export function mountDeployTest(root: HTMLElement) {
   const out = document.createElement('pre');
   out.className = 'dep-testout';
-  const stock: Record<string, number> = { nailbomb: 2, beartrap: 1, roofnails: 2, flare: 2, oil: 2, propane: 1, barrels: 1, tincan: 1, radio: 1, snare: 1, spikepit: 1, electric: 1, deadfall: 1, net: 1, sludge: 1, pipemine: 1, glass: 2 };
+  const stock: Record<string, number> = { snare: 2, roofnails: 2, beartrap: 1, oil: 2, tincan: 1, nailbomb: 2 };
   const box = document.createElement('div');
   root.append(box, out);
   const h = renderDeploy(box, {

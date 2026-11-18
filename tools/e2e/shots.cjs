@@ -111,7 +111,7 @@ const scenes = {
         await page.mouse.click(bb.x + bb.width * fx, bb.y + bb.height * fy);
         await page.waitForTimeout(150);
       };
-      await put('beartrap', 0.32, 0.3); await put('beartrap', 0.45, 0.8); await put('tincan', 0.62, 0.55); await put('propane', 0.5, 0.3); await put('deadfall', 0.24, 0.62); await put('spikepit', 0.38, 0.55);
+      await put('beartrap', 0.32, 0.3); await put('snare', 0.45, 0.8); await put('tincan', 0.62, 0.55); await put('nailbomb', 0.5, 0.3); await put('oil', 0.24, 0.62); await put('roofnails', 0.38, 0.55);
       await page.evaluate(() => [...document.querySelectorAll('.dep-h')].pop()?.scrollIntoView({ block: 'start' }));
     });
   },

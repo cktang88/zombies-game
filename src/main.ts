@@ -403,7 +403,7 @@ function deployStep() {
   const finish = (ps: Placement[]) => {
     readCrew();
     readPosts();
-    // the electric fence needs the generator and a can of fuel a night
+    // a kit that needs a building or upkeep (none of the six do now) is left in the shed without it
     const kept: Placement[] = [];
     const dropped: string[] = [];
     for (const p of ps) {

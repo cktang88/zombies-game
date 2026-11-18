@@ -671,7 +671,7 @@ export class Battle {
   // Controls (the HUD's key line mirrors this):
   //   LMB fire · RMB (hold) Focus · MMB/[F] firebomb · [R] reload / clear (hold: speed reload) · [T] ammo / slug swap
   //   [B] fire selector · [Q]/wheel weapon · [S]/[Ctrl] (hold) duck · [E] rally · [M] mark target
-  //   [1-9]/[Tab] select guard · [Z]/[X]/[C]/[K] order (Shift = everyone; V is melee, L lures, G deadfall/pipe mine, H gun nest) · [Y] guard's post · Space hurry · [O] sally (Shift: + selected) · [P]/Esc pause
+  //   [1-9]/[Tab] select guard · [Z]/[X]/[C]/[K] order (Shift = everyone; V is melee, L lures, G lights the oil, H gun nest) · [Y] guard's post · Space hurry · [O] sally (Shift: + selected) · [P]/Esc pause
   onKey(e: KeyboardEvent) {
     const k = normKey(e);
     // hold [F1] (or ?): every key, as a sheet of keycaps
@@ -1501,7 +1501,7 @@ export class Battle {
   // Weakspots are tested first, then the head, then the body box, which is split into zones by the
   // height the ray crosses the body's centre line: torso (top 40%), arms (40–55%), legs (bottom 45%).
   castShot(g: Guard, ox: number, oy: number, ang: number, dmg: number, pierce: number, knock: number, pellet: boolean, isPlayer: boolean, fx: FireProfile | undefined, laneY: number) {
-    for (const h of this.hooks) if (h.onShot?.(g, ox, oy, ang, laneY, pellet, isPlayer)) return { hit: true, x: ox, y: oy }; // night modules (propane)
+    for (const h of this.hooks) if (h.onShot?.(g, ox, oy, ang, laneY, pellet, isPlayer)) return { hit: true, x: ox, y: oy }; // night modules (a nail bomb shot)
     const gw = (g as Guard | null)?.w;
     this.vfx.shotStart(ox, oy, gw?.def, fx); // impacts below wait for the round to get there
     const dx = Math.cos(ang), dy = Math.sin(ang);

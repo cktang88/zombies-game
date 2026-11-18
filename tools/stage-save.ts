@@ -47,7 +47,7 @@ Object.assign(G.stores, { food: Math.max(G.stores.food, 14), salvage: 48, fuel: 
 G.fort.hp = Math.round(G.fort.maxHp * 0.82);
 G.fort.lights = 2;
 G.fort.spikes = Math.max(G.fort.spikes, 1);
-G.trapStock = { ...(G.trapStock ?? {}), tincan: 2, deadfall: 1, propane: 1, pipemine: 1, beartrap: 2, spikepit: 1 };
+G.trapStock = { ...(G.trapStock ?? {}), tincan: 2, nailbomb: 2, oil: 1, snare: 1, beartrap: 2, roofnails: 1 };
 // papers picked up on runs
 G.flags.docs = JSON.stringify(DOCS.slice(0, 6).map((d) => d.id));
 // a gun nest on the roof

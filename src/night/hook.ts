@@ -19,13 +19,13 @@ export interface BattleHook {
   update?(dt: number): void;
   /** flat things on the road, before the darkness pass and the actors */
   drawGround?(c: CanvasRenderingContext2D): void;
-  /** standing things (barrels, nets, gun nests) sorted in among the actors */
+  /** standing things (bear traps, posts, gun nests) sorted in among the actors */
   sorted?(c: CanvasRenderingContext2D): SortedDraw[];
   /** over everything, after the HUD (prompts, stamina, heat bars) */
   drawOver?(c: CanvasRenderingContext2D): void;
   /** a key; return true to swallow it */
   onKey?(e: KeyboardEvent): boolean | void;
-  /** a projectile leaving a muzzle; return true if this module consumed it (a propane tank was hit) */
+  /** a projectile leaving a muzzle; return true if this module consumed it (a nail bomb was hit) */
   onShot?(g: Guardian | null, ox: number, oy: number, ang: number, laneY: number, pellet: boolean, isPlayer: boolean): boolean;
   /** a body just died (state is already 'dying') */
   onKill?(z: Zed, g: Guardian | null): void;
