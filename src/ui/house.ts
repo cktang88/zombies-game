@@ -264,10 +264,11 @@ function summary(st: Station): string {
 // Existing sprites where there is one; a small ink silhouette (inline SVG) where there is none yet.
 const img = (id: string, x: number, y: number, w: number, cls = '') => `<img class="hv-art ${cls}" src="${spriteUrl(id)}" alt="" draggable="false" style="left:${x}px;top:${y}px;width:${w}px" onerror="this.style.visibility='hidden'">`;
 const svg = (x: number, y: number, w: number, h: number, body: string, cls = '') => `<svg class="hv-art ${cls}" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px" viewBox="0 0 ${w} ${h}" aria-hidden="true">${body}</svg>`;
+/** a painted prop from public/sprites/house/ (3× the scene's units), `w` scene units wide */
+const pic = (id: string, x: number, y: number, w: number, cls = '') => img(`house/${id}`, x, y, w, cls);
 const INK = 'stroke="#070605" stroke-width="3" stroke-linejoin="round"';
 const ART: Record<StationId, () => string> = {
-  infirmary: () => svg(222, 352, 180, 76, `<rect x="6" y="20" width="168" height="16" rx="3" fill="#cbbf9f" ${INK}/><rect x="6" y="14" width="40" height="12" rx="5" fill="#e6dcc6" ${INK}/>
-      <path d="M50 22 q60 -8 120 0 v12 h-120z" fill="#6b5b45" ${INK}/><path d="M14 36 v36 M166 36 v36 M14 56 h152" fill="none" stroke="#1d1813" stroke-width="5"/><path d="M14 36 v36 M166 36 v36" fill="none" ${INK}/>`)
+  infirmary: () => pic('cot', 236, 340, 166)
     + svg(408, 330, 44, 98, `<rect x="4" y="4" width="36" height="50" fill="#2c261f" ${INK}/><rect x="10" y="12" width="10" height="14" fill="#8e2a20" stroke="#070605" stroke-width="2"/><rect x="24" y="16" width="10" height="10" fill="#cbbf9f" stroke="#070605" stroke-width="2"/><path d="M8 54 v40 M36 54 v40" stroke="#1d1813" stroke-width="4"/>`),
   bunks: () => svg(548, 292, 104, 136, `<path d="M8 4 v128 M96 4 v128" stroke="#2c241b" stroke-width="8"/><path d="M8 4 v128 M96 4 v128" fill="none" ${INK} stroke-width="2"/>
       <rect x="10" y="40" width="84" height="14" fill="#5a4c3a" ${INK}/><path d="M14 40 q34 -12 76 -2 v2z" fill="#6f6250" ${INK}/>
