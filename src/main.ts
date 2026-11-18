@@ -8,7 +8,7 @@ import { resolveDayWork, dawnTick, nextWeather, prepareRun, tomorrowTeaser, rest
 import { dailySeed, parseSeed } from './rng';
 import { planNight, afterNight, PERSONAS, nightIntel, expectedTypes, SPECIAL_INFO } from './sim/director';
 import { POST_NAMES, autoPosts, gunSuits, type Post as GuardPost } from './night/battle';
-import { rollIncident, resolveEvent, returnsTick } from './sim/events';
+import { rollIncident, resolveEvent, returnsTick, INCIDENTS } from './sim/events';
 import { Battle, W, H, type NightResult } from './night/battle';
 import { Expedition, type ExpeditionResult } from './night/expedition';
 import { wallLine } from './sim/readiness';
@@ -734,6 +734,9 @@ function openLedger() {
 // debug handle for story testing: roll today's incident now, or force an ending screen
 (globalThis as unknown as { __story: object }).__story = {
   roll: () => { G.pendingEvent = rollIncident(); day(); return G.pendingEvent?.id ?? null; },
+  /** tests: open one incident by id (null if it declines today), and the list of ids */
+  event: (id: string) => { G.pendingEvent = INCIDENTS.find((i) => i.id === id)?.make() ?? null; day(); return G.pendingEvent?.id ?? null; },
+  events: () => INCIDENTS.map((i) => i.id),
   addSurvivor: () => { const s = makeSurvivor(); s.arrivedDay = 1; G.survivors.push(s); return s.id; },
   crossing: () => crossing(false),
   /** tests: the night in play (input checks read its crosshair, focus, duck, selected guard) */
