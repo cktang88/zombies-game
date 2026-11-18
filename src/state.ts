@@ -1,6 +1,7 @@
 import type { GameState, ChronicleEntry, Res, WeaponItem } from './types';
 import { Rng } from './rng';
 import { RECIPES } from './data/world';
+import { MELEE, MELEE_FOLD } from './data/weapons';
 
 const KEY = 'vessey-save-v1';
 
@@ -62,6 +63,8 @@ const RECIPE_FOLD: Record<string, string> = {
   ammo_slug: 'ammo_shell', ammo_flech: 'ammo_shell', ammo_dragon: 'ammo_shell', ammo_flare: 'ammo_shell',
   ammo_rifle_sp: 'ammo_rifle', ammo_rifle_ap: 'ammo_rifle', ammo_r556: 'ammo_rifle', ammo_ball: 'ammo_rifle',
   ammo_pipebomb: 'molotov',
+  // hand weapons folded by role (docs/research/19c-simplify-items.md)
+  m_nailbat: 'm_bat', m_spear: 'm_hatchet', m_sawblade: 'm_hatchet',
 };
 
 /** Bring an older save up to SAVE_VERSION in place, or null when it cannot be read. */
@@ -95,6 +98,13 @@ export function migrateSave(s: GameState | null): GameState | null {
     if (o?.r) o.r = fold(o.r) as string;
     if (sp?.kind === 'ammo' && sp.id) sp.id = fold(sp.id) as string;
     for (const c of ev.choices ?? []) if (c.fx) { c.fx.cost = foldRec(c.fx.cost); c.fx.gain = foldRec(c.fx.gain); }
+  }
+  // thirteen hand weapons became five: each keeps its condition and kills under the role it was folded into
+  if (s.melee) {
+    for (const k of s.melee) k.def = MELEE_FOLD[k.def] ?? k.def;
+    s.melee = s.melee.filter((k) => MELEE[k.def]);
+    const kept = new Set(s.melee.map((k) => k.uid));
+    for (const p of s.survivors ?? []) if (p.melee && !kept.has(p.melee)) p.melee = null;
   }
   s.craftQueue = (s.craftQueue ?? []).map((q) => ({ ...q, recipe: RECIPE_FOLD[q.recipe] ?? q.recipe })).filter((q) => RECIPES.some((r) => r.id === q.recipe));
   s.version = SAVE_VERSION;

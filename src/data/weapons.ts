@@ -76,19 +76,19 @@ export type { WeaponClass } from '../types';
  *   (Survivor.weapon) AND one melee weapon (Survivor.melee = uid in G.melee). Never look
  *   melee defs up in WEAPONS. Call meleeProfile(item, { dmgMul, speedMul, staminaMul }):
  *   dmg        per target hit (condition folded in)
- *   reach      px from the body that the swing connects (boat hook ~110, knife ~40)
+ *   reach      px from the body that the swing connects (fire axe ~72, knife ~40)
  *   arc        how many targets one swing can hit (nearest first, across adjacent lanes)
  *   swingTime  wind-up seconds before the hit lands; recovery: seconds after before the next
  *   knock      push-back px; stagger 0..1: chance/impulse to stagger (stop, release a grab)
- *   bleed      dps applied for BLEED_TIME seconds (machete, nail bat)
+ *   bleed      dps applied for BLEED_TIME seconds (hatchet)
  *   crit       damage multiplier for an overhead strike to the head (wall: a climber's head;
  *              day runs: swing with the crosshair above the target's head line)
  *   finisher   kills sleeping / downed / crawling targets outright (knife: silently)
  *   stamina    cost per swing out of 100 (regen ~18/s); swinging tired = half damage, slow
- *   noise      noise per swing (chainsaw is loud and draws them)
+ *   noise      noise per swing (the fire axe is loud and draws them)
  *   wear       condition lost per hit; at 0 the item breaks and is removed
- *   fuel       fuel taken from stores per swing (chainsaw); no fuel = it will not start
- *   pry        search-speed multiplier on doors/cars/sheds/caches (crowbar)
+ *   fuel       fuel taken from stores per swing (none of the five uses it); no fuel = it will not start
+ *   pry        search-speed multiplier on doors/cars/sheds/caches (crowbar ×2, hatchet ×1.4)
  *   Night combat: melee at the wall vs climbers / over-the-wall, and guards out of ammo use
  *   their melee weapon (meleeProfile(dmg)) instead of fists. Proficiency class: 'melee'.
  *
@@ -361,73 +361,44 @@ export interface MeleeDef {
   craftable?: boolean;
 }
 export const BLEED_TIME = 4;
+/**
+ * Five hand weapons, one role each (docs/research/19c-simplify-items.md). The tradeoff runs along
+ * speed, damage, shove, wear and noise: the quick ones are weak, the heavy ones loud and slow, and
+ * only the crowbar never needs the bench.
+ */
 export const MELEE: Record<string, MeleeDef> = {
-  hatchet: {
-    id: 'hatchet', name: 'Hatchet', icon: 'icon_m_hatchet', dmg: 34, reach: 55, arc: 1, swingTime: 0.2, recovery: 0.22, knock: 10, stagger: 0.25, crit: 2, stamina: 8, noise: 0.15, wear: 0.004,
-    niche: 'Fast and cheap: two quick chops while anything heavier is still winding up.',
-    desc: 'A Plumb hatchet from the kindling box by the stove.',
-  },
-  fellingaxe: {
-    id: 'fellingaxe', name: 'Felling axe', icon: 'icon_m_fellingaxe', dmg: 60, reach: 72, arc: 3, swingTime: 0.5, recovery: 0.45, knock: 22, stagger: 0.5, crit: 2, stamina: 20, noise: 0.2, wear: 0.003,
-    niche: 'A slow, wide cleave through three at once.',
-    desc: 'A Michigan-pattern head on a hickory helve, sharpened for pulpwood.',
-  },
-  crowbar: {
-    id: 'crowbar', name: 'Crowbar', icon: 'icon_m_crowbar', dmg: 30, reach: 60, arc: 1, swingTime: 0.28, recovery: 0.3, knock: 30, stagger: 0.7, crit: 1.8, stamina: 12, noise: 0.25, wear: 0.0008, pry: 1.8,
-    niche: 'Knocks them down, never breaks, and pries doors and cars open nearly twice as fast.',
-    desc: 'Thirty inches of mill-shop steel. Opens anything, eventually.',
-  },
-  bat: {
-    id: 'bat', name: 'Aluminum bat', icon: 'icon_m_bat', dmg: 26, reach: 65, arc: 2, swingTime: 0.26, recovery: 0.3, knock: 55, stagger: 0.8, crit: 1.8, stamina: 12, noise: 0.3, wear: 0.002,
-    niche: 'Shove and stagger: buys room more than it kills.',
-    desc: 'Vessey Vikings JV, 2019. The dents are newer.',
-  },
-  machete: {
-    id: 'machete', name: 'Machete', icon: 'icon_m_machete', dmg: 30, reach: 60, arc: 2, swingTime: 0.2, recovery: 0.2, knock: 6, stagger: 0.2, bleed: 9, crit: 2, stamina: 9, noise: 0.1, wear: 0.004,
-    niche: 'Fast, wide, and everything it touches keeps bleeding.',
-    desc: 'Brush machete from the county road crew. Somebody kept it sharp.',
-  },
-  fireaxe: {
-    id: 'fireaxe', name: 'Fire axe', icon: 'icon_m_fireaxe', dmg: 70, reach: 70, arc: 2, swingTime: 0.45, recovery: 0.4, knock: 25, stagger: 0.6, crit: 3, stamina: 18, noise: 0.2, wear: 0.002,
-    niche: 'Heavy crits: an overhead blow splits a head in one.',
-    desc: 'Red-handled pick-head axe off Engine 2. VESSEY VFD on the blade.',
-  },
-  sledge: {
-    id: 'sledge', name: 'Sledgehammer', icon: 'icon_m_sledge', dmg: 55, reach: 70, arc: 2, swingTime: 0.65, recovery: 0.6, knock: 95, stagger: 1, crit: 2, stamina: 28, noise: 0.4, wear: 0.0008,
-    niche: 'Huge knockback that even rocks a Ferryman; slow and exhausting.',
-    desc: 'Eight pounds of fence-post driver. Two swings and you need a breather.',
-  },
-  boathook: {
-    id: 'boathook', name: 'Boat hook', icon: 'icon_m_boathook', dmg: 22, reach: 115, arc: 1, swingTime: 0.3, recovery: 0.3, knock: 40, stagger: 0.45, crit: 1.6, stamina: 10, noise: 0.1, wear: 0.003,
-    niche: 'Reach: hits at nearly twice arm\'s length and holds one off the wall.',
-    desc: 'Ash pole and a bronze hook from the Halvorsen ferry.',
-  },
   knife: {
-    id: 'knife', name: 'Filleting knife', icon: 'icon_m_knife', dmg: 18, reach: 40, arc: 1, swingTime: 0.15, recovery: 0.15, knock: 2, stagger: 0.05, crit: 2.5, finisher: true, stamina: 5, noise: 0, wear: 0.003,
-    niche: 'Silent finisher: sleeping, downed or crawling ones die without a sound.',
+    id: 'knife', name: 'Knife', icon: 'icon_m_knife', dmg: 18, reach: 40, arc: 1, swingTime: 0.15, recovery: 0.15, knock: 2, stagger: 0.05, crit: 2.5, finisher: true, stamina: 5, noise: 0, wear: 0.003,
+    niche: 'Fast and silent: sleeping, downed or crawling ones die without a sound. Weak against a crowd.',
     desc: 'A Rapala fillet knife from a tackle box. Thin, quick, quiet.',
   },
-  chainsaw: {
-    id: 'chainsaw', name: 'Chainsaw', icon: 'icon_m_chainsaw', dmg: 24, reach: 62, arc: 2, swingTime: 0.06, recovery: 0.06, knock: 4, stagger: 0.5, bleed: 6, crit: 1.5, stamina: 2, noise: 2.2, wear: 0.0015, fuel: 0.04,
-    niche: 'Devastating and continuous — burns fuel, and every one of them hears it.',
-    desc: 'A Husqvarna from the hardware rental shelf. Hold it down.',
+  hatchet: {
+    id: 'hatchet', name: 'Hatchet', icon: 'icon_m_hatchet', dmg: 34, reach: 58, arc: 2, swingTime: 0.2, recovery: 0.22, knock: 10, stagger: 0.25, bleed: 5, crit: 2, stamina: 8, noise: 0.15, wear: 0.004, pry: 1.4,
+    niche: 'The all-rounder: quick chops that leave them bleeding, and it splits a door on a run. Dulls fast.',
+    desc: 'A Plumb hatchet from the kindling box by the stove.',
+    craftable: true,
   },
-  // improvised (craftable)
-  spear: {
-    id: 'spear', name: 'Rebar spear', icon: 'icon_m_boathook', dmg: 30, reach: 100, arc: 2, swingTime: 0.3, recovery: 0.35, knock: 18, stagger: 0.35, crit: 1.6, stamina: 10, noise: 0.1, wear: 0.006, craftable: true,
-    niche: 'Reach on the cheap: thrusts through two in a line.',
-    desc: 'Number-5 rebar ground to a point, tape for a grip.',
+  bat: {
+    id: 'bat', name: 'Bat', icon: 'icon_m_bat', dmg: 26, reach: 68, arc: 2, swingTime: 0.26, recovery: 0.3, knock: 55, stagger: 0.8, crit: 1.8, stamina: 12, noise: 0.3, wear: 0.002,
+    niche: 'Shove and stagger: knocks them off the wall and buys room more than it kills.',
+    desc: 'Vessey Vikings JV, 2019. The dents are newer.',
+    craftable: true,
   },
-  nailbat: {
-    id: 'nailbat', name: 'Nail bat', icon: 'icon_m_bat', dmg: 32, reach: 65, arc: 2, swingTime: 0.28, recovery: 0.3, knock: 45, stagger: 0.7, bleed: 5, crit: 1.8, stamina: 12, noise: 0.3, wear: 0.006, craftable: true,
-    niche: 'A bat that also opens them up: shove plus bleed.',
-    desc: 'Sixteen-penny nails through a Louisville Slugger.',
+  crowbar: {
+    id: 'crowbar', name: 'Crowbar', icon: 'icon_m_crowbar', dmg: 28, reach: 62, arc: 1, swingTime: 0.28, recovery: 0.3, knock: 30, stagger: 0.6, crit: 1.8, stamina: 12, noise: 0.25, wear: 0.0008, pry: 2,
+    niche: 'Never breaks, and pries doors, cars and caches open twice as fast. Hits one at a time.',
+    desc: 'Thirty inches of mill-shop steel. Opens anything, eventually.',
   },
-  sawblade: {
-    id: 'sawblade', name: 'Saw-blade machete', icon: 'icon_m_machete', dmg: 34, reach: 60, arc: 2, swingTime: 0.24, recovery: 0.24, knock: 8, stagger: 0.2, bleed: 7, crit: 2, stamina: 10, noise: 0.15, wear: 0.007, craftable: true,
-    niche: 'Bandsaw steel from the mill: a heavier, ragged machete.',
-    desc: 'Cut from a broken head-rig bandsaw blade, ground on the bench grinder.',
+  fireaxe: {
+    id: 'fireaxe', name: 'Fire axe', icon: 'icon_m_fireaxe', dmg: 66, reach: 72, arc: 3, swingTime: 0.5, recovery: 0.45, knock: 45, stagger: 0.7, crit: 2.5, stamina: 22, noise: 0.35, wear: 0.002,
+    niche: 'A slow, heavy cleave through three at once. Winds up, tires you out, and the road hears it.',
+    desc: 'Red-handled pick-head axe off Engine 2. VESSEY VFD on the blade.',
   },
+};
+/** Hand weapons that were folded into the five above (old saves, old queues): old id -> new id. */
+export const MELEE_FOLD: Record<string, string> = {
+  machete: 'hatchet', sawblade: 'hatchet', nailbat: 'bat', boathook: 'bat', spear: 'crowbar',
+  fellingaxe: 'fireaxe', sledge: 'fireaxe', chainsaw: 'fireaxe',
 };
 export const MELEE_ORDER = Object.keys(MELEE);
 export const MELEE_ICONS: string[] = [...new Set(Object.values(MELEE).map((m) => m.icon))];
