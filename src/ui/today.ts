@@ -149,6 +149,19 @@ function openTodos(): Todo[] {
   if (bigIn >= 0 && ws && !prepping) {
     t.push({ id: 'prep', icon: 'trap_bear', text: bigIn === 0 ? 'Bad night tonight · traps and ammo' : `Bad night in ${bigIn}d · stock up`, tip: `${tonight[bigIn].label} Queue trap kits and rounds, and put someone at the bench.`, tab: 'workshop', sel: '[data-fold="ws-make-traps"], .wsq', dot: 'tab:workshop', prio: bigIn === 0 ? 15 : 48 });
   }
+  // a red night with nobody listening or watching (director.ts intelSources: Radio with the mast, or
+  // a Shooting 3+ lookout on Drill): the dusk report will say nothing about what is coming
+  if (bigIn === 0 && isOpen('jobs')) {
+    const mast = buildingLevel('radio') > 0;
+    const watching = people.some((s) => canWork(s) && !onRunToday(s) && ((s.job === 'radio' && mast) || (s.job === 'drill' && s.skills.shooting >= 3)));
+    if (!watching) {
+      const able = people.filter((s) => canWork(s) && !onRunToday(s) && !isBitten(s));
+      const radio = mast ? [...able].sort((a, b) => b.skills.social - a.skills.social)[0] : undefined;
+      const look = able.filter((s) => s.skills.shooting >= 3).sort((a, b) => b.skills.shooting - a.skills.shooting)[0];
+      const s = radio ?? look;
+      t.push({ id: 'intel', icon: 'job_radio', text: `Nobody watching the road before the ${({ crossing: 'Crossing', band: 'tide' } as Record<string, string>)[tonight[0].kind] ?? tonight[0].kind}`, tip: `Tonight is a bad one, and nobody is on the Radio${mast ? '' : ' (needs the mast)'} or on Drill with Shooting 3+ as a lookout. With one, dusk tells you what is coming, wave by wave.${s ? ` ${first(s)} could: ${s === radio ? 'Work the radio' : 'Drill'}.` : ''}`, sel: jobSel(s), dot: s ? `surv:${s.id}` : undefined, prio: 16 });
+    }
+  }
   if (ws) {
     for (const a of ammoRuns()) {
       const r = RECIPES.find((x) => x.gives?.[a.res] && buildingLevel(x.needs) >= (x.level ?? 1));

@@ -299,7 +299,7 @@ export function nightIntel(plan: NightPlan | null = G.nextNight): string[] {
   const tier = intelTier();
   const { radio, look } = intelSources();
   const who = [radio && `${first(radio)} on the radio`, look && `${first(look)} from the wall`].filter(Boolean).join(' and ');
-  if (tier === 0) return ['Nobody was on the radio or watching the road today. We will see them when they come.'];
+  if (tier === 0) return [`Nobody was on the radio or watching the road today. We will see them when they come. (Tomorrow: someone on ${G.buildings.some((b) => b.id === 'radio') ? 'the Radio, or ' : ''}Drill with Shooting 3+.)`];
   const out: string[] = [];
   const end = Math.max(1, ...plan.spawns.map((s) => s.t));
   const waves = ['First wave', plan.special === 'tide' ? 'Second wave, the tide itself (twice the first)' : 'Second wave', 'Late'];

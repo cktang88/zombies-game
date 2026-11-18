@@ -41,9 +41,9 @@ const JOBS: { id: JobId; label: string; hint: string }[] = [
   { id: 'craft', label: 'Workshop', hint: 'Crafting. Works the queue.' },
   { id: 'farm', label: 'Food', hint: 'Farming. Snares, cold frames.' },
   { id: 'doctor', label: 'Tend wounded', hint: 'Medicine.' },
-  { id: 'drill', label: 'Drill', hint: 'Shooting practice. Burns rounds; dry-fire teaches half as much.' },
+  { id: 'drill', label: 'Drill', hint: 'Shooting practice. Burns rounds; dry-fire teaches half as much. At Shooting 3+ they also watch the road: dusk tells you what is coming.' },
   { id: 'counsel', label: 'Counsel', hint: 'Talk the worst-off down. Fewer breaks tomorrow.' },
-  { id: 'radio', label: 'Work the radio', hint: 'Social. Needs a radio mast.' },
+  { id: 'radio', label: 'Work the radio', hint: 'Social. Needs a radio mast. Dusk tells you what is coming tonight, wave by wave.' },
   { id: 'rest', label: 'Rest', hint: 'Recover. The whole day off.' },
 ];
 
@@ -78,7 +78,8 @@ function jobOutlook(s: Survivor, j: JobId): string {
       const ammo = selectedAmmo(it);
       const rounds = Math.ceil(10 * f);
       const live = !!ammo && ammo !== 'scrap' && (G.stores[ammo] ?? 0) >= rounds;
-      return live ? `${rounds} rounds, ${emplacements().length ? '+ gun nest' : 'live fire'}` : 'dry-fire, half pace';
+      const look = s.skills.shooting >= 3 ? 'lookout' : 'lookout at Shooting 3+';
+      return `${look} · ${live ? `${rounds} rounds${emplacements().length ? ' + gun nest' : ''}` : 'dry-fire'}`;
     }
     case 'counsel': {
       const r = living().filter((o) => o !== s && breakChance(o, false) > 0).sort((a, b) => breakChance(b, false) - breakChance(a, false))[0];
@@ -87,7 +88,7 @@ function jobOutlook(s: Survivor, j: JobId): string {
       return low ? `${low} could use it · counsel ${s.skills.psych ?? 0}` : 'everyone is holding';
     }
     case 'radio':
-      return buildingLevel('radio') ? `social ${s.skills.social}/10` : 'needs a radio mast';
+      return buildingLevel('radio') ? `tonight's numbers · social ${s.skills.social}` : 'needs a radio mast';
     case 'rest':
       return s.rest < 0.6 ? 'sleeps it off' : 'a day off';
     default:
