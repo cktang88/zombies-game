@@ -15,6 +15,11 @@
 .gx-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 6px; }
 .gx-card { display: flex; gap: 10px; align-items: center; text-align: left; padding: 8px 10px; background: rgba(0, 0, 0, .2); border: 1px solid var(--line); font-family: var(--serif); color: var(--ink); min-height: 60px; }
 .gx-card:hover, .gx-card:focus-visible { border-color: #a08a5c; background: rgba(160, 138, 92, .08); outline: none; }
+/* wide, dark gun icons (bows, rifles) read as a thin dim sliver in a square box: a wider box and a faint rim */
+.gx-card .ico.lg, .gx-head .ico.xl { filter: brightness(1.25) drop-shadow(0 0 1px rgba(230, 215, 180, .5)); }
+.gx-card .ico.lg { width: 52px; height: 40px; }
+/* the compound bow is drawn lying flat (3.4:1): stood on the diagonal it fills the box instead of a 15px strip */
+.gx-card .ico[src$="/icon_bow.png"], .gx-head .ico[src$="/icon_bow.png"] { transform: rotate(-38deg) scale(1.5); }
 .gx-card .gx-ct { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .gx-card b { font-family: var(--type); font-weight: normal; font-size: var(--fs-m); }
 .gx-card .t-s { line-height: 1.25; }
