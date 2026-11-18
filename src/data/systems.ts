@@ -302,6 +302,15 @@ function build(): SystemDef[] {
       key: '[Y] change a guard\'s post',
     },
     {
+      id: 'armory', group: 'build', icon: 'rifle', name: 'Armory',
+      what: 'Who carries which gun, what it loads, what is fitted.',
+      spend: [{ i: 'st_break', t: 'condition: worn guns jam' }, { i: 'ammo', t: 'each gun eats its own caliber' }],
+      get: [{ i: 'skill_shooting', t: 'the right gun for each shooter' }, { i: 'mod_scope', t: 'attachments and ammo types' }],
+      tradeoff: 'Big guns hit harder but eat scarce ammo; small ones run forever.',
+      when: 'Match guns to the ammo you can make or find.',
+      key: '[Q] swap guns at the wall',
+    },
+    {
       id: 'ammo', group: 'build', icon: 'ammo', name: 'Ammo types',
       what: 'Special rounds for the same guns.',
       spend: [{ i: 'parts', t: 'parts and more bench work than plain' }],

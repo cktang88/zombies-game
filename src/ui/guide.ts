@@ -97,3 +97,6 @@ export function guideShow(id?: string) {
 
 /** A card's open state for the focus restore after a redraw. */
 export const guideFocus = (h: string) => (h.startsWith('g:sys:') ? '.gx-nav [data-h="g:cards"]' : `[data-h="${h}"]`);
+
+/** A system's tradeoff as plain text (for native title attributes, e.g. on <option>s). */
+export const sysLine = (id: string) => system(id)?.tradeoff ?? '';

@@ -30,6 +30,7 @@ import { hintHtml, markHintTarget, nextHint, skipHints } from './onboarding';
 import { threadsHtml } from '../sim/threads';
 import { calendarHtml } from '../sim/calendar';
 import { juiceAfterRender } from './juice';
+import { sysTip, sysLine } from './guide';
 
 const JOBS: { id: JobId; label: string; hint: string }[] = [
   { id: 'repair', label: 'Repair the wall', hint: 'Building. Uses timber. Hard on the back.' },
@@ -278,8 +279,8 @@ function survivorCard(s: Survivor) {
       ${skillsMini(s)}
       <div class="row sv-jobrow">
         <span class="sv-job"${tip(jobTip)}>${ico('job_' + s.job, '', '')}</span>
-        <select data-act="job" data-id="${s.id}" ${disabled ? 'disabled' : ''} aria-label="Job for ${esc(first(s))}">
-          ${JOBS.map((j) => `<option value="${j.id}" ${s.job === j.id ? 'selected' : ''}>${j.label} — ${jobOutlook(s, j.id)}</option>`).join('')}
+        <select data-act="job" data-id="${s.id}" ${disabled ? 'disabled' : ''} aria-label="Job for ${esc(first(s))}"${sysTip('job_' + s.job)}>
+          ${JOBS.map((j) => `<option value="${j.id}" ${s.job === j.id ? 'selected' : ''} title="${esc(sysLine('job_' + j.id))}">${j.label} — ${jobOutlook(s, j.id)}</option>`).join('')}
         </select>
         ${s.job === 'scavenge' ? `<select data-act="site" data-id="${s.id}" aria-label="Where ${esc(first(s))} scavenges">${sites.map((x) => {
           const xs = siteStock(x.id);
@@ -788,7 +789,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
         ${living().map(survivorCard).join('')}
       </section>
       <section class="center">
-        <nav>${['workshop', 'wall', 'armory', 'town', 'chronicle', 'graves'].map((t) => `<button class="${tab === t ? 'on' : ''}" data-act="tab" data-id="${t}">${t}</button>`).join('')}</nav>
+        <nav>${['workshop', 'wall', 'armory', 'town', 'chronicle', 'graves'].map((t) => `<button class="${tab === t ? 'on' : ''}" data-act="tab" data-id="${t}"${sysTip(t)}>${t}</button>`).join('')}</nav>
         <div class="tabbody">${tab === 'workshop' ? workshopHtml() : tab === 'wall' ? wallHtml() : tab === 'armory' ? armoryHtml() : tab === 'town' ? townHtml() : tab === 'chronicle' ? chronicleHtml() : gravesHtml()}</div>
       </section>
       <section class="report">
