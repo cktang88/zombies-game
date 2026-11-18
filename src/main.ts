@@ -6,7 +6,7 @@ import { renderDay } from './ui/day';
 import { installKit, tip, ico, chip, fold, qi, tag } from './ui/kit';
 import { resolveDayWork, dawnTick, nextWeather, prepareRun, tomorrowTeaser, restoreRunMate } from './sim/day';
 import { dailySeed, parseSeed } from './rng';
-import { planNight, afterNight, PERSONAS, nightIntel } from './sim/director';
+import { planNight, afterNight, PERSONAS, nightIntel, expectedTypes, SPECIAL_INFO } from './sim/director';
 import { POST_NAMES, type Post as GuardPost } from './night/battle';
 import { rollIncident, resolveEvent, returnsTick } from './sim/events';
 import { Battle, W, H, type NightResult } from './night/battle';
@@ -29,7 +29,8 @@ import { startAsh } from './ui/titlefx';
 import { portraitImg } from './ui/portrait';
 import './ui/ledger.css';
 import './ui/menus.css';
-import { renderDeploy } from './ui/deploy';
+import { renderDeploy, turnedFace } from './ui/deploy';
+import { ZOMBIES } from './data/zombies';
 import { TRAPS, placementsAllowed, spendStock, dawnRetrieve, migrateTrapStock, type Placement } from './data/traps';
 import { takeSpent } from './night/traps';
 import { EMPLACEMENTS, parseEmplacements, stringifyEmplacements, type Post } from './data/emplacements';
@@ -196,6 +197,22 @@ function overlay(html: string, onClose: () => void) {
   });
 }
 
+/** The lines "What we know" said at dusk, shown again over the deploy step. */
+let duskIntel: string[] = [];
+const specialName = (sp?: string) => (sp ? SPECIAL_INFO[sp]?.name ?? sp : 'the usual');
+const specialTip = (sp?: string) => (sp && SPECIAL_INFO[sp] ? `<b>${esc(SPECIAL_INFO[sp].name)}</b>: ${esc(SPECIAL_INFO[sp].line)}` : 'An ordinary night: what the road is sending tonight.');
+
+/** Over the deploy step: tonight's special night, the faces we expect, and what the radio / lookout said. */
+function intelStrip(): string {
+  const plan = G.nextNight;
+  if (!plan) return '';
+  const big = plan.special === 'tide' || plan.special === 'crossing' || plan.special === 'horde';
+  const faces = Object.keys(expectedTypes(plan)).map((t) => turnedFace(t, `<b>${esc(t === 'tunneler' ? 'Drag (from the drain)' : ZOMBIES[t]?.name ?? t)}</b>: expected tonight.${ZOMBIES[t]?.role ? `<br>${esc(ZOMBIES[t].role!)}` : ''} The traps that suit it are ringed below.`)).join('');
+  const lines = duskIntel.length ? duskIntel : nightIntel(plan);
+  return `<div class="dep dep-intel"><header class="dep-h"><h2>Tonight</h2>${chip('st_danger', esc(specialName(plan.special)), specialTip(plan.special), big ? 'warn' : '')}${faces ? `<span class="faces">${faces}</span>` : ''}</header>
+    ${lines.map((l, i) => `<p class="${i === 0 && lines.length > 1 ? 'who' : ''}">${esc(l)}</p>`).join('')}</div>`;
+}
+
 function dusk() {
   const lines = resolveDayWork();
   const plan = planNight();
@@ -212,6 +229,7 @@ function dusk() {
   const totalRounds = AMMO_RES.reduce((a, k) => a + Math.floor(G.stores[k] ?? 0), 0);
   const teaser = tomorrowTeaser();
   const intel = nightIntel(plan);
+  duskIntel = intel; // the deploy step shows the same lines (nightIntel rolls its fuzz, so once)
   const big = plan.special === 'tide' || plan.special === 'crossing' || plan.special === 'horde';
   // the session break: saved now, the night must be fought; quitting mid-night replays it from dusk
   G.phase = 'night';
@@ -223,7 +241,7 @@ function dusk() {
     <p class="headline t-l">${esc(plan.label)}</p>
     ${big ? `<p class="stamp threat">${esc(threat)}</p>` : ''}
     <div class="duskchips">
-      ${chip('st_danger', esc(plan.special ?? 'the usual'), 'What the road is sending tonight.', big ? 'warn' : '')}
+      ${chip('st_danger', esc(specialName(plan.special)), specialTip(plan.special), big ? 'warn' : '')}
       ${chip('st_wall', `${Math.ceil(G.fort.hp)}/${G.fort.maxHp}`, 'The wall at dusk.')}
       ${chip('job_guard', `${wall.length} at the wall${line.idle.length ? ` · ${line.idle.length} can't shoot` : ''}`, `${wall.length} at the wall tonight${line.idle.length ? `. Can't shoot: ${line.idle.map((s) => `${first(s)} (${s.weapon ? 'no rounds' : 'no gun'})`).join(', ')}` : ''}.${line.sitOut.length ? ` Sitting out (six places): ${line.sitOut.map(first).join(', ')}.` : ''}`, line.idle.length ? 'warn' : '')}
       ${chip('ammo', gunRounds, `${gunRounds} rounds for the guns we carry; ${totalRounds} in the house.`, gunRounds < wall.length * 20 ? 'warn' : '')}
@@ -280,7 +298,7 @@ function deployStep() {
   if (!kits && !emps.length && !guards.length) return night();
   app.onclick = null;
   app.onchange = null;
-  app.innerHTML = `<div class="deploywrap" style="background-image:linear-gradient(rgba(10,9,8,.84),rgba(10,9,8,.95)),url(${spriteUrl('bg_far')})"><div class="dep-posts"></div><div class="dep-crew"></div><div class="dep-root"></div></div>`;
+  app.innerHTML = `<div class="deploywrap" style="background-image:linear-gradient(rgba(10,9,8,.84),rgba(10,9,8,.95)),url(${spriteUrl('bg_far')})">${intelStrip()}<div class="dep-posts"></div><div class="dep-crew"></div><div class="dep-root"></div></div>`;
   const postsEl = app.querySelector('.dep-posts') as HTMLElement;
   const crewEl = app.querySelector('.dep-crew') as HTMLElement;
   const rootEl = app.querySelector('.dep-root') as HTMLElement;
@@ -398,7 +416,7 @@ function deployStep() {
     const initial = last.filter((p) => TRAPS[p.trap] && (left[p.trap] = (left[p.trap] ?? 0) - 1) >= 0).slice(0, allowed);
     renderDeploy(rootEl, {
       stock, laneCount: 4, roadMinX: WALL_X, roadMaxX: ROAD_MAX_X, wallX: WALL_X,
-      placementsAllowed: allowed, initial, title: 'The road',
+      placementsAllowed: allowed, initial, title: 'The road', expected: expectedTypes(G.nextNight),
       onDone: (ps) => finish(ps.slice(0, allowed)),
     });
   } else {

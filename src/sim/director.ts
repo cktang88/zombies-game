@@ -341,3 +341,26 @@ export function nightIntel(plan: NightPlan | null = G.nextNight): string[] {
   }
   return out;
 }
+
+/** What each special night means, in a line, for the dusk chip and the deploy strip (ids from planNight). */
+export const SPECIAL_INFO: Record<string, { name: string; line: string; types?: string[] }> = {
+  tide: { name: 'Tide', line: 'The middle of the night comes twice as thick. Keep rounds back for it.' },
+  horde: { name: 'Horde', line: 'Half again as many as a usual night, more Deer and Sleepers. A long one.' },
+  crossing: { name: 'The Crossing', line: 'Over the ice: Ferrymen, and the Bellwether who rang the bell.', types: ['ferryman', 'bellwether'] },
+  raiders: { name: 'County men', line: 'Living men with guns come in with the second wave, while the guns are busy with the dead. They shoot the guards.', types: ['raider'] },
+  tunnel: { name: 'The drain', line: 'Drags climb out of the storm drain behind the wall. Traps on the road never meet them.', types: ['tunneler'] },
+  fog: { name: 'Fog', line: 'Guards see less far and they come out of it close. You hear them before you see them.' },
+  criers: { name: 'Criers', line: 'Four times the usual Criers. Their keening calls more; hit one while it draws breath.', types: ['crier'] },
+};
+
+/** The Turned we expect tonight (no Sleepers: they come every night), each with a weight (how many ×
+ *  how dangerous), heaviest first. What the radio or lookout saw (intel tier 1+), else only what the
+ *  special night itself says. */
+export function expectedTypes(plan: NightPlan | null = G.nextNight): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (!plan) return out;
+  const sp = (plan.special && SPECIAL_INFO[plan.special]?.types) ?? [];
+  if (intelTier() > 0) for (const s of plan.spawns) if (s.type !== 'sleeper' && s.type !== 'bellwether') out[s.type] = (out[s.type] ?? 0) + (ZOMBIES[s.type]?.cost ?? 1);
+  for (const t of sp) out[t] = Math.max(out[t] ?? 0, 8);
+  return Object.fromEntries(Object.entries(out).sort((a, b) => b[1] - a[1]));
+}

@@ -41,6 +41,7 @@ export interface DeployOpts {
   wallX: number; // battle x of the wall's front face
   placementsAllowed: number; // placementsAllowed(best Building skill) from data/traps.ts
   initial?: Placement[]; // re-open with last night's plan
+  expected?: Record<string, number>; // Turned we expect tonight → weight (director.expectedTypes): mark the kits that suit them best
   title?: string;
   onDone(placements: Placement[]): void;
   onCancel?(): void;
@@ -65,12 +66,17 @@ const TRIGGER_LABEL: Record<TrapDef['trigger'], string> = {
 const TRIGGER_SHORT: Record<TrapDef['trigger'], string> = { step: 'underfoot', shot: 'shoot it', timer: 'burns down', manual: 'by hand', always: 'all night' };
 const HOW_TO = 'Pick a kit, then tap a lane, or drag it onto the road.<br>Drag a placed trap to move it; tap it to see it or take it up.<br>Arrow keys nudge the selected trap; Delete takes it up.';
 
-/** A Turned as a small portrait (its first sprite), its name on hover; struck through when the trap is poor on it. */
-function turnedPic(id: string, bad: boolean): string {
+const turnedName = (id: string) => (id === 'tunneler' ? 'Drag (tunnelling)' : ZOMBIES[id]?.name ?? id);
+/** A Turned as a small portrait (its first sprite) with a tip; cls 'bad' strikes it through, 'tonight' rings it. */
+export function turnedFace(id: string, tipHtml: string, cls = ''): string {
   const z = ZOMBIES[id];
-  const name = id === 'tunneler' ? 'Drag (tunnelling)' : z?.name ?? id;
+  const name = turnedName(id);
   const src = z?.sprites[0] ? spriteUrl(z.sprites[0]) : '';
-  return `<span class="dep-z${bad ? ' bad' : ''}"${tip(`<b>${esc(name)}</b>: ${bad ? 'poor against' : 'good against'}`)}>${src ? `<img src="${src}" alt="${esc(name)}" draggable="false">` : esc(name)}</span>`;
+  return `<span class="dep-z ${cls}"${tip(tipHtml)}>${src ? `<img src="${src}" alt="${esc(name)}" draggable="false">` : esc(name)}</span>`;
+}
+/** A trap's good/poor-vs portrait; ringed when that Turned is expected tonight. */
+function turnedPic(id: string, bad: boolean, tonight: boolean): string {
+  return turnedFace(id, `<b>${esc(turnedName(id))}</b>: ${bad ? 'poor against' : 'good against'}${tonight ? '. <b>Expected tonight.</b>' : ''}`, `${bad ? 'bad' : ''}${tonight ? ' tonight' : ''}`);
 }
 
 export function renderDeploy(root: HTMLElement, opts: DeployOpts): DeployHandle {
@@ -80,6 +86,11 @@ export function renderDeploy(root: HTMLElement, opts: DeployOpts): DeployHandle 
   const viewMin = wallX - 70; // a little of the yard behind the wall
   const viewMax = roadMaxX + 30;
   const span = viewMax - viewMin;
+  const expected = new Set(Object.keys(opts.expected ?? {}));
+  // how well each kit suits tonight: good-vs weight minus poor-vs weight; the best (within 75 % of the top) are marked
+  const suit = (id: string) => TRAPS[id].good.reduce((a, z) => a + (opts.expected?.[z] ?? 0), 0) - 0.5 * TRAPS[id].bad.reduce((a, z) => a + (opts.expected?.[z] ?? 0), 0);
+  const topSuit = Math.max(0, ...Object.keys(opts.stock).filter((id) => TRAPS[id] && (opts.stock[id] ?? 0) > 0).map(suit));
+  const fits = (id: string) => topSuit > 0 && suit(id) >= topSuit * 0.75;
   const placed: Placement[] = (opts.initial ?? []).filter((p) => TRAPS[p.trap]).map((p) => ({ ...p }));
   let kit: string | null = null; // palette selection for tap-to-place
   let sel = -1; // selected placed token
@@ -193,7 +204,14 @@ export function renderDeploy(root: HTMLElement, opts: DeployOpts): DeployHandle 
     // palette
     const ids = Object.keys(TRAPS).filter((id) => (opts.stock[id] ?? 0) > 0);
     kitsEl.innerHTML = ids.length
-      ? ids.map((id) => { const n = avail(id); return `<button type="button" class="dep-kit${kit === id ? ' on' : ''}" data-kit="${id}" ${n <= 0 ? 'aria-disabled="true"' : ''} ${tip(`<b>${esc(TRAPS[id].name)}</b><br>${esc(TRAPS[id].niche)}`)}><img src="${spriteUrl(TRAPS[id].icon)}" alt="" draggable="false"><span>${esc(TRAPS[id].name)}</span><b>${n}</b></button>`; }).join('')
+      ? ids.map((id) => {
+          const n = avail(id);
+          // suits tonight: good against something we expect, named in the tip
+          const good = TRAPS[id].good.filter((z) => expected.has(z)), poor = TRAPS[id].bad.filter((z) => expected.has(z));
+          const fit = fits(id);
+          const fitTip = (good.length ? `<br><b>Good vs tonight's:</b> ${good.map((z) => esc(turnedName(z))).join(', ')}` : '') + (poor.length ? `<br><b>Poor vs tonight's:</b> ${poor.map((z) => esc(turnedName(z))).join(', ')}` : '') + (fit ? '<br>One of the best kits for tonight.' : '');
+          return `<button type="button" class="dep-kit${kit === id ? ' on' : ''}${fit ? ' fit' : ''}" data-kit="${id}" ${n <= 0 ? 'aria-disabled="true"' : ''} ${tip(`<b>${esc(TRAPS[id].name)}</b><br>${esc(TRAPS[id].niche)}${fitTip}`)}>${fit ? '<i class="dep-fit" aria-label="suits tonight">tonight</i>' : ''}<img src="${spriteUrl(TRAPS[id].icon)}" alt="" draggable="false"><span>${esc(TRAPS[id].name)}</span><b>${n}</b></button>`;
+        }).join('')
       : '<p class="dep-none">No kits made. Traps are crafted at the workbench, forge, still and generator.</p>';
     countEl.textContent = `${placed.length} / ${opts.placementsAllowed} placed`;
     countEl.classList.toggle('full', placed.length >= opts.placementsAllowed);
@@ -226,7 +244,7 @@ export function renderDeploy(root: HTMLElement, opts: DeployOpts): DeployHandle 
       chip('st_time', back, it.retrieve === 'yes' ? 'Comes back at dawn if not spent' : it.retrieve === 'partial' ? 'May come back at dawn' : 'Used up when it goes off'),
       ...upkeep,
     ].join('');
-    const vs = (ids: string[], bad: boolean) => (ids.length ? ids.map((z) => turnedPic(z, bad)).join('') : '<span class="t-s">—</span>');
+    const vs = (ids: string[], bad: boolean) => (ids.length ? ids.map((z) => turnedPic(z, bad, expected.has(z))).join('') : '<span class="t-s">—</span>');
     return `<img class="dep-ci" src="${spriteUrl(it.icon)}" alt=""${tip(esc(it.desc))}>
       <div class="dep-cm">
         <div class="dep-ct"><b class="t-l"${tip(esc(it.desc))}>${esc(it.name)}</b> <span class="t-s dep-niche">${esc(it.niche)}</span></div>

@@ -120,3 +120,17 @@
   .dep.posts .postrow:has(select) > span:last-child:empty { display: none; }
 }
 @media (max-width: 700px) { .dep-h { flex-wrap: wrap; } .dep-h .dep-count { white-space: normal; } }
+/* tonight: kits and portraits that suit what the radio / lookout expect */
+.dep-kit { position: relative; }
+.dep-kit.fit { border-color: var(--moss, #7f8c55); box-shadow: inset 0 0 0 1px var(--moss, #7f8c55); background: #2c2f20; }
+.dep-fit { position: absolute; top: -9px; left: 6px; font-style: normal; font-family: var(--type, monospace); font-size: 13px; line-height: 15px; padding: 0 4px; color: #11120c; background: #9aa866; text-transform: uppercase; letter-spacing: .04em; pointer-events: none; }
+.dep-z.tonight { outline: 2px solid var(--ochre, #b8862f); outline-offset: 1px; border-radius: 2px; background: rgba(184, 134, 47, .14); }
+.dep-z.bad.tonight { outline-color: var(--rust, #a8462a); background: rgba(168, 70, 42, .14); }
+/* the intel strip over the posts */
+.dep.dep-intel .dep-h { align-items: center; flex-wrap: wrap; justify-content: flex-start; }
+.dep-intel .dep-h h2 { margin-right: 4px; }
+.dep-intel .faces { display: inline-flex; gap: 6px; align-items: flex-end; }
+.dep-intel .faces .dep-z { border-bottom-color: var(--ochre, #b8862f); }
+.dep-intel p { margin: 2px 0; font-size: var(--fs-s, 13px); color: var(--dim, #9a8f7a); }
+.dep-intel p.who { color: var(--ink, #e6dcc6); }
+.dep-kits:has(.fit) { padding-top: 8px; }
