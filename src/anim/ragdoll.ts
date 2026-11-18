@@ -12,6 +12,9 @@ import { clamp, wrapAngle } from './math';
 export const P_PELVIS = 0, P_NECK = 1, P_HEAD = 2, P_SH = 3, P_NEL = 4, P_NWR = 5, P_NTIP = 6, P_FEL = 7, P_FWR = 8, P_FTIP = 9,
   P_NHIP = 10, P_NKNEE = 11, P_NANK = 12, P_NTOE = 13, P_FHIP = 14, P_FKNEE = 15, P_FANK = 16, P_FTOE = 17, P_FSH = 18, P_HEADBASE = 19;
 export const RAGDOLL_POINTS = 20;
+const HANG: [number, number, number][] = [[P_SH, P_NEL, P_NWR], [P_FSH, P_FEL, P_FWR]];
+const TRUNK: boolean[] = [];
+for (const i of [P_PELVIS, P_NECK, P_SH, P_FSH, P_NHIP, P_FHIP]) TRUNK[i] = true;
 
 /** For each part (skeleton.ts order): [from point, to point]. */
 export const PART_POINTS: [number, number][] = [
@@ -21,7 +24,7 @@ export const PART_POINTS: [number, number][] = [
 
 interface Dist { a: number; b: number; d: number; stiff: number }
 /** Angle limit at joint j between bone (a→j) and bone (j→c), rel = angle(j→c) - angle(a→j) - off. */
-interface Limit { a: number; j: number; c: number; lo: number; hi: number; off: number; target: number; relax?: boolean }
+interface Limit { a: number; j: number; c: number; lo: number; hi: number; off: number; target: number; relax?: boolean; limp?: boolean }
 
 export type DeathKind = 'shot' | 'headshot' | 'shotgun' | 'explosion' | 'melee' | 'generic';
 export interface DieOpts {
@@ -87,6 +90,7 @@ export class Ragdoll {
     L(P_NKNEE, P_NANK, P_NTOE, -2.1, -0.6); L(P_FKNEE, P_FANK, P_FTOE, -2.1, -0.6);
     L(P_SH, P_NEL, P_NWR, -2.6, 0); L(P_FSH, P_FEL, P_FWR, -2.6, 0);
     L(P_NEL, P_NWR, P_NTIP, -1.1, 1.1); L(P_FEL, P_FWR, P_FTIP, -1.1, 1.1);
+    for (const l of this.limits.slice(-4)) l.limp = true;
     // hips & neck are measured against the torso axis (pelvis → neck)
     L(P_PELVIS, P_NHIP, P_NKNEE, -2.3, 0.5, Math.PI); L(P_PELVIS, P_FHIP, P_FKNEE, -2.3, 0.5, Math.PI);
     L(P_PELVIS, P_HEADBASE, P_HEAD, -0.75, 0.75, headRestRel);
@@ -176,14 +180,20 @@ export class Ragdoll {
         this.ox[i] = this.x[i]; this.oy[i] = this.y[i];
         this.x[i] += vx; this.y[i] += vy + this.gravity * h * h;
       }
+      this.limitSpin(h);
+
       if (this.tip) this.tipOver(h);
       // muscles: stiffness decays linearly over stiffT
       const musc = this.stiffT > 0 ? clamp(1 - this.t / this.stiffT, 0, 1) : 0;
       for (let it = 0; it < 4; it++) {
         for (const d of this.dists) this.solveDist(d);
         // a body that has gone down lets its legs go long (no folded-knee kneeling)
-        const relax = this.tip ? 0.25 * clamp((this.t - 0.25) / 0.4, 0, 1) * clamp((1.8 - this.t) / 0.6, 0, 1) : 0;
-        for (const l of this.limits) this.solveLimit(l, l.relax ? Math.max(musc, relax) : musc);
+        // ...but only once the trunk is down: straightening the legs while it is still kneeling
+        // levered the hips back up and threw the body over a second time (the "flop")
+        const relax = this.tip && this.trunkUp() < 0.3 ? 0.18 * clamp((this.t - 0.3) / 0.5, 0, 1) * clamp((2.2 - this.t) / 0.6, 0, 1) : 0;
+        // elbows and wrists go limp at once (a reach held through the fall swings the arms overhead)
+        for (const l of this.limits) this.solveLimit(l, l.limp ? 0 : l.relax ? Math.max(musc, relax) : musc);
+        this.hangArms();
         this.collide();
       }
     }
@@ -200,7 +210,59 @@ export class Ragdoll {
     let maxMove = 0;
     for (let i = 0; i < RAGDOLL_POINTS; i++) maxMove = Math.max(maxMove, Math.abs(this.x[i] - x0[i]) + Math.abs(this.y[i] - y0[i]));
     this.still = maxMove < 1.0 * dt * 60 ? this.still + dt : 0;
-    if ((this.still > 0.3 && this.t > 0.6) || this.t > 2.6) this.settled = true;
+    const propped = this.tip !== 0 && -this.y[P_PELVIS] > 0.3 * this.torsoL * 1.6 && this.t < 2.2;
+    if ((this.still > 0.3 && this.t > 0.6 && !propped) || this.t > 2.6) this.settled = true;
+  }
+
+  /** Dead arms hang: each elbow and wrist is drawn gently toward lying along the trunk (shoulder → hips side).
+   * Without it a zombie's reach is carried through the fall and the arms end up flung overhead. */
+  private hangArms() {
+    const tx = this.x[P_PELVIS] - this.x[P_NECK], ty = this.y[P_PELVIS] - this.y[P_NECK];
+    const tl = Math.hypot(tx, ty) || 1, ux = tx / tl, uy = ty / tl;
+    for (const [sh, el, wr] of HANG) {
+      if (this.detached.has('armN') && sh === P_SH) continue;
+      const k = 0.06;
+      const ue = Math.hypot(this.x[el] - this.x[sh], this.y[el] - this.y[sh]);
+      this.x[el] += (this.x[sh] + ux * ue - this.x[el]) * k; this.y[el] += (this.y[sh] + uy * ue - this.y[el]) * k;
+      const uf = Math.hypot(this.x[wr] - this.x[el], this.y[wr] - this.y[el]);
+      this.x[wr] += (this.x[el] + ux * uf - this.x[wr]) * k * 0.6; this.y[wr] += (this.y[el] + uy * uf - this.y[wr]) * k * 0.6;
+    }
+  }
+  private trunkUp() { return Math.abs(this.y[P_PELVIS] - this.y[P_NECK]) / this.torsoL; }
+  /** Bodies crumple, they don't cartwheel: the whole body's rotation about its centre of mass
+   * is damped and capped (a standing fall to flat needs about 4 rad/s at the end; more is a flop). */
+  maxSpin = 4.5;
+  private lyingT = 0;
+  private limitSpin(h: number) {
+    let cx = 0, cy = 0, vx = 0, vy = 0;
+    const n = RAGDOLL_POINTS;
+    for (let i = 0; i < n; i++) { cx += this.x[i]; cy += this.y[i]; vx += this.x[i] - this.ox[i]; vy += this.y[i] - this.oy[i]; }
+    cx /= n; cy /= n; vx /= n; vy /= n;
+    let L = 0, I = 0;
+    for (let i = 0; i < n; i++) {
+      const rx = this.x[i] - cx, ry = this.y[i] - cy;
+      L += rx * (this.y[i] - this.oy[i] - vy) - ry * (this.x[i] - this.ox[i] - vx);
+      I += rx * rx + ry * ry;
+    }
+    if (I < 1) return;
+    const w = L / I; // rad per substep
+    const cap = this.maxSpin * h;
+    // lying: the trunk is flat and the hips are on the road. From then on it is dead weight:
+    // the rotation drains away fast (a downed body that keeps rocking or rolling reads as a flop)
+    const lying = this.trunkUp() < 0.3 && -this.y[P_PELVIS] < 0.45 * this.torsoL;
+    this.lyingT = lying ? this.lyingT + h : 0;
+    const drag = this.lyingT > 0.12 ? 0.85 : 0.985;
+    const keep = Math.abs(w) > cap ? cap / Math.abs(w) : 1;
+    const dw = w * (1 - keep * drag); // always a little angular drag, hard cap above maxSpin
+    if (this.lyingT > 0.12) for (let i = 0; i < n; i++) {
+      this.ox[i] += (this.x[i] - this.ox[i]) * 0.12; this.oy[i] += (this.y[i] - this.oy[i]) * 0.06;
+    }
+    if (Math.abs(dw) < 1e-7) return;
+    for (let i = 0; i < n; i++) {
+      const rx = this.x[i] - cx, ry = this.y[i] - cy;
+      // remove dw of rigid rotation: v -= dw × r
+      this.ox[i] -= ry * dw; this.oy[i] += rx * dw;
+    }
   }
 
   /** A body can balance sitting upright (the rigid trunk on its hips) or kneeling face-down
@@ -279,8 +341,11 @@ export class Ragdoll {
       if (this.y[i] > -r) {
         this.y[i] = -r;
         this.ox[i] = this.x[i] - (this.x[i] - this.ox[i]) * (1 - f); // friction
-        if (this.oy[i] < this.y[i] - 2) this.oy[i] = this.y[i] + (this.y[i] - this.oy[i]) * 0.2; // little bounce
+        if (this.oy[i] < this.y[i]) this.oy[i] = this.y[i]; // dead weight: no bounce
       }
+      // a body lying on the road stays down: the trunk can't be levered back up off it
+      // (folding legs, a head against its limit and a sliding body otherwise lifted the hips)
+      if (this.lyingT > 0.15 && TRUNK[i] && this.y[i] < -r - 6) { this.y[i] = -r - 6; this.oy[i] = this.y[i]; }
       if (this.x[i] > this.wallX) { this.x[i] = this.wallX; this.ox[i] = this.x[i]; }
     }
   }
