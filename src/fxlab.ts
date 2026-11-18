@@ -53,15 +53,14 @@ function bodyBox(d: Dummy) {
 
 // ---------- firing ----------
 let wpn = 'ar15';
-function prof(id: string, _ammo?: string): FireProfile {
+function prof(id: string): FireProfile {
   const w: WeaponItem = { uid: 'lab', def: id, cond: 1, kills: 0, mods: {} };
   return fireProfile(w);
 }
-const AMMO: Record<string, string | undefined> = {};
 const key = {};
 
-function fire(id = wpn, opts: { ammo?: string; suppressed?: boolean } = {}) {
-  const p = prof(id, opts.ammo ?? AMMO[id]);
+function fire(id = wpn, opts: { suppressed?: boolean } = {}) {
+  const p = prof(id);
   const mz = muzzle();
   const targets = dummies.filter((d) => d.lane === lane);
   const tgt = targets[0] ?? dummies[0];
@@ -251,7 +250,7 @@ function ui() {
   const bar = (label: string, html: string) => `<div class="bar"><b>${label}</b>${html}</div>`;
   el.innerHTML =
     bar('guns', GUNS.map((g) => `<button data-g="${g}">${WEAPONS[g]?.name ?? g}</button>`).join('')) +
-    bar('ammo', '<button data-a="slug">pump: slug</button><button data-a="dragon">pump: dragon\'s breath</button><button data-a="firebolt">crossbow: fire bolt</button><button data-a="supp">service9 suppressed</button>') +
+    bar('mods', '<button data-a="supp">service9 suppressed</button><button data-a="flare">flare pistol (fire)</button>') +
     bar('effects', Object.keys(EFFECTS).map((k) => `<button data-e="${k}">${k}</button>`).join('')) +
     bar('scene', '<button data-s="lit">floodlit</button><button data-s="snow">snow</button><button data-s="gore">reduce gore</button><button data-s="auto">hold trigger</button><button data-s="lane">lane</button><button data-s="clear">clear decals</button><button data-s="heavy">perf: heavy scene</button><button data-s="gl">GL: on</button><button data-s="pin">governor: on</button>') +
     bar('quality', ['high', 'medium', 'low'].map((q) => `<button data-q="${q}">${q}</button>`).join(''));
@@ -259,9 +258,7 @@ function ui() {
     const b = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
     if (!b) return;
     if (b.dataset.g) { wpn = b.dataset.g; fire(); }
-    if (b.dataset.a === 'slug') fire('pump', { ammo: 'shell_slug' });
-    if (b.dataset.a === 'dragon') fire('pump', { ammo: 'shell_fire' });
-    if (b.dataset.a === 'firebolt') fire('crossbow', { ammo: 'bolt_fire' });
+    if (b.dataset.a === 'flare') fire('flaregun');
     if (b.dataset.a === 'supp') fire('service9', { suppressed: true });
     if (b.dataset.e) EFFECTS[b.dataset.e]();
     if (b.dataset.q) vfx.setQuality(b.dataset.q as Quality);
