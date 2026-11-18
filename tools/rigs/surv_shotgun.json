@@ -2,7 +2,7 @@
   "id": "surv_shotgun",
   "source": "surv_shotgun__riga",
   "height": 240,
-  "aimUnits": { "pump": "unit_surv_shotgun_pump", "ar15": "unit_surv_shotgun_ar15", "smg": "unit_surv_shotgun_smg", "hunting": "unit_surv_shotgun_hunting", "service9": "unit_surv_shotgun_service9", "autoshot": "unit_surv_shotgun_autoshot" },
+  "aimUnits": { "pump": "unit_surv_shotgun_pump", "ar15": "unit_surv_shotgun_ar15", "smg": "unit_surv_shotgun_smg", "hunting": "unit_surv_shotgun_hunting", "service9": "unit_surv_shotgun_service9", "autoshot": "unit_surv_shotgun_autoshot", "lmg": "unit_surv_shotgun_lmg" },
   "joints": {
     "headTop": [
       690,

@@ -2,7 +2,7 @@
   "id": "surv_f_native",
   "source": "surv_f_native__riga",
   "height": 240,
-  "aimUnits": { "hunting": "unit_surv_f_native_hunting", "ar15": "unit_surv_f_native_ar15", "pump": "unit_surv_f_native_pump", "smg": "unit_surv_f_native_smg", "service9": "unit_surv_f_native_service9" },
+  "aimUnits": { "hunting": "unit_surv_f_native_hunting", "ar15": "unit_surv_f_native_ar15", "pump": "unit_surv_f_native_pump", "smg": "unit_surv_f_native_smg", "service9": "unit_surv_f_native_service9", "autoshot": "unit_surv_f_native_autoshot", "lmg": "unit_surv_f_native_lmg" },
   "joints": {
     "headTop": [
       646,

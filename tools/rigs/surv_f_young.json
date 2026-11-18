@@ -2,7 +2,7 @@
   "id": "surv_f_young",
   "source": "surv_f_young__riga",
   "height": 240,
-  "aimUnits": { "m1911": "unit_surv_f_young_m1911", "ar15": "unit_surv_f_young_ar15", "pump": "unit_surv_f_young_pump", "smg": "unit_surv_f_young_smg", "hunting": "unit_surv_f_young_hunting" },
+  "aimUnits": { "m1911": "unit_surv_f_young_m1911", "ar15": "unit_surv_f_young_ar15", "pump": "unit_surv_f_young_pump", "smg": "unit_surv_f_young_smg", "hunting": "unit_surv_f_young_hunting", "autoshot": "unit_surv_f_young_autoshot", "lmg": "unit_surv_f_young_lmg" },
   "joints": {
     "headTop": [
       700,
