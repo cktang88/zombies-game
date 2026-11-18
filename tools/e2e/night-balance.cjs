@@ -3,6 +3,8 @@
 // usage: npx vite build && npx vite preview --port 4198 &
 //        PORT=4198 node tools/e2e/night-balance.cjs [days=3,8,13,18,23] [seeds=2] [modes=passive,decent,prep]
 // env: TUNE / DTUNE / IMP = JSON merged into Battle.tune / DIRECTOR_TUNE / impact.ts IMPACT (deep for objects)
+//      TRAPS=1 lays one of each of the six kits on the road (or TRAPS = JSON [{trap,x,lane}]); the row adds
+//      kills per kit and whether it was used or spent (traps: ...)
 // Columns: wall lost / max, deaths, leader shots, guard kills, stun% = share of on-screen body-seconds
 // spent staggered or down, rx = reactions per kill (stagger / stumble / knockdown).
 // docs/balance.md §9-§11.
@@ -12,6 +14,9 @@ let pw;
 try { pw = require('playwright'); } catch { pw = require(path.join(execSync('npm root -g').toString().trim(), 'playwright')); }
 const { chromium } = pw;
 const PORT = process.env.PORT || 4198;
+// one of each kit, spread down the road (x = battle screen x; the wall face is 372)
+const TRAP_SIX = [{ trap: 'snare', x: 520, lane: 0 }, { trap: 'roofnails', x: 600, lane: 2 }, { trap: 'beartrap', x: 560, lane: 1 }, { trap: 'oil', x: 760, lane: 0 }, { trap: 'tincan', x: 780, lane: 2 }, { trap: 'nailbomb', x: 900, lane: 1 }];
+const TRAPS = !process.env.TRAPS ? [] : process.env.TRAPS === '1' ? TRAP_SIX : JSON.parse(process.env.TRAPS);
 (async () => {
 const days = (process.argv[2] || '3,8,13,18,23').split(',').map(Number);
 const seeds = +(process.argv[3] || 2);
@@ -52,7 +57,7 @@ async function night(day, seed, mode) {
   const snap = { ...snap0, stores: folded(snap0.stores) };
   await page.evaluate((dt) => Object.assign(globalThis.__directorTune, dt), JSON.parse(process.env.DTUNE || "{}"));
   await page.evaluate((im) => { const I = globalThis.__impact; for (const [k, v] of Object.entries(im)) { if (v && typeof v === 'object' && !Array.isArray(v)) Object.assign(I[k], v); else I[k] = v; } }, JSON.parse(process.env.IMP || "{}"));
-  await page.evaluate(([day, snap]) => {
+  await page.evaluate(([day, snap, traps]) => {
     const G = globalThis.__G;
     G.pendingEvent = null;
     G.day = day;
@@ -68,7 +73,13 @@ async function night(day, seed, mode) {
     if (snap.fort.lights && !G.buildings.some((b) => b.id === 'generator')) G.buildings.push({ id: 'generator', level: 1 });
     G.trapStock = {}; G.deploy = []; G.flags.emplacements = '[]';
     delete G.flags.pileCarry; delete G.flags.turningTonight; delete G.flags.posts; delete G.flags.forceSpecial;
-  }, [day, snap]);
+    if (traps.length) {
+      // a builder good enough for every placement; last night's plan pre-fills the deploy screen
+      ppl[0].skills.building = 12;
+      G.trapStock = {}; for (const p of traps) G.trapStock[p.trap] = (G.trapStock[p.trap] ?? 0) + 1;
+      G.flags.lastPlan = JSON.stringify(traps);
+    }
+  }, [day, snap, TRAPS]);
   // dusk → (deploy) → battle
   for (let i = 0; i < 3 && await page.$('.dusk') && !(await page.$('.overlay .go')); i++) { await page.evaluate(() => document.querySelector('.dusk').click()); await page.waitForTimeout(200); }
   await page.waitForSelector('.overlay .go', { timeout: 10000 });
@@ -157,7 +168,9 @@ async function night(day, seed, mode) {
     const spent = {}; for (const k of Object.keys(ammo0)) { const d = ammo0[k] - (G.stores[k] ?? 0); if (d > 0.5) spent[k] = Math.round(d); }
     const fired = Object.fromEntries([...b.fired].map(([u, n]) => [G.weapons.find((w) => w.uid === u)?.def ?? u, n]));
     if (b._tr) console.log(b._tr.join(" "));
-    return { stun: Math.round(stT / Math.max(1, onT) * 1000) / 10, downP: Math.round(dnT / Math.max(1, onT) * 1000) / 10, rx, tr: b._tr, fired, killsBy: b.res.killsBy, t: Math.round(b.t), special: b.plan.special ?? '-', points: b.plan.points, spawns: b.plan.spawns.length, kills, raiders, deaths, fell, wallLost: Math.round(wall0 - G.fort.hp), wallMax: G.fort.maxHp, wallHeld: b.res.wallHeld, spent, shots, guardKills: Object.entries(b.res.killsBy).filter(([id]) => id !== b.guards.find((g) => g.s.isLeader)?.s.id).reduce((a, [, v]) => a + v, 0) };
+    const trapHook = b.hooks.find((h) => Array.isArray(h.list) && h.list.every((t) => t.def && t.def.fx));
+    const trapKills = trapHook ? Object.fromEntries(trapHook.list.map((t) => [t.def.id, `${t.kills}${t.spent ? ' spent' : t.uses < t.def.uses ? ' used' : ''}`])) : {};
+    return { stun: Math.round(stT / Math.max(1, onT) * 1000) / 10, downP: Math.round(dnT / Math.max(1, onT) * 1000) / 10, rx, tr: b._tr, fired, killsBy: b.res.killsBy, t: Math.round(b.t), special: b.plan.special ?? '-', points: b.plan.points, spawns: b.plan.spawns.length, kills, raiders, deaths, fell, wallLost: Math.round(wall0 - G.fort.hp), wallMax: G.fort.maxHp, wallHeld: b.res.wallHeld, spent, shots, trapKills, guardKills: Object.entries(b.res.killsBy).filter(([id]) => id !== b.guards.find((g) => g.s.isLeader)?.s.id).reduce((a, [, v]) => a + v, 0) };
   }, [mode, JSON.parse(process.env.TUNE || '{}')]);
   await page.close();
   return res;
@@ -167,7 +180,7 @@ const rows = [];
 for (const day of days) for (const mode of modes) for (let s = 0; s < seeds; s++) {
   const r = await night(day, s, mode);
   rows.push({ day, mode, seed: s, ...r });
-  console.log([day, mode, s, r.special, 'pts' + r.points, 'n' + r.spawns, 'k' + r.kills, 't' + r.t, 'wall -' + r.wallLost + '/' + r.wallMax, r.wallHeld ? 'held' : 'FELL', 'dead ' + r.deaths, 'lead ' + r.shots, 'gk ' + r.guardKills, 'stun ' + r.stun + '% (down ' + r.downP + '%)', 'rx/k ' + [r.rx.stagger, r.rx.stumble, r.rx.knockdown].map((n) => (n / Math.max(1, r.kills)).toFixed(2)).join('/'), JSON.stringify(r.fired)].join(' | ')); if (r.tr) console.log('   ' + r.tr.join(' '));
+  console.log([day, mode, s, r.special, 'pts' + r.points, 'n' + r.spawns, 'k' + r.kills, 't' + r.t, 'wall -' + r.wallLost + '/' + r.wallMax, r.wallHeld ? 'held' : 'FELL', 'dead ' + r.deaths, 'lead ' + r.shots, 'gk ' + r.guardKills, 'stun ' + r.stun + '% (down ' + r.downP + '%)', 'rx/k ' + [r.rx.stagger, r.rx.stumble, r.rx.knockdown].map((n) => (n / Math.max(1, r.kills)).toFixed(2)).join('/'), JSON.stringify(r.fired), ...(TRAPS.length ? ['traps ' + JSON.stringify(r.trapKills)] : [])].join(' | ')); if (r.tr) console.log('   ' + r.tr.join(' '));
 }
 console.log(errs.length ? errs.join('\n') : 'no page errors');
 await browser.close();
