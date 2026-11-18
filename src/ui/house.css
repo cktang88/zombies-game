@@ -12,8 +12,9 @@
 .hv-st.off .hv-art { filter: brightness(.55) saturate(.6); }
 
 /* stations: the hotspot over the art; hover / focus glows the art and shows the summary */
-.hv-hs { position: absolute; background: transparent; border: 0; padding: 0; margin: 0; cursor: pointer; border-radius: 8px; z-index: 2; }
+.hv-hs { position: absolute; background: transparent; box-shadow: none; border: 0; padding: 0; margin: 0; cursor: pointer; border-radius: 8px; z-index: 2; }
 .hv-hs:hover:not(:disabled) { background: rgba(240, 200, 130, .05); border: 0; }
+.hv-hs:active:not(:disabled), .hv-sv:active:not(:disabled) { transform: none; box-shadow: none; }
 .hv-hs:focus-visible { outline: calc(3px / var(--k)) solid var(--ochre); outline-offset: 2px; }
 .hv-st:has(.hv-hs:hover) .hv-art, .hv-st:has(.hv-hs:focus-visible) .hv-art, .hv-st.on .hv-art, .hv-st.drop .hv-art {
   filter: drop-shadow(0 0 5px rgba(246, 196, 112, .85)) drop-shadow(0 0 14px rgba(240, 170, 80, .35)) brightness(1.12);
@@ -43,7 +44,7 @@
 .hv-wrap.dragging, .hv-wrap.dragging * { cursor: grabbing !important; }
 
 /* people */
-.hv-sv { position: absolute; width: 110px; height: 176px; padding: 0; margin: 0; background: transparent !important; border: 0 !important; cursor: grab; z-index: 3; touch-action: none; }
+.hv-sv { position: absolute; width: 110px; height: 176px; padding: 0; margin: 0; background: transparent !important; border: 0 !important; box-shadow: none !important; cursor: grab; z-index: 3; touch-action: none; }
 .hv-cv { position: absolute; inset: 0; pointer-events: none; }
 .hv-body { width: 110px; height: 176px; display: block; transition: filter .15s; }
 .hv-sv:hover .hv-body, .hv-sv:focus-visible .hv-body, .hv-sv.on .hv-body { filter: drop-shadow(0 0 4px rgba(246, 196, 112, .9)) drop-shadow(0 0 12px rgba(240, 170, 80, .35)) brightness(1.1); }
