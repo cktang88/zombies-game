@@ -17,6 +17,7 @@ import { EMPLACEMENTS, parseEmplacements, stringifyEmplacements, crewHandling, t
 import { first, level, gainXp, byId } from '../sim/survivors';
 import { depthScale } from './render';
 import { drawProp, drawGunPart, drawGunBase, gunReach, has, propW } from './props';
+import { FORT_CAP } from '../data/world';
 
 const WALL_X = 372;
 const ROOF_Y = 506; // the scaffold's deck
@@ -85,7 +86,7 @@ export class Emplacements implements BattleHook {
       }
     }
     // the nail turrets: automatic, at the wall, as before
-    for (let i = 0; i < Math.min(2, G.fort.turrets ?? 0); i++) {
+    for (let i = 0; i < Math.min(FORT_CAP.turret!, G.fort.turrets ?? 0); i++) {
       const m = this.mount(EMPLACEMENTS.nailturret, null, 'firestep', WALL_X - 20 - i * 46, 700, WALL_X - 20 - i * 46, 560 - i * 14);
       m.cd = 1;
       this.mounts.push(m);

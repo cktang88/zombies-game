@@ -30,6 +30,7 @@ import { BattleActors, bandsOk } from './actors'; // rigged bodies (src/anim): d
 import { Sally, SALLY } from './sally';
 import { Ticker, caps, hintRow, keySheet, keyHintsOn, coarsePointer, dot, weaponPanel, panel, worldLabel, FONT, type Hint } from './hud'; // the sortie over the wall
 import { react, slideStep, classicPose, IMPACT, type Reaction } from './impact'; // flinch / stagger / stumble / knockdown
+import { FORT_CAP } from '../data/world';
 
 export const W = 1280, H = 720;
 export const WALL_X = 372; // front face of the barricade (near lane)
@@ -1035,7 +1036,7 @@ export class Battle {
   darkSaid = -99;
   /** Where a body can form up unseen: past the guards' sight in this light (and the floodlights' best throw), never past 1090. */
   darkBand() {
-    const sight = WALL_X + ((this.plan.special === 'fog' ? 640 : 820) - WALL_X) * Battle.tune.guardRange + Math.min(3, G.fort.lights) * 130 + (this.guards.some((g) => g.post === 'roof') ? 260 : 0);
+    const sight = WALL_X + ((this.plan.special === 'fog' ? 640 : 820) - WALL_X) * Battle.tune.guardRange + Math.min(FORT_CAP.light!, G.fort.lights) * 130 + (this.guards.some((g) => g.post === 'roof') ? 260 : 0);
     return Math.min(1090, Math.max(this.plan.special === 'fog' ? 820 : 900, sight + 60));
   }
 
@@ -2089,7 +2090,7 @@ export class Battle {
     const fog = this.plan.special === 'fog';
     const roof = g.post === 'roof';
     // guards only engage what they can make out in the dark
-    const range = Math.max(WALL_X + ((fog ? 640 : 820) - WALL_X) * Battle.tune.guardRange + Math.min(3, G.fort.lights) * 130 + (hasTrait(g.s, 'nightowl') ? 120 : 0) + (roof ? 260 : 0), g.x + SH * 0.45 + prof.light);
+    const range = Math.max(WALL_X + ((fog ? 640 : 820) - WALL_X) * Battle.tune.guardRange + Math.min(FORT_CAP.light!, G.fort.lights) * 130 + (hasTrait(g.s, 'nightowl') ? 120 : 0) + (roof ? 260 : 0), g.x + SH * 0.45 + prof.light);
     const marked = this.mark ? this.zombies.find((z) => z.id === this.mark!.id) : undefined;
     // orders (bloodlust can't hold its fire for long)
     let order = g.order;
@@ -2298,7 +2299,7 @@ export class Battle {
         this.toll(z);
       }
     }
-    const wire = z.x > WALL_X + 60 && z.x < WALL_X + 60 + 90 * Math.min(3, G.fort.wire) ? 0.55 : 1;
+    const wire = z.x > WALL_X + 60 && z.x < WALL_X + 60 + 90 * Math.min(FORT_CAP.wire!, G.fort.wire) ? 0.55 : 1;
     // each body's own pace, a shambler's stalls, a Deer's bolt (zombies.ts paceMul; mean = def.speed)
     z.dash = Math.max(0, (z.dash ?? 0) - dt);
     let speed = z.def.speed * paceMul(z.def, z.id, z.phase, z.dash) * cold * wire;
@@ -3273,7 +3274,7 @@ export class Battle {
     };
     pool(150, 684, 230, 34, '255,184,100', 0.1); // the lantern behind the line
     // sodium floodlight pools: a saturated orange skirt, a hot pale core (warm against the cold road)
-    for (let i = 0; i < Math.min(3, G.fort.lights); i++) {
+    for (let i = 0; i < Math.min(FORT_CAP.light!, G.fort.lights); i++) {
       pool(520 + i * 190, 652, 300, 52, '255,150,50', 0.1);
       pool(520 + i * 190, 654, 120, 22, '255,226,170', 0.12);
     }
@@ -3331,7 +3332,7 @@ export class Battle {
     for (const tu of this.turrets) shadowEllipse(c, tu.x, GROUND_BOT, 12, 3);
     for (const cv of this.covers) shadowEllipse(c, cv.x, cv.y, cv.w * 0.62, 6);
     if (this.dog) shadowEllipse(c, this.dog.x, this.dog.y + 1, 26, 5);
-    if (G.fort.wire > 0) for (let k = 0; k < Math.min(3, G.fort.wire); k++) { const x0 = WALL_X + 60 + k * 90; shadowEllipse(c, x0 + 1, GROUND_BOT, 5, 2); shadowEllipse(c, x0 + 79, GROUND_BOT, 5, 2); }
+    if (G.fort.wire > 0) for (let k = 0; k < Math.min(FORT_CAP.wire!, G.fort.wire); k++) { const x0 = WALL_X + 60 + k * 90; shadowEllipse(c, x0 + 1, GROUND_BOT, 5, 2); shadowEllipse(c, x0 + 79, GROUND_BOT, 5, 2); }
     c.fill();
     // a second, softer shadow cast away from the floodlights and the house (toward the road)
     c.fillStyle = 'rgba(0,0,0,0.25)';
@@ -3422,7 +3423,7 @@ export class Battle {
     if (has('fort_wire')) return; // the generated belt carries its own pickets (drawWireLane)
     c.fillStyle = near ? '#1d1a17' : '#2b2622';
     const y = near ? GROUND_BOT : GROUND_TOP + 4, h = near ? 62 : 44;
-    for (let k = 0; k < Math.min(3, G.fort.wire); k++) {
+    for (let k = 0; k < Math.min(FORT_CAP.wire!, G.fort.wire); k++) {
       const x0 = WALL_X + 60 + k * 90;
       c.fillRect(x0, y - h, near ? 4 : 3, h);
       c.fillRect(x0 + 78, y - h, near ? 4 : 3, h);
@@ -3434,7 +3435,7 @@ export class Battle {
     if (has('fort_wire')) {
       // two rows of belt (the far-middle and near lanes) per section; the others are covered by them
       if (lane !== 1 && lane !== 3) return;
-      for (let k = 0; k < Math.min(3, G.fort.wire); k++) {
+      for (let k = 0; k < Math.min(FORT_CAP.wire!, G.fort.wire); k++) {
         const x0 = WALL_X + 60 + k * 90 + (LANES[3] - LANES[lane]) * 0.12;
         drawProp(c, 'fort_wire', x0 + 40 + (lane === 1 ? 12 : 0), LANES[lane] + 2, 46 * s, LOOK[lane], { w: 86, flip: (lane + k) % 2 === 1 });
       }
@@ -3442,7 +3443,7 @@ export class Battle {
     }
     c.strokeStyle = `rgba(${58 + lane * 8},${55 + lane * 8},${52 + lane * 8},0.85)`;
     c.lineWidth = lane >= 2 ? 1.4 : 1;
-    for (let k = 0; k < Math.min(3, G.fort.wire); k++) {
+    for (let k = 0; k < Math.min(FORT_CAP.wire!, G.fort.wire); k++) {
       const x0 = WALL_X + 60 + k * 90;
       c.beginPath();
       for (let x = 0; x <= 80; x += 4) {
@@ -3586,7 +3587,7 @@ export class Battle {
   }
 
   drawPoles(c: CanvasRenderingContext2D) {
-    for (let i = 0; i < Math.min(3, G.fort.lights); i++) {
+    for (let i = 0; i < Math.min(FORT_CAP.light!, G.fort.lights); i++) {
       const x = 260 - i * 90;
       if (drawProp(c, 'fort_light', x + 2, 652, 280, LOOK[2])) continue;
       c.fillStyle = '#1a1a1a';
@@ -3809,7 +3810,7 @@ export class Battle {
       const len = this.prof(g.w).light;
       if (len > 0) { const mz = this.muzzle(g); cones.push({ x: mz.x, y: mz.y, len, face: g.face }); }
     }
-    return { flood: Math.min(3, G.fort.lights), cones };
+    return { flood: Math.min(FORT_CAP.light!, G.fort.lights), cones };
   }
 
   /** 0 (dark) … 1 (well lit) at a body's chest, and whether a muzzle flash just lit it. */
@@ -4021,7 +4022,7 @@ export class Battle {
    */
   drawPrecip(c: CanvasRenderingContext2D, kind: 'snow' | 'rain') {
     const ls = this.lights.filter((l) => l.life > 0);
-    const flood = Math.min(3, G.fort.lights);
+    const flood = Math.min(FORT_CAP.light!, G.fort.lights);
     const lit = (x: number, y: number) => {
       let v = 0;
       for (const l of ls) {
@@ -4109,7 +4110,7 @@ export class Battle {
       d.closePath();
       d.fill();
     }
-    for (let i = 0; i < Math.min(3, G.fort.lights); i++) {
+    for (let i = 0; i < Math.min(FORT_CAP.light!, G.fort.lights); i++) {
       // floodlight cone down onto the road
       const g = d.createLinearGradient(260 * s, 0, 1100 * s, 0);
       // a shaft through the air, not a lifted wedge of background: the road keeps its dark so the
@@ -4150,7 +4151,7 @@ export class Battle {
       c.fill();
     }
     // sodium beams over the road and the lamp heads themselves: the brightest things in the frame
-    const flood = Math.min(3, G.fort.lights);
+    const flood = Math.min(FORT_CAP.light!, G.fort.lights);
     for (let i = 0; i < flood; i++) {
       const px = 260 - i * 90;
       const bg = c.createLinearGradient(px, 0, 1100, 0);

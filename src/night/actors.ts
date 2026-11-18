@@ -31,6 +31,7 @@ import type { Battle, Zombie, Guard } from './battle';
 import { LANES, DEF_LANES, LOOK, TURNED_LOOK, GUARD_LOOK, SODIUM, LANTERN, wallX, nearestLane } from './battle';
 import { G } from '../state';
 import { fxQuality } from '../ui/settings';
+import { FORT_CAP } from '../data/world';
 
 /** the key on a lit body's near side: sodium-warm, pale enough to lift the value */
 const KEYLIT = '#ffd9a8';
@@ -817,7 +818,7 @@ export class BattleActors implements BattleHook {
     // (the bevel) plus a saturated rim outside the ink. All of it is one or two silhouette passes, so it
     // goes when the frame is under pressure (bandsOk) or a muzzle flash lights the body from the front.
     const q = fxQuality();
-    const flood = Math.min(3, G.fort.lights);
+    const flood = Math.min(FORT_CAP.light!, G.fort.lights);
     const key = flood > 0 ? SODIUM : LANTERN;
     const left = flood > 0 || g.x > 120; // the light is to the left of this body (screen space)
     const cel = q !== 'low' && bandsOk() && !this.frontFlash(g.x, g.y - SH * g.sc * 0.6);

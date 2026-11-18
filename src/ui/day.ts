@@ -7,7 +7,7 @@ import { portraitImg } from './portrait';
 import { WEAPONS, MELEE, meleeProfile, CLASS_NAMES, CALIBERS, AMMO_TYPES, MODS, MOD_SLOTS, fireProfile, ammoTypesFor, ammoLabel, selectedAmmo, slotsFor, attachMod, detachMod, type FireProfile } from '../data/weapons';
 import { TRAITS } from '../data/traits';
 import { SKILL_NAMES } from '../data/names';
-import { SITES, BUILDINGS, RECIPES, RES_LABEL, RES_ICON } from '../data/world';
+import { SITES, BUILDINGS, RECIPES, RES_LABEL, RES_ICON, FORT_CAP } from '../data/world';
 import {
   living, displayName, first, moodBreakdown, computeMood, moodWord, breakThresholds, pain, woundLabel, byId, canWork, canFight,
   isBitten, SKILLS, aimFactor, skillOf, workMult, attr, ATTRS, ATTR_NAMES, level, xpProgress, topSkills, heldProf, prof,
@@ -18,7 +18,7 @@ import { TRAPS } from '../data/traps';
 import {
   buildingLevel, queueRecipe, WEATHER_LABEL, DAY_HOURS, DEFAULT_HOURS, jobHours, setJobHours, hoursAvailable, travelHours, survivorSite,
   searchHours, searchFactor, planConfirmed, confirmPlan, ranToday, onRunToday, runDaylightFor, prepareRun, clockLabel, heatNeed,
-  drillPlan, emplacements, tomorrowTeaser, oilGuns, clearPile, choreHand, craftPoints, breakChance, counselPlan, COUNSEL_BREAK,
+  drillPlan, emplacements, tomorrowTeaser, oilGuns, clearPile, choreHand, craftPoints, fortCount, fortRoom, breakChance, counselPlan, COUNSEL_BREAK,
 } from '../sim/day';
 import { calendar } from '../sim/calendar';
 import { armEveryone, wallLine, gunRounds, ammoUse, SHOTS_PER_GUN_NIGHT } from '../sim/readiness';
@@ -496,6 +496,15 @@ function makeGroup(r: (typeof RECIPES)[number]): MakeGroup {
 const BUILD_ICON: Record<string, string> = { workbench: 'icon_job_craft', forge: 'icon_scrap', garden: 'icon_job_farm', infirmary: 'icon_job_doctor', still: 'icon_molotov', generator: 'icon_fuel', radio: 'icon_job_radio' };
 const pic = (sprite: string, cls = '') => `<img class="pic ${cls}" src="${spriteUrl(sprite)}" alt="" onerror="this.style.visibility='hidden'">`;
 
+// What each wall build does, in a few words (numbers from night/battle.ts; data/systems.ts says the same)
+const FORT_FX: Record<string, { name: string; icon: string; short: string; card: string; long: string }> = {
+  fortify: { name: 'Reinforced', icon: 'icon_st_wall', short: '+60 wall each', card: '+60 wall', long: '+60 max wall each, and the body pile must climb 2 higher.' },
+  spikes: { name: 'Spike rows', icon: 'icon_trap_pit', short: '3.5 dmg/s each', card: '3.5/s', long: 'Each row does 3.5 damage a second to every one of them at the wall face.' },
+  wire: { name: 'Wire belts', icon: 'icon_trap_snare', short: '×0.55 speed', card: '×0.55', long: 'Each belt slows them to ×0.55 across 90px of road.' },
+  light: { name: 'Floodlights', icon: 'icon_mod_flashlight', short: '+130px sight', card: '+130px', long: 'Each: guards see 130px farther and aim 7% better (20% at most). Burns 0.5 fuel a night.' },
+  turret: { name: 'Nail turrets', icon: 'icon_nailgun', short: 'fires alone', card: 'auto', long: 'Fires at the road with nobody on it. Eats scrap; needs the generator.' },
+};
+
 /** The ammo type an ammunition recipe makes (none for firebombs and the rest). */
 const ammoOf = (r: (typeof RECIPES)[number]) => (makeGroup(r) === 'ammo' ? (Object.keys(r.gives ?? {}) as Res[]).find((k) => AMMO_TYPES[k]) : undefined);
 
@@ -544,11 +553,18 @@ function workshopHtml() {
   };
   const card = (r: (typeof RECIPES)[number]) => {
     const res = ammoOf(r);
-    const use = res ? useLine(res) : null;
+    const fx = r.special ? FORT_FX[r.special] : undefined;
+    const cap = r.special ? FORT_CAP[r.special] : undefined;
+    const full = fortRoom(r.special) <= 0;
+    const use = res ? useLine(res) : fx ? {
+      badge: '', unused: full,
+      html: `<div class="cuse t-s">${fortCount(r.special)}${cap ? `/${cap}` : ''} · ${fx.card}</div>`,
+      t: `${fx.long}${cap ? ` Up to ${cap}: ${full ? '<b>you have them all; more does nothing.</b>' : `${fortCount(r.special)} built or queued.`}` : ''}`,
+    } : null;
     return `<div class="wcard recipe ${has(r.cost) ? '' : 'cant'} ${use?.unused ? 'unused' : ''}"${tip(`<b>${esc(r.name)}</b> · ${r.work} work<br>${esc(r.desc)}${use ? `<br>${use.t}` : ''}`)}>
       ${use?.badge ? `<span class="picw">${pic(recipeIcon(r))}${use.badge}</span>` : pic(recipeIcon(r))}
       <div class="cbody"><div class="cname">${r.name}</div><div class="ccost">${costHtml(r.cost)}</div>${use ? use.html : ''}</div>
-      <button class="mini" data-act="queue" data-id="${r.id}" ${has(r.cost) ? '' : 'disabled'} aria-label="Queue ${esc(r.name)}">+</button></div>`;
+      <button class="mini" data-act="queue" data-id="${r.id}" ${has(r.cost) && !full ? '' : 'disabled'} aria-label="Queue ${esc(r.name)}">${full ? '✓' : '+'}</button></div>`;
   };
   // the make list in collapsible groups, each headed by a picture and "ready / total"; affordable first
   const groups = MAKE_GROUPS.map((g) => ({ ...g, rs: recipes.filter((r) => makeGroup(r) === g.id) })).filter((g) => g.rs.length);
@@ -571,18 +587,16 @@ function wallHtml() {
   const f = G.fort;
   const repairers = living().filter((s) => s.job === 'repair' && canWork(s));
   const frac = f.hp / f.maxHp;
-  const fortRow: [string, number, string][] = [
-    ['icon_st_wall', f.level, 'Reinforcements: more wall. Forge: reinforce the wall.'],
-    ['icon_trap_pit', f.spikes, 'Spike rows: the dead hurt themselves at the wall.'],
-    ['icon_trap_snare', f.wire, 'Wire belts: slow them in the road.'],
-    ['icon_mod_flashlight', f.lights, 'Floodlights: better aim, less dark. Burn fuel.'],
-    ['icon_nailgun', f.turrets ?? 0, 'Nail turrets: auto-fire from the wall, eat scrap.'],
-    ['icon_trap_nails', f.traps, 'Nail-bomb traps: one use each, out in the road.'],
-  ];
+  const fortRow: [string, number, string, string][] = (['fortify', 'spikes', 'wire', 'light', 'turret'] as const).map((k) => {
+    const n = k === 'fortify' ? f.level : k === 'spikes' ? f.spikes : k === 'wire' ? f.wire : k === 'light' ? f.lights : f.turrets ?? 0;
+    const cap = FORT_CAP[k];
+    return [FORT_FX[k].icon, n, `<b>${FORT_FX[k].name}${cap ? ` ${n}/${cap}` : ''}</b><br>${FORT_FX[k].long}${cap ? ` Up to ${cap} count.` : ''}<br><span class="dim">Built in Workshop › The wall.</span>`, n ? FORT_FX[k].short : FORT_FX[k].name.toLowerCase()];
+  });
+  if (f.traps) fortRow.push(['icon_trap_nails', f.traps, 'Nail-bomb traps: one use each, out in the road.', 'nail bombs']);
   return `<div class="wall">
     <div class="wallbar"${tip(frac > 0.8 ? 'The wall is sound.' : frac > 0.4 ? 'The wall is chewed. Planks split, the car door hangs.' : 'The wall is barely a wall.')}><div data-tw="wall" style="width:${frac * 100}%"></div><span>${Math.ceil(f.hp)} / ${f.maxHp}</span></div>
     <div class="chips">${repairers.length ? chip('job_repair', repairers.map(first).join(', '), 'Repairing today') : chip('st_danger', 'no repairs', 'Nobody is assigned to repair it. Repairs use timber (the stores, top).', 'warn')}</div>
-    <div class="fortgrid">${fortRow.filter(([, n]) => n > 0 || isOpen('workshop')).map(([icon, n, t]) => `<span class="ftile ${n ? '' : 'none'}"${tip(t)}>${pic(icon)}<b>${n}</b></span>`).join('')}</div>
+    <div class="fortgrid">${fortRow.filter(([, n]) => n > 0 || isOpen('workshop')).map(([icon, n, t, fx]) => `<span class="ftile ${n ? '' : 'none'}"${tip(t)}>${pic(icon)}<b>${n}</b><span class="t-s">${fx}</span></span>`).join('')}</div>
     ${isOpen('chores') ? revealNote('chores') + choresHtml() : ''}
   </div>`;
 }

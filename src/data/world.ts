@@ -143,6 +143,13 @@ RECIPES.push(
   { id: 'emp_repair', name: 'Overhaul a gun nest', needs: 'forge', cost: { scrap: 4, parts: 2 }, work: 3, empRepair: true, desc: 'New springs, a cleaned feed tray, the sandbags restacked (+50% condition on the most worn emplacement).' },
 );
 
+/**
+ * Wall builds that stop helping past a count: night/battle.ts reads at most 3 floodlights (sight and
+ * aim) and 3 wire belts, night/emplacements.ts mounts at most 2 nail turrets. The workshop will not
+ * queue past these.
+ */
+export const FORT_CAP: Partial<Record<string, number>> = { light: 3, wire: 3, turret: 2 };
+
 export const RES_LABEL: Record<Res, string> = {
   food: 'Food', scrap: 'Scrap', wood: 'Timber', parts: 'Parts', meds: 'Medicine', fuel: 'Fuel', cloth: 'Cloth', light: 'Pistol ammo', shell: 'Shells', rifle: 'Rifle ammo', liquor: 'Liquor', molotov: 'Firebombs',
   r22: '.22 ammo', light_hp: 'Hollow-points', shell_slug: 'Slugs', shell_flech: 'Flechettes', shell_fire: "Dragon's breath", rifle_sp: 'Soft-points', rifle_ap: 'AP rounds',

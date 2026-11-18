@@ -348,10 +348,11 @@ h3 .dim { font-size: 13px; letter-spacing: .02em; }
 .q .pic.sm { margin-right: 2px; }
 
 /* wall */
-.fortgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; margin: 8px 0 12px; }
+.fortgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; margin: 8px 0 12px; }
 .ftile { display: flex; flex-direction: column; align-items: center; padding: 6px 2px 4px; border: 1px solid rgba(90, 79, 60, .55); background: rgba(255, 255, 255, .025); cursor: default; }
 .ftile b { font-family: var(--type); font-weight: normal; font-size: 18px; color: #efe4cc; }
 .ftile.none { opacity: .4; }
+.ftile .t-s { text-align: center; line-height: 1.2; }
 .chores { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .chores .t-l { margin-right: 4px; cursor: default; }
 

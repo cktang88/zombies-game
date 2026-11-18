@@ -2,7 +2,7 @@ import type { Survivor, Res } from '../types';
 import { G, R, log, add, pay, has, newWeapon, uid, findDoc, ICE_DAY } from '../state';
 import { Rng } from '../rng';
 import { cyclePos, persona } from './director';
-import { SITES, RECIPES, RES_LABEL } from '../data/world';
+import { SITES, RECIPES, RES_LABEL, FORT_CAP } from '../data/world';
 import { addEmplacement, repairEmplacement } from '../data/emplacements';
 import { WEAPONS, MODS, modFits, slotsFor, selectedAmmo } from '../data/weapons';
 import {
@@ -491,9 +491,19 @@ export function finishRecipe(id: string, by?: Survivor): string {
   return `${who} finished: ${r.name}.`;
 }
 
+/** How many of a wall build stand or are queued (spikes, wire, light, turret, fortify). */
+export function fortCount(special: string | undefined): number {
+  const built = special === 'light' ? G.fort.lights : special === 'wire' ? G.fort.wire : special === 'turret' ? G.fort.turrets ?? 0 : special === 'spikes' ? G.fort.spikes : special === 'fortify' ? G.fort.level : 0;
+  return built + G.craftQueue.filter((q) => RECIPES.find((x) => x.id === q.recipe)?.special === special).length;
+}
+/** How many more of this build still do something (Infinity when it has no cap). */
+export function fortRoom(special: string | undefined): number {
+  const cap = special ? FORT_CAP[special] : undefined;
+  return cap === undefined ? Infinity : cap - fortCount(special);
+}
 export function queueRecipe(id: string) {
   const r = RECIPES.find((x) => x.id === id)!;
-  if (!has(r.cost)) return false;
+  if (!has(r.cost) || fortRoom(r.special) <= 0) return false;
   pay(r.cost);
   G.craftQueue.push({ recipe: id, progress: 0 });
   return true;

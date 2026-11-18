@@ -7,7 +7,7 @@
 // Built lazily (systems()) so this module never touches night/sally.ts or sim/day.ts while the
 // module graph is still loading (battle.ts → pause → help → guide → here would be a cycle).
 import type { Res } from '../types';
-import { RECIPES, BUILDINGS, RES_ICON, RES_LABEL } from './world';
+import { RECIPES, BUILDINGS, RES_ICON, RES_LABEL, FORT_CAP } from './world';
 import { AMMO_TYPES, ammoLabel } from './weapons';
 import { EMPLACEMENTS } from './emplacements';
 import { TRAPS, placementsAllowed } from './traps';
@@ -66,9 +66,9 @@ const CARE = { base: 2, perSkill: 1 };
 // Night (mirrors night/battle.ts: setFocus/tickNerve, useRally, dogBark, the floodlight bonus, spikes, wire, molotov).
 const NERVE = { base: 55, perShot: 4, focusDrain: 20, focusMin: 10, rally: 20, rallySec: 4 };
 const FIRE = { sec: 7, width: 150 };
-const LIGHT = { aim: 0.07, sight: 130, max: 3, fuel: 0.5 };
+const LIGHT = { aim: 0.07, sight: 130, max: FORT_CAP.light!, fuel: 0.5 };
 const SPIKE_DPS = 3.5;
-const WIRE = { slow: 0.55, band: 90, max: 3 };
+const WIRE = { slow: 0.55, band: 90, max: FORT_CAP.wire! };
 const DOG = { aim: 0.15, sec: 5, mood: 4 };
 const COUNSEL_BREAK = 0.35; // sim/survivors.ts counsel(): dawn break chance ×0.35
 const COLD_JAM = 1.7; // night/battle.ts: un-oiled guns in the cold jam ×1.7
@@ -272,7 +272,7 @@ function build(): SystemDef[] {
       get: [{ i: 'nailgun', n: `${EMPLACEMENTS.nailturret.rof}/s`, t: 'shots with no crew' }],
       tradeoff: 'Fires with nobody on it, but eats scrap all night.',
       when: 'Scrap is piling up and the line is thin.',
-      key: 'Needs the generator',
+      key: `Up to ${FORT_CAP.turret}; needs the generator`,
     },
     {
       id: 'traps', group: 'build', icon: 'trap_bear', name: 'Traps',
