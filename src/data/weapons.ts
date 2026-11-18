@@ -22,7 +22,7 @@ export type { WeaponClass } from '../types';
  *   flare      the round lights the road where it lands: a light of FLARE_LIGHT.r for FLARE_LIGHT.time s
  *   smoke      black-powder cloud at the muzzle (cosmetic, maybe a brief aim penalty)
  *   ammoRes    the stores key rounds are drawn from (null = never runs out)
- *   perShot    stores units consumed per round loaded (nails: 0.05 scrap; .410: 0.5 shell)
+ *   perShot    stores units consumed per round loaded (nails: 0.05 salvage; .410: 0.5 shell)
  *   reload     if reloadPerRound: seconds PER ROUND (firing interrupts it, like the old pump);
  *              else seconds for the whole magazine
  *   mag        rounds per magazine
@@ -126,7 +126,7 @@ export const CALIBERS: Record<string, Caliber> = {
   ball: { id: 'ball', name: '.50 ball & black powder', types: ['ball'], icon: 'icon_ball' },
   bolt: { id: 'bolt', name: 'Arrows & bolts', types: ['bolt', 'bolt_fire'], icon: 'icon_bolts' },
   flare: { id: 'flare', name: '12 ga flare shells', types: ['flare'], icon: 'icon_flares' },
-  nails: { id: 'nails', name: 'Nails & rivets (scrap)', types: ['scrap'], icon: 'icon_scrap' },
+  nails: { id: 'nails', name: 'Nails & rivets (salvage)', types: ['salvage'], icon: 'icon_scrap' },
   rocket: { id: 'rocket', name: '66mm rockets', types: ['rocket'], icon: 'icon_rocket' },
   g40: { id: 'g40', name: '40mm grenades', types: ['g40', 'g40_buck'], icon: 'icon_g40' },
   pipebomb: { id: 'pipebomb', name: 'Pipe bombs', types: ['pipebomb'], icon: 'icon_pipebomb' },
@@ -161,9 +161,9 @@ export const AMMO_TYPES: Partial<Record<Res, AmmoType>> = {
   g40: { res: 'g40', caliber: 'g40', name: '40mm HE', short: 'HE', icon: 'icon_g40', desc: 'High-explosive grenade. Lobbed; bursts where it lands.' },
   g40_buck: { res: 'g40_buck', caliber: 'g40', name: '40mm buckshot', short: 'buck', icon: 'icon_g40', desc: 'A fat shotgun shell for the thumper: flat-shooting, no blast.', explosive: null, arc: false, pelletsSet: 20, dmgSet: 15, spreadMul: 6, knockMul: 0.5, stagger: 0.6 },
   pipebomb: { res: 'pipebomb', caliber: 'pipebomb', name: 'Pipe bomb', short: 'bomb', icon: 'icon_pipebomb', desc: 'Capped pipe, powder and roofing nails.' },
-  scrap: { res: 'scrap', caliber: 'nails', name: 'Scrap (nails & rivets)', short: 'scrap', icon: 'icon_scrap', desc: 'Cut, headed and fed from the scrap pile.' },
+  salvage: { res: 'salvage', caliber: 'nails', name: 'Salvage (nails & rivets)', short: 'salvage', icon: 'icon_scrap', desc: 'Cut, headed and fed from the salvage pile.' },
 };
-export const AMMO_RES: Res[] = Object.values(CALIBERS).flatMap((c) => c.types).filter((r) => r !== 'scrap');
+export const AMMO_RES: Res[] = Object.values(CALIBERS).flatMap((c) => c.types).filter((r) => r !== 'salvage');
 
 export function ammoLabel(res: Res | null | undefined): string {
   if (!res) return '—';
@@ -306,15 +306,15 @@ export const WEAPONS: Record<string, WeaponDef> = {
     desc: 'Orange plastic from the boathouse emergency kit.',
   },
   nailer: {
-    id: 'nailer', cls: 'improvised', name: 'Nail driver', icon: 'icon_nailgun', ammo: 'scrap', caliber: 'nails',
+    id: 'nailer', cls: 'improvised', name: 'Nail driver', icon: 'icon_nailgun', ammo: 'salvage', caliber: 'nails',
     dmg: 22, rof: 8, mag: 40, reload: 2.6, spread: 0.05, pellets: 1, pierce: 1, knock: 2, auto: true, noise: 0.5, perShot: 0.08, craftable: true, limbMul: 0.8, stagger: 0.04,
-    niche: 'Near-silent automatic that feeds on the scrap pile.',
-    desc: 'Mill-shop contraption. Quiet. Feeds on scrap.',
+    niche: 'Near-silent automatic that feeds on the salvage pile.',
+    desc: 'Mill-shop contraption. Quiet. Feeds on salvage.',
   },
   rivet: {
-    id: 'rivet', cls: 'improvised', name: 'Rivet gun', icon: 'icon_rivet', ammo: 'scrap', caliber: 'nails',
+    id: 'rivet', cls: 'improvised', name: 'Rivet gun', icon: 'icon_rivet', ammo: 'salvage', caliber: 'nails',
     dmg: 62, rof: 1.6, mag: 10, reload: 2.2, spread: 0.02, pellets: 1, pierce: 2, knock: 7, auto: false, noise: 0.6, armorPen: 0.6, perShot: 0.25, craftable: true,
-    niche: 'Quiet steel rivets that punch through Deputy plate; hungry for scrap.',
+    niche: 'Quiet steel rivets that punch through Deputy plate; hungry for salvage.',
     desc: 'A boiler-shop rivet hammer on a compressor bottle. Thunk.',
   },
   // --- launchers ---
@@ -367,7 +367,7 @@ export const ARSENAL_ICONS: string[] = [...new Set([
 ])];
 
 // Legacy pool names (still used by some night code).
-export const AMMO_NAMES: Record<string, string> = { light: 'Pistol rounds', shell: 'Shells', rifle: 'Rifle rounds', scrap: 'Scrap' };
+export const AMMO_NAMES: Record<string, string> = { light: 'Pistol rounds', shell: 'Shells', rifle: 'Rifle rounds', salvage: 'Salvage' };
 
 
 // ---------- melee ----------

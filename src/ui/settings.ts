@@ -14,6 +14,7 @@ import { ACTIONS, FIXED, PAD, PAD_BUTTONS, PAD_STICKS, conflicts, keyLabel, keyO
 import { padConnected } from '../input/gamepad';
 import { resetHints } from './onboarding';
 import { fold } from './kit';
+import { SAVE_VERSION } from '../state';
 
 export type TextSize = 'S' | 'M' | 'L';
 export interface Settings {
@@ -215,7 +216,7 @@ export function importData(text: string): string | null {
   try { o = JSON.parse(text) as Record<string, unknown>; } catch { return 'That file is not a Vessey export (not JSON).'; }
   if (!o || o.format !== 'vessey-export') return 'That file is not a Vessey export.';
   if (typeof o.save === 'string') {
-    try { const s = JSON.parse(o.save) as { version?: number }; if (s.version !== 1) return 'The save in that file is from another version.'; } catch { return 'The save in that file is damaged.'; }
+    try { const s = JSON.parse(o.save) as { version?: number }; if (s.version !== 1 && s.version !== SAVE_VERSION) return 'The save in that file is from another version.'; } catch { return 'The save in that file is damaged.'; }
   }
   try {
     for (const [k, key] of Object.entries(DATA_KEYS)) if (typeof o[k] === 'string') localStorage.setItem(key, o[k] as string);

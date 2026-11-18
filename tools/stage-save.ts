@@ -2,7 +2,7 @@
 // for N days (the simtest's crude nights), with machinery, guns with attachments, trap kits,
 // a gun nest, papers found in town, and a few survivors with some history.
 //   npx tsx tools/stage-save.ts [day=12] [out=/tmp/vessey-save.json] [seed=1001]
-// Load it in the browser: localStorage.setItem('vessey-save-v1', <file contents>), then Continue.
+// Load it in the browser: localStorage.setItem('vessey-save-v1', <file contents>), then Continue (older saves migrate on load: state.ts migrateSave).
 import { writeFileSync } from 'node:fs';
 import { G, addRep } from '../src/state';
 import { newGame } from '../src/sim/newgame';
@@ -43,7 +43,7 @@ G.nextNight = null;
 // machinery and a stocked house
 const build = (id: string, level: number) => { const b = G.buildings.find((x) => x.id === id); if (b) b.level = Math.max(b.level, level); else G.buildings.push({ id, level }); };
 build('workbench', 2); build('forge', 1); build('generator', 1); build('radio', 1); build('infirmary', 1); build('garden', 1);
-Object.assign(G.stores, { food: Math.max(G.stores.food, 14), scrap: 22, wood: 18, fuel: 9, parts: 4, meds: 3, molotov: 4 });
+Object.assign(G.stores, { food: Math.max(G.stores.food, 14), salvage: 48, fuel: 9, meds: 3, molotov: 4 });
 G.fort.hp = Math.round(G.fort.maxHp * 0.82);
 G.fort.lights = 2;
 G.fort.spikes = Math.max(G.fort.spikes, 1);

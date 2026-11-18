@@ -226,7 +226,7 @@ export const MORE_INCIDENTS: Incident[] = [
       const s = byId(opts[c])!;
       if (s.dead) return '';
       const p = Math.min(0.85, 0.4 + s.skills.scavenging * 0.06);
-      const loot = R.pick([{ rifle: 24, meds: 2 }, { meds: 5, food: 6 }, { light: 60, food: 4 }, { food: 14, cloth: 4 }] as const);
+      const loot = R.pick([{ rifle: 24, meds: 2 }, { meds: 5, food: 6 }, { light: 60, food: 4 }, { food: 14, salvage: 6 }] as const);
       const got = Object.entries(loot).map(([k, v]) => `${v} ${k}`).join(', ');
       if (R.chance(p)) {
         for (const [k, v] of Object.entries(loot)) add(k as 'food', v);
@@ -325,13 +325,13 @@ export const MORE_INCIDENTS: Incident[] = [
       id: 'wall_rot', title: 'The north section',
       text: `The north section of the wall, where the rain sheets off the garage roof, has gone soft. You can push a thumb into the posts. The bottom rail is black with rot and something orange-grey that might just be fungus.\n\nIt will hold a while. Not a long while.`,
       choices: [
-        { label: 'Tear it out and rebuild (15 wood)', hint: G.stores.wood >= 15 ? 'A morning of work.' : 'We do not have the wood.', effect: 'fix' },
+        { label: 'Tear it out and rebuild (15 salvage)', hint: G.stores.salvage >= 15 ? 'A morning of work.' : 'We do not have the salvage.', effect: 'fix' },
         { label: 'Shore it up and hope', hint: 'The wall loses 50 max strength until reinforced.', effect: 'hope' },
       ],
     }),
     resolve: (c) => {
-      if (c === 0 && G.stores.wood >= 15) {
-        add('wood', -15);
+      if (c === 0 && G.stores.salvage >= 15) {
+        add('salvage', -15);
         for (const s of living()) s.rest = Math.max(0, s.rest - 0.08);
         log('event', 'We tore out the rotten north section of the wall and rebuilt it.');
         return 'New posts, still smelling of sap. It holds.';
@@ -350,18 +350,18 @@ export const MORE_INCIDENTS: Incident[] = [
       const tech = [...adults()].sort((a, b) => b.skills.building - a.skills.building)[0];
       return {
         id: 'generator', title: 'The generator',
-        text: `The diesel coughed at four in the morning, ran rough, and died. ${tech ? `${first(tech)} has it half apart on a tarp: "Injector pump. I can fix it if we have parts. Otherwise we're dark tonight."` : 'Nobody in the house knows engines.'}\n\nWithout it: no floodlights, no turrets.`,
+        text: `The diesel coughed at four in the morning, ran rough, and died. ${tech ? `${first(tech)} has it half apart on a tarp: "Injector pump. I can fix it if we have the parts in the salvage pile. Otherwise we're dark tonight."` : 'Nobody in the house knows engines.'}\n\nWithout it: no floodlights, no turrets.`,
         data: { tech: tech?.id },
         choices: [
-          { label: 'Fix it (3 parts)', hint: G.stores.parts >= 3 ? 'Back by dusk.' : 'We do not have the parts.', effect: 'fix' },
+          { label: 'Fix it (6 salvage)', hint: G.stores.salvage >= 6 ? 'Back by dusk.' : 'We do not have the salvage.', effect: 'fix' },
           { label: 'Go dark tonight', hint: 'Lights and turrets off for one night. Fixed tomorrow, for free.', effect: 'dark' },
         ],
       };
     },
     resolve: (c, d) => {
       const tech = d.tech ? byId(d.tech as string) : undefined;
-      if (c === 0 && G.stores.parts >= 3) {
-        add('parts', -3);
+      if (c === 0 && G.stores.salvage >= 6) {
+        add('salvage', -6);
         if (tech) tale(tech, 'Rebuilt the generator\'s injector pump on a tarp in the snow.');
         return `${tech ? first(tech) : 'Somebody'} got it running by three. It sounds worse than before, but it runs.`;
       }

@@ -13,7 +13,7 @@ export interface EmplacementDef {
   short: string;
   desc: string;
   niche: string;
-  /** what it eats: a stores key (r556, rifle, fuel, scrap) and how much per round (or per second for flame) */
+  /** what it eats: a stores key (r556, rifle, fuel, salvage) and how much per round (or per second for flame) */
   ammo: Res;
   perShot: number;
   /** rounds in a belt / box / magazine before a reload (flame: seconds of fuel in the tank) */
@@ -62,10 +62,10 @@ export const EMPLACEMENTS: Record<string, EmplacementDef> = {
     desc: 'A weed burner, two grill tanks and a still-fuel drip, on a pipe stand over the barricade. Lights the oil, too.',
   },
   nailturret: {
-    id: 'nailturret', name: 'Nail turret', short: 'turret', ammo: 'scrap', perShot: 0.05, mag: 9999, reload: 0, rof: 3.3, auto: true,
+    id: 'nailturret', name: 'Nail turret', short: 'turret', ammo: 'salvage', perShot: 0.05, mag: 9999, reload: 0, rof: 3.3, auto: true,
     dmg: 18, pierce: 1, knock: 2, spread: 0.04, armorPen: 0, noise: 0.15,
     crew: false, posts: ['firestep'], wear: 0, sound: 'nailer',
-    niche: 'Fires at anything on the road by itself. Eats scrap; needs the generator.',
+    niche: 'Fires at anything on the road by itself. Eats salvage; needs the generator.',
     desc: 'A framing nailer on a tractor-seat swivel, triggered by a doorbell relay.',
   },
 };

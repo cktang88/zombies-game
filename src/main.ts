@@ -307,7 +307,7 @@ function deployStep() {
   const crewEl = app.querySelector('.dep-crew') as HTMLElement;
   const rootEl = app.querySelector('.dep-root') as HTMLElement;
   // ---- where each guard stands (night/battle.ts Post); the roof nest if there is one ----
-  const NEST_COST = { wood: 12, scrap: 4 } as const;
+  const NEST_COST = 20; // salvage
   const POST_ICON: Record<GuardPost, string> = { step: 'st_wall', loop: 'shells', runner: 'ammo', roof: 'scoped' };
   const hint: Record<GuardPost, string> = { step: 'shoots over the wall', loop: 'shoves them back; gets clawed', runner: 'all reload faster', roof: 'sees farther; not at the wall' };
   const longHint: Record<GuardPost, string> = { step: 'Shoots over the wall at whatever comes.', loop: 'A shotgun through the loophole: shoves harder than anyone. Big ones claw that guard.', runner: 'Carries ammo along the line: everyone reloads faster. Shoots only what gets over.', roof: 'Up on the garage: sees much farther and aims steadier, but cannot angle down at the wall.' };
@@ -322,7 +322,7 @@ function deployStep() {
     const gunOf = (s: Survivor) => G.weapons.find((x) => x.uid === s.weapon) ?? null;
     // what "auto" gives each guard tonight, around the posts picked by hand (the night uses the same rule)
     const eff = autoPosts(guards.map((s) => ({ s, w: gunOf(s) })), nest, fixed);
-    const canNest = !nest && (G.stores.wood ?? 0) >= NEST_COST.wood && (G.stores.scrap ?? 0) >= NEST_COST.scrap;
+    const canNest = !nest && (G.stores.salvage ?? 0) >= NEST_COST;
     // every post's job up front: icon, name, a short effect
     const legend = (['step', 'loop', 'runner', 'roof'] as GuardPost[]).map((p) => `<span class="chip postkey${p === 'roof' && !nest ? ' lo' : ''}"${tip(`<b>${POST_NAMES[p]}</b>: ${esc(longHint[p])}${p === 'roof' && !nest ? '<br>Needs a roof nest (below, or built at the workbench).' : ''}`)}>${ico(POST_ICON[p])}<b>${POST_NAMES[p]}</b><span class="t-s">${esc(hint[p])}</span></span>`).join('');
     postsEl.innerHTML = `<div class="dep posts"><header class="dep-h"><h2>Posts${qi('Who stands where beside you. One at the loophole, one on the roof. <b>auto</b> picks by gun: a shotgun at the loophole, a rifle on the roof, a handgun runs.')}</h2></header>
@@ -338,7 +338,7 @@ function deployStep() {
           <span class="dim">${ico(POST_ICON[eff[s.id]])} ${esc(hint[eff[s.id]])}</span></p>`;
       }).join('')}
       ${sitOut.length ? `<p class="postrow sitout">${tag('sits out', 'Only six fit on the wall: you and five.')} <span class="dim">${sitOut.map((s) => esc(first(s))).join(', ')}</span></p>` : ''}
-      <p class="postrow">${nest ? '<span class="dim">The roof nest is up on the garage.</span>' : `<button type="button" class="mini" data-nest ${canNest ? '' : 'disabled'}${tip('A nest for one rifle on the garage roof. Cheaper built at the workbench in the day.')}>Throw up a roof nest now</button> <span class="dim">${NEST_COST.wood} timber, ${NEST_COST.scrap} scrap</span>`}</p></div>`;
+      <p class="postrow">${nest ? '<span class="dim">The roof nest is up on the garage.</span>' : `<button type="button" class="mini" data-nest ${canNest ? '' : 'disabled'}${tip('A nest for one rifle on the garage roof. Cheaper built at the workbench in the day.')}>Throw up a roof nest now</button> <span class="dim">${NEST_COST} salvage</span>`}</p></div>`;
   };
   const readPosts = () => {
     if (!guards.length) return;
@@ -359,10 +359,9 @@ function deployStep() {
   postsEl.addEventListener('change', (e) => { sfx.ui(); readPosts(); renderPosts(); void e; });
   postsEl.addEventListener('click', (e) => {
     if (!(e.target as HTMLElement).closest('[data-nest]')) return;
-    if ((G.stores.wood ?? 0) < NEST_COST.wood || (G.stores.scrap ?? 0) < NEST_COST.scrap) return;
+    if ((G.stores.salvage ?? 0) < NEST_COST) return;
     readPosts();
-    add('wood', -NEST_COST.wood);
-    add('scrap', -NEST_COST.scrap);
+    add('salvage', -NEST_COST);
     G.flags.roofNest = 1;
     report.push('Planks and sandbags went up on the garage roof at dusk: a nest for one rifle.');
     sfx.ui('stamp');

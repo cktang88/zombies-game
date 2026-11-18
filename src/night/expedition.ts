@@ -37,7 +37,7 @@ const ZONE_NAMES = ['the near houses', 'past the rail crossing', 'beyond the fou
 const RUN_YIELD = 0.22; // per-search loot scale: clearing the whole street ≈ 2–2.4× a scavenging job (before the pack cap)
 // how many of a resource fit in one pack slot (bulky things take more room)
 const STACK: Partial<Record<Res, number>> = {
-  food: 6, wood: 4, scrap: 8, parts: 4, meds: 3, fuel: 3, cloth: 6, liquor: 2, molotov: 2,
+  food: 6, salvage: 8, meds: 3, fuel: 3, molotov: 2,
   light: 20, light_hp: 20, r22: 50, shell: 8, shell_slug: 8, shell_flech: 8, shell_fire: 8, rifle: 12, rifle_sp: 12, rifle_ap: 12,
   r556: 30, ball: 15, bolt: 12, bolt_fire: 8, flare: 4, rocket: 1, g40: 3, g40_buck: 3, pipebomb: 2,
 };
@@ -516,7 +516,7 @@ export class Expedition {
     // search
     const near = mateNear ? undefined : this.spots.find((s) => !s.searched && Math.abs(s.x - this.px) < 60);
     if (this.held('run.search') && near && !this.searching && !this.downed) {
-      if (near.kind === 'truck' && (G.stores.fuel < 2 || G.stores.parts < 1)) this.say('It would take 2 fuel and a part to start it. The house does not have them.', 2.5);
+      if (near.kind === 'truck' && (G.stores.fuel < 2 || G.stores.salvage < 2)) this.say('It would take 2 fuel and 2 salvage to start it. The house does not have them.', 2.5);
       else {
         this.searching = near; this.searchT = 0; this.rummageT = 0.7;
         sfx.search(near.kind === 'door' || near.kind === 'shed' || near.kind === 'cache' ? 'door' : near.kind === 'car' || near.kind === 'truck' ? 'creak' : 'rummage', { pan: panOf(near.x - this.cam) * 0.5 });
@@ -1269,10 +1269,10 @@ export class Expedition {
     this.say(got.length ? `${sp.label[0].toUpperCase() + sp.label.slice(1)}: ${got.join(', ')}.` : `${sp.label[0].toUpperCase() + sp.label.slice(1)}: nothing. Somebody got here first.`, 3.5);
   }
 
-  // the pickup: costs fuel and a part, makes a racket, and carries everything you left on the road
+  // the pickup: costs fuel and salvage (a part), makes a racket, and carries everything you left on the road
   driveOut() {
     add('fuel', -2);
-    add('parts', -1);
+    add('salvage', -2);
     sfx.search('door');
     sfx.impact('metal', { delay: 0.3 }); sfx.thud();
     this.noise = 4;

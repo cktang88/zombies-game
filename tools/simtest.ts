@@ -118,7 +118,7 @@ function economy(n: number) {
         else if (i === 2 && G.craftQueue.length) s.job = 'craft';
         else { s.job = 'scavenge'; G.flags[`site_${s.id}`] = near[i % Math.max(1, near.length)]?.id ?? 'route9'; }
       });
-      if (G.craftQueue.length < 1 && G.stores.scrap >= 3 && G.stores.fuel >= 2) queueRecipe('ammo_light');
+      if (G.craftQueue.length < 1 && G.stores.salvage >= 3 && G.stores.fuel >= 2) queueRecipe('ammo_light');
       const fuelBefore = G.stores.fuel;
       resolveDayWork();
       if (G.day >= 12) { fuelDays++; if (G.stores.fuel <= 0 || fuelBefore - G.stores.fuel < heatNeed()) fuelShort++; }
@@ -384,7 +384,7 @@ G.director.mode = 'quiet'; G.day = 1; console.log('quiet:', calendar(10).map((c)
     resolveDayWork();
     return x;
   };
-  const wood = (id: string | null) => { let w0 = 0; dayRun(id, (x) => { x.job = 'repair'; G.fort.hp = 50; G.stores.wood = 999; w0 = G.stores.wood; }); return w0 - G.stores.wood; };
+  const wood = (id: string | null) => { let w0 = 0; dayRun(id, (x) => { x.job = 'repair'; G.fort.hp = 50; G.stores.salvage = 999; w0 = G.stores.salvage; }); return w0 - G.stores.salvage; };
   check(wood('thrifty') < wood(null), `Thrifty uses less timber ${wood('thrifty')} < ${wood(null)}`);
   const rest = (id: string | null) => dayRun(id, (x) => { x.job = 'repair'; }).rest;
   check(rest('tireless') > rest(null), 'Tireless tires less');
@@ -396,7 +396,7 @@ G.director.mode = 'quiet'; G.day = 1; console.log('quiet:', calendar(10).map((c)
   const tier = (id: string | null) => { dayRun(id, (x) => { x.job = 'radio'; x.skills.social = 4; x.mood = 70; G.buildings.push({ id: 'radio', level: 1 }); }); return intelTier(); };
   check(tier(null) === 1 && tier('easy_talker') === 2, `radio work counts for intel: ${tier(null)} → ${tier('easy_talker')}`);
   // repairs need timber: none in the stores, a quarter of the wall
-  const patch = (w: number) => { let g = 0; dayRun(null, (x) => { x.job = 'repair'; G.fort.hp = 50; G.stores.wood = w; }); g = G.fort.hp - 50; return g; };
+  const patch = (w: number) => { let g = 0; dayRun(null, (x) => { x.job = 'repair'; G.fort.hp = 50; G.stores.salvage = w; }); g = G.fort.hp - 50; return g; };
   check(patch(0) > 0 && patch(0) <= Math.ceil(patch(99) * 0.3), `repair without timber is small: ${patch(0)} vs ${patch(99)}`);
   check(perkFx(w('packrat'), 'scav') > perkFx(w('deep_pockets'), 'scav') && perkFx(w('ghost'), 'scavDanger') < perkFx(w('light_step'), 'scavDanger'), 'scavenging perks');
   // the house: Warmth / Anchor lift everyone else; counselling goes deeper

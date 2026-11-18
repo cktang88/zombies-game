@@ -30,10 +30,33 @@ export function loadSave(): GameState | null {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
     const s = JSON.parse(raw) as GameState;
-    return s.version === 1 ? s : null;
+    return migrateSave(s);
   } catch {
     return null;
   }
+}
+
+/** Version 2 folded nine materials into four (food, salvage, fuel, medicine); see docs/research/19-simplify-resources.md. */
+export const SAVE_VERSION = 2;
+/** Salvage per unit of each old material: one pile for timber, scrap, parts and cloth (parts were rarer, so they count double). */
+const TO_SALVAGE: Record<string, number> = { scrap: 1, wood: 1, cloth: 1, parts: 2 };
+
+/** Bring an older save up to SAVE_VERSION in place, or null when it cannot be read. */
+export function migrateSave(s: GameState | null): GameState | null {
+  if (!s || typeof s !== 'object' || !s.stores) return null;
+  if (s.version === SAVE_VERSION) return s;
+  if (s.version !== 1) return null;
+  const old = s.stores as unknown as Record<string, number>;
+  const n = (k: string) => (typeof old[k] === 'number' && isFinite(old[k]) ? Math.max(0, old[k]) : 0);
+  const st = s.stores as unknown as Record<string, number>;
+  st.salvage = Math.round(n('salvage') + Object.entries(TO_SALVAGE).reduce((a, [k, w]) => a + n(k) * w, 0));
+  // liquor: each bottle back to the 1.5 food it was made from (the still now pours food straight into courage)
+  st.food = Math.round((n('food') + n('liquor') * 1.5) * 10) / 10;
+  for (const k of [...Object.keys(TO_SALVAGE), 'liquor']) delete st[k];
+  // queued liquor becomes a round from the still
+  for (const q of s.craftQueue ?? []) if (q.recipe === 'liquor') q.recipe = 'drink';
+  s.version = SAVE_VERSION;
+  return s;
 }
 
 export function clearSave() {

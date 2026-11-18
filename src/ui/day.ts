@@ -36,7 +36,7 @@ import { sysTip, sysLine } from './guide';
 import { todayHtml, dotKeys, pickTodo, applyFlash, markSeen, setRevealAll, isOpen, revealNote, runOpen, JOB_REVEAL, type RevealId } from './today';
 
 const JOBS: { id: JobId; label: string; hint: string }[] = [
-  { id: 'repair', label: 'Repair the wall', hint: 'Building. 1 timber per 25 wall; without timber, a quarter as much. Hard on the back.' },
+  { id: 'repair', label: 'Repair the wall', hint: 'Building. 1 salvage per 25 wall; without salvage, a quarter as much. Hard on the back.' },
   { id: 'scavenge', label: 'Scavenge', hint: 'Scavenging. Risky. The walk there and back eats the day.' },
   { id: 'craft', label: 'Workshop', hint: 'Building. Works the queue.' },
   { id: 'farm', label: 'Food', hint: 'Anyone can farm: snares, kale, cold frames. A Green thumb brings in half again.' },
@@ -60,7 +60,7 @@ function jobOutlook(s: Survivor, j: JobId): string {
       const room = Math.max(0, G.fort.maxHp - G.fort.hp);
       if (room <= 0) return 'wall is whole';
       const p = repairPlan(s, m * f);
-      return p.short ? `+${p.gain} wall · out of timber` : `+${p.gain} wall · ${p.wood} timber`;
+      return p.short ? `+${p.gain} wall · out of salvage` : `+${p.gain} wall · ${p.wood} salvage`;
     }
     case 'craft':
       return G.craftQueue.length ? `${Math.round(craftPoints(s, m * f))} work on the queue` : 'queue is empty';
@@ -77,7 +77,7 @@ function jobOutlook(s: Survivor, j: JobId): string {
       if (!it) return 'needs a gun';
       const ammo = selectedAmmo(it);
       const rounds = Math.ceil(10 * f);
-      const live = !!ammo && ammo !== 'scrap' && (G.stores[ammo] ?? 0) >= rounds;
+      const live = !!ammo && ammo !== 'salvage' && (G.stores[ammo] ?? 0) >= rounds;
       const look = s.skills.shooting >= 3 ? 'lookout' : 'lookout at Shooting 3+';
       return `${look} · ${live ? `${rounds} rounds${emplacements().length ? ' + gun nest' : ''}` : 'dry-fire'}`;
     }
@@ -200,8 +200,8 @@ function needs(): Set<Find> {
   if (G.stores.food / eat < 3) n.add('food');
   if (G.stores.fuel < heatNeed() + 2) n.add('fuel');
   if (living().some((x) => x.wounds.length)) n.add('meds');
-  if (G.fort.hp < G.fort.maxHp * 0.6 && G.stores.wood < 8) n.add('wood');
-  const shortGun = living().some((x) => { const w = G.weapons.find((g) => g.uid === x.weapon); const a = w ? (w.ammoType ?? WEAPONS[w.def]?.ammo) : null; return a && a !== 'scrap' && (G.stores[a as Res] ?? 0) < 25; });
+  if (G.stores.salvage < 12 || (G.fort.hp < G.fort.maxHp * 0.6 && G.stores.salvage < 20)) n.add('salvage');
+  const shortGun = living().some((x) => { const w = G.weapons.find((g) => g.uid === x.weapon); const a = w ? (w.ammoType ?? WEAPONS[w.def]?.ammo) : null; return a && a !== 'salvage' && (G.stores[a as Res] ?? 0) < 25; });
   if (shortGun) n.add('ammo');
   return n;
 }
@@ -462,7 +462,7 @@ function runHtml() {
 
 // The picture for a recipe: what it makes.
 const SPECIAL_ICON: Record<string, string> = {
-  spikes: 'icon_trap_pit', wire: 'icon_trap_snare', light: 'icon_mod_flashlight', trap: 'icon_trap_nails', molotov: 'icon_molotov', liquor: 'icon_molotov',
+  spikes: 'icon_trap_pit', wire: 'icon_trap_snare', light: 'icon_mod_flashlight', trap: 'icon_trap_nails', molotov: 'icon_molotov', drink: 'icon_molotov',
   fortify: 'icon_st_wall', repair: 'icon_parts', turret: 'icon_nailgun', duffel: 'icon_cloth', repairMelee: 'icon_m_hatchet', roofnest: 'icon_wood', armor: 'icon_scrap',
 };
 function recipeIcon(r: (typeof RECIPES)[number]): string {
@@ -502,7 +502,7 @@ const FORT_FX: Record<string, { name: string; icon: string; short: string; card:
   spikes: { name: 'Spike rows', icon: 'icon_trap_pit', short: '3.5 dmg/s each', card: '3.5/s', long: 'Each row does 3.5 damage a second to every one of them at the wall face.' },
   wire: { name: 'Wire belts', icon: 'icon_trap_snare', short: '×0.55 speed', card: '×0.55', long: 'Each belt slows them to ×0.55 across 90px of road.' },
   light: { name: 'Floodlights', icon: 'icon_mod_flashlight', short: '+130px sight', card: '+130px', long: 'Each: guards see 130px farther and aim 7% better (20% at most). Burns 0.5 fuel a night.' },
-  turret: { name: 'Nail turrets', icon: 'icon_nailgun', short: 'fires alone', card: 'auto', long: 'Fires at the road with nobody on it. Eats scrap; needs the generator.' },
+  turret: { name: 'Nail turrets', icon: 'icon_nailgun', short: 'fires alone', card: 'auto', long: 'Fires at the road with nobody on it. Eats salvage; needs the generator.' },
 };
 
 /** The ammo type an ammunition recipe makes (none for firebombs and the rest). */
@@ -595,7 +595,7 @@ function wallHtml() {
   if (f.traps) fortRow.push(['icon_trap_nails', f.traps, 'Nail-bomb traps: one use each, out in the road.', 'nail bombs']);
   return `<div class="wall">
     <div class="wallbar"${tip(frac > 0.8 ? 'The wall is sound.' : frac > 0.4 ? 'The wall is chewed. Planks split, the car door hangs.' : 'The wall is barely a wall.')}><div data-tw="wall" style="width:${frac * 100}%"></div><span>${Math.ceil(f.hp)} / ${f.maxHp}</span></div>
-    <div class="chips">${repairers.length ? chip('job_repair', repairers.map(first).join(', '), 'Repairing today') : chip('st_danger', 'no repairs', 'Nobody is assigned to repair it. Repairs use timber (the stores, top).', 'warn')}</div>
+    <div class="chips">${repairers.length ? chip('job_repair', repairers.map(first).join(', '), 'Repairing today') : chip('st_danger', 'no repairs', 'Nobody is assigned to repair it. Repairs use salvage (the stores, top).', 'warn')}</div>
     <div class="fortgrid">${fortRow.filter(([, n]) => n > 0 || isOpen('workshop')).map(([icon, n, t, fx]) => `<span class="ftile ${n ? '' : 'none'}"${tip(t)}>${pic(icon)}<b>${n}</b><span class="t-s">${fx}</span></span>`).join('')}</div>
     ${isOpen('chores') ? revealNote('chores') + choresHtml() : ''}
   </div>`;
@@ -608,8 +608,8 @@ function choresHtml() {
   if (G.flags.oiledDay === G.day) out.push(`<span class="chip good"${tip('The cold will not seize them tonight.')}>✓ guns oiled</span>`);
   else {
     const hand = choreHand(1);
-    const can = !!hand && ((G.stores.cloth ?? 0) >= 1 || (G.stores.fuel ?? 0) >= 1);
-    out.push(`<button class="mini ${cold ? 'urgent' : ''}" data-act="oil" ${can ? '' : 'disabled'}${tip(`1 hour${hand ? ` (${esc(first(hand))})` : ''} · a rag or 1 fuel · ${cold ? '<b>dry guns jam in this cold</b>' : 'fewer stoppages in the cold'}`)}>Oil the guns</button>`);
+    const can = !!hand && ((G.stores.salvage ?? 0) >= 1 || (G.stores.fuel ?? 0) >= 1);
+    out.push(`<button class="mini ${cold ? 'urgent' : ''}" data-act="oil" ${can ? '' : 'disabled'}${tip(`1 hour${hand ? ` (${esc(first(hand))})` : ''} · a rag (1 salvage) or 1 fuel · ${cold ? '<b>dry guns jam in this cold</b>' : 'fewer stoppages in the cold'}`)}>Oil the guns</button>`);
   }
   if (G.flags.pileCarry) {
     let tot = 0;
@@ -710,7 +710,7 @@ function armoryHtml() {
   const stock = Object.values(CALIBERS).map((c) => {
     const items = c.types.map((t) => {
       const n = Math.floor(G.stores[t] ?? 0);
-      total += t === 'scrap' ? 0 : n;
+      total += t === 'salvage' ? 0 : n;
       return `<span class="chip ${n ? '' : 'none'}"${tip(`<b>${esc(ammoLabel(t))}</b><br>${esc(AMMO_TYPES[t]!.desc)}`)}><img src="${spriteUrl(AMMO_TYPES[t]!.icon)}" alt=""><b>${n}</b></span>`;
     }).join('');
     return `<div class="calrow"><span class="t-s">${esc(c.name.replace(/\s*\(.*\)/, ''))}</span>${items}</div>`;
@@ -806,17 +806,17 @@ function gravesHtml() {
     <div class="gd">${dateLabel(g.dead!.day)}</div></div></div>`).join('')}</div>`;
 }
 
-const STORE_RES: Res[] = ['food', 'wood', 'scrap', 'parts', 'cloth', 'fuel', 'meds', 'liquor', 'molotov'];
+const STORE_RES: Res[] = ['food', 'salvage', 'fuel', 'meds', 'molotov'];
 const STORE_USE: Partial<Record<Res, string>> = {
-  food: 'One a day for every mouth.', wood: 'Repairs the wall; builds frames and machinery.', scrap: 'Ammo, traps, the forge.', parts: 'Machinery, guns, upgrades.',
-  cloth: 'Bandages, rags to oil the guns, wicks.', fuel: 'The stove at night; reloading powder; the still.', meds: 'The doctor heals and fights infection with these.',
-  liquor: 'Courage for the breaking; the still makes it.', molotov: 'Firebombs: [F] or right-click at night.',
+  food: 'One a day for every mouth. The still pours it into courage.', salvage: 'One pile for everything you build: patch the wall, make bullets, or build traps.',
+  fuel: 'The stove at night, floodlights, powder and firebombs.', meds: 'The doctor heals and fights infection with these.',
+  molotov: 'Firebombs: [F] or right-click at night.',
 };
 
 // One compact chip for every round in the house, with a per-caliber breakdown on hover/focus.
 function ammoChip() {
   const rows = Object.values(CALIBERS).map((c) => {
-    const types = c.types.filter((t) => t !== 'scrap');
+    const types = c.types.filter((t) => t !== 'salvage');
     const n = types.reduce((a, t) => a + Math.floor(G.stores[t] ?? 0), 0);
     return { c, types, n };
   }).filter((r) => r.types.length);
@@ -873,7 +873,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
       <div class="date"${tip(`This town's seed: ${G.seed}${G.flags.daily ? ` · daily ${esc(String(G.flags.daily))}` : ''}. Start a new game from it on the title screen to replay the same Vessey.`)}><b class="t-xl">${dateLabel()}</b> <span class="t-xs">day ${G.day}</span> <span class="t-s wx">${WEATHER_LABEL[G.weather] ?? G.weather}</span></div>
       <div class="ice"${tip(ice > 0 ? `The river freezes in ${ice} day${ice === 1 ? '' : 's'}. Then the dead can cross.` : ice === 0 ? 'The river is freezing tonight.' : 'The river is ice.')}>${ico('st_cold')}<b>${ice > 0 ? `${ice}d` : ice === 0 ? 'tonight' : 'ice'}</b></div>
       <div class="hbtns"><button class="icon" data-act="help" aria-label="Help and controls" title="Help and controls">?</button><button class="icon" data-act="settings" aria-label="Settings" title="Settings">⚙</button></div>
-      <div class="stores">${STORE_RES.filter((r) => isOpen('stores') || ['food', 'wood', 'scrap', 'fuel'].includes(r) || (r === 'molotov' && G.stores.molotov > 0)).map((r) => {
+      <div class="stores">${STORE_RES.filter((r) => isOpen('stores') || ['food', 'salvage', 'fuel'].includes(r) || (r === 'molotov' && G.stores.molotov > 0)).map((r) => {
         const low = (r === 'food' && G.stores.food < eat * 2) || (r === 'fuel' && G.stores.fuel < heat);
         const use = r === 'food' ? foodTip(eatN, half) : r === 'fuel' && heat ? `The stove burns ${heat} tonight.` : '';
         return `<span data-res="${r}" class="chip lg ${low ? 'warn' : ''}"${tip(`<b>${RES_LABEL[r]}</b><br>${STORE_USE[r] ?? ''}${use ? `<br>${use}` : ''}`)}><img src="${spriteUrl(RES_ICON[r])}" alt="${RES_LABEL[r]}"><span class="n">${Math.floor(G.stores[r] ?? 0)}</span>${r === 'fuel' && heat ? `<em>−${heat}</em>` : r === 'food' && eat ? `<em>−${eatN}${half ? ' · ½' : ''}</em>` : ''}</span>`;

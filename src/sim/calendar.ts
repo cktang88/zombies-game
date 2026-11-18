@@ -85,7 +85,7 @@ export function noiseOfHouse(): { level: number; pct: number; reasons: string[] 
     { v: s.fuel * 1.5 + G.fort.lights * 15, why: G.fort.lights ? `Diesel and ${G.fort.lights} floodlight${G.fort.lights === 1 ? '' : 's'}` : `Woodsmoke and ${Math.floor(s.fuel)} fuel` },
     { v: guns, why: `Gun oil: ${G.weapons.length} gun${G.weapons.length === 1 ? '' : 's'} in the house` },
     { v: G.buildings.reduce((a, b) => a + 30 * b.level, 0), why: 'The bench and the forge ringing all day' },
-    { v: s.meds * 3 + s.parts * 2, why: 'Medicine and engine parts, the things worth stealing' },
+    { v: s.meds * 3 + s.salvage * 0.15, why: 'Medicine and a salvage pile, the things worth stealing' },
     { v: (s.light + s.shell * 2 + s.rifle * 2) * 0.15, why: 'Ammunition stacked in the hall' },
     { v: (G.fort.maxHp - 300) * 0.2, why: 'A wall big enough to be seen from the river' },
   ];
@@ -143,7 +143,7 @@ export const OMEN_INCIDENT: Incident = {
       text: `${om.line}\n\n${s ? `${first(s)} says what everyone is thinking: ` : ''}"Tomorrow night. It's tomorrow night."`,
       data: { s: s?.id },
       choices: [
-        { label: 'Everyone on the wall today', hint: '8 timber. +50 wall before the tide. A tiring day.', effect: 'wall' },
+        { label: 'Everyone on the wall today', hint: '8 salvage. +50 wall before the tide. A tiring day.', effect: 'wall' },
         { label: 'Rest. Eat. Be ready.', hint: 'Everyone rests a little; spirits steady.', effect: 'rest' },
         { label: 'It\'s just the sky', effect: 'none' },
       ],
@@ -151,8 +151,8 @@ export const OMEN_INCIDENT: Incident = {
   },
   resolve: (c) => {
     if (c === 0) {
-      if (G.stores.wood < 8) return 'We did not have the timber. We stood at the wall anyway and looked at the road.';
-      add('wood', -8);
+      if (G.stores.salvage < 8) return 'We did not have the salvage. We stood at the wall anyway and looked at the road.';
+      add('salvage', -8);
       G.fort.maxHp += 20; G.fort.hp = Math.min(G.fort.maxHp, G.fort.hp + 50);
       for (const s of living()) s.rest = Math.max(0, s.rest - 0.1);
       log('event', 'An omen at dawn. We spent the day on the wall.');

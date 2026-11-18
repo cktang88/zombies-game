@@ -326,7 +326,7 @@ function profiles(): Prof[] {
   }
   return out;
 }
-const VALUE: Partial<Record<Res, number>> = { scrap: 1, wood: 0.5, cloth: 1, fuel: 2, parts: 3, food: 0.6 };
+const VALUE: Partial<Record<Res, number>> = { salvage: 1, fuel: 2, food: 0.6 };
 /** scrap-equivalent material cost of one stores unit of res, from the cheapest recipe. */
 function unitCost(res: Res, depth = 0): number {
   if (VALUE[res] !== undefined) return VALUE[res]!;
@@ -577,7 +577,7 @@ function economy(seeds: number, N: number): { days: EconDay[]; md: string } {
       // --- scavenging: best ammo-value site
       const slots = loadout(day);
       const calibers = new Set(slots.map((s) => WEAPONS[s.gun].ammo));
-      const siteVal = (s: (typeof SITES)[number]) => Object.entries(s.loot).reduce((a, [k, v]) => a + (calibers.has(k as Res) ? 3 : k === 'scrap' ? (stores.scrap < 15 ? 4 : 1) : k === 'fuel' ? (stores.fuel < 6 ? 3 : 0.5) : k === 'parts' ? 1 : 0.2) * (v ?? 0), 0) * Math.max(0.15, siteStock.get(s.id)! / s.stock);
+      const siteVal = (s: (typeof SITES)[number]) => Object.entries(s.loot).reduce((a, [k, v]) => a + (calibers.has(k as Res) ? 3 : k === 'salvage' ? (stores.salvage < 15 ? 4 : 1) : k === 'fuel' ? (stores.fuel < 6 ? 3 : 0.5) : 0.2) * (v ?? 0), 0) * Math.max(0.15, siteStock.get(s.id)! / s.stock);
       const open = SITES.filter((s) => s.minDay <= day && day >= 2 + (s.risk > 0.5 ? 6 : 0));
       for (const site of open.sort((a, b) => siteVal(b) - siteVal(a)).slice(0, day >= 8 ? 2 : 1)) {
         const fullness = Math.max(0.15, siteStock.get(site.id)! / site.stock);
@@ -586,7 +586,7 @@ function economy(seeds: number, N: number): { days: EconDay[]; md: string } {
         siteStock.set(site.id, siteStock.get(site.id)! - 1);
       }
       // --- background income from the rest of the house (repair/farm jobs bring nothing; radio/trade a little)
-      addR('scrap', 1); addR('wood', 2);
+      addR('salvage', 3);
       // --- crafting: 5.7 work/day, ammo for the most-depleted caliber in the loadout; half the materials go to the wall
       let work = (3 + 3 * 0.9) * (day >= 15 ? 3 : day >= 8 ? 2 : 1); // more crafters as the house grows
       if (day >= 6) addR('fuel', 2); // the still: rot and sawdust to fuel
@@ -620,14 +620,14 @@ function economy(seeds: number, N: number): { days: EconDay[]; md: string } {
       let strag = 0;
       for (let i = 0; i < 6 && noise >= 28; i++) { const k = Math.floor(noise / 28); noise -= k * 28; strag += k; killOne('sleeper', k * 0.7); killOne('deer', k * 0.3); }
       for (const [k, v] of Object.entries(spent)) { stores[k as Res] = Math.max(0, (stores[k as Res] ?? 0) - (v ?? 0)); lastSpent[k as Res] = v; }
-      if (M.salvage) stores.scrap += n * M.salvage; // brass, nails and buckles off the road at dawn
+      if (M.salvage) stores.salvage += n * M.salvage; // brass, nails and buckles off the road at dawn
       G.stores = { ...G.stores, ...stores };
       const row = acc[day - 1] ?? { day, pts: 0, zombies: 0, hp: 0, spent: {}, gained: {}, stock: {}, stragglers: 0, scrap: 0, fuel: 0, parts: 0 };
       row.pts += plan.points / seeds; row.zombies += n / seeds; row.hp += hp / seeds; row.stragglers += strag / seeds;
       for (const [k, v] of Object.entries(spent)) row.spent[k as Res] = (row.spent[k as Res] ?? 0) + (v ?? 0) / seeds;
       for (const [k, v] of Object.entries(gained)) row.gained[k as Res] = (row.gained[k as Res] ?? 0) + (v ?? 0) / seeds;
       for (const k of ['light', 'shell', 'rifle', 'r556', 'r22'] as Res[]) row.stock[k] = (row.stock[k] ?? 0) + (stores[k] ?? 0) / seeds;
-      row.scrap += stores.scrap / seeds; row.fuel += stores.fuel / seeds; row.parts += stores.parts / seeds;
+      row.scrap += stores.salvage / seeds; row.fuel += stores.fuel / seeds;
       acc[day - 1] = row;
     }
     void crafted;

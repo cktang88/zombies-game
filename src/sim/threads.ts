@@ -138,18 +138,18 @@ const DEFS: ThreadDef[] = [
     canStart: () => G.day >= 5 && rep('union') > -40 && G.day <= 30,
     days: 6,
     startTitle: 'A runner from the mill',
-    startText: () => `A Local 41 runner, out of breath: "Boiler house generator threw a rod. We've got the steam but not the pumps, and if the pumps stop the pipes freeze and then we all freeze. Wick says: ten parts. Bearings, gaskets, anything off an engine. She says she'll remember who came through. She remembers everything."`,
+    startText: () => `A Local 41 runner, out of breath: "Boiler house generator threw a rod. We've got the steam but not the pumps, and if the pumps stop the pipes freeze and then we all freeze. Wick says: twenty-five salvage. Bearings, gaskets, sheet steel, anything off an engine. She says she'll remember who came through. She remembers everything."`,
     accept: '"Tell Wick we\'re on it."',
-    acceptHint: 'Gather 10 parts within 6 days.',
-    objective: () => `Send 10 parts to the mill (have ${Math.floor(G.stores.parts)}/10).`,
-    ready: () => G.stores.parts >= 10,
+    acceptHint: 'Gather 25 salvage within 6 days.',
+    objective: () => `Send 25 salvage to the mill (have ${Math.floor(G.stores.salvage)}/25).`,
+    ready: () => G.stores.salvage >= 25,
     deliverTitle: 'Parts for the mill',
-    deliverText: () => 'Ten parts in a feed sack, oily and heavy. The Union sled can take them up Mill Road.',
-    deliverLabel: 'Send 10 parts on the sled',
+    deliverText: () => 'Twenty-five salvage in feed sacks, oily and heavy. The Union sled can take them up Mill Road.',
+    deliverLabel: 'Send 25 salvage on the sled',
     deliver: () => {
-      pay({ parts: 10 });
+      pay({ salvage: 25 });
       G.fort.maxHp += 60; G.fort.hp += 60;
-      log('event', 'We sent ten engine parts to the Local 41 boiler house. The pumps run. Wick sent steel plate back on the same sled.');
+      log('event', 'We sent a sled of engine salvage to the Local 41 boiler house. The pumps run. Wick sent steel plate back on the same sled.');
       return 'The sled came back that afternoon loaded with steel plate. A note in grease pencil: "PUMPS RUNNING. WE OWE YOU. — D.W." (+60 wall)' + shiftRep('union', 25);
     },
     fail: () => {

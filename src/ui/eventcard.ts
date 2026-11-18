@@ -19,7 +19,7 @@ const CONSEQ: [RegExp, string, string][] = [
   [/food|eat|mouth|hungry/i, 'food', 'food'],
   [/medicine|meds/i, 'meds', 'medicine'],
   [/ammo|rounds|shot|gun\b/i, 'ammo', 'ammunition'],
-  [/timber|wood|steel|parts|scrap|supplies/i, 'parts', 'materials'],
+  [/salvage|timber|wood|steel|parts|scrap|supplies/i, 'scrap', 'salvage'],
   [/wall/i, 'st_wall', 'the wall'],
   [/hurt|burn|bite|bitten|danger|risk|could get|mad\b|deadly/i, 'st_danger', 'risk'],
   [/mood|spirits|goodbye|forgive|remember|hard to watch|likes/i, 'st_mood_down', 'mood'],

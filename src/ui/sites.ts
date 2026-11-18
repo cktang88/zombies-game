@@ -1,17 +1,17 @@
 // What each scavenging site is good for, from its loot table (src/data/world.ts SITES), so the player
-// picks a place by what it gives, not by luck: "Ferry Diner: food" / "Aubin mill yard: scrap, parts".
+// picks a place by what it gives, not by luck: "Ferry Diner: food" / "Aubin mill yard: salvage".
 import type { Site } from '../data/world';
 import type { Res } from '../types';
 
-export type Find = 'food' | 'wood' | 'scrap' | 'parts' | 'meds' | 'fuel' | 'cloth' | 'ammo' | 'guns';
+export type Find = 'food' | 'salvage' | 'meds' | 'fuel' | 'ammo' | 'guns';
 export const FIND_LABEL: Record<Find, string> = {
-  food: 'food', wood: 'timber', scrap: 'scrap', parts: 'parts', meds: 'medicine', fuel: 'fuel', cloth: 'cloth', ammo: 'ammo', guns: 'guns',
+  food: 'food', salvage: 'salvage', meds: 'medicine', fuel: 'fuel', ammo: 'ammo', guns: 'guns',
 };
 export const FIND_ICON: Record<Find, string> = {
-  food: 'food', wood: 'wood', scrap: 'scrap', parts: 'parts', meds: 'meds', fuel: 'fuel', cloth: 'cloth', ammo: 'ammo', guns: 'rifle',
+  food: 'food', salvage: 'scrap', meds: 'meds', fuel: 'fuel', ammo: 'ammo', guns: 'rifle',
 };
 // a "normal" haul of each per trip: a site's amount against this says whether it is a good place for it
-const TYPICAL: Record<Exclude<Find, 'guns'>, number> = { food: 5, wood: 5, scrap: 7, parts: 3, meds: 3, fuel: 3, cloth: 3, ammo: 20 };
+const TYPICAL: Record<Exclude<Find, 'guns'>, number> = { food: 5, salvage: 10, meds: 3, fuel: 3, ammo: 20 };
 const AMMO: Res[] = ['light', 'shell', 'rifle', 'r22', 'light_hp', 'shell_slug', 'shell_flech', 'shell_fire', 'rifle_sp', 'rifle_ap', 'r556', 'ball', 'bolt', 'bolt_fire', 'flare'];
 // heavy rounds count for more than .22s
 const AMMO_W: Partial<Record<Res, number>> = { r22: 0.4, shell: 1.5, shell_slug: 1.8, shell_flech: 1.8, flare: 2, bolt: 1.5, ball: 1.2 };
@@ -22,7 +22,7 @@ export interface SiteFind { k: Find; score: number; level: 'lots' | 'some' | 'a 
 export function siteFinds(site: Site): SiteFind[] {
   const l = site.loot;
   const amt: Partial<Record<Find, number>> = {};
-  for (const k of ['food', 'wood', 'scrap', 'parts', 'meds', 'fuel', 'cloth'] as const) if (l[k]) amt[k] = l[k]!;
+  for (const k of ['food', 'salvage', 'meds', 'fuel'] as const) if (l[k]) amt[k] = l[k]!;
   let ammo = 0;
   for (const r of AMMO) ammo += (l[r] ?? 0) * (AMMO_W[r] ?? 1);
   ammo += ((l.rocket ?? 0) + (l.g40 ?? 0) + (l.g40_buck ?? 0)) * 15;
@@ -36,7 +36,7 @@ export function siteFinds(site: Site): SiteFind[] {
   return out.sort((a, b) => b.score - a.score);
 }
 
-/** "food, timber, scrap": the top finds in words, for a <select> option. */
+/** "food, salvage, ammo": the top finds in words, for a <select> option. */
 export function siteFindsText(site: Site, n = 3): string {
   return siteFinds(site).filter((f) => f.level !== 'a little').slice(0, n).map((f) => FIND_LABEL[f.k]).join(', ') || 'odds and ends';
 }

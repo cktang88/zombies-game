@@ -49,7 +49,7 @@ export function drillPlan(s: Survivor) {
   const it = G.weapons.find((w) => w.uid === s.weapon);
   const ammo = it ? selectedAmmo(it) : null;
   const rounds = Math.ceil(DRILL_ROUNDS * jobHours(s) / DEFAULT_HOURS);
-  const live = !!ammo && ammo !== 'scrap' && (G.stores[ammo] ?? 0) >= rounds && rounds > 0;
+  const live = !!ammo && ammo !== 'salvage' && (G.stores[ammo] ?? 0) >= rounds && rounds > 0;
   return { ammo, rounds, live, heavy: emplacements().length > 0 };
 }
 const FREE_HOUR_REST = 0.04; // rest regained per unworked daylight hour
@@ -91,18 +91,18 @@ export function choreHand(h: number): Survivor | undefined {
 function spendChore(s: Survivor, h: number) {
   G.flags[`chore_${s.id}`] = G.day * 100 + choreHours(s) + h;
 }
-/** Oil the guns: one hour, a rag (cloth) or a splash of fuel. The cold won't seize them tonight. */
+/** Oil the guns: one hour, a rag (salvage) or a splash of fuel. The cold won't seize them tonight. */
 export function oilGuns(): string | null {
   if (G.flags.oiledDay === G.day) return null;
   const s = choreHand(1);
   if (!s) return 'Nobody has an hour free to oil the guns.';
-  const res = (G.stores.cloth ?? 0) >= 1 ? 'cloth' : (G.stores.fuel ?? 0) >= 1 ? 'fuel' : null;
+  const res = (G.stores.salvage ?? 0) >= 1 ? 'salvage' : (G.stores.fuel ?? 0) >= 1 ? 'fuel' : null;
   if (!res) return 'No rag and no fuel to oil them with.';
   add(res, -1);
   spendChore(s, 1);
   G.flags.oiledDay = G.day;
   for (const w of G.weapons) w.cond = Math.min(1, w.cond + 0.01);
-  return `${first(s)} stripped and oiled the guns at the kitchen table (${res === 'cloth' ? 'a rag' : 'a splash of fuel'}, an hour).`;
+  return `${first(s)} stripped and oiled the guns at the kitchen table (${res === 'salvage' ? 'a rag' : 'a splash of fuel'}, an hour).`;
 }
 /** The bodies against the wall (G.flags.pileCarry): haul them off (3 h, a grim job) or burn them (2 fuel, 1 h). */
 export function clearPile(how: 'haul' | 'burn'): string | null {
@@ -225,9 +225,9 @@ export function resolveDayWork(): string[] {
       case 'repair': {
         const p = repairPlan(s, m * f);
         G.fort.hp = Math.min(G.fort.maxHp, G.fort.hp + p.gain);
-        add('wood', -p.wood);
+        add('salvage', -p.wood);
         out.push(p.gain > 0
-          ? `${first(s)} patched the wall for ${hours}h (+${p.gain}${p.short ? ', out of timber: pulled boards off the shed' : ''}).`
+          ? `${first(s)} patched the wall for ${hours}h (+${p.gain}${p.short ? ', out of salvage: pulled boards off the shed' : ''}).`
           : `${first(s)} walked the wall for ${hours}h and found nothing to patch.`);
         break;
       }
@@ -361,14 +361,14 @@ export function radioWorkOf(s: Survivor, m: number) {
   return (1 + skillOf(s, 'social') * 0.2) * m * perkMul(s, 'radio');
 }
 
-/** Wall per timber: 1 timber patches this much (a Thrifty builder uses less). */
+/** Wall per salvage: 1 salvage patches this much (a Thrifty builder uses less). */
 export const REPAIR_WOOD_PER = 25;
-/** Without timber a repairer only manages this fraction: boards pulled off the shed, the car door re-hung. */
+/** Without salvage a repairer only manages this fraction: boards pulled off the shed, the car door re-hung. */
 export const REPAIR_NO_WOOD = 0.25;
-/** What a repairer will do today: wall gained and timber used, from the timber in the stores. */
-export function repairPlan(s: Survivor, m: number, wood = G.stores.wood ?? 0, room = G.fort.maxHp - G.fort.hp) {
+/** What a repairer will do today: wall gained and salvage used (`wood`), from the salvage in the stores. */
+export function repairPlan(s: Survivor, m: number, wood = G.stores.salvage ?? 0, room = G.fort.maxHp - G.fort.hp) {
   const full = Math.max(0, Math.min(room, repairAmount(s, m)));
-  const per = REPAIR_WOOD_PER / perkMul(s, 'repairWood'); // wall per timber for this builder
+  const per = REPAIR_WOOD_PER / perkMul(s, 'repairWood'); // wall per salvage for this builder
   const need = Math.ceil(full / per);
   if (wood >= need) return { gain: full, wood: need, short: false };
   const timbered = Math.floor(wood) * per;
@@ -502,6 +502,17 @@ export function finishRecipe(id: string, by?: Survivor): string {
     case 'trap': G.fort.traps++; break;
     case 'duffel': G.flags.duffel = true; break;
     case 'roofnest': G.flags.roofNest = 1; break;
+    case 'drink': {
+      // food into courage: everyone takes the edge off; the breaking are steadied; drinkers settle for two dawns
+      G.flags.pouredDay = G.day;
+      let steadied = 0;
+      for (const s of living()) {
+        if (s.child) continue;
+        addThought(s, { id: 'still_round', label: 'A round from the still', mood: 8, days: 2 }, 1);
+        if (s.breakState?.kind === 'sulk') { s.breakState = null; steadied++; }
+      }
+      return `${who} poured a round from the still.${steadied ? ` ${steadied === 1 ? 'One who was coming apart' : `${steadied} who were coming apart`} came back to the table.` : ''}`;
+    }
     case 'repairMelee': {
       const k = [...(G.melee ?? [])].sort((a, b) => a.cond - b.cond)[0];
       if (k) k.cond = Math.min(1, k.cond + 0.5);
@@ -572,11 +583,9 @@ export function dawnTick(): string[] {
     if (halfRations()) addThought(s, { id: 'rations', label: 'Half rations', mood: -5, days: 1 }, 1);
     // drink
     if (hasTrait(s, 'drinker')) {
+      // a drinker is settled for two dawns after a round from the still (recipe 'drink')
       delete G.flags[`drank_${s.id}`];
-      if (G.stores.liquor > 0) {
-        add('liquor', -1);
-        G.flags[`drank_${s.id}`] = true;
-      }
+      if (G.day - ((G.flags.pouredDay as number | undefined) ?? -99) <= 2) G.flags[`drank_${s.id}`] = true;
     }
     s.daysSurvived++;
     delete G.flags[`inspired_${s.id}`];
@@ -776,7 +785,7 @@ function breaksTick(): string[] {
       continue;
     }
     const options: { k: string; w: number }[] = tier === 1
-      ? [{ k: 'sulk', w: 3 }, { k: 'binge', w: 2 }, { k: 'lash', w: hasTrait(s, 'abrasive') ? 4 : 1.5 }, { k: 'drink', w: hasTrait(s, 'drinker') ? 5 : G.stores.liquor > 0 ? 1 : 0 }]
+      ? [{ k: 'sulk', w: 3 }, { k: 'binge', w: 2 }, { k: 'lash', w: hasTrait(s, 'abrasive') ? 4 : 1.5 }, { k: 'drink', w: hasTrait(s, 'drinker') ? 5 : buildingLevel('still') ? 1 : 0 }]
       : tier === 2
         ? [{ k: 'catatonic', w: 2 }, { k: 'wander', w: 2 }, { k: 'smash', w: 1.2 }, { k: 'hidebite', w: isBitten(s) ? 5 : 0 }]
         : [{ k: 'wander', w: 2 }, { k: 'desert', w: living().length >= 3 ? 2 : 0 }, { k: 'catatonic', w: 1.5 }, { k: 'endit', w: hasTrait(s, 'fragile') || hasTrait(s, 'grim') ? 1 : 0.3 }];
@@ -786,7 +795,7 @@ function breaksTick(): string[] {
     switch (k) {
       case 'sulk': s.breakState = { kind: 'sulk', days: 1 }; out.push(`${name} refused to work. Sat on the porch all day staring at the river.`); break;
       case 'binge': add('food', -3); out.push(`${name} ate three days of food in one sitting and then cried.`); addThought(s, { id: 'binged', label: 'Binged', mood: 10, days: 1 }, 1); break;
-      case 'drink': add('liquor', -Math.min(2, G.stores.liquor)); s.breakState = { kind: 'sulk', days: 1 }; out.push(`${name} drank until ${they(s)} could not stand.`); log('break', `${displayName(s)} went on a bender.`); break;
+      case 'drink': add('food', -Math.min(3, G.stores.food)); s.breakState = { kind: 'sulk', days: 1 }; out.push(`${name} drank until ${they(s)} could not stand.`); log('break', `${displayName(s)} went on a bender.`); break;
       case 'lash': {
         const t = R.pick(living().filter((x) => x !== s));
         if (t) {

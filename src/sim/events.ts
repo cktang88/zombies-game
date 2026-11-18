@@ -115,7 +115,7 @@ export const INCIDENTS: Incident[] = [
     weight: () => (G.day > 2 ? 1.2 : 0),
     make: () => {
       const wants: Res = R.pick(['fuel', 'food', 'meds', 'light'] as Res[]);
-      const offers = R.pick([{ r: 'rifle', n: 18 }, { r: 'shell', n: 20 }, { r: 'parts', n: 6 }, { r: 'meds', n: 3 }, { r: 'food', n: 12 }, { r: 'scrap', n: 20 }].filter((o) => o.r !== wants)) as { r: Res; n: number };
+      const offers = R.pick([{ r: 'rifle', n: 18 }, { r: 'shell', n: 20 }, { r: 'salvage', n: 16 }, { r: 'meds', n: 3 }, { r: 'food', n: 12 }].filter((o) => o.r !== wants)) as { r: Res; n: number };
       // friends of the Ferry families get the family price
       const friend = rep('ferry') >= 40 ? 0.6 : rep('ferry') >= 10 ? 0.8 : rep('ferry') <= -40 ? 1.5 : 1;
       const price = Math.max(1, Math.round({ fuel: 6, food: 10, meds: 3, light: 40 }[wants as 'fuel'] * friend));
@@ -306,7 +306,7 @@ export const INCIDENTS: Incident[] = [
     make: () => ({
       id: 'union', title: 'Local 41',
       text: `A Union runner in a hard hat with LOCAL 41 stenciled on it comes under a white flag. "Steward Wick says: we've got steam, we've got steel. We need hands that can shoot. Send us one of yours for the week and we'll send back plate for your wall."`,
-      choices: [{ label: 'Send our best shot', hint: 'They stand the mill wall for a week. Steel plate comes back for ours.', fx: { who: [...living()].sort((a, b) => b.skills.shooting - a.skills.shooting)[0]?.id, away: 5, gain: { scrap: 40 }, wall: 80, rep: { union: 25 } }, effect: 'send' }, { label: 'Send 15 rifle rounds instead', fx: { cost: { rifle: 15 }, gain: { scrap: 25 }, rep: { union: 10 } }, effect: 'ammo' }, { label: '"Everybody works their own shift."', fx: { rep: { union: -5 } }, effect: 'no' }],
+      choices: [{ label: 'Send our best shot', hint: 'They stand the mill wall for a week. Steel plate comes back for ours.', fx: { who: [...living()].sort((a, b) => b.skills.shooting - a.skills.shooting)[0]?.id, away: 5, gain: { salvage: 40 }, wall: 80, rep: { union: 25 } }, effect: 'send' }, { label: 'Send 15 rifle rounds instead', fx: { cost: { rifle: 15 }, gain: { salvage: 25 }, rep: { union: 10 } }, effect: 'ammo' }, { label: '"Everybody works their own shift."', fx: { rep: { union: -5 } }, effect: 'no' }],
     }),
     resolve: (c) => {
       G.flags.unionDone = true;
@@ -316,15 +316,15 @@ export const INCIDENTS: Incident[] = [
         s.breakState = { kind: 'away', days: 5 };
         G.flags.unionReturn = G.day + 5;
         G.flags.unionGuy = s.id;
-        add('scrap', 40);
+        add('salvage', 40);
         G.fort.maxHp += 80; G.fort.hp += 80;
         log('event', `${displayName(s)} went to stand the Union's wall at the mill for a week. They sent steel plate in trade.`);
         return `${first(s)} went with the runner. The steel arrived by sled that afternoon.` + shiftRep('union', 25);
       }
       if (c === 1) {
         if (G.stores.rifle < 15) return 'We do not have it. The runner looks at our wall and does not say anything.';
-        add('rifle', -15); add('scrap', 25);
-        return 'They sent back scrap. Fair trade.' + shiftRep('union', 10);
+        add('rifle', -15); add('salvage', 25);
+        return 'They sent back steel offcuts. Fair trade.' + shiftRep('union', 10);
       }
       return 'The runner walks back to the mill.' + shiftRep('union', -5);
     },
@@ -516,19 +516,19 @@ export const INCIDENTS: Incident[] = [
       const s = lowestSpotlight();
       return {
         id: 'fire', title: 'Fire in the woodshed',
-        text: `A stovepipe cracked in the night and the woodshed went up. ${first(s)} is already running at it with a wet blanket. Half the timber is in there.`,
+        text: `A stovepipe cracked in the night and the woodshed went up. ${first(s)} is already running at it with a wet blanket. Half the salvage pile is in there: timber, rope, the good tarps.`,
         data: { s: s.id },
-        choices: [{ label: 'Everyone fights it', hint: 'Save most of the wood. Someone may get burned.', fx: { cost: { wood: Math.round(G.stores.wood * 0.2) }, odds: 0.55, risk: `${first(s)} gets burned`, who: s.id }, effect: 'fight' }, { label: 'Let it burn', hint: 'Nobody gets hurt.', fx: { cost: { wood: Math.round(G.stores.wood * 0.6) } }, effect: 'let' }],
+        choices: [{ label: 'Everyone fights it', hint: 'Save most of it. Someone may get burned.', fx: { cost: { salvage: Math.round(G.stores.salvage * 0.15) }, odds: 0.55, risk: `${first(s)} gets burned`, who: s.id }, effect: 'fight' }, { label: 'Let it burn', hint: 'Nobody gets hurt.', fx: { cost: { salvage: Math.round(G.stores.salvage * 0.4) } }, effect: 'let' }],
       };
     },
     resolve: (c, d) => {
       const s = byId(d.s as string)!;
-      if (c === 1) { add('wood', -Math.round(G.stores.wood * 0.6)); log('event', 'The woodshed burned. We watched it go.'); return 'It burned down to the stone footing.'; }
-      add('wood', -Math.round(G.stores.wood * 0.2));
+      if (c === 1) { add('salvage', -Math.round(G.stores.salvage * 0.4)); log('event', 'The woodshed burned. We watched it go.'); return 'It burned down to the stone footing.'; }
+      add('salvage', -Math.round(G.stores.salvage * 0.15));
       if (R.chance(0.45)) {
         wound(s, 'burn', R.range(0.2, 0.45), R.pick(['larm', 'rarm', 'torso']));
         tale(s, 'Went into the burning woodshed with a wet blanket.');
-        log('tale', `${displayName(s)} went into the burning woodshed and came out with the timber, and burns.`);
+        log('tale', `${displayName(s)} went into the burning woodshed and came out with the salvage, and burns.`);
         return `${first(s)} got burned dragging planks out. We saved most of it.`;
       }
       return 'Bucket line from the rain barrel. We saved most of it.';
@@ -593,13 +593,13 @@ export const INCIDENTS: Incident[] = [
         id: 'wedding', title: 'A wedding, of sorts',
         text: `${first(a)} and ${first(b)} want to make it official. No license, no church that's still standing. ${R.pick(['A ring made from a ferry cable shackle.', 'Rings cut from a brass shell casing.', 'A ring of copper wire, twisted three times.'])}\n\nSomeone would need to say the words.`,
         data: { a: a.id, b: b.id },
-        choices: [{ label: 'Hold the wedding tonight before dusk', hint: 'Uses 4 food and the liquor. Everyone\'s spirits rise.', effect: 'yes' }, { label: 'Not now. Not like this.', effect: 'no' }],
+        choices: [{ label: 'Hold the wedding tonight before dusk', hint: 'Uses 6 food (a round from the still, if we have one). Everyone\'s spirits rise.', effect: 'yes' }, { label: 'Not now. Not like this.', effect: 'no' }],
       };
     },
     resolve: (c, d) => {
       const a = byId(d.a as string)!, b = byId(d.b as string)!;
       if (c === 1) { addThought(a, { id: 'nowedding', label: 'They said not now', mood: -6, days: 4 }, 1); addThought(b, { id: 'nowedding', label: 'They said not now', mood: -6, days: 4 }, 1); return 'Maybe after the ice.'; }
-      add('food', -Math.min(4, G.stores.food)); add('liquor', -Math.min(2, G.stores.liquor));
+      add('food', -Math.min(6, G.stores.food));
       setBond(a, b, 'spouse');
       for (const s of living()) addThought(s, { id: 'wedding', label: `${first(a)} and ${first(b)} got married`, mood: s === a || s === b ? 20 : 8, days: 6 }, 1);
       tale(a, `Married ${first(b)} in the front room on ${G.day < 23 ? 'a November afternoon' : 'a December afternoon'}, in the middle of the end of the world.`);

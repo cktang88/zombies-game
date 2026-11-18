@@ -509,7 +509,7 @@ export class Battle {
     this.duration = (plan.spawns[plan.spawns.length - 1]?.t ?? 30) + 5;
     this.wallStart = G.fort.hp;
     this.ammoStart = {};
-    for (const k of [...AMMO_RES, 'scrap', 'molotov'] as Res[]) this.ammoStart[k] = G.stores[k] ?? 0;
+    for (const k of [...AMMO_RES, 'salvage', 'molotov'] as Res[]) this.ammoStart[k] = G.stores[k] ?? 0;
     this.res = { kills: 0, deaths: [], wallHeld: true, wallLost: 0, ammoUsed: {}, killsBy: {}, headshots: 0, lines: [], fell: false };
     this.setupGuards();
     // last night's bodies, if nobody cleared them (G.flags.pileCarry: JSON number[4])
@@ -2203,13 +2203,13 @@ export class Battle {
     tu.flash = Math.max(0, tu.flash - dt);
     tu.cd -= dt;
     if (tu.cd > 0) return;
-    if (G.stores.scrap < 0.05 || !G.buildings.some((b) => b.id === 'generator')) { tu.cd = 1; return; }
+    if (G.stores.salvage < 0.05 || !G.buildings.some((b) => b.id === 'generator')) { tu.cd = 1; return; }
     const tgt = this.zombies.filter((z) => z.state !== 'dying' && z.x < 900).sort((a, b) => a.x - b.x)[0];
     if (!tgt) { tu.cd = 0.3; return; }
     const hb = this.hitbox(tgt);
     const ty = (hb.y1 + hb.y2) / 2 - 10;
     tu.ang = Math.atan2(ty - tu.y, tgt.x - tu.x);
-    add('scrap', -0.05);
+    add('salvage', -0.05);
     this.castShot(null as unknown as Guard, tu.x + 20, tu.y, tu.ang + R.gauss(0, 0.04), 18, 1, 2, false, false, undefined, tgt.y);
     tu.cd = 0.3;
     tu.flash = 0.05;
@@ -4769,7 +4769,7 @@ export class Battle {
     // dawn salvage: brass, nails and buckles picked off the road (balance.md §8.10)
     if (r.wallHeld && r.kills > 0) {
       const sc = Math.round(r.kills * 0.12);
-      if (sc > 0) { add('scrap', sc); r.lines.push(`${sc} scrap in brass, nails and buckles picked off the road.`); }
+      if (sc > 0) { add('salvage', sc); r.lines.push(`${sc} salvage in brass, nails and buckles picked off the road.`); }
     }
     // the pile: half of it is still against the wall tomorrow night unless somebody clears it
     const carry = this.piles.map((m) => Math.round(m * 0.5 * 10) / 10);

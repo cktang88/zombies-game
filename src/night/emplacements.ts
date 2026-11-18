@@ -390,18 +390,18 @@ export class Emplacements implements BattleHook {
     this.traps?.igniteNear(tipX - 30, tipX);
   }
 
-  // the nail turret (moved here from battle.ts): automatic, eats scrap, needs the generator
+  // the nail turret (moved here from battle.ts): automatic, eats salvage, needs the generator
   updateTurret(m: Mount, dt: number) {
     const b = this.b;
     m.cd -= dt;
     if (m.cd > 0) return;
-    if ((G.stores.scrap ?? 0) < m.def.perShot || !G.buildings.some((x) => x.id === 'generator')) { m.cd = 1; return; }
+    if ((G.stores.salvage ?? 0) < m.def.perShot || !G.buildings.some((x) => x.id === 'generator')) { m.cd = 1; return; }
     let tgt: Zed | undefined;
     for (const z of b.zombies) if (z.state !== 'dying' && z.x < 900 && !z.flip && (z.state as string) !== 'over' && (z.state as string) !== 'maul' && (!tgt || z.x < tgt.x)) tgt = z;
     if (!tgt) { m.cd = 0.3; return; }
     const hb = b.hitbox(tgt);
     m.ang = Math.atan2((hb.y1 + hb.y2) / 2 - 10 - m.py, tgt.x - m.px);
-    add('scrap', -m.def.perShot);
+    add('salvage', -m.def.perShot);
     const mz = this.muzzle(m);
     b.castShot(null as unknown as Guardian, mz.x, mz.y, m.ang + R.gauss(0, m.def.spread), m.def.dmg, m.def.pierce, m.def.knock, false, false, m.fx, tgt.y);
     m.cd = 1 / m.def.rof;

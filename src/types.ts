@@ -1,6 +1,7 @@
 // Core data model. Everything in GameState is plain JSON so it can be saved.
 
-export type Res = 'food' | 'scrap' | 'wood' | 'parts' | 'meds' | 'fuel' | 'cloth' | 'light' | 'shell' | 'rifle' | 'liquor' | 'molotov'
+// Four materials: food, salvage (timber, scrap, parts and cloth in one pile), fuel, medicine. Then ammunition.
+export type Res = 'food' | 'salvage' | 'meds' | 'fuel' | 'light' | 'shell' | 'rifle' | 'molotov'
   // ammunition by caliber & bullet type (see src/data/weapons.ts CALIBERS / AMMO_TYPES)
   | 'r22' | 'light_hp' | 'shell_slug' | 'shell_flech' | 'shell_fire' | 'rifle_sp' | 'rifle_ap' | 'r556' | 'ball' | 'bolt' | 'bolt_fire' | 'flare'
   | 'rocket' | 'g40' | 'g40_buck' | 'pipebomb';

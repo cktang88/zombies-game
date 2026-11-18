@@ -184,8 +184,8 @@ export const FACTION_INCIDENTS: Incident[] = [
         text: `The Union sled comes up Mill Road dragging sheet steel and railroad spikes. The runner has a note from Steward Wick in grease pencil:\n\n"SAME DEAL AS ALWAYS. Lend us a shooter two nights, take the steel. Or rifle rounds. We're short on both. — D.W."`,
         data: { s: s?.id },
         choices: [
-          ...(s && living().length > 2 ? [{ label: `Lend ${first(s)} for two nights`, hint: '+50 wall, 15 scrap. One fewer gun on our wall.', effect: 'lend' }] : []),
-          { label: 'Trade 12 rifle rounds', hint: '20 scrap, 3 parts.', effect: 'ammo' },
+          ...(s && living().length > 2 ? [{ label: `Lend ${first(s)} for two nights`, hint: '+50 wall, 15 salvage. One fewer gun on our wall.', effect: 'lend' }] : []),
+          { label: 'Trade 12 rifle rounds', hint: '26 salvage.', effect: 'ammo' },
           { label: 'Not this time', effect: 'no' },
         ],
       };
@@ -196,14 +196,14 @@ export const FACTION_INCIDENTS: Incident[] = [
       const pick = opts[c];
       if (pick === 'lend' && s && !s.dead) {
         sendAway(s, 2, 'union');
-        G.fort.maxHp += 50; G.fort.hp += 50; add('scrap', 15);
+        G.fort.maxHp += 50; G.fort.hp += 50; add('salvage', 15);
         tale(s, 'Stood the Union\'s wall at the mill for two nights.');
         log('event', `${displayName(s)} went to stand the Local 41 wall for two nights. The sled left steel.`);
         return `${first(s)} rode back on the empty sled. The steel went up on our wall by noon.` + shiftRep('union', 6);
       }
       if (pick === 'ammo') {
         if (G.stores.rifle < 12) return 'We did not have twelve rounds to spare. The runner shrugged and took the steel home.';
-        add('rifle', -12); add('scrap', 20); add('parts', 3);
+        add('rifle', -12); add('salvage', 26);
         return 'The runner counted the rounds twice. "Wick says thanks. She doesn\'t say that."' + shiftRep('union', 4);
       }
       return 'The sled went back down Mill Road, still loaded.' + shiftRep('union', -3);
