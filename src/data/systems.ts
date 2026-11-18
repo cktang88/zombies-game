@@ -122,7 +122,7 @@ function itemCards(): SystemDef[] {
         { i: 'st_dead', n: m.dmg, t: `damage a hit${m.arc > 1 ? `, up to ${m.arc} at once` : ''}` },
         { i: 'st_time', n: `${speed}/s`, t: 'swings a second' },
         { i: 'st_wall', n: m.knock, t: 'shove' },
-        { i: 'st_noise', n: m.noise === 0 ? 'silent' : m.noise, t: 'noise a swing' },
+        { i: 'st_noise', n: m.noise === 0 ? 'silent' : m.noise <= 0.15 ? 'quiet' : m.noise <= 0.25 ? 'some' : 'loud', t: 'noise a swing' },
         ...(m.pry ? [{ i: 'job_scavenge', n: `×${m.pry}`, t: 'opens doors, cars and caches faster' }] : []),
         ...(m.finisher ? [{ i: 'st_bite', t: 'kills sleeping and crawling ones outright' }] : []),
       ],
