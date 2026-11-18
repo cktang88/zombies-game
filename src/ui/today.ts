@@ -16,7 +16,7 @@ import { canFight } from '../sim/survivors';
 import { tip, ico } from './kit';
 import './today.css';
 
-export type RevealId = 'workshop' | 'chronicle' | 'calendar' | 'chores' | 'armory' | 'jobs' | 'run' | 'town' | 'graves';
+export type RevealId = 'workshop' | 'chronicle' | 'calendar' | 'chores' | 'armory' | 'stores' | 'jobs' | 'run' | 'town' | 'graves';
 
 /** The unlock schedule. day: the first day it shows. what: the one line shown when it appears. */
 export const REVEAL: { id: RevealId; day: number; label: string; icon: string; what: string; tab?: string; sel?: string }[] = [
@@ -25,6 +25,7 @@ export const REVEAL: { id: RevealId; day: number; label: string; icon: string; w
   { id: 'chores', day: 2, label: 'Chores', icon: 'st_time', tab: 'wall', sel: '.chores', what: 'Oil the guns, clear the bodies: an hour of someone\'s day.' },
   { id: 'chronicle', day: 2, label: 'Chronicle', icon: 'st_xp', tab: 'chronicle', what: 'What happened, day by day.' },
   { id: 'armory', day: 3, label: 'Armory', icon: 'pistol', tab: 'armory', what: 'Every gun, its rounds and attachments. Hover a gun for its numbers.' },
+  { id: 'stores', day: 3, label: 'All the stores', icon: 'parts', what: 'Parts, cloth, meds and liquor join the stores along the top.' },
   { id: 'jobs', day: 3, label: 'More jobs', icon: 'job_drill', what: 'Drill, Counsel and the Radio join the job list.' },
   { id: 'run', day: 4, label: 'Lead a run', icon: 'job_scavenge', sel: '.run', what: 'Your leader walks one street in daylight for loot. Back before dark.' },
   { id: 'town', day: 4, label: 'Town', icon: 'st_faction', tab: 'town', what: 'Vessey: the factions, and the papers you find on runs.' },
@@ -57,7 +58,8 @@ export function isNew(id: RevealId): boolean {
   return G.day - rev(id).day <= 1;
 }
 export function markSeen(id: string) {
-  if (REVEAL.some((r) => r.id === id)) G.flags[`seen_${id}`] = true;
+  // the day it was first looked at: its one-line note stays up for the rest of that day
+  if (REVEAL.some((r) => r.id === id) && !G.flags[`seen_${id}`]) G.flags[`seen_${id}`] = G.day;
 }
 
 // ---------------------------------------------------------------- the list
@@ -243,6 +245,14 @@ export function applyFlash(root: HTMLElement) {
   all.forEach((x) => { x.classList.remove('td-flash'); void (x as HTMLElement).offsetWidth; x.classList.add('td-flash'); });
   window.setTimeout(() => all.forEach((x) => x.classList.remove('td-flash')), 2600);
   if (el.tagName === 'SELECT' || el.tagName === 'BUTTON') el.focus({ preventScroll: true });
+}
+
+/** The one-line "what this is for" while a system is new (or was first opened today). */
+export function revealNote(id: RevealId): string {
+  const r = REVEAL.find((x) => x.id === id);
+  if (!r || revealAll() || !isOpen(id)) return '';
+  if (!isNew(id) && G.flags[`seen_${id}`] !== G.day) return '';
+  return `<div class="reveal-note">${ico(r.icon, '', 'sm')}<span><b>New.</b> ${esc(r.what)}</span></div>`;
 }
 
 /** Whether the leader's run panel shows (it unlocks on its day, or once a run happened). */

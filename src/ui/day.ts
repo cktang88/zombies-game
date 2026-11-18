@@ -30,7 +30,7 @@ import { hintHtml, markHintTarget, nextHint, skipHints } from './onboarding';
 import { threadsHtml } from '../sim/threads';
 import { calendarHtml } from '../sim/calendar';
 import { juiceAfterRender } from './juice';
-import { todayHtml, dotKeys, pickTodo, applyFlash, markSeen, setRevealAll } from './today';
+import { todayHtml, dotKeys, pickTodo, applyFlash, markSeen, setRevealAll, isOpen, revealNote, runOpen, JOB_REVEAL, type RevealId } from './today';
 
 const JOBS: { id: JobId; label: string; hint: string }[] = [
   { id: 'repair', label: 'Repair the wall', hint: 'Building. Uses timber. Hard on the back.' },
@@ -241,7 +241,7 @@ function survivorCard(s: Survivor, dots: Set<string> = new Set()) {
       <div class="row sv-jobrow">
         <span class="sv-job"${tip(jobTip)}>${ico('job_' + s.job, '', '')}</span>
         <select data-act="job" data-id="${s.id}" ${disabled ? 'disabled' : ''} aria-label="Job for ${esc(first(s))}">
-          ${JOBS.map((j) => `<option value="${j.id}" ${s.job === j.id ? 'selected' : ''}>${j.label} — ${jobOutlook(s, j.id)}</option>`).join('')}
+          ${JOBS.filter((j) => j.id === s.job || !JOB_REVEAL[j.id] || isOpen(JOB_REVEAL[j.id]!)).map((j) => `<option value="${j.id}" ${s.job === j.id ? 'selected' : ''}>${j.label} — ${jobOutlook(s, j.id)}</option>`).join('')}
         </select>
         ${s.job === 'scavenge' ? `<select data-act="site" data-id="${s.id}" aria-label="Where ${esc(first(s))} scavenges">${sites.map((x) => {
           const xs = siteStock(x.id);
@@ -494,8 +494,8 @@ function wallHtml() {
   return `<div class="wall">
     <div class="wallbar"${tip(frac > 0.8 ? 'The wall is sound.' : frac > 0.4 ? 'The wall is chewed. Planks split, the car door hangs.' : 'The wall is barely a wall.')}><div data-tw="wall" style="width:${frac * 100}%"></div><span>${Math.ceil(f.hp)} / ${f.maxHp}</span></div>
     <div class="chips">${repairers.length ? chip('job_repair', repairers.map(first).join(', '), 'Repairing today') : chip('st_danger', 'no repairs', 'Nobody is assigned to repair it.', 'warn')}${chip('wood', G.stores.wood, 'Timber for repairs')}</div>
-    <div class="fortgrid">${fortRow.map(([icon, n, t]) => `<span class="ftile ${n ? '' : 'none'}"${tip(t)}>${pic(icon)}<b>${n}</b></span>`).join('')}</div>
-    ${choresHtml()}
+    <div class="fortgrid">${fortRow.filter(([, n]) => n > 0 || isOpen('workshop')).map(([icon, n, t]) => `<span class="ftile ${n ? '' : 'none'}"${tip(t)}>${pic(icon)}<b>${n}</b></span>`).join('')}</div>
+    ${isOpen('chores') ? revealNote('chores') + choresHtml() : ''}
   </div>`;
 }
 
@@ -731,6 +731,9 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
     G.flags.dreadCue = G.day;
     window.setTimeout(() => { stinger('dread'); distant('dog', { delay: 1.2 }); distant('dog', { delay: 3.4, gain: 0.3 }); distant('dog', { delay: 7, gain: 0.35 }); }, 400);
   }
+  // the tabs open over the first days (src/ui/today.ts REVEAL); the Wall is there from the start
+  const tabs = ['workshop', 'wall', 'armory', 'town', 'chronicle', 'graves'].filter((t) => t === 'wall' || isOpen(t as RevealId));
+  if (!tabs.includes(tab)) tab = tabs.includes('workshop') ? 'workshop' : 'wall';
   const strip = todayHtml(keyLabel(keyOf('day.dusk')));
   const dots = dotKeys();
   const sky = dread ? 'linear-gradient(rgba(70,14,10,.62),rgba(24,8,8,.78) 45%,rgba(10,10,12,.92))' : 'linear-gradient(rgba(10,10,12,.72),rgba(10,10,12,.9))';
@@ -739,7 +742,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
       <div class="date"${tip(`${WEATHER_LABEL[G.weather] ?? G.weather}<br>This town's seed: ${G.seed}${G.flags.daily ? ` · daily ${esc(String(G.flags.daily))}` : ''}. Start a new game from it on the title screen to replay the same Vessey.`)}><b class="t-xl">${dateLabel()}</b> <span class="t-xs">day ${G.day}</span> <span class="t-s wx">${WEATHER_LABEL[G.weather] ?? G.weather}</span></div>
       <div class="ice"${tip(ice > 0 ? `The river freezes in ${ice} day${ice === 1 ? '' : 's'}. Then the dead can cross.` : ice === 0 ? 'The river is freezing tonight.' : 'The river is ice.')}>${ico('st_cold')}<b>${ice > 0 ? `${ice}d` : ice === 0 ? 'tonight' : 'ice'}</b></div>
       <div class="hbtns"><button class="icon" data-act="help" aria-label="Help and controls" title="Help and controls">?</button><button class="icon" data-act="settings" aria-label="Settings" title="Settings">⚙</button></div>
-      <div class="stores">${STORE_RES.map((r) => {
+      <div class="stores">${STORE_RES.filter((r) => isOpen('stores') || ['food', 'wood', 'scrap', 'fuel'].includes(r) || (r === 'molotov' && G.stores.molotov > 0)).map((r) => {
         const low = (r === 'food' && G.stores.food < eat * 2) || (r === 'fuel' && G.stores.fuel < heat);
         const use = r === 'food' ? `Eat ${eat}/day.` : r === 'fuel' && heat ? `The stove burns ${heat} tonight.` : '';
         return `<span data-res="${r}" class="schip ${low ? 'low' : ''}"${tip(`<b>${RES_LABEL[r]}</b><br>${STORE_USE[r] ?? ''}${use ? `<br>${use}` : ''}`)}><img src="${spriteUrl(RES_ICON[r])}" alt="${RES_LABEL[r]}"><span class="n">${Math.floor(G.stores[r] ?? 0)}</span>${r === 'fuel' && heat ? `<em class="heat">−${heat}</em>` : r === 'food' && eat ? `<em>−${eat}</em>` : ''}</span>`;
@@ -753,17 +756,18 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
         ${living().map((s) => survivorCard(s, dots)).join('')}
       </section>
       <section class="center">
-        <nav>${['workshop', 'wall', 'armory', 'town', 'chronicle', 'graves'].map((t) => `<button class="${tab === t ? 'on' : ''}" data-act="tab" data-id="${t}"${dots.has(`tab:${t}`) ? ' data-dot' : ''}>${t}</button>`).join('')}</nav>
+        <nav>${tabs.map((t) => `<button class="${tab === t ? 'on' : ''}" data-act="tab" data-id="${t}"${dots.has(`tab:${t}`) ? ' data-dot' : ''}>${t}</button>`).join('')}</nav>
+        ${revealNote(tab as RevealId)}
         <div class="tabbody">${tab === 'workshop' ? workshopHtml() : tab === 'wall' ? wallHtml() : tab === 'armory' ? armoryHtml() : tab === 'town' ? townHtml() : tab === 'chronicle' ? chronicleHtml() : gravesHtml()}</div>
       </section>
       <section class="report">
         <h2 class="t-l">This morning</h2>
         <div class="lines">${report.length ? report.slice(0, 2).map((l) => `<p>${esc(l)}</p>`).join('') + (report.length > 2 ? fold(`<span class="t-xs">+${report.length - 2} more</span>`, report.slice(2).map((l) => `<p>${esc(l)}</p>`).join('')) : '') : '<p class="t-s">A quiet morning.</p>'}</div>
         ${fc ? `<p class="forecast">${esc(fc)}</p>` : ''}
-        <div class="calwrap"${dots.has('calendar') ? ' data-dot' : ''}>${calendarHtml()}</div>
+        ${isOpen('calendar') ? `<div class="calwrap"${dots.has('calendar') ? ' data-dot' : ''}>${revealNote('calendar')}${calendarHtml()}</div>` : ''}
         ${threadsHtml()}
-        <div class="weather"${tip(`Tonight feels like ${tp > 60 ? 'a long one' : tp > 30 ? 'a bad one' : 'any other night'}.${heat ? ` The stove will want ${heat} fuel.` : ''}`)}><span class="t-xs">The Weather</span> <b>${persona().name}</b> ${pips(Math.min(5, Math.ceil(tp / 20)), 5, tp > 60 ? 'red' : '')}</div>
-        <div class="runwrap"${dots.has('run') ? ' data-dot' : ''}>${runHtml()}</div>
+        ${isOpen('calendar') ? `<div class="weather"${tip(`Tonight feels like ${tp > 60 ? 'a long one' : tp > 30 ? 'a bad one' : 'any other night'}.${heat ? ` The stove will want ${heat} fuel.` : ''}`)}><span class="t-xs">The Weather</span> <b>${persona().name}</b> ${pips(Math.min(5, Math.ceil(tp / 20)), 5, tp > 60 ? 'red' : '')}</div>` : ''}
+        ${runOpen() ? `<div class="runwrap"${dots.has('run') ? ' data-dot' : ''}>${revealNote('run')}${runHtml()}</div>` : ''}
         <button class="dusk" data-act="dusk">${duskArmed && stale.length ? 'Yesterday\'s jobs are marked. Go anyway ›' : 'Go to the wall at dusk ›'}<small>${esc(keyLabel(keyOf('day.dusk')))}</small></button>
       </section>
     </main>

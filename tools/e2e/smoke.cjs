@@ -22,6 +22,8 @@ const URL = process.argv[2] ?? 'http://localhost:4192/';
   await page.click('[data-act=new][data-id=siege]');
   await page.waitForSelector('.day');
   step('day 1');
+  // the run panel opens on day 4; show everything now (the Today strip's link)
+  await page.click('[data-act=revealall]');
   // a run: walk out a little, then home off the left edge
   await page.click('[data-act=run]');
   await page.waitForSelector('.stage canvas');
