@@ -2,10 +2,10 @@
 // moment the player hands out guns (docs/research/18-decision-info-audit.md #1). Mirrors
 // night/battle.ts setupGuards: the leader first, then the others who can fight, six at most; a guard
 // without a gun (or with a dry one) never shoots and does not swing a hand weapon either.
-import type { Survivor, WeaponItem } from '../types';
+import type { Survivor, WeaponItem, Res } from '../types';
 import { G } from '../state';
 import { living, canFight, prof } from './survivors';
-import { fireProfile, roundsInStores, weaponClass } from '../data/weapons';
+import { fireProfile, roundsInStores, weaponClass, ammoTypesFor } from '../data/weapons';
 
 /** About this many shots per gun is one ordinary night on the wall (a tide is 2–3×). */
 export const SHOTS_PER_GUN_NIGHT = 25;
@@ -99,4 +99,22 @@ export function armPreview(): { s: Survivor; w: WeaponItem }[] {
 export function canArmAnyone(): boolean {
   const rack = rackGuns();
   return wallLine().idle.some((s) => rack.some((w) => gunRounds(w) >= 1 || !gunOf(s)));
+}
+
+/**
+ * One ammo type against the guns people carry: rounds on hand, who has it loaded, who could load it,
+ * and about how many ordinary nights it lasts at SHOTS_PER_GUN_NIGHT a gun (loaded guns, else the ones
+ * that fit). nights is null when no carried gun takes it.
+ */
+export function ammoUse(res: Res) {
+  const have = Math.floor(G.stores[res] ?? 0);
+  const loaded: Survivor[] = [], fits: Survivor[] = [];
+  for (const s of living()) {
+    const w = gunOf(s);
+    if (!w) continue;
+    if (fireProfile(w).ammoRes === res) loaded.push(s);
+    else if (ammoTypesFor(w.def).includes(res)) fits.push(s);
+  }
+  const guns = loaded.length || fits.length;
+  return { have, loaded, fits, nights: guns ? have / (SHOTS_PER_GUN_NIGHT * guns) : null };
 }

@@ -18,10 +18,10 @@ import { TRAPS } from '../data/traps';
 import {
   buildingLevel, queueRecipe, WEATHER_LABEL, DAY_HOURS, DEFAULT_HOURS, jobHours, setJobHours, hoursAvailable, travelHours, survivorSite,
   searchHours, searchFactor, planConfirmed, confirmPlan, ranToday, onRunToday, runDaylightFor, prepareRun, clockLabel, heatNeed,
-  drillPlan, emplacements, tomorrowTeaser, oilGuns, clearPile, choreHand, breakChance, counselPlan, COUNSEL_BREAK,
+  drillPlan, emplacements, tomorrowTeaser, oilGuns, clearPile, choreHand, craftPoints, breakChance, counselPlan, COUNSEL_BREAK,
 } from '../sim/day';
 import { calendar } from '../sim/calendar';
-import { armEveryone, wallLine, gunRounds } from '../sim/readiness';
+import { armEveryone, wallLine, gunRounds, ammoUse, SHOTS_PER_GUN_NIGHT } from '../sim/readiness';
 import { persona, forecast, threatPoints } from '../sim/director';
 import { sfx, music, stinger, distant } from '../audio';
 import { openSettings } from './settings';
@@ -495,6 +495,9 @@ function makeGroup(r: (typeof RECIPES)[number]): MakeGroup {
 const BUILD_ICON: Record<string, string> = { workbench: 'icon_job_craft', forge: 'icon_scrap', garden: 'icon_job_farm', infirmary: 'icon_job_doctor', still: 'icon_molotov', generator: 'icon_fuel', radio: 'icon_job_radio' };
 const pic = (sprite: string, cls = '') => `<img class="pic ${cls}" src="${spriteUrl(sprite)}" alt="" onerror="this.style.visibility='hidden'">`;
 
+/** The ammo type an ammunition recipe makes (none for firebombs and the rest). */
+const ammoOf = (r: (typeof RECIPES)[number]) => (makeGroup(r) === 'ammo' ? (Object.keys(r.gives ?? {}) as Res[]).find((k) => AMMO_TYPES[k]) : undefined);
+
 function workshopHtml() {
   const builds = Object.values(BUILDINGS).map((b) => {
     const lvl = buildingLevel(b.id);
@@ -506,17 +509,46 @@ function workshopHtml() {
       ${lvl < b.maxLevel ? `<button class="mini" data-act="build" data-id="${b.id}" ${has(next) ? '' : 'disabled'}>${lvl ? '▲' : 'Build'}</button>` : ''}
     </div>`;
   }).join('');
-  const recipes = RECIPES.filter((r) => !r.hidden && !(r.special === 'roofnest' && G.flags.roofNest) && buildingLevel(r.needs) >= (r.level ?? 1)).sort((a, b) => +has(b.cost) - +has(a.cost));
+  // ammo for guns people carry first (shortest-lasting first), then what you can afford
+  const rank = (r: (typeof RECIPES)[number]) => { const k = ammoOf(r); if (!k) return 2; const u = ammoUse(k); return u.loaded.length ? 0 : u.fits.length ? 1 : 2; };
+  const recipes = RECIPES.filter((r) => !r.hidden && !(r.special === 'roofnest' && G.flags.roofNest) && buildingLevel(r.needs) >= (r.level ?? 1))
+    .sort((a, b) => rank(a) - rank(b) || +has(b.cost) - +has(a.cost));
   const locked = RECIPES.filter((r) => !r.hidden && buildingLevel(r.needs) < (r.level ?? 1));
   const crafters = living().filter((s) => s.job === 'craft' && canWork(s));
+  // the bench's work today (sim/day.ts resolveDayWork: craftPoints per crafter, the queue in order)
+  const perDay = crafters.reduce((a, s) => a + (onRunToday(s) ? 0 : craftPoints(s, workMult(s) * (jobHours(s) / DEFAULT_HOURS))), 0);
+  let left = 0;
   const queue = G.craftQueue.length ? G.craftQueue.map((q, i) => {
     const r = RECIPES.find((x) => x.id === q.recipe)!;
-    return `<div class="q">${pic(recipeIcon(r), 'sm')}<span class="t-s">${r.name}</span><div class="qbar"><div style="width:${(q.progress / r.work) * 100}%"></div></div><button data-act="unqueue" data-i="${i}" title="Cancel (refund)">×</button></div>`;
+    left += r.work - q.progress;
+    const days = perDay > 0 ? Math.ceil(left / perDay - 1e-6) : 0;
+    const eta = !perDay ? '' : days <= 1 ? 'by dusk' : days === 2 ? 'tomorrow' : `in ${days} days`;
+    return `<div class="q">${pic(recipeIcon(r), 'sm')}<span class="t-s">${r.name}</span><div class="qbar"><div style="width:${(q.progress / r.work) * 100}%"></div></div>${eta ? `<span class="t-xs qeta ${days <= 1 ? 'pos' : ''}"${tip(`${Math.round(r.work - q.progress)} work left; the bench does ${+perDay.toFixed(1)} a day with today's crafters.`)}>${eta}</span>` : ''}<button data-act="unqueue" data-i="${i}" title="Cancel (refund)">×</button></div>`;
   }).join('') : '<div class="t-s">Bench idle.</div>';
-  const card = (r: (typeof RECIPES)[number]) => `<div class="wcard recipe ${has(r.cost) ? '' : 'cant'}"${tip(`<b>${esc(r.name)}</b> · ${r.work} work<br>${esc(r.desc)}`)}>
-      ${pic(recipeIcon(r))}
-      <div class="cbody"><div class="cname">${r.name}</div><div class="ccost">${costHtml(r.cost)}</div></div>
+  const nightsWord = (n: number) => (n < 0.75 ? '<1 night' : `≈${Math.round(n)} night${Math.round(n) === 1 ? '' : 's'}`);
+  // an ammo card's need line: rounds on hand · who carries a gun for it · how many nights it lasts
+  const useLine = (res: Res) => {
+    const u = ammoUse(res);
+    if (u.nights === null) return { badge: '', html: `<div class="cuse t-s dim">${u.have} · no gun</div>`, t: 'No carried gun takes these.', unused: true };
+    const who = u.loaded.length ? u.loaded : u.fits;
+    const w0 = G.weapons.find((x) => x.uid === who[0].weapon);
+    const badge = w0 ? `<img class="gunbadge" src="${spriteUrl(WEAPONS[w0.def].icon)}" alt="">` : '';
+    const end = u.loaded.length ? `<span class="${u.nights < 1 ? 'neg' : ''}">${nightsWord(u.nights)}</span>` : 'fits';
+    return {
+      badge,
+      html: `<div class="cuse t-s">${u.have} · ${end}</div>`,
+      t: `${u.have} on hand.${u.loaded.length ? ` Loaded: ${esc(u.loaded.map((s) => `${first(s)}'s ${WEAPONS[G.weapons.find((x) => x.uid === s.weapon)!.def].name.toLowerCase()}`).join(', '))}: ${nightsWord(u.nights)}.` : ''}${u.fits.length ? ` Also fits: ${esc(u.fits.map(first).join(', '))}.` : ''} About ${SHOTS_PER_GUN_NIGHT} shots a gun is an ordinary night; a tide is 2–3×.`,
+      unused: false,
+    };
+  };
+  const card = (r: (typeof RECIPES)[number]) => {
+    const res = ammoOf(r);
+    const use = res ? useLine(res) : null;
+    return `<div class="wcard recipe ${has(r.cost) ? '' : 'cant'} ${use?.unused ? 'unused' : ''}"${tip(`<b>${esc(r.name)}</b> · ${r.work} work<br>${esc(r.desc)}${use ? `<br>${use.t}` : ''}`)}>
+      ${use?.badge ? `<span class="picw">${pic(recipeIcon(r))}${use.badge}</span>` : pic(recipeIcon(r))}
+      <div class="cbody"><div class="cname">${r.name}</div><div class="ccost">${costHtml(r.cost)}</div>${use ? use.html : ''}</div>
       <button class="mini" data-act="queue" data-id="${r.id}" ${has(r.cost) ? '' : 'disabled'} aria-label="Queue ${esc(r.name)}">+</button></div>`;
+  };
   // the make list in collapsible groups, each headed by a picture and "ready / total"; affordable first
   const groups = MAKE_GROUPS.map((g) => ({ ...g, rs: recipes.filter((r) => makeGroup(r) === g.id) })).filter((g) => g.rs.length);
   const groupHtml = groups.map((g) => {

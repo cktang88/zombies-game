@@ -336,6 +336,13 @@ h3 .dim { font-size: 13px; letter-spacing: .02em; }
 .wcard .cost { font-size: 13px; margin-right: 4px; font-family: var(--type); }
 .wcard .cost img { width: 16px; height: 16px; }
 .wcard button { flex: none; min-width: 30px; }
+.wcard.recipe .cbody > .cuse { display: block; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wcard .cuse .neg { color: #d07a5a; }
+.wcard .picw { position: relative; flex: none; display: block; }
+.wcard .picw .gunbadge { position: absolute; left: -4px; bottom: -6px; width: 30px; height: 14px; object-fit: contain; filter: drop-shadow(0 0 1px rgba(232, 220, 196, .6)) drop-shadow(0 1px 1px #000); }
+.wcard.recipe.unused { opacity: .6; }
+.q .qeta { flex: none; white-space: nowrap; }
+.q .qeta.pos { color: #9db070; }
 .pic { width: 34px; height: 34px; object-fit: contain; flex: none; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .8)); }
 .pic.sm { width: 20px; height: 20px; }
 .q .pic.sm { margin-right: 2px; }
