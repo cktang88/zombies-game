@@ -150,7 +150,7 @@ export interface WeaponItem {
   mods?: Partial<Record<ModSlot, ModItem>>; // attachments (see MODS in data/weapons.ts)
 }
 
-export type ModSlot = 'optic' | 'muzzle' | 'barrel' | 'under' | 'mag' | 'stock';
+export type ModSlot = 'optic' | 'muzzle' | 'under' | 'mag' | 'stock';
 export interface ModItem {
   uid: string;
   def: string; // MODS key

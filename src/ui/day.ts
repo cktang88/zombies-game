@@ -652,7 +652,7 @@ function modDeltaHtml(w: WeaponItem) {
   const rows: [keyof FireProfile, string, boolean][] = [
     ['dmg', 'dmg', true], ['spread', 'spread', false], ['rof', 'rate', true], ['mag', 'mag', true], ['reload', 'reload', false],
     ['noise', 'noise', false], ['knock', 'shove', true], ['bloomMul', 'bloom', false], ['recoilMul', 'kick', false],
-    ['braceBloomMul', 'bloom on the wall', false], ['switchTime', 'target switch', false], ['light', 'light', true], ['melee', 'melee', true], ['range', 'range', true],
+    ['switchTime', 'target switch', false], ['light', 'light', true],
   ];
   const out: string[] = [];
   for (const [k, label, up] of rows) {
@@ -661,8 +661,7 @@ function modDeltaHtml(w: WeaponItem) {
     const better = up ? y > x : y < x;
     let txt: string;
     if (k === 'switchTime') txt = `${y > x ? '+' : '−'}${Math.abs(y - x).toFixed(2)}s`;
-    else if (k === 'light' || k === 'melee') txt = `${Math.round(y)}`;
-    else if (k === 'range') txt = Number.isFinite(y) ? `${Math.round(y)}px` : '∞';
+    else if (k === 'light') txt = `${Math.round(y)}`;
     else if (k === 'mag') txt = `${x}→${y}`;
     else txt = `${y > x ? '+' : '−'}${Math.round(Math.abs(y / x - 1) * 100)}%`;
     out.push(`<span style="color:${better ? '#9db070' : '#c0604a'}">${label} ${txt}</span>`);

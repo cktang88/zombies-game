@@ -1,7 +1,7 @@
 import type { GameState, ChronicleEntry, Res, WeaponItem } from './types';
 import { Rng } from './rng';
 import { RECIPES } from './data/world';
-import { MELEE, MELEE_FOLD } from './data/weapons';
+import { MELEE, MELEE_FOLD, MODS, MOD_FOLD } from './data/weapons';
 
 const KEY = 'vessey-save-v1';
 
@@ -65,6 +65,8 @@ const RECIPE_FOLD: Record<string, string> = {
   ammo_pipebomb: 'molotov',
   // hand weapons folded by role (docs/research/19c-simplify-items.md)
   m_nailbat: 'm_bat', m_spear: 'm_hatchet', m_sawblade: 'm_hatchet',
+  mod_taped: 'mod_extmag', mod_speedloader: 'mod_extmag', mod_brake: 'mod_sling', mod_bipod: 'mod_sling',
+  mod_choke: 'mod_flashlight', mod_sawedoff: 'mod_flashlight', mod_hatchet: 'mod_flashlight',
 };
 
 /** Bring an older save up to SAVE_VERSION in place, or null when it cannot be read. */
@@ -97,6 +99,7 @@ export function migrateSave(s: GameState | null): GameState | null {
     const o = d.offers as { r?: string } | undefined, sp = d.special as { kind?: string; id?: string } | undefined;
     if (o?.r) o.r = fold(o.r) as string;
     if (sp?.kind === 'ammo' && sp.id) sp.id = fold(sp.id) as string;
+    if (sp?.kind === 'mod' && sp.id) sp.id = MOD_FOLD[sp.id] ?? sp.id;
     for (const c of ev.choices ?? []) if (c.fx) { c.fx.cost = foldRec(c.fx.cost); c.fx.gain = foldRec(c.fx.gain); }
   }
   // thirteen hand weapons became five: each keeps its condition and kills under the role it was folded into
@@ -105,6 +108,25 @@ export function migrateSave(s: GameState | null): GameState | null {
     s.melee = s.melee.filter((k) => MELEE[k.def]);
     const kept = new Set(s.melee.map((k) => k.uid));
     for (const p of s.survivors ?? []) if (p.melee && !kept.has(p.melee)) p.melee = null;
+  }
+  // fourteen attachments became six: spares change name; a fitted one that no longer fits (or whose slot
+  // is gone, or taken by another folded into the same slot) goes back on the bench
+  if (s.modStock) {
+    for (const m of s.modStock) m.def = MOD_FOLD[m.def] ?? m.def;
+    s.modStock = s.modStock.filter((m) => MODS[m.def]);
+  }
+  for (const w of s.weapons ?? []) {
+    if (!w.mods) continue;
+    const old = Object.values(w.mods);
+    w.mods = {};
+    for (const m of old) {
+      if (!m) continue;
+      m.def = MOD_FOLD[m.def] ?? m.def;
+      const md = MODS[m.def];
+      if (!md) continue;
+      if (md.fits(w.def) && !w.mods[md.slot]) w.mods[md.slot] = m;
+      else (s.modStock ??= []).push(m);
+    }
   }
   s.craftQueue = (s.craftQueue ?? []).map((q) => ({ ...q, recipe: RECIPE_FOLD[q.recipe] ?? q.recipe })).filter((q) => RECIPES.some((r) => r.id === q.recipe));
   s.version = SAVE_VERSION;

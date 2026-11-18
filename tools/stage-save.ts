@@ -56,10 +56,10 @@ G.flags.emplacements = JSON.stringify([{ id: 'mgnest', post: 'roof', cond: 0.9 }
 const mod = (def: string) => { G.uid++; return { uid: `m${G.uid}`, def, cond: 1 }; };
 const add = (def: string, extra: Partial<WeaponItem> = {}) => { if (!WEAPONS[def]) return; G.uid++; G.weapons.push({ uid: `w${G.uid}`, def, cond: 0.6 + rnd.next() * 0.35, kills: Math.floor(rnd.next() * 40), ...extra }); };
 add('ar15', { name: 'Haugen\'s Carbine', mods: { optic: mod('reddot'), under: mod('flashlight'), mag: mod('extmag'), stock: mod('sling') } });
-add('scoped', { mods: { optic: mod('scope'), under: mod('bipod') } });
-add('pump', { mods: { muzzle: mod('choke'), under: mod('flashlight') } });
+add('scoped', { mods: { optic: mod('scope'), stock: mod('sling') } });
+add('pump', { mods: { optic: mod('reddot'), under: mod('flashlight') } });
 add('lever');
-G.modStock = [...(G.modStock ?? []), mod('suppressor'), mod('drum'), mod('brake')];
+G.modStock = [...(G.modStock ?? []), mod('suppressor'), mod('extmag'), mod('scope')];
 // some skill and history on the leader and the others
 for (const s of living()) {
   gainXp(s, 'shooting', 300 + rnd.next() * 600);
