@@ -31,6 +31,7 @@ import { threadsHtml } from '../sim/threads';
 import { calendarHtml } from '../sim/calendar';
 import { juiceAfterRender } from './juice';
 import { sysTip, sysLine } from './guide';
+import { todayHtml, dotKeys, pickTodo, applyFlash, markSeen, setRevealAll, isOpen, revealNote, runOpen, JOB_REVEAL, type RevealId } from './today';
 
 const JOBS: { id: JobId; label: string; hint: string }[] = [
   { id: 'repair', label: 'Repair the wall', hint: 'Building. Uses timber. Hard on the back.' },
@@ -99,46 +100,7 @@ function moodWhy(s: Survivor, n = 2) {
     .slice(0, n);
 }
 
-interface Warn { icon: string; short: string; text: string }
-function warnings(): Warn[] {
-  const w: Warn[] = [];
-  const eat = living().length;
-  if (eat) {
-    const days = Math.floor(G.stores.food / eat);
-    const farmers = living().filter((s) => s.job === 'farm' && canWork(s)).length;
-    if (days < 2) w.push({ icon: 'food', short: `${days}d`, text: `Food for ${days ? 'one more day' : 'less than a day'}.${farmers ? '' : ' Nobody is on the Food job.'}` });
-    else if (days < 4) w.push({ icon: 'food', short: `${days}d`, text: `Food for ${days} days.` });
-  }
-  // ammo: what each equipped gun actually loads (fireProfile.ammoRes), in rounds it can fire
-  const ammoNeed = new Map<Res, { guns: number; perShot: number }>();
-  for (const s of living().filter(canFight)) {
-    const it = G.weapons.find((x) => x.uid === s.weapon);
-    if (!it) continue;
-    const p = fireProfile(it);
-    if (!p.ammoRes) continue;
-    const e = ammoNeed.get(p.ammoRes) ?? { guns: 0, perShot: p.perShot };
-    e.guns++;
-    ammoNeed.set(p.ammoRes, e);
-  }
-  for (const [a, { guns, perShot }] of ammoNeed) {
-    const have = Math.floor((G.stores[a] ?? 0) / (perShot || 1));
-    if (have < 12 * guns) w.push({ icon: RES_ICON[a]?.replace(/^icon_/, '') ?? 'ammo', short: `${have}`, text: `${have ? `Only ${have}` : 'No'} ${ammoLabel(a).toLowerCase()} for ${guns === 1 ? 'one gun' : `${guns} guns`} on the wall.` });
-  }
-  if (G.fort.hp / G.fort.maxHp < 0.4 && !living().some((s) => s.job === 'repair' && canWork(s))) w.push({ icon: 'st_wall', short: `${Math.round((G.fort.hp / G.fort.maxHp) * 100)}%`, text: 'The wall is barely standing and nobody is repairing it.' });
-  if (G.craftQueue.length && !living().some((s) => s.job === 'craft' && canWork(s))) w.push({ icon: 'job_craft', short: 'idle', text: 'Work is queued but nobody is at the bench.' });
-  const ragged = living().filter((s) => s.rest < 0.25 && s.job !== 'rest' && canWork(s));
-  if (ragged.length) w.push({ icon: 'st_tired', short: `${ragged.length}`, text: `${ragged.map(first).join(', ')} ${ragged.length === 1 ? 'is' : 'are'} worn out. Give them short hours or a day of rest.` });
-  const heat = heatNeed();
-  if (heat > G.stores.fuel) w.push({ icon: 'fuel', short: `${Math.floor(G.stores.fuel)}/${heat}`, text: `The stove needs ${heat} fuel tonight and there is ${Math.floor(G.stores.fuel)}.` });
-  return w;
-}
-
-function warningsHtml() {
-  const w = warnings();
-  if (!w.length) return '';
-  const head = `<span class="wcount">⚠ ${w.length}</span>${w.map((x) => `<span class="wchip"${tip(esc(x.text))}>${ico(x.icon)}<b>${esc(x.short)}</b></span>`).join('')}`;
-  return fold(head, w.map((x) => `<p class="stamp" role="alert">${esc(x.text)}</p>`).join(''), { cls: 'warns', id: 'warns' });
-}
+// (the morning warnings now live in the Today list: src/ui/today.ts)
 
 let tab = 'workshop';
 let detail: string | null = null;
@@ -258,7 +220,16 @@ function skillsMini(s: Survivor) {
   return `<div class="skmini sv-skills">${top.join('')}<span class="sv-attrs">${attrs.join('')}</span></div>`;
 }
 
-function survivorCard(s: Survivor) {
+/** The closed line of a survivor's detail fold: their gun as a picture, its rounds, their aim. */
+function gearPeek(s: Survivor) {
+  const it = G.weapons.find((x) => x.uid === s.weapon);
+  const p = it ? fireProfile(it) : null;
+  const rounds = p?.ammoRes ? Math.floor((G.stores[p.ammoRes] ?? 0) / (p.perShot || 1)) : null;
+  const gun = it ? `<img class="sv-peekgun" src="${spriteUrl(WEAPONS[it.def].icon)}" alt="" onerror="this.style.display='none'"><span class="t-s">${esc(it.name ? `"${it.name}"` : WEAPONS[it.def].name)}</span>${rounds !== null ? `<b class="t-s ${rounds < 25 ? 'neg' : ''}">${rounds}</b>` : ''}` : '<span class="t-s dim">unarmed</span>';
+  return `<span class="sv-peek"${tip('Gun, rounds, skills, hours and mood: open for the details.')}>${gun}<span class="t-xs">aim ${Math.round(aimFactor(s) * 100)}</span></span>`;
+}
+
+function survivorCard(s: Survivor, dots: Set<string> = new Set()) {
   computeMood(s);
   const site = survivorSite(s);
   const sites = SITES.filter((x) => x.minDay <= G.day);
@@ -270,17 +241,15 @@ function survivorCard(s: Survivor) {
   const drill = s.job === 'drill' ? (() => { const d = drillPlan(s); return d.live ? `${d.rounds} ${esc(ammoLabel(d.ammo).toLowerCase())}` : 'No live rounds: dry-fire.'; })() : '';
   const jobTip = `<b>${esc(jobDef?.label ?? s.job)}</b> · ${esc(jobOutlook(s, s.job))}<br>${esc(jobDef?.hint ?? '')}${drill ? `<br>${drill}` : ''}`;
   const st = s.job === 'scavenge' ? siteStock(site) : null;
-  return `<div class="card surv sv-card ${stale ? 'stale' : ''}" data-id="${s.id}">
+  return `<div class="card surv sv-card ${stale ? 'stale' : ''}" data-id="${s.id}"${dots.has(`surv:${s.id}`) ? ' data-dot' : ''}>
     ${portraitImg(s.sprite, `portrait${s.isLeader ? ' lead' : ''}`)}
     <div class="body">
       <div class="name"><a data-act="detail" data-id="${s.id}">${esc(displayName(s))}</a> <span class="age t-xs">${s.age}</span>${s.perkOffers?.length ? `<a class="tag sv-perknew" data-act="detail" data-id="${s.id}"${tip(`<b>New perk</b><br>${esc(progressName(s.perkOffers[0].skill))} reached ${s.perkOffers[0].tier}: pick one on the sheet.`)}>${ico('st_perk', '', 'sm')}perk</a>` : ''}${stale ? `<span class="tag carried"${tip("Yesterday's job carried over. Change it, or press Keep to confirm.")}>same?</span>` : ''}</div>
       <div class="sv-state">${moodChip(s)}${statusTags(s)}</div>
-      ${moodBar(s)}
-      ${skillsMini(s)}
       <div class="row sv-jobrow">
         <span class="sv-job"${tip(jobTip)}>${ico('job_' + s.job, '', '')}</span>
         <select data-act="job" data-id="${s.id}" ${disabled ? 'disabled' : ''} aria-label="Job for ${esc(first(s))}"${sysTip('job_' + s.job)}>
-          ${JOBS.map((j) => `<option value="${j.id}" ${s.job === j.id ? 'selected' : ''} title="${esc(sysLine('job_' + j.id))}">${j.label} — ${jobOutlook(s, j.id)}</option>`).join('')}
+          ${JOBS.filter((j) => j.id === s.job || !JOB_REVEAL[j.id] || isOpen(JOB_REVEAL[j.id]!)).map((j) => `<option value="${j.id}" ${s.job === j.id ? 'selected' : ''} title="${esc(sysLine('job_' + j.id))}">${j.label} — ${jobOutlook(s, j.id)}</option>`).join('')}
         </select>
         ${s.job === 'scavenge' ? `<select data-act="site" data-id="${s.id}" aria-label="Where ${esc(first(s))} scavenges">${sites.map((x) => {
           const xs = siteStock(x.id);
@@ -290,7 +259,7 @@ function survivorCard(s: Survivor) {
         }).join('')}</select>` : ''}
       </div>
       ${st ? `<div class="stock"${tip(`<b>${esc(SITES.find((x) => x.id === site)?.name ?? '')}</b>: ${st.left <= 0 ? 'picked clean' : `${st.left} of ${st.max} left`}<br>Every trip strips it further. ${Math.round(searchFactor(searchHours(s)) * 100)}% of a full search today.`)}>${st.pips}</div>` : ''}
-      ${disabled ? '' : hoursBar(s)}
+      ${fold(gearPeek(s), `${moodBar(s)}${skillsMini(s)}${disabled ? '' : hoursBar(s)}
       <div class="row small sv-gear">
         <select data-act="weapon" data-id="${s.id}" aria-label="Gun for ${esc(first(s))}">
           <option value="">— unarmed —</option>
@@ -301,7 +270,7 @@ function survivorCard(s: Survivor) {
         ${hp ? `<span class="chip sv-chip"${tip(`<b>${esc(CLASS_NAMES[hp.cls])} ${hp.v}</b><br>${esc(first(s))}'s proficiency (0–10). Grows with drill and use.`)}><b>${esc(CLASS_SHORT[hp.cls])} ${hp.v}</b></span>` : ''}
         <span class="chip sv-chip"${tip('<b>Aim on the wall</b><br>Shooting, traits, arm wounds, mood and rest.')}><b>aim ${Math.round(aimFactor(s) * 100)}</b></span>
         ${s.armor ? `<button class="mini" data-act="unarmor" data-id="${s.id}"${tip('Mill-plate vest: wounds 30% lighter. Click to take it off.')}>vest ✓</button>` : (G.flags.armorStock as number) > 0 ? `<button class="mini" data-act="armor" data-id="${s.id}"${tip('Give a mill-plate vest: wounds 30% lighter.')}>+ vest</button>` : ''}
-      </div>
+      </div>`, { id: `sv-more-${s.id}`, cls: 'sv-more' })}
     </div>
   </div>`;
 }
@@ -533,8 +502,8 @@ function wallHtml() {
   return `<div class="wall">
     <div class="wallbar"${tip(frac > 0.8 ? 'The wall is sound.' : frac > 0.4 ? 'The wall is chewed. Planks split, the car door hangs.' : 'The wall is barely a wall.')}><div data-tw="wall" style="width:${frac * 100}%"></div><span>${Math.ceil(f.hp)} / ${f.maxHp}</span></div>
     <div class="chips">${repairers.length ? chip('job_repair', repairers.map(first).join(', '), 'Repairing today') : chip('st_danger', 'no repairs', 'Nobody is assigned to repair it.', 'warn')}${chip('wood', G.stores.wood, 'Timber for repairs')}</div>
-    <div class="fortgrid">${fortRow.map(([icon, n, t]) => `<span class="ftile ${n ? '' : 'none'}"${tip(t)}>${pic(icon)}<b>${n}</b></span>`).join('')}</div>
-    ${choresHtml()}
+    <div class="fortgrid">${fortRow.filter(([, n]) => n > 0 || isOpen('workshop')).map(([icon, n, t]) => `<span class="ftile ${n ? '' : 'none'}"${tip(t)}>${pic(icon)}<b>${n}</b></span>`).join('')}</div>
+    ${isOpen('chores') ? revealNote('chores') + choresHtml() : ''}
   </div>`;
 }
 
@@ -770,37 +739,43 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
     G.flags.dreadCue = G.day;
     window.setTimeout(() => { stinger('dread'); distant('dog', { delay: 1.2 }); distant('dog', { delay: 3.4, gain: 0.3 }); distant('dog', { delay: 7, gain: 0.35 }); }, 400);
   }
+  // the tabs open over the first days (src/ui/today.ts REVEAL); the Wall is there from the start
+  const tabs = ['workshop', 'wall', 'armory', 'town', 'chronicle', 'graves'].filter((t) => t === 'wall' || isOpen(t as RevealId));
+  if (!tabs.includes(tab)) tab = tabs.includes('workshop') ? 'workshop' : 'wall';
+  const strip = todayHtml(keyLabel(keyOf('day.dusk')));
+  const dots = dotKeys();
   const sky = dread ? 'linear-gradient(rgba(70,14,10,.62),rgba(24,8,8,.78) 45%,rgba(10,10,12,.92))' : 'linear-gradient(rgba(10,10,12,.72),rgba(10,10,12,.9))';
   root.innerHTML = `<div class="day ${duskArmed && stale.length ? 'armed' : ''} ${dread ? 'dread' : ''}" style="background-image:${sky},url(${spriteUrl('bg_far')})">
     <header>
       <div class="date"${tip(`${WEATHER_LABEL[G.weather] ?? G.weather}<br>This town's seed: ${G.seed}${G.flags.daily ? ` · daily ${esc(String(G.flags.daily))}` : ''}. Start a new game from it on the title screen to replay the same Vessey.`)}><b class="t-xl">${dateLabel()}</b> <span class="t-xs">day ${G.day}</span> <span class="t-s wx">${WEATHER_LABEL[G.weather] ?? G.weather}</span></div>
       <div class="ice"${tip(ice > 0 ? `The river freezes in ${ice} day${ice === 1 ? '' : 's'}. Then the dead can cross.` : ice === 0 ? 'The river is freezing tonight.' : 'The river is ice.')}>${ico('st_cold')}<b>${ice > 0 ? `${ice}d` : ice === 0 ? 'tonight' : 'ice'}</b></div>
       <div class="hbtns"><button class="icon" data-act="help" aria-label="Help and controls" title="Help and controls">?</button><button class="icon" data-act="settings" aria-label="Settings" title="Settings">⚙</button></div>
-      <div class="stores">${STORE_RES.map((r) => {
+      <div class="stores">${STORE_RES.filter((r) => isOpen('stores') || ['food', 'wood', 'scrap', 'fuel'].includes(r) || (r === 'molotov' && G.stores.molotov > 0)).map((r) => {
         const low = (r === 'food' && G.stores.food < eat * 2) || (r === 'fuel' && G.stores.fuel < heat);
         const use = r === 'food' ? `Eat ${eat}/day.` : r === 'fuel' && heat ? `The stove burns ${heat} tonight.` : '';
         return `<span data-res="${r}" class="schip ${low ? 'low' : ''}"${tip(`<b>${RES_LABEL[r]}</b><br>${STORE_USE[r] ?? ''}${use ? `<br>${use}` : ''}`)}><img src="${spriteUrl(RES_ICON[r])}" alt="${RES_LABEL[r]}"><span class="n">${Math.floor(G.stores[r] ?? 0)}</span>${r === 'fuel' && heat ? `<em class="heat">−${heat}</em>` : r === 'food' && eat ? `<em>−${eat}</em>` : ''}</span>`;
       }).join('')}${ammoChip()}</div>
     </header>
+    ${strip}
     <main>
       <section class="people">
         <h2 class="t-l">The house <span class="t-xs"${tip(`${living().length} living · eat ${eat}/day${G.flags.dog ? ` · and ${esc(String(G.flags.dog))}` : ''} · daylight ${clockLabel(0)}–${clockLabel(DAY_HOURS)}`)}>${living().length} living${G.flags.dog ? ' + dog' : ''}</span></h2>
         ${stale.length ? `<div class="carryover ${duskArmed ? 'flash' : ''}"><span>${stale.length === 1 ? `${esc(first(stale[0]))}'s job` : `${stale.length} jobs`} carried over from yesterday.</span><button class="mini" data-act="keepplans">Keep ${stale.length === 1 ? 'it' : 'them'}</button></div>` : ''}
-        ${living().map(survivorCard).join('')}
+        ${living().map((s) => survivorCard(s, dots)).join('')}
       </section>
       <section class="center">
-        <nav>${['workshop', 'wall', 'armory', 'town', 'chronicle', 'graves'].map((t) => `<button class="${tab === t ? 'on' : ''}" data-act="tab" data-id="${t}"${sysTip(t)}>${t}</button>`).join('')}</nav>
+        <nav>${tabs.map((t) => `<button class="${tab === t ? 'on' : ''}" data-act="tab" data-id="${t}"${sysTip(t)}${dots.has(`tab:${t}`) ? ' data-dot' : ''}>${t}</button>`).join('')}</nav>
+        ${revealNote(tab as RevealId)}
         <div class="tabbody">${tab === 'workshop' ? workshopHtml() : tab === 'wall' ? wallHtml() : tab === 'armory' ? armoryHtml() : tab === 'town' ? townHtml() : tab === 'chronicle' ? chronicleHtml() : gravesHtml()}</div>
       </section>
       <section class="report">
         <h2 class="t-l">This morning</h2>
-        ${warningsHtml()}
         <div class="lines">${report.length ? report.slice(0, 2).map((l) => `<p>${esc(l)}</p>`).join('') + (report.length > 2 ? fold(`<span class="t-xs">+${report.length - 2} more</span>`, report.slice(2).map((l) => `<p>${esc(l)}</p>`).join('')) : '') : '<p class="t-s">A quiet morning.</p>'}</div>
         ${fc ? `<p class="forecast">${esc(fc)}</p>` : ''}
-        ${calendarHtml()}
+        ${isOpen('calendar') ? `<div class="calwrap"${dots.has('calendar') ? ' data-dot' : ''}>${revealNote('calendar')}${calendarHtml()}</div>` : ''}
         ${threadsHtml()}
-        <div class="weather"${tip(`Tonight feels like ${tp > 60 ? 'a long one' : tp > 30 ? 'a bad one' : 'any other night'}.${heat ? ` The stove will want ${heat} fuel.` : ''}`)}><span class="t-xs">The Weather</span> <b>${persona().name}</b> ${pips(Math.min(5, Math.ceil(tp / 20)), 5, tp > 60 ? 'red' : '')}</div>
-        ${runHtml()}
+        ${isOpen('calendar') ? `<div class="weather"${tip(`Tonight feels like ${tp > 60 ? 'a long one' : tp > 30 ? 'a bad one' : 'any other night'}.${heat ? ` The stove will want ${heat} fuel.` : ''}`)}><span class="t-xs">The Weather</span> <b>${persona().name}</b> ${pips(Math.min(5, Math.ceil(tp / 20)), 5, tp > 60 ? 'red' : '')}</div>` : ''}
+        ${runOpen() ? `<div class="runwrap"${dots.has('run') ? ' data-dot' : ''}>${revealNote('run')}${runHtml()}</div>` : ''}
         <button class="dusk" data-act="dusk">${duskArmed && stale.length ? 'Yesterday\'s jobs are marked. Go anyway ›' : 'Go to the wall at dusk ›'}<small>${esc(keyLabel(keyOf('day.dusk')))}</small></button>
       </section>
     </main>
@@ -810,6 +785,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
   </div>`;
   if (!G.pendingEvent && !sel) markHintTarget(root);
   juiceAfterRender(root);
+  applyFlash(root);
   // Going to the wall with jobs nobody looked at today: the first press highlights them, the second goes.
   const goDusk = () => {
     const left = living().filter((s) => canWork(s) && G.day > 1 && !planConfirmed(s) && !(onRunToday(s)));
@@ -890,8 +866,20 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
       if (e.target !== el && el.classList.contains('overlay')) return;
       detail = null;
     } else if (act === 'detail') { detail = el.dataset.id!; sfx.ui('paper'); h.rerender(); return; }
-    else if (act === 'tab') {
+    else if (act === 'todo') {
+      const go = pickTodo(+el.dataset.i!);
+      if (go.tab) { tab = go.tab; markSeen(go.tab); }
+      sfx.ui('paper');
+      h.rerender();
+      return;
+    } else if (act === 'revealall') {
+      setRevealAll(true);
+      sfx.ui('paper');
+      h.rerender();
+      return;
+    } else if (act === 'tab') {
       tab = el.dataset.id!;
+      markSeen(tab);
       if (tab === 'chronicle') { sfx.ui('type'); window.setTimeout(() => sfx.ui('type'), 90); window.setTimeout(() => sfx.ui('type'), 210); } else sfx.ui('paper');
       h.rerender();
       return;

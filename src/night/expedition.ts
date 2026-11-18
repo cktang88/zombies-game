@@ -1661,9 +1661,9 @@ export class Expedition {
     c.textAlign = 'left';
     // top left: where and who (small caps), then the bars with their pictures, no words
     c.fillStyle = 'rgba(10,9,8,0.55)';
-    c.beginPath(); c.roundRect(14, 12, 236, this.mate ? 106 : 92, 4); c.fill();
-    caps(c, `${this.site.name}`, 22, 26, '#c9a95a');
-    caps(c, `${first(this.s)}  ·  ${ZONE_NAMES[this.zoneOf(this.px)]}`, 22, 38, '#a89c84');
+    c.beginPath(); c.roundRect(14, 12, 270, this.mate ? 118 : 104, 4); c.fill();
+    caps(c, `${this.site.name}`, 22, 29, '#c9a95a');
+    caps(c, `${first(this.s)}  ·  ${ZONE_NAMES[this.zoneOf(this.px)]}`, 22, 46, '#a89c84');
     const bar = (icon: string, y: number, f: number, col: string, word?: string, wordCol = '#c04030') => {
       const ic = img(icon);
       if (ic) c.drawImage(ic, 22, y - 7, 14, 14 * (ic.height / ic.width));
@@ -1672,16 +1672,16 @@ export class Expedition {
       if (word) caps(c, word, 198, y + 4, wordCol);
     };
     const dl = Math.max(0, this.daylight);
-    bar('icon_st_time', 52, dl / this.dayMax, dl > 40 ? '#c9b27a' : '#b0502c', this.daylight > 0 ? undefined : 'dusk');
+    bar('icon_st_time', 64, dl / this.dayMax, dl > 40 ? '#c9b27a' : '#b0502c', this.daylight > 0 ? undefined : 'dusk');
     const hp = Math.max(0, 1 - pain(this.s) / 1.45);
-    bar('icon_st_wound', 66, hp, hp > 0.5 ? '#9db070' : '#c04030');
-    bar('icon_st_tired', 80, this.stamina / 100, this.stamina < 25 ? '#b0502c' : '#8aa6c0');
-    bar('icon_st_noise', 94, this.heat / 6, this.heat >= 2 ? '#c04030' : '#8a7a5a', this.heat >= 2 ? 'followed' : undefined);
+    bar('icon_st_wound', 78, hp, hp > 0.5 ? '#9db070' : '#c04030');
+    bar('icon_st_tired', 92, this.stamina / 100, this.stamina < 25 ? '#b0502c' : '#8aa6c0');
+    bar('icon_st_noise', 106, this.heat / 6, this.heat >= 2 ? '#c04030' : '#8a7a5a', this.heat >= 2 ? 'followed' : undefined);
     if (this.mate) {
       const mh = Math.max(0, 1 - pain(this.mate) / 1.45);
-      dot(c, 26, 106, this.mateDown ? '#c04030' : mh > 0.5 ? '#9db070' : '#d0a040', 3);
-      c.font = `13px ${FONT}`; c.fillStyle = '#cfc3a6'; c.fillText(first(this.mate), 36, 110);
-      if (this.mateW) { c.textAlign = 'right'; c.fillText(`${this.mateMag}`, 192, 110); c.textAlign = 'left'; }
+      dot(c, 26, 118, this.mateDown ? '#c04030' : mh > 0.5 ? '#9db070' : '#d0a040', 3);
+      c.font = `13px ${FONT}`; c.fillStyle = '#cfc3a6'; c.fillText(first(this.mate), 36, 122);
+      if (this.mateW) { c.textAlign = 'right'; c.fillText(`${this.mateMag}`, 192, 122); c.textAlign = 'left'; }
     }
     // progress along the street
     c.fillStyle = 'rgba(0,0,0,0.5)';
@@ -1692,8 +1692,8 @@ export class Expedition {
     for (const bx of this.zoneB) { c.fillStyle = '#b0502c'; c.fillRect(W / 2 - 150 + 300 * (bx / this.len) - 1, 18, 2, 14); }
     // the pack: a row of pictures with counts; the selected one boxed; words on the selected only
     const used = this.slots(), cap = this.cap();
-    caps(c, `pack ${used}/${cap}`, 20, H - 52, used > cap ? '#e05040' : '#c9b27a');
-    if (used > cap) caps(c, 'overloaded', 100, H - 52, '#e05040');
+    const packW = caps(c, `pack ${used}/${cap}`, 20, H - 50, used > cap ? '#e05040' : '#c9b27a');
+    if (used > cap) caps(c, 'overloaded', 20 + packW + 10, H - 50, '#e05040');
     const iconOf = (it: PackItem) => (it.kind === 'res' ? RES_ICON[it.res] : it.kind === 'gun' ? WEAPONS[it.def].icon : it.kind === 'melee' ? MELEE[it.def].icon : MODS[it.def]?.icon) ?? '';
     let px = 20;
     const selI = this.sel % Math.max(1, this.pack.length);

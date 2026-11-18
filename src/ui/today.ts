@@ -1,0 +1,260 @@
+// What to do today, a few things at a time (the player: "too much on the screen, I don't know what
+// to do"). Three pieces, all computed from the game state on every render of the day screen:
+//   REVEAL     — the unlock schedule: which tabs and systems show on which day (one table, tune here)
+//   todos()    — the short "Today" checklist, most urgent first; each item jumps to where to act
+//   dots       — a yellow dot on the corner of a tab / card / panel with an open item or something new
+// Seen-state lives in G.flags (seen_<id>), so it travels with the save. A save already past a day
+// in the table shows that system without a "new" dot.
+import type { Survivor, Res, SkillId } from '../types';
+import { G } from '../state';
+import { living, first, canWork, isBitten } from '../sim/survivors';
+import { RECIPES, RES_LABEL } from '../data/world';
+import { buildingLevel, onRunToday, ranToday, heatNeed, planConfirmed } from '../sim/day';
+import { calendar } from '../sim/calendar';
+import { fireProfile, ammoLabel } from '../data/weapons';
+import { canFight } from '../sim/survivors';
+import { tip, ico } from './kit';
+import './today.css';
+
+export type RevealId = 'workshop' | 'chronicle' | 'calendar' | 'chores' | 'armory' | 'stores' | 'jobs' | 'run' | 'town' | 'graves';
+
+/** The unlock schedule. day: the first day it shows. what: the one line shown when it appears. */
+export const REVEAL: { id: RevealId; day: number; label: string; icon: string; what: string; tab?: string; sel?: string }[] = [
+  { id: 'workshop', day: 2, label: 'Workshop', icon: 'job_craft', tab: 'workshop', what: 'Queue ammo, traps and machinery. Someone must be on the Workshop job.' },
+  { id: 'calendar', day: 2, label: 'Calendar', icon: 'st_danger', sel: '.calendar', what: 'The week ahead. A red dot is a bad night: get ready for it.' },
+  { id: 'chores', day: 2, label: 'Chores', icon: 'st_time', tab: 'wall', sel: '.chores', what: 'Oil the guns, clear the bodies: an hour of someone\'s day.' },
+  { id: 'chronicle', day: 2, label: 'Chronicle', icon: 'st_xp', tab: 'chronicle', what: 'What happened, day by day.' },
+  { id: 'armory', day: 3, label: 'Armory', icon: 'pistol', tab: 'armory', what: 'Every gun, its rounds and attachments. Hover a gun for its numbers.' },
+  { id: 'stores', day: 3, label: 'All the stores', icon: 'parts', what: 'Parts, cloth, meds and liquor join the stores along the top.' },
+  { id: 'jobs', day: 3, label: 'More jobs', icon: 'job_drill', what: 'Drill, Counsel and the Radio join the job list.' },
+  { id: 'run', day: 4, label: 'Lead a run', icon: 'job_scavenge', sel: '.run', what: 'Your leader walks one street in daylight for loot. Back before dark.' },
+  { id: 'town', day: 4, label: 'Town', icon: 'st_faction', tab: 'town', what: 'Vessey: the factions, and the papers you find on runs.' },
+  { id: 'graves', day: 1, label: 'Graves', icon: 'st_dead', tab: 'graves', what: 'The ones behind the house.' },
+];
+/** Jobs that wait for a reveal (the rest are there from day 1). */
+export const JOB_REVEAL: Partial<Record<string, RevealId>> = { craft: 'workshop', drill: 'jobs', counsel: 'jobs', radio: 'jobs' };
+
+const RA_KEY = 'vessey-reveal-all';
+let revealAllMem: boolean | null = null;
+/** The player chose to see everything at once (or a test did). */
+export function revealAll(): boolean {
+  if (revealAllMem === null) { try { revealAllMem = localStorage.getItem(RA_KEY) === '1'; } catch { revealAllMem = false; } }
+  return revealAllMem;
+}
+export function setRevealAll(on: boolean) {
+  revealAllMem = on;
+  try { localStorage.setItem(RA_KEY, on ? '1' : '0'); } catch { /* private window */ }
+}
+
+const rev = (id: RevealId) => REVEAL.find((r) => r.id === id)!;
+export function isOpen(id: RevealId): boolean {
+  if (id === 'graves') return G.graves.length > 0;
+  return revealAll() || G.day >= rev(id).day;
+}
+/** Open, not yet looked at, and it opened today or yesterday (an old save does not light up). */
+export function isNew(id: RevealId): boolean {
+  if (!isOpen(id) || G.flags[`seen_${id}`] || revealAll()) return false;
+  if (id === 'graves') return G.graves.some((g) => (g.dead?.day ?? 0) >= G.day - 1);
+  return G.day - rev(id).day <= 1;
+}
+export function markSeen(id: string) {
+  // the day it was first looked at: its one-line note stays up for the rest of that day
+  if (REVEAL.some((r) => r.id === id) && !G.flags[`seen_${id}`]) G.flags[`seen_${id}`] = G.day;
+}
+
+// ---------------------------------------------------------------- the list
+export interface Todo {
+  id: string;
+  icon: string;
+  text: string;
+  tip?: string;
+  /** where to act: a tab to open, then an element to scroll to and flash */
+  tab?: string;
+  sel?: string;
+  /** what gets the yellow dot while this is open: 'tab:wall', 'surv:<id>', 'run', 'calendar' */
+  dot?: string;
+  prio: number;
+  isNew?: boolean;
+  done?: boolean;
+}
+
+const BEST: Record<string, SkillId> = { repair: 'building', farm: 'farming', craft: 'crafting', doctor: 'medicine', scavenge: 'scavenging' };
+/** Who to suggest for a job: free hands first (resting or idle), then the most skilled. */
+function bestFor(job: string): Survivor | undefined {
+  const sk = BEST[job];
+  const able = living().filter((s) => canWork(s) && !onRunToday(s) && !isBitten(s));
+  const idle = (s: Survivor) => (s.job === 'rest' && s.rest > 0.6 ? 2 : 0);
+  return able.sort((a, b) => idle(b) - idle(a) || (sk ? b.skills[sk] - a.skills[sk] : 0))[0];
+}
+const jobSel = (s: Survivor | undefined) => (s ? `.sv-card[data-id="${s.id}"] select[data-act=job]` : '.people');
+const on = (job: string) => living().some((s) => s.job === job && canWork(s));
+
+function ammoRuns(): { res: Res; have: number; guns: number }[] {
+  const need = new Map<Res, { guns: number; perShot: number }>();
+  for (const s of living().filter(canFight)) {
+    const it = G.weapons.find((x) => x.uid === s.weapon);
+    if (!it) continue;
+    const p = fireProfile(it);
+    if (!p.ammoRes) continue;
+    const e = need.get(p.ammoRes) ?? { guns: 0, perShot: p.perShot };
+    e.guns++;
+    need.set(p.ammoRes, e);
+  }
+  const out: { res: Res; have: number; guns: number }[] = [];
+  // about 25 shots a gun is one ordinary night on the wall
+  for (const [res, { guns, perShot }] of need) {
+    const have = Math.floor((G.stores[res] ?? 0) / (perShot || 1));
+    if (have < 25 * guns) out.push({ res, have, guns });
+  }
+  return out;
+}
+
+/** Everything open right now, unsorted. */
+function openTodos(): Todo[] {
+  const t: Todo[] = [];
+  const people = living();
+  const eat = people.length;
+  const frac = G.fort.hp / G.fort.maxHp;
+  const ws = isOpen('workshop');
+
+  // day 1: open until the player has set (or re-set) anyone's job; the defaults are sensible
+  if (G.day === 1 && !people.some((s) => planConfirmed(s)))
+    t.push({ id: 'jobs1', icon: 'job_guard', text: 'Pick a job for each person', tip: 'The line in each job list says what it will yield today. Hover the picture for more.', sel: '.sv-card select[data-act=job]', prio: 5 });
+
+  if (frac < 0.7 && !on('repair')) {
+    const s = bestFor('repair');
+    t.push({ id: 'wall', icon: 'job_repair', text: `Repair the wall · ${Math.round(frac * 100)}%`, tip: `Nobody is on Repair the wall.${s ? ` ${first(s)} builds best of the free hands.` : ''} Uses timber.`, tab: 'wall', sel: jobSel(s), dot: s ? `surv:${s.id}` : 'tab:wall', prio: frac < 0.4 ? 10 : 25 });
+  }
+  if (eat) {
+    const days = Math.floor(G.stores.food / eat);
+    if (days < 3 && !on('farm')) {
+      const s = bestFor('farm');
+      t.push({ id: 'food', icon: 'food', text: days < 1 ? 'Find food · none left' : `Find food · ${days}d left`, tip: `Everyone eats one a day.${s ? ` Put ${first(s)} on Food, or send a scavenger.` : ''}`, sel: jobSel(s), dot: s ? `surv:${s.id}` : undefined, prio: days < 2 ? 12 : 30 });
+    }
+  }
+  const tonight = calendar(3);
+  const red = (k: string) => k === 'tide' || k === 'crossing' || k === 'band' || k === 'horde' || k === 'raiders';
+  const bigIn = tonight.findIndex((c) => red(c.kind));
+  const prepping = G.craftQueue.some((q) => { const r = RECIPES.find((x) => x.id === q.recipe); return !!r && (!!r.trap || Object.keys(r.gives ?? {}).length > 0); }) && on('craft');
+  if (bigIn >= 0 && ws && !prepping) {
+    t.push({ id: 'prep', icon: 'trap_bear', text: bigIn === 0 ? 'Bad night tonight · traps and ammo' : `Bad night in ${bigIn}d · stock up`, tip: `${tonight[bigIn].label} Queue trap kits and rounds, and put someone at the bench.`, tab: 'workshop', sel: '[data-fold="ws-make-traps"], .wsq', dot: 'tab:workshop', prio: bigIn === 0 ? 15 : 48 });
+  }
+  if (ws) {
+    for (const a of ammoRuns()) {
+      const r = RECIPES.find((x) => x.gives?.[a.res] && buildingLevel(x.needs) >= (x.level ?? 1));
+      const queued = !!r && G.craftQueue.some((q) => q.recipe === r.id) && on('craft');
+      if (queued) continue;
+      const name = ammoLabel(a.res).toLowerCase();
+      t.push(r
+        ? { id: `ammo_${a.res}`, icon: 'ammo', text: `Make ${name} · ${a.have} left`, tip: `${a.have ? `Only ${a.have}` : 'No'} ${name} for ${a.guns === 1 ? 'one gun' : `${a.guns} guns`} on the wall: about one night's shooting is ${25 * a.guns}. Queue ${r.name} and put someone at the bench.`, tab: 'workshop', sel: `[data-act=queue][data-id="${r.id}"]`, dot: 'tab:workshop', prio: a.have < 10 * a.guns ? 18 : 22 }
+        : { id: `ammo_${a.res}`, icon: 'ammo', text: `Find ${name} · ${a.have} left`, tip: `Nothing in the workshop makes ${name} yet. Scavengers and runs bring it home.`, sel: '.people', prio: 26 });
+    }
+  }
+  const heat = heatNeed();
+  if (heat > G.stores.fuel && !on('scavenge')) {
+    const s = bestFor('scavenge');
+    t.push({ id: 'fuel', icon: 'fuel', text: `Find fuel · stove needs ${heat}`, tip: `The stove burns ${heat} tonight and there is ${Math.floor(G.stores.fuel)}. Scavengers bring ${RES_LABEL.fuel.toLowerCase()} home.`, sel: jobSel(s), dot: s ? `surv:${s.id}` : undefined, prio: 28 });
+  }
+  if (G.craftQueue.length && !on('craft') && ws) {
+    const s = bestFor('craft');
+    t.push({ id: 'bench', icon: 'job_craft', text: `Put ${s ? first(s) : 'someone'} at the bench`, tip: 'Work is queued, but nothing moves unless someone is on the Workshop job.', sel: jobSel(s), dot: s ? `surv:${s.id}` : undefined, prio: 30 });
+  }
+  const hurt = people.reduce((a, p) => a + p.wounds.filter((w) => !w.tended && !w.hidden).length, 0);
+  if (hurt && !on('doctor')) {
+    const s = bestFor('doctor');
+    t.push({ id: 'tend', icon: 'job_doctor', text: `Tend the wounded · ${hurt}`, tip: 'Untended wounds bleed, fester and slow people down.', sel: jobSel(s), dot: s ? `surv:${s.id}` : undefined, prio: 32 });
+  }
+  const stale = people.filter((s) => canWork(s) && G.day > 1 && !planConfirmed(s) && !onRunToday(s));
+  if (stale.length) t.push({ id: 'stale', icon: 'job_guard', text: stale.length === 1 ? `Check ${first(stale[0])}'s job` : `Check ${stale.length} jobs from yesterday`, tip: 'Yesterday\'s jobs carried over. Change them, or press Keep.', sel: '.carryover', prio: 35 });
+  for (const s of people) {
+    if (!canWork(s) || onRunToday(s) || stale.includes(s)) continue;
+    const idle = (s.job === 'rest' && s.rest > 0.6) || (s.job === 'craft' && !G.craftQueue.length && ws);
+    if (idle) t.push({ id: `idle_${s.id}`, icon: 'job_rest', text: `Give ${first(s)} a job`, tip: s.job === 'craft' ? 'The bench is empty: queue something, or give them other work.' : `${first(s)} is rested and doing nothing today.`, sel: jobSel(s), dot: `surv:${s.id}`, prio: 40 });
+    if (s.rest < 0.25 && s.job !== 'rest') t.push({ id: `worn_${s.id}`, icon: 'st_tired', text: `Rest ${first(s)} · worn out`, tip: 'Give them the Rest job, or short hours.', sel: jobSel(s), dot: `surv:${s.id}`, prio: 45 });
+    if (s.perkOffers?.length) t.push({ id: `perk_${s.id}`, icon: 'st_perk', text: `Pick ${first(s)}'s perk`, tip: 'A skill grew. Choose one perk on their sheet.', sel: `.sv-card[data-id="${s.id}"] [data-act=detail]`, dot: `surv:${s.id}`, prio: 70 });
+  }
+  for (const r of REVEAL) {
+    if (!isNew(r.id)) continue;
+    t.push({ id: `new_${r.id}`, icon: r.icon, text: `New: ${r.label}`, tip: r.what, tab: r.tab, sel: r.sel, dot: r.tab ? `tab:${r.tab}` : r.id === 'run' ? 'run' : r.id === 'calendar' ? 'calendar' : undefined, prio: 60, isNew: true });
+  }
+  return t;
+}
+
+// What the list showed earlier today: an item that was open and is now resolved stays, ticked.
+let memDay = -1;
+const mem = new Map<string, Todo>();
+let current: Todo[] = [];
+
+/** The list as shown: open items (most urgent first), then today's ticked ones; five at most. */
+export function todos(): Todo[] {
+  if (memDay !== G.day) { memDay = G.day; mem.clear(); }
+  const open = openTodos().sort((a, b) => a.prio - b.prio);
+  for (const o of open) mem.set(o.id, o);
+  const ids = new Set(open.map((o) => o.id));
+  // a "new" item that was looked at is not a task done; it simply goes
+  const done = [...mem.values()].filter((m) => !ids.has(m.id) && !m.isNew).map((m) => ({ ...m, done: true }));
+  const shown = open.slice(0, 4);
+  current = [...shown, ...done.slice(0, Math.max(0, 5 - shown.length))];
+  return current;
+}
+export const openCount = () => current.filter((t) => !t.done).length;
+
+/** Keys that carry a yellow dot right now. */
+export function dotKeys(list = current): Set<string> {
+  const d = new Set<string>();
+  for (const t of list) if (!t.done && t.dot) d.add(t.dot);
+  return d;
+}
+
+const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+
+/** The strip under the header. Clicks: data-act="todo" data-i, "dusk", "revealall". */
+export function todayHtml(duskKey: string): string {
+  const list = todos();
+  const left = list.filter((t) => !t.done).length;
+  const items = list.map((t, i) => `<button class="td ${t.done ? 'done' : ''} ${t.isNew ? 'new' : ''}" data-act="todo" data-i="${i}"${tip(t.tip ? `<b>${esc(t.text)}</b><br>${esc(t.tip)}` : '')}>
+      <span class="td-box">${t.done ? '✓' : ''}</span>${ico(t.icon, '', 'sm')}<span class="td-t">${esc(t.text)}</span></button>`).join('');
+  const ready = left === 0 ? `<button class="td ready" data-act="dusk"${tip(`Everything on the list is done. ${esc(duskKey)} also goes.`)}>Ready for dusk ›</button>` : '';
+  const early = !revealAll() && REVEAL.some((r) => r.id !== 'graves' && !isOpen(r.id));
+  return `<div class="today" role="list" aria-label="Today">
+    <span class="td-h t-l"${tip('What needs doing before dusk, most urgent first. Click one to go there.')}>Today${left ? ` <b>${left}</b>` : ''}</span>
+    ${items}${ready}
+    ${early ? `<button class="mini td-all" data-act="revealall"${tip('New screens open over the first days. Show them all now.')}>show everything</button>` : ''}
+  </div>`;
+}
+
+// ---------------------------------------------------------------- jump and flash
+let pendingFlash: string | null = null;
+/** Remember a todo's target; the day screen flashes it after its next render. Returns the tab to open, if any. */
+export function pickTodo(i: number): { tab?: string } {
+  const t = current[i];
+  if (!t) return {};
+  if (t.isNew) markSeen(t.id.replace(/^new_/, ''));
+  pendingFlash = t.sel ?? null;
+  return { tab: t.tab };
+}
+/** After a render: scroll the pending target into view (opening its folds) and pulse it. */
+export function applyFlash(root: HTMLElement) {
+  if (!pendingFlash) return;
+  const sel = pendingFlash;
+  pendingFlash = null;
+  const el = root.querySelector(sel) as HTMLElement | null;
+  if (!el) return;
+  for (let p: HTMLElement | null = el; p; p = p.parentElement) if (p instanceof HTMLDetailsElement) p.open = true;
+  const all = root.querySelectorAll(sel);
+  try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch { el.scrollIntoView(); }
+  all.forEach((x) => { x.classList.remove('td-flash'); void (x as HTMLElement).offsetWidth; x.classList.add('td-flash'); });
+  window.setTimeout(() => all.forEach((x) => x.classList.remove('td-flash')), 2600);
+  if (el.tagName === 'SELECT' || el.tagName === 'BUTTON') el.focus({ preventScroll: true });
+}
+
+/** The one-line "what this is for" while a system is new (or was first opened today). */
+export function revealNote(id: RevealId): string {
+  const r = REVEAL.find((x) => x.id === id);
+  if (!r || revealAll() || !isOpen(id)) return '';
+  if (!isNew(id) && G.flags[`seen_${id}`] !== G.day) return '';
+  return `<div class="reveal-note">${ico(r.icon, '', 'sm')}<span><b>New.</b> ${esc(r.what)}</span></div>`;
+}
+
+/** Whether the leader's run panel shows (it unlocks on its day, or once a run happened). */
+export const runOpen = () => isOpen('run') || ranToday();

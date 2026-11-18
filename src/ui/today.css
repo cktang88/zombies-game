@@ -1,0 +1,47 @@
+/* The "Today" list under the day screen's header, the yellow attention dots, and the jump flash (src/ui/today.ts). */
+:root { --dot: #e8c040; }
+
+.today {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px;
+  padding: 8px 18px; background: rgba(10, 9, 8, .62); border-bottom: 1px solid var(--line);
+  font-family: var(--type);
+}
+.today .td-h { color: #d3c6a4; margin-right: 6px; letter-spacing: .04em; }
+.today .td-h b { display: inline-grid; place-items: center; min-width: 22px; height: 22px; margin-left: 4px; border-radius: 11px; background: var(--dot); color: #1a1408; font-size: 13px; font-weight: normal; }
+.today .td {
+  position: relative; display: inline-flex; align-items: center; gap: 7px;
+  padding: 6px 12px 6px 8px; font-size: 14px; color: #e8dcc0; text-transform: none; letter-spacing: 0;
+  background: #26221b; border: 1px solid #5a4f3c;
+}
+.today .td:hover:not(:disabled) { border-color: var(--dot); }
+.today .td .ico.sm { width: 24px; height: 24px; }
+.today .td-box { display: inline-grid; place-items: center; width: 18px; height: 18px; border: 1px solid #8a7a5c; color: #9db070; font-size: 14px; line-height: 1; flex: none; }
+.today .td.done { opacity: .55; }
+.today .td.done .td-t { text-decoration: line-through; text-decoration-color: rgba(232, 220, 192, .5); }
+.today .td.new { border-style: dashed; }
+.today .td.ready { background: linear-gradient(rgba(255, 190, 140, .07), rgba(0, 0, 0, .2)), #4a2a20; border-color: #8a5a3e; color: #f2e6c8; padding: 6px 14px; }
+.today .td-all { margin-left: auto; font-size: 13px; color: var(--dim); background: transparent; border-color: transparent; box-shadow: none; text-decoration: underline dotted; }
+.today .td-all:hover { color: #e8dcc0; }
+
+/* the attention dot: a small yellow disc on the top-right corner */
+.adot, [data-dot]::after {
+  position: absolute; top: -4px; right: -4px; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--dot); box-shadow: 0 0 0 2px #14120f, 0 0 8px rgba(232, 192, 64, .6);
+  pointer-events: none; animation: adot 2.2s ease-in-out infinite;
+}
+[data-dot] { position: relative; }
+[data-dot]::after { content: ''; z-index: 2; }
+@keyframes adot { 50% { box-shadow: 0 0 0 2px #14120f, 0 0 2px rgba(232, 192, 64, .2); } }
+@media (prefers-reduced-motion: reduce) { .adot, [data-dot]::after { animation: none; } }
+
+/* the jump: the place to act pulses for a moment */
+.td-flash { animation: tdflash 1.2s ease-out 2; outline: 2px solid var(--dot); outline-offset: 2px; }
+@keyframes tdflash { 0% { box-shadow: 0 0 0 0 rgba(232, 192, 64, .8); } 100% { box-shadow: 0 0 0 12px rgba(232, 192, 64, 0); } }
+
+/* a newly opened system: its one line, under the tabs */
+.reveal-note { display: flex; align-items: center; gap: 8px; margin: -4px 0 10px; padding: 6px 10px; border-left: 3px solid var(--dot); background: rgba(232, 192, 64, .06); font-size: 14px; color: #ddd0b0; }
+
+@media (max-width: 700px) {
+  .today { padding: 6px 10px; }
+  .today .td { font-size: 13px; padding: 5px 8px 5px 6px; }
+}

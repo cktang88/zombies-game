@@ -1,6 +1,6 @@
 // Shared canvas-HUD pieces for the night and the run: keycap glyphs, small-caps labels, a
 // one-line message ticker, and the full key sheet shown while a key is held.
-// Type scale: BIG numbers (mag, wall, clock) · body 13 · small caps 9 (labels) · keycap 10.
+// Type scale: BIG numbers (mag, wall, clock) · body 13 · small caps 13 (labels) · keycap 13. Nothing under 13.
 import { keyLabel, keyOf } from '../ui/keys';
 import { getSettings } from '../ui/settings';
 import { img } from '../assets';
@@ -25,7 +25,7 @@ export function capOf(id: string): string { return id.includes('.') ? keyLabel(k
 
 /** One keycap glyph: a small rounded key with its letter. Returns the width drawn. */
 export function keycap(c: CanvasRenderingContext2D, label: string, x: number, y: number, o: { size?: number; alpha?: number; hot?: boolean } = {}): number {
-  const s = o.size ?? 10;
+  const s = o.size ?? 13;
   c.save();
   c.globalAlpha *= o.alpha ?? 1;
   c.font = `${s}px ${FONT}`;
@@ -47,12 +47,12 @@ export function keycap(c: CanvasRenderingContext2D, label: string, x: number, y:
   return w;
 }
 
-/** Small-caps label: 9px, letter-spaced, upper case. Returns its width. */
-export function caps(c: CanvasRenderingContext2D, text: string, x: number, y: number, color = DIM, align: CanvasTextAlign = 'left', size = 9): number {
+/** Small-caps label: 13px, letter-spaced, upper case. Returns its width. */
+export function caps(c: CanvasRenderingContext2D, text: string, x: number, y: number, color = DIM, align: CanvasTextAlign = 'left', size = 13): number {
   c.save();
   c.font = `${size}px ${FONT}`;
   const t = text.toUpperCase();
-  try { (c as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = '1.5px'; } catch { /* older canvas */ }
+  try { (c as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = '1px'; } catch { /* older canvas */ }
   const w = c.measureText(t).width;
   c.textAlign = align;
   c.fillStyle = color;
