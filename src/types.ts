@@ -99,7 +99,7 @@ export interface Survivor {
   perkOffers?: { skill: SkillId; tier: 4 | 7; options: string[]; day: number }[];
 }
 
-// Weapon class: what a survivor's proficiency is in (see CLASS_NAMES in data/weapons.ts)
+// Weapon class: a survivor's favourite (Survivor.fav) (see CLASS_NAMES in data/weapons.ts)
 export type WeaponClass = 'handgun' | 'smg' | 'rifle' | 'assault' | 'marksman' | 'shotgun' | 'heavy' | 'launcher' | 'bow' | 'improvised' | 'melee';
 
 export interface WeaponDef {

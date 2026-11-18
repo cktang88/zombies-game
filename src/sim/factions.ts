@@ -342,7 +342,7 @@ export const FACTION_INCIDENTS: Incident[] = [
         text: `Pastor Engvall is at the gate. She saw the smoke from the gym roof; everyone did.\n\n"We keep a registry. Every soul in Vessey, living, missing, turned, dead. When somebody's burned on the road like a brush pile, I have to write 'burned' in the registry, and I have to tell their people that's how it ended." She is not shouting. "They were somebody. Every one of them was somebody."`,
         choices: [
           { label: 'Promise to bury our dead from now on', hint: 'Break the promise and the Parish will know.', effect: 'promise' },
-          { label: 'Let her bless the ashes', hint: 'Faithful survivors will be grateful.', effect: 'bless' },
+          { label: 'Let her bless the ashes', hint: 'Gentle survivors will be grateful.', effect: 'bless' },
           { label: '"The dead don\'t care how."', effect: 'cold' },
         ],
       };
