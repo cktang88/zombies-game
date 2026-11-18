@@ -3207,7 +3207,7 @@ export class Battle {
     for (const gd of this.guards) if (gd.downed && !gd.s.dead && !gd.fled) this.drawDownedLabel(c, gd);
     // texts
     for (const t of this.texts) {
-      c.font = `bold ${t.size}px "Special Elite", monospace`;
+      c.font = `bold ${Math.max(13, t.size)}px "Special Elite", monospace`; // nothing under 13 (a0031e9)
       c.fillStyle = t.color;
       c.globalAlpha = Math.min(1, t.life * 2);
       c.textAlign = 'center';
@@ -3725,11 +3725,11 @@ export class Battle {
         c.strokeStyle = 'rgba(207,198,176,0.25)'; c.lineWidth = 1;
         c.beginPath(); c.moveTo(x, top - 4); c.lineTo(g.x, natural - 2); c.stroke();
       }
-      c.font = `${focus(l.g) ? 11 : 10}px "Special Elite", monospace`;
+      c.font = `${focus(l.g) ? 14 : 13}px "Special Elite", monospace`;
       c.textAlign = 'center';
       c.fillStyle = 'rgba(8,8,10,0.5)';
       const nw = c.measureText(l.name).width;
-      c.fillRect(x - nw / 2 - 3, top - 24, nw + 6, 13);
+      c.fillRect(x - nw / 2 - 3, top - 26, nw + 6, 16);
       c.fillStyle = isP ? '#f0d890' : '#cfc6b0';
       c.fillText(l.name, x, top - 14);
       if (!isP) this.drawOrderGlyph(c, g, x + nw / 2 + 9, top - 18, false);
@@ -4560,22 +4560,22 @@ export class Battle {
     if (p) {
       const x = 20, y = 64;
       c.fillStyle = 'rgba(10,9,8,0.6)';
-      c.fillRect(x, y - 12, 210, 22);
+      c.fillRect(x, y - 12, 222, 22);
       const f = this.nerve / Math.max(1, this.nerveMax);
       if (this.nerveShown < 0) this.nerveShown = f;
       if (f < this.nerveShown - 0.03 && this.nerveFlash <= 0) this.nerveFlash = 0.3;
       this.nerveShown += (f - this.nerveShown) * 0.12;
-      if (this.nerveShown > f) { c.fillStyle = `rgba(230,200,170,${0.3 + this.nerveFlash})`; c.fillRect(x + 54, y - 4, 100 * this.nerveShown, 6); }
+      if (this.nerveShown > f) { c.fillStyle = `rgba(230,200,170,${0.3 + this.nerveFlash})`; c.fillRect(x + 66, y - 4, 100 * this.nerveShown, 6); }
       c.fillStyle = f < 0.25 ? '#c04030' : f < 0.5 ? '#c09040' : '#9db0a0';
-      c.fillRect(x + 54, y - 4, 100 * Math.min(f, this.nerveShown + 0.01), 6);
+      c.fillRect(x + 66, y - 4, 100 * Math.min(f, this.nerveShown + 0.01), 6);
       c.strokeStyle = 'rgba(200,190,160,0.3)';
-      c.strokeRect(x + 54, y - 4, 100, 6);
+      c.strokeRect(x + 66, y - 4, 100, 6);
       caps(c, this.focusing ? 'focus' : 'nerve', x + 6, y + 3, this.focusing ? '#e0d4b0' : '#a89c84');
       // the headshot streak as tally marks, then banked rallies
       c.fillStyle = '#d9c9a0';
-      for (let i = 0; i < this.streak; i++) c.fillRect(x + 160 + i * 4, y - 6, 2, 10);
-      if (this.rally > 0) caps(c, `rally ×${this.rally}`, x + 160 + this.streak * 4 + 4, y + 3, '#e0c070');
-      if (this.rallyT > 0) caps(c, 'rally', x + 160, y + 3, '#e0c070');
+      for (let i = 0; i < this.streak; i++) c.fillRect(x + 172 + i * 4, y - 6, 2, 10);
+      if (this.rally > 0) caps(c, `rally ×${this.rally}`, x + 172 + this.streak * 4 + 4, y + 3, '#e0c070');
+      if (this.rallyT > 0) caps(c, 'rally', x + 172, y + 3, '#e0c070');
     }
     // keys: no wall of them. Only what matters this second, as keycap glyphs, bottom left; the
     // whole sheet while [F1] is held (or paused). A phone, or a canvas too small to read, shows none.

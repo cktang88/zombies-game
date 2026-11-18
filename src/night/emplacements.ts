@@ -558,10 +558,10 @@ export class Emplacements implements BattleHook {
       const ammo = m.def.id === 'flamer' ? `${Math.floor(G.stores.fuel ?? 0)}` : `${m.mag}`;
       c.fillStyle = 'rgba(10,9,8,0.55)';
       c.beginPath(); c.roundRect(20, y - 13, 210, 24, 3); c.fill();
-      caps(c, m.def.short, 26, y + 2, m.crew ? '#c9a95a' : '#7a6e58');
+      const lw = caps(c, m.def.short, 26, y + 3, m.crew ? '#c9a95a' : '#7a6e58');
       c.font = '13px "Special Elite", monospace';
       c.fillStyle = m.crew ? '#d9cdb0' : '#7a6e58';
-      c.fillText(who, 62, y + 2);
+      c.fillText(who, Math.max(62, 26 + lw + 8), y + 3);
       c.textAlign = 'right';
       c.font = '15px "Special Elite", monospace';
       c.fillStyle = m.reload > 0 ? '#8f846e' : m.mag === 0 && m.def.id !== 'flamer' ? '#c04030' : '#efe2c2';
