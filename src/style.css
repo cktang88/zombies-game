@@ -402,3 +402,11 @@ dl.keys dd, dl.gloss dd { margin: 0; }
 .fold > summary::before { content: '▸'; color: var(--dim); transition: transform .15s; display: inline-block; width: 10px; }
 .fold[open] > summary::before { transform: rotate(90deg); }
 .fold > .fold-body { padding: 2px 0 10px 18px; }
+.calendar .calhead { color: #c9bc9e; margin-bottom: 3px; text-transform: uppercase; letter-spacing: .08em; cursor: default; }
+.calendar .calday .cw { font-size: 13px; color: #a89c80; white-space: nowrap; overflow: hidden; }
+.calendar .calday.red .cw { color: #e0705a; }
+.calendar .calday.ice .cw { color: #a8d0e4; }
+.calendar .calnext { margin: 6px 0 4px; font-size: var(--fs-s); color: #d8ccb0; }
+.calendar .calnext.warn b { color: #e0705a; }
+.calendar .calday { display: flex; flex-direction: column; align-items: center; }
+.calendar .calday > div { width: 100%; }

@@ -173,27 +173,43 @@ const GLYPH: Record<CalKind, string> = { night: '·', tide: '●', band: '◌', 
 const BLOOD = '#b0302a';
 
 /** Compact 7-day ledger strip plus the noise meter. */
+const WORD: Record<CalKind, string> = { night: 'quiet', tide: 'TIDE', band: 'tide?', crossing: 'ICE', ice: 'ice', raiders: 'raiders', horde: 'HORDE', tunnel: 'diggers', unknown: '?' };
+const BIG: Partial<Record<CalKind, string>> = {
+  tide: 'a tide: three times the usual crowd',
+  band: 'probably a tide (the exact night is unsure)',
+  horde: 'a horde: the whole east bank comes',
+  raiders: 'raiders: armed people, not the Turned',
+  tunnel: 'diggers: they come up under the wall',
+  crossing: 'the Crossing: the river freezes and they walk over',
+  ice: 'the river is ice: every night is bad from here',
+};
+/** "Coming nights": the next week at a glance, the next big night in words, and what to do about it. */
 export function calendarHtml(): string {
   const cal = calendar(7);
   const n = noiseOfHouse();
   const cell = (c: CalDay, i: number) => {
     const red = c.kind === 'tide' || c.kind === 'horde' || c.kind === 'raiders' || c.kind === 'band';
     const ice = c.kind === 'crossing' || c.kind === 'ice';
-    const title = `${c.date}: ${c.label} Weather: ${c.weather}.${c.deadlines.length ? ` Deadline: ${c.deadlines.join(', ')}.` : ''}`;
-    return `<div class="calday ${i === 0 ? 'today' : ''} ${red ? 'red' : ice ? 'ice' : ''} ${c.kind === 'crossing' ? 'crossing' : ''}"${tip(esc(title))}>
-      <div class="cd">${i === 0 ? 'tonight' : c.date.split(' ')[1]}</div>
+    const title = `<b>${i === 0 ? 'Tonight' : i === 1 ? 'Tomorrow' : c.date}</b>: ${c.label}<br>Weather: ${c.weather}.${c.deadlines.length ? `<br>◆ Deadline: ${c.deadlines.join(', ')}.` : ''}`;
+    return `<div class="calday ${i === 0 ? 'today' : ''} ${red ? 'red' : ice ? 'ice' : ''} ${c.kind === 'crossing' ? 'crossing' : ''}"${tip(title)}>
+      <div class="cd">${i === 0 ? 'tonight' : i === 1 ? 'tmrw' : c.date.split(' ')[1]}</div>
       <div class="cg ${c.certainty === 'likely' ? 'likely' : ''}">${GLYPH[c.kind]}</div>
+      <div class="cw">${WORD[c.kind]}</div>
       <div class="cdl">${c.deadlines.length ? '◆' : ''}</div></div>`;
   };
-  const today = cal[0];
-  const key = cal.some((c) => c.kind === 'tide') ? `<span style="color:${BLOOD}">●</span> tide` : cal.some((c) => c.kind === 'band') ? `<span style="color:${BLOOD}">◌</span> tide, roughly` : cal.some((c) => c.kind === 'unknown') ? '? the Coin keeps no calendar' : '';
+  const bi = cal.findIndex((c) => BIG[c.kind]);
+  const when = bi < 0 ? '' : bi === 0 ? 'Tonight' : bi === 1 ? 'Tomorrow' : `In ${bi} days`;
+  const next = bi < 0
+    ? (cal.some((c) => c.kind === 'unknown') ? '<b>No telling.</b> Any night could be big: keep the wall up.' : '<b>No big night this week.</b> A good time to stock up and build.')
+    : `<b>${when}: ${esc(BIG[cal[bi].kind]!)}.</b>${bi <= 2 ? ' Get ready: wall up, traps set, ammo made.' : ''}`;
   return `<div class="calendar">
+    <div class="calhead t-s"${tip('What the next nights look like. Plain nights are quiet; red ones are big. Prepare the day before a red one.')}>Coming nights</div>
     <div class="calstrip">${cal.map(cell).join('')}</div>
-    <div class="calkey"${tip(`${key}${cal.some((c) => c.kind === 'crossing') ? ' · ❄ the Crossing' : ''}${cal.some((c) => c.deadlines.length) ? ' · ◆ thread deadline' : ''}`)}>${esc(today.label)}</div>
-    <div class="smell"${tip(`<b>Smell of the house</b><br>${n.reasons.length ? esc(n.reasons.join('. ')) + '. Hoarding draws bigger nights.' : 'A lean house. Nothing much to smell.'}`)}>
+    <div class="calnext ${bi >= 0 && bi <= 1 ? 'warn' : ''}">${next}</div>
+    <div class="smell"${tip(`<b>Smell of the house</b><br>The more you hoard, the more of them come.${n.reasons.length ? '<br>' + esc(n.reasons.join('. ')) + '.' : ''}`)}>
       <div class="row"><span class="t-xs" style="white-space:nowrap">Smell</span>
         <div class="bar"><div style="width:${Math.round(n.level * 100)}%;background:${n.level > 0.7 ? BLOOD : '#c8a05a'}"></div></div>
-        <b style="white-space:nowrap">+${n.pct}%</b></div>
+        <b style="white-space:nowrap">+${n.pct}% bigger nights</b></div>
     </div></div>`;
 }
 
