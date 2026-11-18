@@ -17,7 +17,13 @@ const cases: (DieOpts & { name: string; speed?: number })[] = [
   { name: 'leg', impulse: { x: -90, y: 0 }, at: 'legN', kind: 'shot' },
   { name: 'shotgun', impulse: { x: -600, y: -200 }, at: 'torso', kind: 'shotgun' },
   { name: 'walking', impulse: { x: -50, y: 0 }, speed: 40 },
+  { name: 'rifle', impulse: { x: -500, y: -120 }, at: 'torso', kind: 'shot' },
+  { name: 'rifle-head', impulse: { x: -700, y: -160 }, at: 'head', kind: 'headshot' },
+  { name: 'heavy', impulse: { x: -1000, y: -250 }, at: 'torso', kind: 'shotgun' },
+  { name: 'explosion', impulse: { x: -900, y: -500 }, at: 'torso', kind: 'explosion' },
 ];
+// a crumple, not a flop: the trunk turns through about a quarter turn (stand → lying) and never cartwheels
+const MAX_WOBBLE = 120; // degrees turned back and forth beyond the net fall (a face-first pitch then the hips settling is ~100)
 let bad = 0, natural = 0, n = 0, tSum = 0;
 for (const id of sprites) {
   await loadRig(id); // fails in node (no fetch base): attach the atlas meta by hand
@@ -29,18 +35,27 @@ for (const id of sprites) {
     rig.ds = 0.6; rig.df = -1;
     rig.setSpeed(c.speed ?? 0);
     for (let i = 0; i < 40; i++) rig.update(1 / 60);
-    rig.die({ ...c, authored: false });
+    rig.die({ ...c, authored: false, noCollapse: !!process.env.NOCOL });
     let t = 0;
-    while (!rig.settled && t < 4) { rig.update(1 / 60); t += 1 / 60; }
+    const rr = rig.ragdoll!;
+    const ang = () => Math.atan2(rr.y[1] - rr.y[0], rr.x[1] - rr.x[0]);
+    let a0 = ang(), spin = 0, net = 0;
+    while (!rig.settled && t < 4) {
+      rig.update(1 / 60); t += 1 / 60;
+      const a = ang(); let d = a - a0; d = Math.atan2(Math.sin(d), Math.cos(d)); a0 = a;
+      net += d; spin += Math.abs(d);
+    }
     const r = rig.ragdoll!;
     const g = rig.geo!;
+    const spinDeg = (spin * 180) / Math.PI;
     const up = (r.y[0] - r.y[1]) / g.torsoLen; // pelvis below neck: 1 standing, 0 flat
     const seat = -r.y[0] / g.legLen; // pelvis height over the ground
-    const ok = up < 0.45 && seat < 0.45;
+    const flat = up < 0.45 && seat < 0.45, calmSpin = spinDeg - Math.abs((net * 180) / Math.PI) < MAX_WOBBLE;
+    const ok = flat && calmSpin;
     n++; tSum += t;
     if (r.t < 2.6) natural++; // came to rest on its own (not the 2.6 s cap)
     if (!ok) bad++;
-    console.log(`${id.padEnd(12)} ${c.name.padEnd(10)} upright ${up.toFixed(2)} seat ${seat.toFixed(2)} t ${t.toFixed(2)} slide ${(r.x[0] / g.legLen).toFixed(2)} ${ok ? '' : '  <-- NOT FLAT'}`);
+    console.log(`${id.padEnd(12)} ${c.name.padEnd(10)} upright ${up.toFixed(2)} seat ${seat.toFixed(2)} t ${t.toFixed(2)} slide ${(r.x[0] / g.legLen).toFixed(2)} spin ${spinDeg.toFixed(0).padStart(4)}° net ${((net * 180) / Math.PI).toFixed(0).padStart(4)}°${flat ? '' : '  <-- NOT FLAT'}${calmSpin ? '' : '  <-- SPINS'}`);
   }
 }
 // quadrupeds (src/anim/quad.ts): the trunk ends on the road, whatever gait it died in
