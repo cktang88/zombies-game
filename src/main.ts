@@ -3,7 +3,7 @@ import { G, R, setState, save, loadSave, clearSave, log, dateLabel, ICE_DAY } fr
 import { loadAssets, spriteUrl } from './assets';
 import { newGame } from './sim/newgame';
 import { renderDay } from './ui/day';
-import { installKit, tip, ico, chip, fold, qi } from './ui/kit';
+import { installKit, tip, ico, chip, fold, qi, tag } from './ui/kit';
 import { resolveDayWork, dawnTick, nextWeather, prepareRun, tomorrowTeaser, restoreRunMate } from './sim/day';
 import { dailySeed, parseSeed } from './rng';
 import { planNight, afterNight, PERSONAS, nightIntel } from './sim/director';
@@ -666,16 +666,16 @@ function openLedger() {
   const render = () => {
     const L = loadLegacy();
     div.innerHTML = `<div class="modal ledger" style="max-height:86vh;overflow:auto">
+      <button class="close" data-act="ledgerclose" aria-label="Close the Ledger">×</button>
       <h2>The Ledger</h2>
-      <p class="dim">${L.runs} November${L.runs === 1 ? '' : 's'} on Ferry Road. Longest held: ${L.best.days} days. Best score: ${L.best.score}.</p>
+      <div class="duskchips">${chip('st_time', L.runs, `${L.runs} November${L.runs === 1 ? '' : 's'} on Ferry Road`)}${chip('st_wall', `${L.best.days}d`, 'Longest held')}${chip('st_xp', L.best.score, 'Best score')}</div>
       <h3>Boons for the next run</h3>
       ${BOONS.map((b) => {
         const un = L.unlocked.includes(b.id), on = L.chosen.includes(b.id);
-        return `<p><button class="mute" data-act="boon" data-id="${b.id}" ${un ? '' : 'disabled'} aria-pressed="${on}">${un ? (on ? '☑' : '☐') : '☐'} ${esc(b.name)}</button> <span class="dim">${esc(un ? b.desc : `Locked. ${b.how}`)}</span></p>`;
+        return `<p><button class="mute" data-act="boon" data-id="${b.id}" ${un ? '' : 'disabled'} aria-pressed="${on}">${un ? (on ? '☑ ' : '☐ ') : ''}${esc(b.name)}</button> ${un ? '' : tag('locked')} <span class="dim">${esc(un ? b.desc : b.how)}</span></p>`;
       }).join('')}
-      <h3>Names</h3>
-      ${L.entries.length ? L.entries.slice().reverse().map((e) => `<div class="doc"><b>${esc(e.name)}</b>, ${e.age} <span class="dim">· ${esc(e.fate)} · ${e.days} days · ${e.kills} put down${e.heirloom ? ` · carried "${esc(e.heirloom.name)}"` : ''}</span><p>${esc(e.tale)}</p></div>`).join('') : '<p class="dim">No names yet. At the end of a run, inscribe up to two survivors here. Their people may come to the gate.</p>'}
-      <button class="go" data-act="ledgerclose">Close ›</button>
+      <h3>Names${qi('At the end of a run, inscribe up to two survivors here. Their people may come to the gate.')}</h3>
+      ${L.entries.length ? L.entries.slice().reverse().map((e) => `<div class="doc"><b>${esc(e.name)}</b>, ${e.age} <span class="dim">· ${esc(e.fate)} · ${e.days} days · ${e.kills} put down${e.heirloom ? ` · carried "${esc(e.heirloom.name)}"` : ''}</span><p>${esc(e.tale)}</p></div>`).join('') : '<p class="dim">No names yet.</p>'}
     </div>`;
   };
   render();
@@ -684,8 +684,13 @@ function openLedger() {
     if (!el) return;
     e.stopPropagation();
     if (el.dataset.act === 'boon') { setBoon(el.dataset.id!, !loadLegacy().chosen.includes(el.dataset.id!)); render(); }
-    if (el.dataset.act === 'ledgerclose') div.remove();
+    if (el.dataset.act === 'ledgerclose') close();
   });
+  // Esc or a click outside closes it, as on the other ledger pages
+  const close = () => { div.remove(); window.removeEventListener('keydown', onKey, true); };
+  const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+  window.addEventListener('keydown', onKey, true);
+  div.addEventListener('click', (e) => { if (e.target === div) close(); });
   app.appendChild(div);
 }
 
