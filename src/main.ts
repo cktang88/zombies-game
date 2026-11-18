@@ -97,7 +97,6 @@ function title() {
       const boons = applyBoons();
       report = [
         `${displayName(living()[0])} leads. ${living().slice(1).map(displayName).join(' and ')} came with ${living()[0].sex === 'm' ? 'him' : 'her'}.`,
-        'Assign everyone a job for the day, then go to the wall at dusk.',
         ...boons,
       ];
       save();
