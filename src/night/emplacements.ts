@@ -1,8 +1,8 @@
 // Crew-served guns at night (data/emplacements.ts): an MG nest, a swivel deer rifle, a propane
 // flame projector at posts on the line, plus the automatic nail turrets. Each crewed mount is
-// worked by a survivor picked at dusk (or the best heavy-trained guard), or by the leader:
+// worked by a survivor picked at dusk (or the best gunner on the line), or by the leader:
 // [H] mans / leaves the nearest one; then the mouse aims it, click / hold fires, [R] swaps the
-// barrel or the belt. Handling follows heavy-weapons training (crewHandling): untrained crews
+// barrel or the belt. Handling follows the crew's Shooting, +3 for an MG favourite (crewHandling): untrained crews
 // spray, cook the barrel and jam; trained crews fire short bursts and keep it cool. Heavy XP
 // goes to whoever worked it.
 import { is, keyCap } from '../ui/keys';
@@ -14,7 +14,7 @@ import { G, R, add } from '../state';
 import { sfx } from '../audio';
 import { fireProfile, type FireProfile } from '../data/weapons';
 import { EMPLACEMENTS, parseEmplacements, stringifyEmplacements, crewHandling, type EmplacementDef, type EmplacementItem, type Post } from '../data/emplacements';
-import { first, level, gainXp, byId } from '../sim/survivors';
+import { first, handling, gainXp, byId } from '../sim/survivors';
 import { depthScale } from './render';
 import { drawProp, drawGunPart, drawGunBase, gunReach, has, propW } from './props';
 import { FORT_CAP } from '../data/world';
@@ -109,7 +109,7 @@ export class Emplacements implements BattleHook {
     return got;
   }
 
-  heavyOf(m: Mount) { return m.crew ? level(m.crew.s, 'heavy') : 0; }
+  heavyOf(m: Mount) { return m.crew ? handling(m.crew.s, 'heavy') : 0; }
 
   assignCrews() {
     const plan = crewPlan();
@@ -124,10 +124,10 @@ export class Emplacements implements BattleHook {
       if (want !== 'auto') g = b.guards.find((q) => q.s.id === want && b.standing(q) && !taken.has(q));
       if (!g) {
         const pool = b.guards.filter((q) => b.standing(q) && !taken.has(q) && q !== leader);
-        pool.sort((a, c) => level(c.s, 'heavy') - level(a.s, 'heavy'));
+        pool.sort((a, c) => handling(c.s, 'heavy') - handling(a.s, 'heavy'));
         const best = pool[0];
         // auto: someone who knows the gun, or a spare hand when the line can afford one
-        if (best && (level(best.s, 'heavy') >= 2 || pool.length >= 2)) g = best;
+        if (best && (handling(best.s, 'heavy') >= 2 || pool.length >= 2)) g = best;
       }
       if (g === leader && want === 'auto') g = undefined;
       if (!g) return;
@@ -589,14 +589,14 @@ export class Emplacements implements BattleHook {
   }
 
   onEnd() {
-    // heavy XP for whoever worked a gun; the gun's wear goes back into the save
+    // Shooting XP for whoever worked a gun; the gun's wear goes back into the save
     for (const m of this.mounts) {
       if (!m.def.crew) continue;
       this.credit(m);
       if (m.mag > 0 && m.def.id !== 'flamer') add(m.def.ammo, m.mag * m.def.perShot);
       m.mag = 0;
     }
-    for (const [id, xp] of this.xp) { const s = byId(id); if (s && xp > 0) gainXp(s, 'heavy', Math.min(80, Math.round(xp))); }
+    for (const [id, xp] of this.xp) { const s = byId(id); if (s && xp > 0) gainXp(s, 'shooting', Math.min(40, Math.round(xp * 0.5))); }
     const items = this.mounts.map((m) => m.item).filter((x): x is EmplacementItem => !!x);
     if (items.length) {
       // keep emplacements that this battle did not mount (none today), in their order

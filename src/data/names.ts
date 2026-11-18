@@ -11,7 +11,7 @@ export interface Backstory {
   text: string;
   skills: Partial<Record<SkillId, number>>;
   attrs?: Partial<Record<'courage' | 'grit', number>>; // added to the 0..10 base attributes
-  prof?: Partial<Record<WeaponClass, number>>; // weapon-class proficiency grants
+  prof?: Partial<Record<WeaponClass, number>>; // the guns they knew: the biggest is their favourite (Survivor.fav)
   minAge?: number;
   maxAge?: number;
 }

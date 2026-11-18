@@ -1,6 +1,6 @@
 // Crew-served emplacements: heavy guns on fixed mounts at a post on the line. Built at the
 // forge / workbench (recipes in data/world.ts), stored in G.flags.emplacements as a JSON array
-// of { id, post, cond }, crewed at night by a survivor (heavy-weapons training, level(s,'heavy'))
+// of { id, post, cond }, crewed at night by a survivor (handling(s, 'heavy'): Shooting, +3 if the MG is their favourite)
 // or by the leader ([H] at the battle). The nail turret is the odd one out: automatic, no crew,
 // counted by G.fort.turrets. Runtime: src/night/emplacements.ts. Pure data + pure helpers.
 import type { Res } from '../types';
@@ -89,7 +89,7 @@ export function stringifyEmplacements(list: EmplacementItem[]): string {
 }
 
 /**
- * Crew handling from heavy-weapons training (0..10). Untrained crews hold the trigger down
+ * Crew handling from handling(s, 'heavy') (0..10). Untrained crews hold the trigger down
  * (long bursts, they cook the barrel and jam), aim wide and swap barrels slowly; a trained
  * crew fires short bursts, lets it cool, and clears a jam in a moment.
  */

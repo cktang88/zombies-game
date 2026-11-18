@@ -10,7 +10,7 @@ import { resolveDayWork, dawnTick, nextWeather, queueRecipe } from '../src/sim/d
 import { Rng } from '../src/rng';
 import { planNight, afterNight } from '../src/sim/director';
 import { rollIncident, resolveEvent, returnsTick } from '../src/sim/events';
-import { living, wound, makeSurvivor, gainXp, gainProf } from '../src/sim/survivors';
+import { living, wound, makeSurvivor, gainXp } from '../src/sim/survivors';
 import { WEAPONS } from '../src/data/weapons';
 import type { WeaponItem } from '../src/types';
 import { DOCS } from '../src/data/lore';
@@ -64,7 +64,6 @@ G.modStock = [...(G.modStock ?? []), mod('suppressor'), mod('drum'), mod('brake'
 for (const s of living()) {
   gainXp(s, 'shooting', 300 + rnd.next() * 600);
   gainXp(s, 'scavenging', 200 + rnd.next() * 400);
-  gainProf(s, 'rifle', 120 + rnd.next() * 300);
 }
 if (living()[2]) wound(living()[2], 'laceration', 0.35, 'larm');
 writeFileSync(out, JSON.stringify(G));

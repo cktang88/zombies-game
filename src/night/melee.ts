@@ -20,7 +20,7 @@ import type { WeaponItem } from '../types';
 import { G, R, add } from '../state';
 import { sfx } from '../audio';
 import { MELEE, meleeProfile, FISTS, BLEED_TIME, type MeleeProfile } from '../data/weapons';
-import { first, level, gainProf } from '../sim/survivors';
+import { first, handling } from '../sim/survivors';
 import { depthScale } from './render';
 
 const WALL_X = 372;
@@ -37,7 +37,7 @@ function itemOf(g: Guardian): WeaponItem | undefined {
 }
 export function profOf(g: Guardian): { prof: MeleeProfile; item?: WeaponItem } {
   const item = itemOf(g);
-  const lv = level(g.s, 'prof_melee');
+  const lv = handling(g.s, 'melee');
   const mods = { dmgMul: 1 + lv * 0.03, speedMul: 1 - lv * 0.02, staminaMul: 1 - lv * 0.03 };
   if (item) return { prof: meleeProfile(item, mods), item };
   return { prof: { ...FISTS, dmg: Math.round(FISTS.dmg * mods.dmgMul) } };
@@ -301,10 +301,7 @@ export class Melee implements BattleHook {
   }
 
   onEnd() {
-    for (const [id, n] of this.meleeKills) {
-      const g = this.b.guards.find((q) => q.s.id === id);
-      if (g && !g.s.dead) gainProf(g.s, 'melee', n * 3);
-    }
+    // melee kills count toward Shooting with the night's other kills (main.ts nightXp)
   }
 }
 

@@ -85,11 +85,11 @@ export interface Survivor {
   xp?: Partial<Record<string, number>>;
   // Attributes 0..10: courage (night nerve, panic/flee resistance) and grit (fatigue and pain tolerance).
   attrs?: { courage: number; grit: number };
-  // Crew-served weapon training 0..10 (MG nests and other G.flags.emplacements). Grows from the Drill job
-  // while an emplacement exists. Combat should read it via level(s, 'heavy').
+  // Favourite kind of gun: handles it as if Shooting were FAV_BONUS higher (src/sim/survivors.ts handling()).
+  // Fixed at arrival (the backstory's gun, else a roll). The one choice it makes: who gets which gun.
+  fav?: WeaponClass;
+  // Old saves only: per-class proficiency and heavy-weapons training, folded into Shooting and fav on load.
   training?: { heavy?: number };
-  // Weapon-class proficiency 0..10 (WeaponClass in data/weapons.ts: pistol, smg, shotgun, rifle, lmg, bow, tool),
-  // separate from the general shooting skill. Read with prof(s, cls); award with gainProf(s, cls, xp).
   prof?: Partial<Record<string, number>>;
   // Values at arrival (skills and attributes), to show growth on the survivor sheet.
   base?: Partial<Record<string, number>>;

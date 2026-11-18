@@ -4,7 +4,7 @@
 // without a gun (or with a dry one) never shoots and does not swing a hand weapon either.
 import type { Survivor, WeaponItem, Res } from '../types';
 import { G } from '../state';
-import { living, canFight, prof } from './survivors';
+import { living, canFight, handling } from './survivors';
 import { fireProfile, roundsInStores, weaponClass, ammoTypesFor } from '../data/weapons';
 
 /** About this many shots per gun is one ordinary night on the wall (a tide is 2–3×). */
@@ -41,7 +41,7 @@ export function rackGuns(): WeaponItem[] {
 
 /**
  * The best rack gun for this person: one with rounds on hand first (shared out among everyone who
- * already carries that ammo), then their proficiency with its class, then rounds, then condition.
+ * already carries that ammo), then their handling of it (a favourite counts), then rounds, then condition.
  */
 export function bestGunFor(s: Survivor, rack = rackGuns(), carriers = ammoCarriers()): WeaponItem | undefined {
   let best: WeaponItem | undefined, bestScore = -Infinity;
@@ -49,7 +49,7 @@ export function bestGunFor(s: Survivor, rack = rackGuns(), carriers = ammoCarrie
     const p = fireProfile(w);
     const rounds = roundsInStores(p, G.stores);
     const share = p.ammoRes ? rounds / (1 + (carriers.get(p.ammoRes) ?? 0)) : SHOTS_PER_GUN_NIGHT;
-    const score = (share >= 1 ? 1000 : 0) + prof(s, weaponClass(w.def)) * 20 + Math.min(share, SHOTS_PER_GUN_NIGHT) + w.cond * 5;
+    const score = (share >= 1 ? 1000 : 0) + handling(s, weaponClass(w.def)) * 20 + Math.min(share, SHOTS_PER_GUN_NIGHT) + w.cond * 5;
     if (score > bestScore) { bestScore = score; best = w; }
   }
   return best;

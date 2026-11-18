@@ -11,7 +11,7 @@ import { keyOf, normKey, keyCap } from '../ui/keys';
 import { openPause } from '../ui/pause';
 import {
   living, canFight, aimFactor, first, displayName, wound, pain, killSurvivor, tale, addThought, hasTrait, changeOpinion, byId, isBitten, breakThresholds,
-  moodBreakdown, their, them, grantTitle, prof, attr, perkFx,
+  moodBreakdown, their, them, grantTitle, handling, attr, perkFx,
 } from '../sim/survivors';
 import {
   kickFor, bloomAfter, aimedDelay, climbFor, heatLimit, heatCool, usesHeat, swapsBarrel, fireModes, hasChamber, manualAction, drawTime, shooterMods, clearTime,
@@ -1198,7 +1198,7 @@ export class Battle {
     if (!p || !p.w) return;
     if (this.jam) {
       if (this.jam.clearing <= 0) {
-        this.jam.clearing = this.jam.kind === 'barrel' ? 2.2 * (1.1 - prof(p.s, 'heavy') * 0.04) : clearTime(this.prof(p.w, p.s), p.s, this.jam.kind);
+        this.jam.clearing = this.jam.kind === 'barrel' ? 2.2 * (1.1 - handling(p.s, 'heavy') * 0.04) : clearTime(this.prof(p.w, p.s), p.s, this.jam.kind);
         if (this.jam.kind === 'double') this.say('Double-feed. Lock, strip, rack.', 2);
         // the rig plays the clear (tap-rack / strip) and voices each stage; Classic: one sound
         if (!this.actors.clearJam(p, this.jam.kind, this.jam.clearing)) sfx.reload(gunSoundFor(p.w.def).reload, this.jam.kind === 'barrel' ? 'out' : 'bolt');

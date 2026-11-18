@@ -10,7 +10,7 @@ import { SKILL_NAMES } from '../data/names';
 import { SITES, BUILDINGS, RECIPES, RES_LABEL, RES_ICON, FORT_CAP } from '../data/world';
 import {
   living, displayName, first, moodBreakdown, computeMood, moodWord, breakThresholds, pain, woundLabel, byId, canWork, canFight,
-  isBitten, SKILLS, aimFactor, skillOf, workMult, attr, ATTRS, ATTR_NAMES, level, xpProgress, topSkills, heldProf, prof,
+  isBitten, SKILLS, aimFactor, skillOf, workMult, attr, ATTRS, ATTR_NAMES, level, xpProgress, topSkills, heldGun, handling, FAV_BONUS,
   WEAPON_CLASSES, CLASS_SHORT, progressName, choosePerk, their, them, hasTrait, type ProgressKey,
 } from '../sim/survivors';
 import { PERKS } from '../data/perks';
@@ -274,13 +274,11 @@ function skillPip(s: Survivor, k: SkillId) {
 
 function skillsMini(s: Survivor) {
   const top = topSkills(s, 2).map((k) => skillPip(s, k));
-  const heavy = s.training?.heavy ?? 0;
   const at = (st: string, word: string, v: number, t: string) => `<span class="chip sv-attr"${tip(t)}>${icoFb(st, word)}<b>${v}</b></span>`;
   const attrs = [
     at('st_courage', 'nerve', attr(s, 'courage'), `<b>Courage ${attr(s, 'courage')}</b><br>Nerve on the wall: holds when it breaks.`),
     at('st_grit', 'grit', attr(s, 'grit'), `<b>Grit ${attr(s, 'grit')}</b><br>Shrugs off fatigue and pain.`),
   ];
-  if (heavy > 0 || emplacements().length) attrs.push(at('st_wall', 'heavy', heavy, `<b>Heavy weapons ${heavy}</b><br>Crew-served guns in the nests.`));
   return `<div class="skmini sv-skills">${top.join('')}<span class="sv-attrs">${attrs.join('')}</span></div>`;
 }
 
@@ -300,7 +298,7 @@ function survivorCard(s: Survivor, dots: Set<string> = new Set()) {
   const freeWeapons = G.weapons.filter((x) => x.uid === s.weapon || !living().some((o) => o.weapon === x.uid));
   const disabled = !canWork(s);
   const stale = !disabled && G.day > 1 && !planConfirmed(s) && !(onRunToday(s));
-  const hp = heldProf(s);
+  const hp = heldGun(s);
   const jobDef = JOBS.find((j) => j.id === s.job);
   const drill = s.job === 'drill' ? (() => { const d = drillPlan(s); return d.live ? `${d.rounds} ${esc(ammoLabel(d.ammo).toLowerCase())}` : 'No live rounds: dry-fire.'; })() : '';
   const jobTip = `<b>${esc(jobDef?.label ?? s.job)}</b> · ${esc(jobOutlook(s, s.job))}<br>${esc(jobDef?.hint ?? '')}${drill ? `<br>${drill}` : ''}`;
@@ -324,7 +322,7 @@ function survivorCard(s: Survivor, dots: Set<string> = new Set()) {
         </select>
         ${ammoSelect(G.weapons.find((x) => x.uid === s.weapon), true)}
         ${meleeSelect(s)}
-        ${hp ? `<span class="chip"${tip(`<b>${esc(CLASS_NAMES[hp.cls])} ${hp.v}</b><br>${esc(first(s))}'s proficiency (0–10). Grows with drill and use.`)}><b>${esc(CLASS_SHORT[hp.cls])} ${hp.v}</b></span>` : ''}
+        ${hp?.fav ? `<span class="chip good"${tip(`<b>Favourite gun</b><br>${esc(first(s))} handles a ${esc(CLASS_NAMES[hp.cls].toLowerCase())} as if Shooting were ${FAV_BONUS} higher: faster reloads, fewer jams.`)}><b>★ ${esc(CLASS_SHORT[hp.cls])}</b></span>` : ''}
         ${s.armor ? `<button class="mini" data-act="unarmor" data-id="${s.id}"${tip('Mill-plate vest: wounds 30% lighter. Click to take it off.')}>vest ✓</button>` : (G.flags.armorStock as number) > 0 ? `<button class="mini" data-act="armor" data-id="${s.id}"${tip('Give a mill-plate vest: wounds 30% lighter.')}>+ vest</button>` : ''}
       </div>`, { id: `sv-more-${s.id}`, cls: 'sv-more' })}
     </div>
@@ -363,7 +361,6 @@ function detailHtml(s: Survivor) {
     .map(([id, r]) => ({ id, o: byId(id), r }))
     .filter((x) => x.o)
     .sort((a, b) => Math.abs(b.r.opinion) - Math.abs(a.r.opinion) + (b.r.bond ? 100 : 0) - (a.r.bond ? 100 : 0));
-  const heavy = s.training?.heavy ?? 0;
   const wounds = s.wounds.filter((w) => !w.hidden);
   const best = topSkills(s, 1)[0];
   const mp = (p: { label: string; v: number }) => `<div class="mp ${p.v >= 0 ? 'pos' : 'neg'}"><span>${esc(p.label)}</span><b>${signed(p.v)}</b></div>`;
@@ -376,9 +373,7 @@ function detailHtml(s: Survivor) {
     `${SKILLS.map((k) => progRow(s, k, SKILL_NAMES[k], 'skill_' + k, s.passions.includes(k))).join('')}
     <div class="t-xs sv-sub">Nerve and body</div>
     ${progRow(s, 'courage', ATTR_NAMES.courage, 'st_courage')}${progRow(s, 'grit', ATTR_NAMES.grit, 'st_grit')}
-    ${heavy > 0 || emplacements().length ? progRow(s, 'heavy', progressName('heavy'), 'st_wall') : ''}
-    <div class="t-xs sv-sub">Guns</div>
-    <div class="sv-chips">${WEAPON_CLASSES.map((c) => `<span class="chip sv-gun ${prof(s, c) >= 5 ? 'good' : prof(s, c) <= 1 ? 'lo' : ''}"${tip(`<b>${esc(CLASS_NAMES[c])} ${prof(s, c)}</b><br>${Math.round(xpProgress(s, `prof_${c}`) * 100)}% to the next`)}><b>${esc(CLASS_SHORT[c])} ${prof(s, c)}</b></span>`).join('')}</div>`,
+    ${s.fav ? `<div class="sv-chips"><span class="chip sv-gun good"${tip(`<b>Favourite: ${esc(CLASS_NAMES[s.fav])}</b><br>Handles one as if Shooting were ${FAV_BONUS} higher (${handling(s, s.fav)}): faster reloads, fewer jams${s.fav === 'heavy' ? ', a steadier gun nest' : ''}. Give them one.`)}><b>★ ${esc(CLASS_SHORT[s.fav])}</b></span></div>` : ''}`,
     { id: 'sv-skills', open: true, cls: 'sv-fold' });
 
   const mood = fold(`<span class="t-l">Mood</span><span class="sv-meta"><b class="sv-big ${moodTone(s)}">${Math.round(s.mood)}</b> ${esc(moodWord(s.mood))}</span>`,
@@ -690,16 +685,16 @@ function modDeltaHtml(w: WeaponItem) {
   return out.length ? `<div>mods: ${out.join(' · ')}</div>` : '';
 }
 
-// A rack gun's "give to ▾": everyone who stands the wall, the ones who can't shoot first, with their
-// proficiency for this gun's class (it sets reload, jams and spread).
+// A rack gun's "give to ▾": everyone who stands the wall, the ones who can't shoot first, then whoever
+// handles it best (Shooting, +3 for a favourite: ★). Handling sets reload, jams and spread.
 function giveSelect(w: WeaponItem) {
   const cls = WEAPONS[w.def].cls;
   const line = wallLine();
-  const ppl = [...line.at, ...line.sitOut].sort((a, b) => +!line.idle.includes(a) - +!line.idle.includes(b) || prof(b, cls) - prof(a, cls));
+  const ppl = [...line.at, ...line.sitOut].sort((a, b) => +!line.idle.includes(a) - +!line.idle.includes(b) || handling(b, cls) - handling(a, cls));
   const dry = gunRounds(w) < 1;
-  return `<select class="give" data-act="give" data-w="${w.uid}" aria-label="Give the ${esc(WEAPONS[w.def].name)} to"${tip(`On the rack${dry ? ' · <b>no rounds for it</b>' : ''}. Give it to someone: ${esc(CLASS_SHORT[cls])} proficiency in brackets.`)}>
+  return `<select class="give" data-act="give" data-w="${w.uid}" aria-label="Give the ${esc(WEAPONS[w.def].name)} to"${tip(`On the rack${dry ? ' · <b>no rounds for it</b>' : ''}. Give it to someone: Shooting beside the name, ★ = their favourite kind of gun.`)}>
     <option value="">rack · give to</option>
-    ${ppl.map((s) => `<option value="${s.id}">${esc(first(s))} · ${esc(CLASS_SHORT[cls])} ${prof(s, cls)}${line.idle.includes(s) ? (s.weapon ? ' · dry' : ' · unarmed') : ''}</option>`).join('')}
+    ${ppl.map((s) => `<option value="${s.id}">${esc(first(s))} · Shooting ${s.skills.shooting}${s.fav === cls ? ' ★' : ''}${line.idle.includes(s) ? (s.weapon ? ' · dry' : ' · unarmed') : ''}</option>`).join('')}
   </select>`;
 }
 

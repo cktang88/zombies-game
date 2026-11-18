@@ -12,7 +12,7 @@ import { rollIncident, resolveEvent, returnsTick, INCIDENTS } from './sim/events
 import { Battle, W, H, type NightResult } from './night/battle';
 import { Expedition, type ExpeditionResult } from './night/expedition';
 import { wallLine } from './sim/readiness';
-import { living, displayName, first, byId, canFight, migrateSurvivor, gainXp, gainProf, heldProf, closeTo, drainLevelUps, makeSurvivor } from './sim/survivors';
+import { living, displayName, first, byId, canFight, migrateSurvivor, gainXp, handling, closeTo, drainLevelUps, makeSurvivor } from './sim/survivors';
 import { showDawnReport } from './ui/dawn';
 import { forTomorrow } from './sim/tomorrow';
 import { AMMO_RES, AMMO_TYPES, fireProfile, WEAPONS } from './data/weapons';
@@ -369,7 +369,7 @@ function deployStep() {
   });
   const plan = crewPlan();
   if (emps.length) {
-    crewEl.innerHTML = `<div class="dep crew"><header class="dep-h"><h2>The guns${qi('Heavy-weapons training decides how well a crew works one.')}</h2></header>
+    crewEl.innerHTML = `<div class="dep crew"><header class="dep-h"><h2>The guns${qi('Shooting decides how well a crew works one; someone whose favourite is the MG handles it 3 better.')}</h2></header>
       ${emps.map((e, i) => {
         const d = EMPLACEMENTS[e.id];
         const want = plan[String(i)] ?? 'auto';
@@ -377,9 +377,9 @@ function deployStep() {
           <span class="dim">${Math.round(e.cond * 100)}%</span>
           <label>post <select data-emp-post="${i}">${d.posts.map((p) => `<option value="${p}" ${p === e.post ? 'selected' : ''}>${p === 'roof' ? 'roof scaffold' : 'firestep'}</option>`).join('')}</select></label>
           <label>crew <select data-emp-crew="${i}">
-            <option value="auto" ${want === 'auto' ? 'selected' : ''}>best heavy-trained</option>
+            <option value="auto" ${want === 'auto' ? 'selected' : ''}>best gunner</option>
             <option value="none" ${want === 'none' ? 'selected' : ''}>nobody (I'll take it: [H])</option>
-            ${fighters.map((s) => `<option value="${esc(s.id)}" ${want === s.id ? 'selected' : ''}>${esc(first(s))} · heavy ${level(s, 'heavy')}${s.isLeader ? ' (you)' : ''}</option>`).join('')}
+            ${fighters.map((s) => `<option value="${esc(s.id)}" ${want === s.id ? 'selected' : ''}>${esc(first(s))} · ${handling(s, 'heavy')}${s.fav === 'heavy' ? ' ★' : ''}${s.isLeader ? ' (you)' : ''}</option>`).join('')}
           </select></label></p>`;
       }).join('')}</div>`;
   }
@@ -453,18 +453,14 @@ function night() {
   mountStage(app.querySelector('.stage')!, 'night');
 }
 
-// XP from the night: kills train shooting and the held gun's class; standing the wall builds courage;
+// XP from the night: kills train Shooting; standing the wall builds courage;
 // losing someone close, or the house, shakes it.
 function nightXp(r: NightResult) {
   const pts = G.nextNight?.points ?? 30;
   const big = G.nextNight?.special === 'tide' || G.nextNight?.special === 'crossing';
   for (const s of living()) {
     const k = r.killsBy?.[s.id] ?? 0;
-    if (k) {
-      gainXp(s, 'shooting', k * 3);
-      const hp = heldProf(s);
-      if (hp) gainProf(s, hp.cls, k * 3);
-    }
+    if (k) gainXp(s, 'shooting', k * 3);
     if (canFight(s)) gainXp(s, 'courage', 6 + pts * 0.15 + k + (r.wallHeld && big ? 20 : 0));
   }
   for (const g of G.graves.filter((x) => x.dead?.day === G.day)) {

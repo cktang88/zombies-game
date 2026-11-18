@@ -120,7 +120,7 @@ export function makeSurvivor(opts: Partial<Survivor> = {}): Survivor {
     for (const [k, v] of Object.entries(before.attrs ?? {})) s.attrs[k as AttrId] = Math.min(10, s.attrs[k as AttrId] + (v ?? 0));
   }
   s.xp ??= {};
-  s.prof ??= baseProf(s, before.prof);
+  if (!s.child && !opts.fav) s.fav = rollFav(before.prof);
   s.base ??= { ...s.skills, ...s.attrs };
   return s;
 }
@@ -210,45 +210,43 @@ export function skillOf(s: Survivor, k: SkillId) {
   return s.skills[k] * (s.passions.includes(k) ? 1.15 : 1);
 }
 
-// ---------- progression: skills, attributes and training grow with use ----------
+// ---------- progression: skills and courage grow with use ----------
 // API for other systems (night/combat, events, runs):
-//   gainXp(s, key, amount)  award XP. key = any SkillId, 'courage', 'grit' or 'heavy' (crew-served weapons).
+//   gainXp(s, key, amount)  award XP. key = any SkillId, 'courage' or 'grit'.
 //                           Passions give x1.5, Grim/Idle x0.8. Level-up at xp >= 100 * (level + 1), max 10.
 //                           Negative amounts shake it (a trauma can drop courage a level).
 //                           Level-ups queue a line for the report; drainLevelUps() collects them.
-//   level(s, key)           the current 0..10 value of a skill, attribute or training track.
+//   level(s, key)           the current 0..10 value of a skill or attribute.
 //   attr(s, 'courage'|'grit')  attribute 0..10 (defaults derived from traits for old saves).
 //   xpProgress(s, key)      0..1 toward the next level (for UI bars).
 // Rough XP scale: a working hour ~ 6 XP, a kill ~ 3 shooting XP, a held hard night ~ 15-30 courage XP.
 // Effects here: grit cuts fatigue drain (sim/day.ts) and the pain penalty in workMult; courage shifts break
-// thresholds. Combat may read attr(s, 'courage') for panic/flee and level(s, 'heavy') for emplacement handling.
+// thresholds. Combat reads attr(s, 'courage') for panic/flee and handling(s, cls) for guns and gun nests.
 export type AttrId = 'courage' | 'grit';
-export type ProgressKey = SkillId | AttrId | 'heavy' | `prof_${WeaponClass}`;
+export type ProgressKey = SkillId | AttrId;
 export const WEAPON_CLASSES: WeaponClass[] = ['handgun', 'smg', 'shotgun', 'rifle', 'assault', 'marksman', 'heavy', 'launcher', 'bow', 'improvised', 'melee'];
 // short labels for cards and sheets (data/weapons.ts CLASS_NAMES has the long ones)
 export const CLASS_SHORT: Record<WeaponClass, string> = { handgun: 'pistol', smg: 'SMG', shotgun: 'shotgun', rifle: 'rifle', assault: 'assault', marksman: 'scoped', heavy: 'MG', launcher: 'launcher', bow: 'bow', improvised: 'shop gun', melee: 'melee' };
-// Weapon-class proficiency (0..10), separate from shooting. Combat: read prof(s, weaponClass(w.def)) for handling
-// (reload/spread/jam). Award with gainProf(s, cls, xp) (same XP curve as skills; a kill ~ 3 XP).
-export function prof(s: Survivor, cls: WeaponClass) {
-  return s.prof?.[cls] ?? 0;
+// Gun handling (0..10): Shooting, plus FAV_BONUS with their favourite kind of gun. One number for reload, jams,
+// a guard's spread, the gun nests (handling(s, 'heavy')) and the hatchet (handling(s, 'melee')).
+// Shooting grows with drill, kills and crewing a nest; the favourite never changes.
+export const FAV_BONUS = 3;
+export function handling(s: Survivor, cls: WeaponClass) {
+  return Math.min(10, (s.skills.shooting ?? 0) + (s.fav === cls ? FAV_BONUS : 0));
 }
-export function gainProf(s: Survivor, cls: WeaponClass, xp: number) {
-  return gainXp(s, `prof_${cls}`, xp);
-}
-/** Proficiency with the gun this survivor carries (null if unarmed). */
-export function heldProf(s: Survivor): { cls: WeaponClass; v: number } | null {
+/** The class of the gun this survivor carries and whether it is their favourite (null if unarmed). */
+export function heldGun(s: Survivor): { cls: WeaponClass; fav: boolean; v: number } | null {
   const w = G.weapons.find((x) => x.uid === s.weapon);
   if (!w) return null;
   const cls = weaponClass(w.def);
-  return { cls, v: prof(s, cls) };
+  return { cls, fav: s.fav === cls, v: handling(s, cls) };
 }
-function baseProf(s: Survivor, grants: Partial<Record<WeaponClass, number>> = {}) {
-  const out: Partial<Record<string, number>> = {};
-  for (const c of WEAPON_CLASSES) {
-    const v = Math.round(s.skills.shooting * 0.35 + R.gauss(0, 0.8) + (grants[c] ?? 0));
-    out[c] = Math.max(0, Math.min(10, v));
-  }
-  return out;
+// favourites rolled for survivors without a backstory gun: the guns the house actually finds, mostly
+const FAV_ROLL: [WeaponClass, number][] = [['handgun', 4], ['shotgun', 4], ['rifle', 3], ['smg', 2], ['improvised', 2], ['bow', 1], ['assault', 1], ['marksman', 1], ['heavy', 1], ['melee', 1]];
+function rollFav(grants: Partial<Record<WeaponClass, number>> = {}): WeaponClass {
+  const top = Object.entries(grants).sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))[0];
+  if (top) return top[0] as WeaponClass;
+  return R.weighted(FAV_ROLL, (x) => x[1])![0];
 }
 export const ATTRS: AttrId[] = ['courage', 'grit'];
 export const ATTR_NAMES: Record<AttrId, string> = { courage: 'Courage', grit: 'Grit' };
@@ -275,8 +273,6 @@ export function attr(s: Survivor, a: AttrId): number {
 }
 export function level(s: Survivor, k: ProgressKey): number {
   if (k === 'courage' || k === 'grit') return attr(s, k);
-  if (k === 'heavy') return s.training?.heavy ?? 0;
-  if (k.startsWith('prof_')) return s.prof?.[k.slice(5)] ?? 0;
   return s.skills[k as SkillId] ?? 0;
 }
 function setLevel(s: Survivor, k: ProgressKey, v: number) {
@@ -284,9 +280,7 @@ function setLevel(s: Survivor, k: ProgressKey, v: number) {
   if (k === 'courage' || k === 'grit') {
     attr(s, k);
     s.attrs![k] = v;
-  } else if (k === 'heavy') (s.training ??= {}).heavy = v;
-  else if (k.startsWith('prof_')) (s.prof ??= {})[k.slice(5)] = v;
-  else s.skills[k as SkillId] = v;
+  } else s.skills[k as SkillId] = v;
 }
 export function xpNeeded(lvl: number) {
   return 100 * (lvl + 1);
@@ -297,11 +291,10 @@ export function xpProgress(s: Survivor, k: ProgressKey) {
 }
 const LEVEL_WORDS: Partial<Record<ProgressKey, string>> = {
   shooting: 'shooting straight', building: 'building', medicine: 'stitching', scavenging: 'finding things',
-  social: 'talking to people', courage: 'standing the wall', grit: 'going without', heavy: 'working the gun nest',
+  social: 'talking to people', courage: 'standing the wall', grit: 'going without',
 };
-const KEY_NAMES: Record<string, string> = { courage: 'Courage', grit: 'Grit', heavy: 'Heavy weapons' };
+const KEY_NAMES: Record<string, string> = { courage: 'Courage', grit: 'Grit' };
 export function progressName(k: ProgressKey) {
-  if (k.startsWith('prof_')) return CLASS_SHORT[k.slice(5) as WeaponClass] ?? k.slice(5);
   return KEY_NAMES[k] ?? k[0].toUpperCase() + k.slice(1);
 }
 export function gainXp(s: Survivor, k: ProgressKey, amount: number): boolean {
@@ -356,12 +349,21 @@ export function migrateSurvivor(s: Survivor) {
   };
   fold('building', 'crafting');
   fold('social', 'psych');
+  // per-gun proficiency and heavy-weapons training fold into Shooting; the best-known gun becomes the favourite
+  if (s.prof || s.training) {
+    const profs = Object.entries(s.prof ?? {}).filter(([, v]) => (v ?? 0) > 0).sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0));
+    const heavy = s.training?.heavy ?? 0;
+    old.shooting = Math.max(old.shooting ?? 0, heavy, profs[0]?.[1] ?? 0);
+    if (!s.child && !s.fav) s.fav = heavy > (profs[0]?.[1] ?? 0) ? 'heavy' : (profs[0]?.[0] as WeaponClass | undefined);
+    delete s.prof; delete s.training;
+    if (s.xp) for (const k of Object.keys(s.xp)) if (k.startsWith('prof_') || k === 'heavy') delete s.xp[k];
+  }
+  if (!s.child && !s.fav) s.fav = rollFav();
   if (old.farming != null) { delete old.farming; if (s.xp) delete s.xp.farming; if (s.base) delete s.base.farming; }
   for (const k of SKILLS) old[k] ??= 0;
   s.passions = [...new Set(s.passions.map((p) => ({ crafting: 'building', psych: 'social' } as Record<string, SkillId>)[p] ?? p).filter((p) => (SKILLS as string[]).includes(p)))] as SkillId[];
   s.attrs ??= baseAttrs(s, false);
   s.xp ??= {};
-  s.prof ??= baseProf(s);
   s.base ??= { ...s.skills, ...s.attrs };
   s.perks ??= [];
   // perks that were cut drop; a stale offer goes; a tier the skill has reached with no perk is offered again

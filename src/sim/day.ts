@@ -8,7 +8,7 @@ import { WEAPONS, MODS, modFits, slotsFor, selectedAmmo } from '../data/weapons'
 import {
   living, first, displayName, workMult, skillOf, addThought, wound, canWork, rel, changeOpinion, setBond, hasTrait,
   computeMood, breakThresholds, killSurvivor, pain, they, their, tale, isBitten, PART_NAMES, closeTo, them, checkTitles,
-  dedupeSprites, perkMul, perkFx, settlePerkOffers, gainXp, attr, counsel, counselled, drainLevelUps, gainProf, heldProf, canFight,
+  dedupeSprites, perkMul, perkFx, settlePerkOffers, gainXp, attr, counsel, counselled, drainLevelUps, canFight,
 } from './survivors';
 import { bondLine, breakLine } from './chronicle';
 
@@ -302,9 +302,6 @@ export function resolveDayWork(): string[] {
         const d = drillPlan(s);
         if (d.live && d.ammo) add(d.ammo, -d.rounds);
         gainXp(s, 'shooting', (d.live ? 2 : 1) * XP_PER_HOUR * hours);
-        if (d.heavy) gainXp(s, 'heavy', (d.live ? 2 : 1) * 5 * hours);
-        const held = heldProf(s);
-        if (held) gainProf(s, held.cls, (d.live ? 2 : 1) * 5 * hours);
         out.push(d.live
           ? `${first(s)} drilled ${hours}h${d.heavy ? ' on the gun nest' : ''} and burned ${d.rounds} ${(RES_LABEL[d.ammo!] ?? 'rounds').toLowerCase()}.`
           : `${first(s)} dry-fired for ${hours}h${d.heavy ? ' behind the gun nest' : ''}. Without live rounds it only half takes.`);

@@ -2,7 +2,7 @@
 // Pure helpers: no game state here. Battle owns the per-gun state (bloom, heat, chamber, pouch).
 import type { WeaponItem, Survivor } from '../types';
 import { WEAPONS, type FireProfile, type ShooterMods } from '../data/weapons';
-import { prof, hasTrait, attr, perkMul } from '../sim/survivors';
+import { handling, hasTrait, attr, perkMul } from '../sim/survivors';
 
 /** Bloom (rad) added per shot, by weapon id first, then by class (balance.md §8.1). */
 const KICK_ID: Record<string, number> = { carbine: 0.085 };
@@ -63,12 +63,12 @@ export function drawTime(p: FireProfile): number {
   return t[p.cls] ?? 0.7;
 }
 
-/** Shooter mods from the survivor: class proficiency and skill set reload, spread, jams (fireProfile's 2nd arg). */
+/** Shooter mods from the survivor: handling (Shooting + favourite) sets reload, spread, jams (fireProfile's 2nd arg). */
 export function shooterMods(s: Survivor, cls: FireProfile['cls'], forGuard: boolean): ShooterMods {
-  const pv = prof(s, cls); // 0..10
+  const pv = handling(s, cls); // 0..10: Shooting, +3 with their favourite
   const steady = hasTrait(s, 'steady') ? 0.75 : 1;
   return {
-    reloadMul: (1.15 - pv * 0.035) * perkMul(s, 'reload'), // prof 0: 15% slower, prof 10: 20% faster; perks
+    reloadMul: (1.15 - pv * 0.035) * perkMul(s, 'reload'), // handling 0: 15% slower, 10: 20% faster; perks
     jamMul: 1.25 - pv * 0.06, // handling 10: about half the jams
     spreadMul: forGuard ? 1.1 - pv * 0.025 : 1, // the player's own hand is the player's spread
     bloomMul: steady,
@@ -76,7 +76,7 @@ export function shooterMods(s: Survivor, cls: FireProfile['cls'], forGuard: bool
 }
 /** Seconds to clear a stoppage: tap-rack is quick; a double-feed is the punishing one. */
 export function clearTime(p: FireProfile, s: Survivor, kind: Malfunction) {
-  const pv = prof(s, p.cls);
+  const pv = handling(s, p.cls);
   const k = (1.1 - pv * 0.04) * perkMul(s, 'jamClear'); // Tap-rack perk
   if (kind === 'double') return p.jamClear * 1.8 * k;
   if (kind === 'short') return 0.3;
