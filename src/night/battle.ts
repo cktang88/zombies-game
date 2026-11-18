@@ -4389,7 +4389,7 @@ export class Battle {
     c.restore();
   }
   /** The keycap hints that matter right now: an empty gun, a banked rally, a pressed wall, a selected guard; and the modules' own (nest, sally). */
-  contextHints(): Hint[] {
+  contextHints(coach: { key: string }[] = []): Hint[] {
     const p = this.player, out: Hint[] = [];
     if (p?.w && !this.jam && this.playerReload <= 0) {
       const prof = this.eff(p);
@@ -4407,7 +4407,8 @@ export class Battle {
       for (const h of [{ key: 'night.reload', label: 'reload' }, { key: 'night.duck', label: 'duck' }, { key: 'RMB', label: 'focus' }, { key: '1-9', label: 'guard' }])
         if (!out.some((o) => o.key === h.key)) out.push(h);
     }
-    return out.slice(0, 6);
+    // a key the coach is teaching right now is not repeated down here
+    return (coach.length ? out.filter((h) => !coach.some((l) => l.key === h.key)) : out).slice(0, 6);
   }
   /**
    * The first nights' coach: at most two short lines under the news, each with a yellow dot, about
@@ -4434,8 +4435,7 @@ export class Battle {
     if (this.t > 25) want('focus', 'RMB', 'Hold to steady your aim');
     return out.slice(0, 2);
   }
-  drawCoach(c: CanvasRenderingContext2D) {
-    const lines = this.coachLines();
+  drawCoach(c: CanvasRenderingContext2D, lines: { id: string; key: string; text: string }[]) {
     const dt = this.coachT < 0 ? 0 : Math.max(0, Math.min(0.1, this.t - this.coachT));
     this.coachT = this.t;
     if (!lines.length) return;
@@ -4464,7 +4464,7 @@ export class Battle {
       { title: 'your gun', rows: [{ key: 'LMB', label: 'fire' }, { key: 'RMB', label: 'focus' }, { key: 'night.reload', label: 'reload (hold: speed)' }, { key: 'night.weapon', label: 'next gun' }, ...(multiAmmo ? [{ key: 'night.ammo', label: 'ammo' }] : []), { key: 'night.selector', label: 'selector' }] },
       { title: 'you', rows: [{ key: 'night.duck', label: 'duck' }, { key: 'night.firebomb', label: `firebomb ×${G.stores.molotov}` }, { key: 'night.melee', label: 'melee' }, { key: 'night.nest', label: 'gun nest' }, { key: 'night.rally', label: 'rally' }, { key: 'night.sally', label: 'sally' }] },
       { title: 'the guards', rows: [{ key: '1-9', label: 'select (Tab: next)' }, { key: 'night.free', label: 'free fire' }, { key: 'night.hold', label: 'hold' }, { key: 'night.heads', label: 'heads' }, { key: 'night.wall', label: 'wall (Shift: all)' }, { key: 'night.post', label: 'post' }] },
-      { title: 'the night', rows: [{ key: 'night.mark', label: 'mark target' }, { key: 'night.hurry', label: 'hurry' }, { key: 'night.pause', label: 'pause' }, { key: 'F1', label: 'this sheet' }] },
+      { title: 'the night', rows: [{ key: 'night.lure', label: 'lure' }, { key: 'night.trap', label: 'spring trap' }, { key: 'night.mark', label: 'mark target' }, { key: 'night.hurry', label: 'hurry' }, { key: 'night.pause', label: 'pause' }, { key: 'F1', label: 'this sheet' }] },
     ];
   }
   drawHud(c: CanvasRenderingContext2D) {
@@ -4635,16 +4635,17 @@ export class Battle {
     // keys: no wall of them. Only what matters this second, as keycap glyphs, bottom left; the
     // whole sheet while [F1] is held (or paused). A phone, or a canvas too small to read, shows none.
     const narrow = (this.canvas.getBoundingClientRect().width || W) < 700 || coarsePointer(); // the stage may be CSS-transformed: measure what shows
+    const coach = narrow ? [] : this.coachLines();
     if (!narrow) {
       if (this.keySheetHeld || this.paused) keySheet(c, W, H, this.keyGroups());
       else if (keyHintsOn()) {
-        const hs = this.contextHints();
+        const hs = this.contextHints(coach);
         const x = hs.length ? 20 + hintRow(c, hs, 20, H - 14) + 18 : 20;
         hintRow(c, [{ key: 'F1', label: 'keys' }], x, H - 14, 'left', 0.45);
       }
     }
     this.messages.draw(c, W, 104, narrow ? 30 : 17);
-    if (!narrow) this.drawCoach(c);
+    if (!narrow) this.drawCoach(c, coach);
     // crosshair: circle sized by real spread, at where the hand points
     if (p && p.w && !this.done) {
       const prof = this.eff(p);

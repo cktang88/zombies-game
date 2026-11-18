@@ -7,10 +7,11 @@
 //
 // Keys: [L] pull a lure (tin cans / radio), [G] drop the deadfall or fire the pipe mine.
 // Propane is shot: onShot tests the leader's rays against the tank before the crowd.
-import { is, keyCap } from '../ui/keys';
+import { is } from '../ui/keys';
 import type { Battle } from './battle';
 import { LANES, W } from './battle';
 import type { BattleHook, Zed, Guardian, SortedDraw } from './hook';
+import type { Hint } from './hud';
 import { TRAPS, type TrapDef, type Placement } from '../data/traps';
 import { G, R } from '../state';
 import { sfx } from '../audio';
@@ -969,20 +970,16 @@ export class Traps implements BattleHook {
     c.restore();
   }
 
-  drawOver(c: CanvasRenderingContext2D) {
-    if (!this.list.length || this.b.intro > 0) return;
-    const parts: string[] = [];
-    const lures = this.list.filter((t) => t.def.fx.lure && t.uses > 0 && !t.spent && !t.on).length;
-    if (this.list.some((t) => t.def.fx.lure)) parts.push(`${keyCap('night.lure')} lure${lures ? ` ×${lures}` : ' —'}`);
-    const g = this.list.filter((t) => (t.def.id === 'deadfall' || t.def.id === 'pipemine') && t.armed);
-    if (this.list.some((t) => t.def.id === 'deadfall' || t.def.id === 'pipemine')) parts.push(`${keyCap('night.trap')} ${g.map((t) => (t.def.id === 'deadfall' ? 'deadfall' : 'pipe mine')).join(', ') || '—'}`);
-    if (this.list.some((t) => t.def.id === 'propane' && t.armed)) parts.push('shoot the propane');
-    if (!parts.length) return;
-    c.save();
-    c.font = '13px "Special Elite", monospace';
-    c.textAlign = 'left';
-    c.fillStyle = `rgba(216,196,140,${0.6 + 0.4 * Math.min(1, this.hint)})`;
-    c.fillText(`traps: ${parts.join('   ·   ')}`, 20, 720 - 40);
-    c.restore();
+  /** The traps' keys join the battle's keycap chips (bottom left), only while there is something to fire. */
+  hints(): Hint[] {
+    if (!this.list.length || this.b.intro > 0 || this.b.done) return [];
+    const out: Hint[] = [];
+    let lures = 0;
+    for (const t of this.list) if (t.def.fx.lure && t.uses > 0 && !t.spent && !t.on) lures++;
+    if (lures) out.push({ key: 'night.lure', label: 'lure', n: lures });
+    const armed = this.list.filter((t) => (t.def.id === 'deadfall' || t.def.id === 'pipemine') && t.armed);
+    if (armed.length) out.push({ key: 'night.trap', label: armed.some((t) => t.def.id === 'deadfall') ? 'deadfall' : 'pipe mine', n: armed.length > 1 ? armed.length : undefined });
+    if (this.hint > 0 && this.list.some((t) => t.def.id === 'propane' && t.armed)) out.push({ key: 'LMB', label: 'the propane' });
+    return out;
   }
 }
