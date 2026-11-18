@@ -106,7 +106,7 @@
 .deploywrap { min-height: 100vh; overflow: auto; padding: 16px 12px 28px; background-color: #0e0d0b; background-size: cover; background-position: center; background-attachment: fixed; display: flex; flex-direction: column; gap: 12px; }
 .deploywrap > div:empty { display: none; }
 .deploywrap .dep { box-shadow: 0 8px 30px rgba(0, 0, 0, .55); width: 100%; }
-.dep.posts .postrow:has(select) { display: grid; grid-template-columns: 7em minmax(8em, 11em) 12em 1fr; gap: 10px; align-items: center; margin: 4px 0; padding: 3px 0; border-bottom: 1px dotted rgba(90, 79, 60, .5); }
+.dep.posts .postrow:has(select) { display: grid; grid-template-columns: 7em minmax(10em, 17em) 12em 1fr; gap: 10px; align-items: center; margin: 4px 0; padding: 3px 0; border-bottom: 1px dotted rgba(90, 79, 60, .5); }
 .dep.posts .postrow b { min-width: 0; }
 .dep.posts .postrow select { width: 100%; }
 .dep.posts .postrow:not(:has(select)) { margin-top: 10px; }
@@ -134,3 +134,11 @@
 .dep-intel p { margin: 2px 0; font-size: var(--fs-s, 13px); color: var(--dim, #9a8f7a); }
 .dep-intel p.who { color: var(--ink, #e6dcc6); }
 .dep-kits:has(.fit) { padding-top: 8px; }
+/* posts: every post's job up front, the effective post's line on each row */
+.postkeys { display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 2px 0 8px; }
+.chip.postkey { gap: 6px; }
+.chip.postkey .t-s { color: var(--dim, #9a8f7a); }
+.dep.posts .postrow .ico { width: 18px; height: 18px; vertical-align: -4px; }
+.dep.posts .postrow .tag { margin-left: 6px; }
+.dep.posts .postrow.sitout { margin-top: 8px; }
+.dep.posts .postrow .ico, .postkey .ico { width: 22px; height: 20px; object-fit: contain; }

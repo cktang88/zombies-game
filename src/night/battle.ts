@@ -202,6 +202,38 @@ export type Post = 'step' | 'roof' | 'loop' | 'runner';
 /** What a guard shoots at: Free fire, Hold fire, Heads only, Protect the wall. */
 export type Order = 'free' | 'hold' | 'heads' | 'wall';
 export const POST_NAMES: Record<Post, string> = { step: 'Firestep', roof: 'Roof nest', loop: 'Loophole', runner: 'Runner' };
+/** What a gun is best at on the wall: a shotgun at the loophole, a rifle on the roof, a handgun runs. */
+export function gunSuits(w: WeaponItem | null | undefined): Post {
+  const d = w ? WEAPONS[w.def] : undefined;
+  if (!d) return 'step';
+  if (d.caliber === 'shot') return 'loop';
+  if (d.cls === 'rifle' || d.cls === 'marksman') return 'roof';
+  if (d.cls === 'handgun') return 'runner';
+  return 'step';
+}
+/** Posts for the guards beside the leader: the ones picked at dusk (fixed) stand; the rest get the
+ *  defaults around them. A shotgun at the loophole, the best long gun on the roof (if there is a nest),
+ *  the lightest handgun (or empty hands) runs when the line is long. Shared by the night and the deploy screen. */
+export function autoPosts(others: { s: Survivor; w: WeaponItem | null }[], roofNest: boolean, fixed: Record<string, Post> = {}): Record<string, Post> {
+  const out: Record<string, Post> = {};
+  for (const g of others) if (fixed[g.s.id]) out[g.s.id] = fixed[g.s.id];
+  const free = others.filter((g) => !out[g.s.id]);
+  const taken = (p: Post) => Object.values(out).includes(p);
+  if (!taken('loop') && others.length >= 2) {
+    const loop = free.find((g) => g.w && WEAPONS[g.w.def]?.caliber === 'shot' && !hasTrait(g.s, 'coward'));
+    if (loop) out[loop.s.id] = 'loop';
+  }
+  if (roofNest && !taken('roof')) {
+    const roof = free.filter((g) => !out[g.s.id] && g.w && ['rifle', 'marksman'].includes(WEAPONS[g.w.def]?.cls)).sort((a, b) => b.s.skills.shooting - a.s.skills.shooting)[0];
+    if (roof) out[roof.s.id] = 'roof';
+  }
+  if (others.length >= 4 && !taken('runner')) {
+    const run = free.filter((g) => !out[g.s.id]).sort((a, b) => (a.w ? WEAPONS[a.w.def]?.dmg ?? 0 : 0) - (b.w ? WEAPONS[b.w.def]?.dmg ?? 0 : 0))[0];
+    if (run && (!run.w || WEAPONS[run.w.def]?.cls === 'handgun')) out[run.s.id] = 'runner';
+  }
+  for (const g of free) out[g.s.id] ??= 'step';
+  return out;
+}
 export const ORDER_NAMES: Record<Order, string> = { free: 'Free fire', hold: 'Hold fire', heads: 'Heads only', wall: 'Protect wall' };
 /** A bile glob in the air (Biler). */
 interface Glob { x0: number; y0: number; x1: number; y1: number; gy0: number; gy1: number; t: number; dur: number; g: Guard | null; lane: number; ducked?: boolean; rolled?: boolean }
@@ -525,20 +557,9 @@ export class Battle {
     let orders: Record<string, Order> = {};
     try { orders = G.flags.orders ? JSON.parse(G.flags.orders as string) as Record<string, Order> : {}; } catch { orders = {}; }
     const others = this.guards.filter((g) => !g.s.isLeader);
-    for (const g of others) { if (posts[g.s.id]) g.post = posts[g.s.id]; if (orders[g.s.id]) g.order = orders[g.s.id]; }
-    if (!Object.keys(posts).length) {
-      // a shotgun at the loophole, the best long gun on the roof (if there is a nest), a runner when the line is long
-      const loop = others.find((g) => g.w && WEAPONS[g.w.def].caliber === 'shot' && !hasTrait(g.s, 'coward'));
-      if (loop && others.length >= 2) loop.post = 'loop';
-      if (this.roofNest()) {
-        const roof = others.filter((g) => g.post === 'step' && g.w && ['rifle', 'marksman'].includes(WEAPONS[g.w.def].cls)).sort((a, b) => b.s.skills.shooting - a.s.skills.shooting)[0];
-        if (roof) roof.post = 'roof';
-      }
-      if (others.length >= 4) {
-        const run = others.filter((g) => g.post === 'step').sort((a, b) => (a.w ? WEAPONS[a.w.def].dmg : 0) - (b.w ? WEAPONS[b.w.def].dmg : 0))[0];
-        if (run && (!run.w || WEAPONS[run.w.def].cls === 'handgun')) run.post = 'runner';
-      }
-    }
+    // a post picked at dusk holds; everyone left on "auto" gets the sensible default around them
+    const auto = autoPosts(others, this.roofNest(), posts);
+    for (const g of others) { g.post = auto[g.s.id] ?? 'step'; if (orders[g.s.id]) g.order = orders[g.s.id]; }
     for (const g of others) g.homeX = -1e3; // slots are handed out afresh, from the wall back
     for (const g of others) this.placePost(g, g.post);
     // the frayed may come apart on the wall tonight

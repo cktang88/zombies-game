@@ -7,7 +7,7 @@ import { installKit, tip, ico, chip, fold, qi, tag } from './ui/kit';
 import { resolveDayWork, dawnTick, nextWeather, prepareRun, tomorrowTeaser, restoreRunMate } from './sim/day';
 import { dailySeed, parseSeed } from './rng';
 import { planNight, afterNight, PERSONAS, nightIntel, expectedTypes, SPECIAL_INFO } from './sim/director';
-import { POST_NAMES, type Post as GuardPost } from './night/battle';
+import { POST_NAMES, autoPosts, gunSuits, type Post as GuardPost } from './night/battle';
 import { rollIncident, resolveEvent, returnsTick } from './sim/events';
 import { Battle, W, H, type NightResult } from './night/battle';
 import { Expedition, type ExpeditionResult } from './night/expedition';
@@ -294,7 +294,10 @@ function deployStep() {
   const emps = parseEmplacements(G.flags.emplacements).filter((e) => EMPLACEMENTS[e.id]?.crew);
   const kits = Object.values(stock).some((v) => v > 0);
   const fighters = living().filter(canFight);
-  const guards = fighters.filter((s) => !s.isLeader).slice(0, 5);
+  // the wall takes six, the leader first (battle.ts setupGuards); anyone past that sits out
+  const onWall = [...fighters].sort((a, b) => (b.isLeader ? 1 : 0) - (a.isLeader ? 1 : 0));
+  const sitOut = onWall.splice(6);
+  const guards = onWall.filter((s) => !s.isLeader);
   if (!kits && !emps.length && !guards.length) return night();
   app.onclick = null;
   app.onchange = null;
@@ -304,26 +307,41 @@ function deployStep() {
   const rootEl = app.querySelector('.dep-root') as HTMLElement;
   // ---- where each guard stands (night/battle.ts Post); the roof nest if there is one ----
   const NEST_COST = { wood: 12, scrap: 4 } as const;
+  const POST_ICON: Record<GuardPost, string> = { step: 'st_wall', loop: 'shells', runner: 'ammo', roof: 'scoped' };
+  const hint: Record<GuardPost, string> = { step: 'shoots over the wall', loop: 'shoves them back; gets clawed', runner: 'all reload faster', roof: 'sees farther; not at the wall' };
+  const longHint: Record<GuardPost, string> = { step: 'Shoots over the wall at whatever comes.', loop: 'A shotgun through the loophole: shoves harder than anyone. Big ones claw that guard.', runner: 'Carries ammo along the line: everyone reloads faster. Shoots only what gets over.', roof: 'Up on the garage: sees much farther and aims steadier, but cannot angle down at the wall.' };
   const renderPosts = () => {
     if (!guards.length) { postsEl.innerHTML = ''; return; }
     let saved: Record<string, GuardPost> = {};
     try { saved = G.flags.posts ? JSON.parse(G.flags.posts as string) as Record<string, GuardPost> : {}; } catch { saved = {}; }
     const nest = !!G.flags.roofNest || G.buildings.some((b) => b.id === 'roofnest');
     const opts: GuardPost[] = ['step', 'loop', 'runner', ...(nest ? ['roof' as GuardPost] : [])];
-    const hint: Record<GuardPost, string> = { step: 'shoots over the wall', loop: 'a shotgun at the loophole: shoves harder; gets clawed by big ones', runner: 'carries ammo: everyone reloads faster; shoots only what gets over', roof: 'sees farther and steadier; cannot angle down at the wall' };
+    const fixed: Record<string, GuardPost> = {};
+    for (const s of guards) if (saved[s.id] && opts.includes(saved[s.id])) fixed[s.id] = saved[s.id];
+    const gunOf = (s: Survivor) => G.weapons.find((x) => x.uid === s.weapon) ?? null;
+    // what "auto" gives each guard tonight, around the posts picked by hand (the night uses the same rule)
+    const eff = autoPosts(guards.map((s) => ({ s, w: gunOf(s) })), nest, fixed);
     const canNest = !nest && (G.stores.wood ?? 0) >= NEST_COST.wood && (G.stores.scrap ?? 0) >= NEST_COST.scrap;
-    postsEl.innerHTML = `<div class="dep posts"><header class="dep-h"><h2>Posts${qi(`Who stands where. One at the loophole, one on the roof.<br>${opts.map((p) => `<b>${POST_NAMES[p]}</b>: ${esc(hint[p])}`).join('<br>')}`)}</h2></header>
+    // every post's job up front: icon, name, a short effect
+    const legend = (['step', 'loop', 'runner', 'roof'] as GuardPost[]).map((p) => `<span class="chip postkey${p === 'roof' && !nest ? ' lo' : ''}"${tip(`<b>${POST_NAMES[p]}</b>: ${esc(longHint[p])}${p === 'roof' && !nest ? '<br>Needs a roof nest (below, or built at the workbench).' : ''}`)}>${ico(POST_ICON[p])}<b>${POST_NAMES[p]}</b><span class="t-s">${esc(hint[p])}</span></span>`).join('');
+    postsEl.innerHTML = `<div class="dep posts"><header class="dep-h"><h2>Posts${qi('Who stands where beside you. One at the loophole, one on the roof. <b>auto</b> picks by gun: a shotgun at the loophole, a rifle on the roof, a handgun runs.')}</h2></header>
+      <div class="postkeys">${legend}</div>
       ${guards.map((s) => {
-        const w = G.weapons.find((x) => x.uid === s.weapon);
-        const cur = saved[s.id] && opts.includes(saved[s.id]) ? saved[s.id] : '';
-        return `<p class="postrow"><b>${esc(first(s))}</b> <span class="dim">${w ? esc(w.name ? `"${w.name}"` : WEAPONS[w.def]?.name.toLowerCase() ?? w.def) : 'no gun'}</span>
-          <select data-post="${esc(s.id)}"><option value="" ${cur ? '' : 'selected'}>let them choose</option>${opts.map((p) => `<option value="${p}" ${p === cur ? 'selected' : ''}>${POST_NAMES[p]}</option>`).join('')}</select>
-          <span class="dim">${cur ? esc(hint[cur]) : ''}</span></p>`;
+        const w = gunOf(s);
+        const cur = fixed[s.id] ?? '';
+        const suits = gunSuits(w);
+        const suitTag = !w ? tag('no gun', 'Takes a place on the wall and does nothing. Hand them a gun in the Armory.', 'bad')
+          : suits === 'step' ? '' : tag(`suits ${POST_NAMES[suits].toLowerCase()}`, `${esc(WEAPONS[w.def]?.name ?? '')}: best ${suits === 'loop' ? 'at the loophole' : suits === 'roof' ? 'on the roof' : 'as the runner'}.`, eff[s.id] === suits ? 'good' : '');
+        return `<p class="postrow"><b>${esc(first(s))}</b><span class="dim">${w ? esc(w.name ? `"${w.name}"` : WEAPONS[w.def]?.name.toLowerCase() ?? w.def) : ''} ${suitTag}</span>
+          <select data-post="${esc(s.id)}"><option value="" ${cur ? '' : 'selected'}>auto · ${POST_NAMES[eff[s.id]]}</option>${opts.map((p) => `<option value="${p}" ${p === cur ? 'selected' : ''}>${POST_NAMES[p]}</option>`).join('')}</select>
+          <span class="dim">${ico(POST_ICON[eff[s.id]])} ${esc(hint[eff[s.id]])}</span></p>`;
       }).join('')}
+      ${sitOut.length ? `<p class="postrow sitout">${tag('sits out', 'Only six fit on the wall: you and five.')} <span class="dim">${sitOut.map((s) => esc(first(s))).join(', ')}</span></p>` : ''}
       <p class="postrow">${nest ? '<span class="dim">The roof nest is up on the garage.</span>' : `<button type="button" class="mini" data-nest ${canNest ? '' : 'disabled'}${tip('A nest for one rifle on the garage roof. Cheaper built at the workbench in the day.')}>Throw up a roof nest now</button> <span class="dim">${NEST_COST.wood} timber, ${NEST_COST.scrap} scrap</span>`}</p></div>`;
   };
   const readPosts = () => {
     if (!guards.length) return;
+    // only the posts picked by hand are kept; "auto" rows stay auto (the night fills them in around these)
     const posts: Record<string, GuardPost> = {};
     const taken = new Set<GuardPost>();
     for (const el of Array.from(postsEl.querySelectorAll<HTMLSelectElement>('[data-post]'))) {
@@ -333,11 +351,8 @@ function deployStep() {
       taken.add(p);
       posts[el.dataset.post!] = p;
     }
-    if (Object.keys(posts).length) {
-      // anyone left to choose stands the firestep
-      for (const s of guards) posts[s.id] ??= 'step';
-      G.flags.posts = JSON.stringify(posts);
-    } else delete G.flags.posts;
+    if (Object.keys(posts).length) G.flags.posts = JSON.stringify(posts);
+    else delete G.flags.posts;
   };
   renderPosts();
   postsEl.addEventListener('change', (e) => { sfx.ui(); readPosts(); renderPosts(); void e; });
