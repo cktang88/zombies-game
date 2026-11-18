@@ -5,7 +5,7 @@ import { G, R, log, add, newWeapon, findDoc, uid } from '../state';
 import { ZOMBIES, type ZombieDef } from '../data/zombies';
 import { WEAPONS, fireProfile, ammoTypesFor, ammoLabel, AMMO_TYPES, armorDamage, roundsInStores, shotSound, BURN, FLARE_LIGHT, MODS, wearMods, blastDamage, MELEE, meleeProfile, FISTS, BLEED_TIME, type FireProfile, type MeleeProfile } from '../data/weapons';
 import { SITES, RES_LABEL, RES_ICON, type Site } from '../data/world';
-import { Ticker, caps, hintRow, keycap, capOf, dot, FONT, type Hint } from './hud';
+import { Ticker, caps, hintRow, keycap, capOf, dot, panel, worldLabel, keySheet, keyHintsOn, FONT, type Hint } from './hud';
 import { img, flashImg, shadeImg } from '../assets';
 import { depthScale, canvas, bakeSprite, bakeLayer, bakeGround, fgStrip, type Look, type Baked } from './render';
 import { sfx, wind, gunSoundFor, type Surface } from '../audio';
@@ -292,7 +292,8 @@ export class Expedition {
     (globalThis as unknown as { __EX: Expedition }).__EX = this; // debug handle (tests)
     wind(true);
     this.say(`${this.site.name}. ${this.site.desc}`, 6);
-    this.say(`[${keyLabel(keyOf('run.left'))}/${keyLabel(keyOf('run.right'))}] walk · ${keyCap('run.search')} search · ${keyCap('run.shove')} shove${this.w && ammoTypesFor(this.w.def).length > 1 ? ` · ${keyCap('run.ammo')} ammo` : ''} · ${keyCap('run.pack')}/${keyCap('run.drop')} pick & drop from the pack · ${keyCap('run.swing')}/right-click ${this.kn ? MELEE[this.kn.def].name.toLowerCase() : 'fists'} · home is the left edge.`, 8);
+    // the opening keys in one short line; the rest on the [F1] sheet (17c: the full list ran over the status panel)
+    this.say(`[${keyLabel(keyOf('run.left'))}/${keyLabel(keyOf('run.right'))}] walk · ${keyCap('run.search')} search · hold [F1] for keys · home is the left edge.`, 6);
     if (this.mate) this.say(`${first(this.mate)} comes along. ${first(this.mate)} carries ${MATE_CAP} more and watches your back.`, 6);
   }
 
@@ -410,6 +411,7 @@ export class Expedition {
     const k = normKey(e);
     if (this.paused) return; // the pause menu has the keyboard
     if (down) this.keys.add(k); else this.keys.delete(k);
+    if (k === 'F1' || k === '?') { e.preventDefault(); this.keySheetHeld = down; return; }
     if (!down) return;
     if (k === 'Escape' || k === keyOf('run.pause')) { e.preventDefault(); this.pause(); return; }
     if (k === keyOf('run.reload')) this.startReload();
@@ -418,6 +420,15 @@ export class Expedition {
     if (k === keyOf('run.drop')) this.dropSelected();
     if (k === keyOf('run.swing')) this.swing();
     if (k === keyOf('run.shove')) { this.shove(); e.preventDefault(); }
+  }
+  keySheetHeld = false;
+  /** The full key sheet ([F1] held), grouped like the night's. */
+  keyGroups(): { title: string; rows: Hint[] }[] {
+    return [
+      { title: 'move', rows: [{ key: `${keyLabel(keyOf('run.left'))}/${keyLabel(keyOf('run.right'))}`, label: 'walk (left: home)' }, { key: 'run.search', label: 'search / revive' }, { key: 'run.pause', label: 'pause' }, { key: 'F1', label: 'this sheet' }] },
+      { title: 'fight', rows: [{ key: 'LMB', label: 'fire' }, { key: 'run.reload', label: 'reload' }, { key: 'run.ammo', label: 'ammo' }, { key: 'run.swing', label: `${this.kn ? MELEE[this.kn.def].name.toLowerCase() : 'fists'} (RMB)` }, { key: 'run.shove', label: 'shove' }] },
+      { title: 'the pack', rows: [{ key: 'run.pack', label: 'next item' }, { key: 'run.drop', label: 'drop it' }] },
+    ];
   }
   /** Held: an action's key, or (for walking) the arrow keys too. */
   held(id: string) { return this.keys.has(keyOf(id)) || (id === 'run.left' && this.keys.has('ArrowLeft')) || (id === 'run.right' && this.keys.has('ArrowRight')); }
@@ -1591,8 +1602,8 @@ export class Expedition {
     }
     c.font = '13px "Special Elite", monospace';
     c.textAlign = 'center';
-    c.fillStyle = this.mateDown > 0 ? '#c04030' : '#c9b27a';
-    c.fillText(this.mateDown > 0 ? `${first(m)} — DOWN ${Math.ceil(this.mateDown)}s · hold ${keyCap('run.search')}` : first(m), x, LANES[0] - h * k - 8);
+    // the name is in the status panel; over the head only when they are down
+    if (this.mateDown > 0) worldLabel(c, `${first(m)} — DOWN ${Math.ceil(this.mateDown)}s · hold ${keyCap('run.search')}`, x, LANES[0] - h * k - 8, '#c04030');
     if (this.reviveT > 0) { c.fillStyle = '#d9c9a0'; c.fillRect(x - 30, LANES[0] - h * k - 4, 60 * Math.min(1, this.reviveT / 2.5), 4); }
     c.textAlign = 'left';
   }
@@ -1626,7 +1637,7 @@ export class Expedition {
     const x = Math.round(z.x - this.cam);
     if (x < -200 || x > W + 200) return;
     if (this.actors.drawZed(c, z, this.cam, this.looks[lane], z.state === 'kin')) {
-      if (z.state === 'sleep') { c.font = '13px "Special Elite", monospace'; c.fillStyle = 'rgba(200,190,170,0.6)'; c.textAlign = 'center'; c.fillText('standing still', x, z.y - h - 8); c.textAlign = 'left'; }
+      if (z.state === 'sleep' && Math.abs(z.x - this.px) < 420) worldLabel(c, 'standing still', x, z.y - h - 8, 'rgba(200,190,170,0.7)');
       return;
     }
     c.save();
@@ -1647,21 +1658,15 @@ export class Expedition {
     if (z.flash > 0) { const f = flashImg(z.sprite); if (f) { c.globalAlpha = 0.6; c.drawImage(f, -w / 2, -h, w, h); } }
     if (z.burn && z.burn > 0) { const f = shadeImg(z.sprite, '#ff7a2a'); if (f) { c.globalAlpha = 0.25 + Math.sin(this.t * 24 + z.id) * 0.1; c.drawImage(f, -w / 2, -h, w, h); } }
     c.restore();
-    if (z.state === 'sleep') {
-      c.font = '13px "Special Elite", monospace';
-      c.fillStyle = 'rgba(200,190,170,0.6)';
-      c.textAlign = 'center';
-      c.fillText('standing still', x, z.y - h - 8);
-      c.textAlign = 'left';
-    }
+    // only the near ones: a row of 'standing still' down the street was noise
+    if (z.state === 'sleep' && Math.abs(z.x - this.px) < 420) worldLabel(c, 'standing still', x, z.y - h - 8, 'rgba(200,190,170,0.7)');
   }
 
   hud() {
     const c = this.c;
     c.textAlign = 'left';
     // top left: where and who (small caps), then the bars with their pictures, no words
-    c.fillStyle = 'rgba(10,9,8,0.55)';
-    c.beginPath(); c.roundRect(14, 12, 270, this.mate ? 118 : 104, 4); c.fill();
+    panel(c, 14, 12, 270, this.mate ? 120 : 106);
     caps(c, `${this.site.name}`, 22, 29, '#c9a95a');
     caps(c, `${first(this.s)}  ·  ${ZONE_NAMES[this.zoneOf(this.px)]}`, 22, 46, '#a89c84');
     const bar = (icon: string, y: number, f: number, col: string, word?: string, wordCol = '#c04030') => {
@@ -1709,8 +1714,8 @@ export class Expedition {
       if (it.kind === 'res') { c.font = `13px ${FONT}`; c.textAlign = 'right'; c.fillStyle = '#efe2c2'; c.fillText(`${it.n}`, px + iw + 8, H - 15); c.textAlign = 'left'; }
       px += iw + 14;
     });
-    if (!this.pack.length) caps(c, 'empty', 20, H - 24, '#8a7e66');
-    else {
+    if (keyHintsOn()) hintRow(c, [{ key: 'F1', label: 'keys' }], 20 + packW + (used > cap ? 110 : 14), H - 50, 'left', 0.45);
+    if (this.pack.length) {
       const it = this.pack[selI];
       if (it) { c.font = `13px ${FONT}`; c.fillStyle = '#cfc3a6'; c.fillText(itemLabel(it), px + 6, H - 24); px += c.measureText(itemLabel(it)).width + 16; }
       hintRow(c, [{ key: 'run.pack', label: '' }, { key: 'run.drop', label: 'drop' }], px, H - 23, 'left', 0.6);
@@ -1731,7 +1736,7 @@ export class Expedition {
       c.textAlign = 'left';
       c.font = `14px ${FONT}`; c.fillStyle = '#a89c84';
       c.fillText(`/${Number.isFinite(left) ? left : '∞'}`, magX + 6, H - 22);
-      caps(c, this.reload > 0 ? 'reloading…' : def.name, W - 20, H - 70, '#9a8e76', 'right');
+      if (this.reload > 0) caps(c, 'reloading…', W - 20, H - 70, '#9a8e76', 'right'); // the picture is the gun: no name
       const at = p.ammoRes ? AMMO_TYPES[p.ammoRes] : undefined;
       const aw = caps(c, at?.short ?? ammoLabel(p.ammoRes), W - 20, H - 54, '#b8ab90', 'right');
       const aic = at ? img(at.icon) : undefined;
@@ -1747,6 +1752,7 @@ export class Expedition {
     }
     c.shadowBlur = 0; c.shadowColor = 'transparent';
     this.msgs.draw(c, W, 84, 16);
+    if (this.keySheetHeld) keySheet(c, W, H, this.keyGroups());
     // crosshair
     if (this.w) {
       const p = this.prof()!;
