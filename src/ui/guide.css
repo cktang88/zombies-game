@@ -79,3 +79,4 @@
   .gx-cards { grid-template-columns: 1fr; }
 }
 .get .gx-row .gx-amt.neg b { color: #e09070; }
+.tipcard .gx-tspend .ico.sm, .tipcard .gx-tget .ico.sm { width: 22px; height: 22px; }
