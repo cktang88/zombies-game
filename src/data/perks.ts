@@ -8,7 +8,7 @@ export type PerkFx =
   | 'weakspot' // night/battle guard weakspot aim chance: + v
   | 'aim' // sim/survivors aimFactor: + v
   | 'repair' // sim/day repairAmount: x(1 + v)
-  | 'repairWood' // sim/day timber per wall point: x(1 + v)
+  | 'repairWood' // sim/day salvage per wall point: x(1 + v)
   | 'craft' // sim/day craftPoints: x(1 + v)
   | 'drain' // sim/day job fatigue: x(1 + v)
   | 'care' // sim/day doctor: wounds tended per day x(1 + v)
@@ -39,7 +39,7 @@ export const PERK_LIST: PerkDef[] = [
   P('shooting', 7, 'bead', 'Bead', 'Weakspots are easier: 15% wider under your own sights, sought far more often on guard.', { weakspot: 0.15 }),
   P('shooting', 7, 'dead_eye', 'Dead eye', 'Aim +8.', { aim: 0.08 }),
   P('building', 4, 'mason', 'Mason', 'Wall repairs go 25% further.', { repair: 0.25 }),
-  P('building', 4, 'thrifty', 'Thrifty', 'Patches the wall with 40% less timber.', { repairWood: -0.4 }),
+  P('building', 4, 'thrifty', 'Thrifty', 'Patches the wall with 40% less salvage.', { repairWood: -0.4 }),
   P('building', 7, 'master_hand', 'Master hand', '50% more bench work done.', { craft: 0.5 }),
   P('building', 7, 'tireless', 'Tireless', 'Work tires them 40% less.', { drain: -0.4 }),
   P('medicine', 4, 'field_medic', 'Field medic', 'Tends 50% more wounds a day.', { care: 0.5 }),

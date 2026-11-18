@@ -289,9 +289,9 @@ for (let i = 0; i < 40; i++) {
   const ev = trader.make()!;
   const si = ev.choices.findIndex((c) => c.effect === 's');
   if (si < 0) continue;
-  const before = (G.modStock ?? []).length + G.stores.shell + G.stores.rifle;
+  const before = (G.modStock ?? []).length + G.stores.shell + G.stores.rifle + G.stores.explosive;
   const out = resolveEvent(ev, si);
-  const after = (G.modStock ?? []).length + G.stores.shell + G.stores.rifle;
+  const after = (G.modStock ?? []).length + G.stores.shell + G.stores.rifle + G.stores.explosive;
   check(after > before, `trader special gave nothing: ${out}`);
   if (!specials) console.log('tarp:', ev.choices[si].label, '—', out.slice(0, 60));
   specials++;
