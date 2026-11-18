@@ -27,10 +27,10 @@ function newcomerEvent(id: string, title: string, intro: (n: Survivor) => string
       return {
         id, title,
         text: `${intro(n)}\n\n${displayName(n)}, ${n.age}. ${n.before} ${n.outbreak}`,
-        data: { n, bitten },
+        data: { n, bitten, biteOdds: risky ? 0.3 : 0 },
         choices: [
-          { label: 'Let them in', hint: 'Another mouth. Another gun.', effect: 'accept' },
-          { label: 'Check them for bites first', hint: 'Strip search in the cold. They will remember it.', effect: 'check' },
+          { label: 'Let them in', hint: risky ? 'Another mouth, another pair of hands. A hidden bite would turn inside the wall.' : 'Another mouth, another pair of hands.', effect: 'accept' },
+          { label: 'Check them for bites first', hint: 'Finds a bite if there is one. Strip search in the cold: they think less of you, and their mood drops for days.', effect: 'check' },
           { label: 'Turn them away', effect: 'refuse' },
         ],
       };

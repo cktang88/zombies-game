@@ -135,3 +135,10 @@
 .duskwork .fold-body p { margin: 3px 0; font-size: 15px; }
 .duskrep .saved { cursor: help; }
 .modal.event .choices button small { flex-basis: 100%; margin-top: 0; font-size: 13px; }
+/* strangers at the gate: what they bring, under the hook */
+.modal.event .evstrs { display: flex; flex-direction: column; gap: 4px; margin: -2px 0 10px; }
+.modal.event .evstr { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
+.modal.event .evstr > b { min-width: 4.5em; }
+.modal.event .evstr .chip.warn { border-color: #a8462a; background: rgba(168, 70, 42, .12); }
+.modal.event .evstr .chip.warn b { color: #7a2414; }
+.modal.event .evstr .tag { color: #4a3f30; border-color: #8a7a5e; }
