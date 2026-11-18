@@ -11,6 +11,7 @@ import { POST_NAMES, type Post as GuardPost } from './night/battle';
 import { rollIncident, resolveEvent, returnsTick } from './sim/events';
 import { Battle, W, H, type NightResult } from './night/battle';
 import { Expedition, type ExpeditionResult } from './night/expedition';
+import { wallLine } from './sim/readiness';
 import { living, displayName, first, byId, canFight, migrateSurvivor, gainXp, gainProf, heldProf, closeTo, drainLevelUps, makeSurvivor } from './sim/survivors';
 import { showDawnReport } from './ui/dawn';
 import { AMMO_RES, AMMO_TYPES, fireProfile, WEAPONS } from './data/weapons';
@@ -200,7 +201,8 @@ function dusk() {
   const plan = planNight();
   G.nextNight = plan;
   G.flags.wallAtDusk = G.fort.hp;
-  const wall = living().filter(canFight);
+  const line = wallLine();
+  const wall = line.at;
   const rounds = new Map<string, number>();
   for (const s of wall) {
     const w = G.weapons.find((x) => x.uid === s.weapon);
@@ -223,7 +225,7 @@ function dusk() {
     <div class="duskchips">
       ${chip('st_danger', esc(plan.special ?? 'the usual'), 'What the road is sending tonight.', big ? 'warn' : '')}
       ${chip('st_wall', `${Math.ceil(G.fort.hp)}/${G.fort.maxHp}`, 'The wall at dusk.')}
-      ${chip('job_guard', wall.length, `${wall.length} at the wall tonight.`)}
+      ${chip('job_guard', `${wall.length} at the wall${line.idle.length ? ` · ${line.idle.length} can't shoot` : ''}`, `${wall.length} at the wall tonight${line.idle.length ? `. Can't shoot: ${line.idle.map((s) => `${first(s)} (${s.weapon ? 'no rounds' : 'no gun'})`).join(', ')}` : ''}.${line.sitOut.length ? ` Sitting out (six places): ${line.sitOut.map(first).join(', ')}.` : ''}`, line.idle.length ? 'warn' : '')}
       ${chip('ammo', gunRounds, `${gunRounds} rounds for the guns we carry; ${totalRounds} in the house.`, gunRounds < wall.length * 20 ? 'warn' : '')}
     </div>
     ${intel.length ? `<div class="intel"><b>What we know</b>${intel.map((l, i) => `<p class="${i === 0 && intel.length > 1 ? 'who' : ''}">${esc(l)}</p>`).join('')}</div>` : ''}

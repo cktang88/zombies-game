@@ -358,6 +358,8 @@ h3 .dim { font-size: 13px; letter-spacing: .02em; }
 .gcard .gname { font-family: var(--type); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default; }
 .gcard .gmeta { display: flex; align-items: center; gap: 6px; }
 .gcard .gfoot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 2px; }
+.gcard .gmeta select.give { flex: 1 1 60%; min-width: 0; font-size: 13px; padding: 1px 18px 1px 4px; }
+.gcard .gmeta .cond { flex: 1 1 30%; }
 .gcard .gfoot select { font-size: 13px; padding: 1px 18px 1px 4px; max-width: 100%; }
 .cond { flex: 1; height: 5px; background: #0e0d0b; border: 1px solid rgba(90, 79, 60, .55); display: block; }
 .cond i { display: block; height: 100%; background: #8f9a5a; }

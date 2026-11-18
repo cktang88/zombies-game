@@ -13,6 +13,8 @@ import { buildingLevel, onRunToday, ranToday, heatNeed, planConfirmed } from '..
 import { calendar } from '../sim/calendar';
 import { fireProfile, ammoLabel } from '../data/weapons';
 import { canFight } from '../sim/survivors';
+import { wallLine, rackGuns, canArmAnyone, armPreview, SHOTS_PER_GUN_NIGHT } from '../sim/readiness';
+import { WEAPONS } from '../data/weapons';
 import { tip, ico } from './kit';
 import './today.css';
 
@@ -71,6 +73,8 @@ export interface Todo {
   /** where to act: a tab to open, then an element to scroll to and flash */
   tab?: string;
   sel?: string;
+  /** a one-click fix instead of a jump: the day screen runs it (data-act value, e.g. 'armall') */
+  act?: string;
   /** what gets the yellow dot while this is open: 'tab:wall', 'surv:<id>', 'run', 'calendar' */
   dot?: string;
   prio: number;
@@ -101,10 +105,10 @@ function ammoRuns(): { res: Res; have: number; guns: number }[] {
     need.set(p.ammoRes, e);
   }
   const out: { res: Res; have: number; guns: number }[] = [];
-  // about 25 shots a gun is one ordinary night on the wall
+  // about SHOTS_PER_GUN_NIGHT shots a gun is one ordinary night on the wall
   for (const [res, { guns, perShot }] of need) {
     const have = Math.floor((G.stores[res] ?? 0) / (perShot || 1));
-    if (have < 25 * guns) out.push({ res, have, guns });
+    if (have < SHOTS_PER_GUN_NIGHT * guns) out.push({ res, have, guns });
   }
   return out;
 }
@@ -146,9 +150,21 @@ function openTodos(): Todo[] {
       if (queued) continue;
       const name = ammoLabel(a.res).toLowerCase();
       t.push(r
-        ? { id: `ammo_${a.res}`, icon: 'ammo', text: `Make ${name} · ${a.have} left`, tip: `${a.have ? `Only ${a.have}` : 'No'} ${name} for ${a.guns === 1 ? 'one gun' : `${a.guns} guns`} on the wall: about one night's shooting is ${25 * a.guns}. Queue ${r.name} and put someone at the bench.`, tab: 'workshop', sel: `[data-act=queue][data-id="${r.id}"]`, dot: 'tab:workshop', prio: a.have < 10 * a.guns ? 18 : 22 }
+        ? { id: `ammo_${a.res}`, icon: 'ammo', text: `Make ${name} · ${a.have} left`, tip: `${a.have ? `Only ${a.have}` : 'No'} ${name} for ${a.guns === 1 ? 'one gun' : `${a.guns} guns`} on the wall: about one night's shooting is ${SHOTS_PER_GUN_NIGHT * a.guns}. Queue ${r.name} and put someone at the bench.`, tab: 'workshop', sel: `[data-act=queue][data-id="${r.id}"]`, dot: 'tab:workshop', prio: a.have < 10 * a.guns ? 18 : 22 }
         : { id: `ammo_${a.res}`, icon: 'ammo', text: `Find ${name} · ${a.have} left`, tip: `Nothing in the workshop makes ${name} yet. Scavengers and runs bring it home.`, sel: '.people', prio: 26 });
     }
+  }
+  // guards who cannot shoot: a wall place wasted (battle.ts updateGuard returns without a gun)
+  const line = wallLine();
+  if (line.idle.length) {
+    const n = line.idle.length, rack = rackGuns();
+    const can = canArmAnyone();
+    const plan = can ? armPreview() : [];
+    const who = line.idle.map((s) => {
+      const w = plan.find((p) => p.s === s)?.w;
+      return `${first(s)}${s.weapon ? ' (no rounds)' : ''}${w ? ` → ${WEAPONS[w.def].name.toLowerCase()}` : ''}`;
+    }).join(', ');
+    t.push({ id: 'arm', icon: 'pistol', text: `${n} can't shoot tonight${can ? ' · arm ›' : ''}`, tip: `${who}. A guard without a gun or rounds holds a place on the wall and does nothing.${can ? ` Click: hand out the best free gun for each (their proficiency, rounds on hand). ${rack.length} on the rack.` : ' No free gun with rounds on the rack: make or find rounds.'}`, act: can ? 'armall' : undefined, sel: can ? undefined : `.sv-card[data-id="${line.idle[0].id}"] select[data-act=weapon]`, dot: `surv:${line.idle[0].id}`, prio: 14 });
   }
   const heat = heatNeed();
   if (heat > G.stores.fuel && !on('scavenge')) {
@@ -226,12 +242,12 @@ export function todayHtml(duskKey: string): string {
 // ---------------------------------------------------------------- jump and flash
 let pendingFlash: string | null = null;
 /** Remember a todo's target; the day screen flashes it after its next render. Returns the tab to open, if any. */
-export function pickTodo(i: number): { tab?: string } {
+export function pickTodo(i: number): { tab?: string; act?: string; id?: string } {
   const t = current[i];
   if (!t) return {};
   if (t.isNew) markSeen(t.id.replace(/^new_/, ''));
   pendingFlash = t.sel ?? null;
-  return { tab: t.tab };
+  return { tab: t.tab, act: t.done ? undefined : t.act, id: t.id };
 }
 /** After a render: scroll the pending target into view (opening its folds) and pulse it. */
 export function applyFlash(root: HTMLElement) {

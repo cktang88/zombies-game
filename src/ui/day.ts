@@ -21,6 +21,7 @@ import {
   drillPlan, emplacements, tomorrowTeaser, oilGuns, clearPile, choreHand,
 } from '../sim/day';
 import { calendar } from '../sim/calendar';
+import { armEveryone, wallLine, gunRounds } from '../sim/readiness';
 import { persona, forecast, threatPoints } from '../sim/director';
 import { sfx, music, stinger, distant } from '../audio';
 import { openSettings } from './settings';
@@ -630,6 +631,19 @@ function modDeltaHtml(w: WeaponItem) {
   return out.length ? `<div>mods: ${out.join(' · ')}</div>` : '';
 }
 
+// A rack gun's "give to ▾": everyone who stands the wall, the ones who can't shoot first, with their
+// proficiency for this gun's class (it sets reload, jams and spread).
+function giveSelect(w: WeaponItem) {
+  const cls = WEAPONS[w.def].cls;
+  const line = wallLine();
+  const ppl = [...line.at, ...line.sitOut].sort((a, b) => +!line.idle.includes(a) - +!line.idle.includes(b) || prof(b, cls) - prof(a, cls));
+  const dry = gunRounds(w) < 1;
+  return `<select class="give" data-act="give" data-w="${w.uid}" aria-label="Give the ${esc(WEAPONS[w.def].name)} to"${tip(`On the rack${dry ? ' · <b>no rounds for it</b>' : ''}. Give it to someone: ${esc(CLASS_SHORT[cls])} proficiency in brackets.`)}>
+    <option value="">rack · give to</option>
+    ${ppl.map((s) => `<option value="${s.id}">${esc(first(s))} · ${esc(CLASS_SHORT[cls])} ${prof(s, cls)}${line.idle.includes(s) ? (s.weapon ? ' · dry' : ' · unarmed') : ''}</option>`).join('')}
+  </select>`;
+}
+
 const condBar = (c: number) => `<span class="cond ${c < 0.4 ? 'bad' : c < 0.7 ? 'mid' : ''}"><i style="width:${Math.round(c * 100)}%"></i></span>`;
 
 function armoryHtml() {
@@ -672,7 +686,7 @@ function armoryHtml() {
     return `<div class="gcard ${holder ? 'held' : ''}">
       <div class="gpic"${tip(t)}><img src="${spriteUrl(d.icon)}" alt="${esc(d.name)}"></div>
       <div class="gname"${tip(t)}>${w.name ? `"${esc(w.name)}"` : esc(d.name)}</div>
-      <div class="gmeta">${condBar(w.cond)}<span class="t-xs"${tip(`${Math.round(w.cond * 100)}% condition · ${w.kills} kills`)}>${holder ? esc(first(holder)) : 'rack'}</span></div>
+      <div class="gmeta">${condBar(w.cond)}${holder ? `<span class="t-xs"${tip(`${Math.round(w.cond * 100)}% condition · ${w.kills} kills`)}>${esc(first(holder))}</span>` : giveSelect(w)}</div>
       <div class="gfoot">${ammo}${modSlotsHtml(w)}</div>
     </div>`;
   }).join('');
@@ -751,6 +765,13 @@ function ammoChip() {
   const keys = rows.flatMap((r) => r.types).join(' ');
   const t = `<b>Ammunition</b><br>${rows.filter((r) => r.n).map((r) => `${esc(r.c.name.replace(/\s*\(.*\)/, ''))}: ${r.types.filter((x) => (G.stores[x] ?? 0) >= 1).map((x) => `${Math.floor(G.stores[x] ?? 0)} ${esc((AMMO_TYPES[x]?.short ?? ammoLabel(x)).toLowerCase())}`).join(' · ')}`).join('<br>')}`;
   return `<span class="chip lg" data-res-group="${keys}"${tip(t)}><img src="${spriteUrl(RES_ICON.light)}" alt="rounds"><span class="n">${total}</span></span>`;
+}
+
+/** One click: every guard who can't shoot gets the best free gun for them. */
+function armAll(report: string[]) {
+  const got = armEveryone();
+  if (got.length) report.unshift(`Handed out: ${got.map(({ s, w }) => `${first(s)} the ${(w.name ? `"${w.name}"` : WEAPONS[w.def].name).toLowerCase()}`).join(', ')}.`);
+  sfx.ui('stamp');
 }
 
 let duskArmed = false; // first dusk press with carried-over plans only highlights them
@@ -863,6 +884,12 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
       h.rerender();
       return;
     }
+    if (t.dataset.act === 'give') {
+      const s = byId(t.value);
+      if (s && G.weapons.some((x) => x.uid === t.dataset.w)) { s.weapon = t.dataset.w!; sfx.ui('stamp'); }
+      h.rerender();
+      return;
+    }
     if (t.dataset.act === 'ammo') {
       const w = G.weapons.find((x) => x.uid === t.dataset.w);
       if (w) w.ammoType = t.value as Res;
@@ -916,7 +943,8 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
     else if (act === 'todo') {
       const go = pickTodo(+el.dataset.i!);
       if (go.tab) { tab = go.tab; markSeen(go.tab); }
-      sfx.ui('paper');
+      if (go.act === 'armall') armAll(report);
+      else sfx.ui('paper');
       h.rerender();
       return;
     } else if (act === 'revealall') {
