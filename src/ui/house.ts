@@ -272,8 +272,7 @@ const ART: Record<StationId, () => string> = {
     + pic('medcabinet', 410, 325, 45),
   bunks: () => pic('bunks', 490, 287, 154),
   radio: () => pic('radio', 774, 315, 92),
-  kitchen: () => svg(212, 498, 92, 114, `<rect x="6" y="30" width="80" height="80" fill="#26221d" ${INK}/><rect x="16" y="54" width="60" height="34" fill="#141210" ${INK} stroke-width="2"/>
-      <path d="M22 80 q8 -16 12 -2 q6 -14 10 0 q6 -12 10 0" fill="none" stroke="#c96b2a" stroke-width="3"/><rect x="34" y="0" width="16" height="32" fill="#1d1a16" ${INK}/><rect x="2" y="24" width="88" height="8" fill="#3a332b" ${INK}/>`)
+  kitchen: () => pic('stove', 382, 486, 62)
     + svg(316, 470, 120, 50, `<rect x="2" y="30" width="116" height="7" fill="#3a2f24" ${INK}/><rect x="10" y="10" width="14" height="20" rx="3" fill="#6b7a4c" opacity=".85" ${INK} stroke-width="2"/><rect x="28" y="14" width="14" height="16" rx="3" fill="#b8862f" opacity=".7" ${INK} stroke-width="2"/><rect x="48" y="6" width="18" height="24" rx="2" fill="#5a4c3a" ${INK} stroke-width="2"/><rect x="74" y="12" width="30" height="18" fill="#4a3f30" ${INK} stroke-width="2"/>`)
     + (G.flags.dog ? img('dog', 352, 560, 84, 'hv-dog') : '')
     + (buildingLevel('still') ? svg(392, 528, 44, 84, `<ellipse cx="22" cy="58" rx="18" ry="22" fill="#9a5a2a" ${INK}/><path d="M22 36 v-20 q0 -12 16 -12" fill="none" stroke="#9a5a2a" stroke-width="5"/><path d="M22 36 v-20 q0 -12 16 -12" fill="none" stroke="#070605" stroke-width="1.5"/>`) : ''),
