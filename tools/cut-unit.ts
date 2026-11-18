@@ -1,14 +1,18 @@
 // Cuts a generated "aim unit" (docs/research/14 §3: torso + head + both arms + hands + gun drawn as one
 // piece in the firing pose, tools/aim-guide.ts + gen-parts.ts) into a rig-scale part with its pivots.
-//   npx tsx tools/cut-unit.ts <rig> <weapon> [--match]
-// Source: tools/rigs/src/aimunit_<rig>_<weapon>.png (the raw generation picked from tools/.cache/parts-raw).
-// Points (source px): tools/rigs/src/aimunit_<rig>_<weapon>.points.json when present, else the template's
-// own (tools/rigs/src/aimguide_<rig>_<weapon>.json, scaled to the source size: the model keeps the
+//   npx tsx tools/cut-unit.ts <rig> <weapon> [aim|ready|reload] [--match]
+// The mode picks the drawing (tools/aim-guide.ts): aim (the firing pose), ready (low ready) or reload (the
+// reload key drawing); <mode> below is that word.
+// Source: tools/rigs/src/<mode>unit_<rig>_<weapon>.png (the raw generation picked from tools/.cache/parts-raw).
+// Points (source px): tools/rigs/src/<mode>unit_<rig>_<weapon>.points.json when present, else the template's
+// own (tools/rigs/src/<mode>guide_<rig>_<weapon>.json, scaled to the source size: the model keeps the
 // template's layout, so the gun lands where the template put it):
-//   { pelvis?, neck?, muzzle?, butt? (any point back along the bore), ppu? (source px per rig unit), cutY?, degrey?, shade? }
+//   { pelvis?, neck?, muzzle?, butt? (any point back along the bore), pocket?, ppu? (source px per rig unit),
+//     cutY?, hips? (cutY at this many rig units below the pelvis), cutX? (drop everything left of x: a second figure or a template ghost), degrey?, shade? }
 //   (keys left out come from the template)
-// Output: public/sprites/parts/unit_<rig>_<weapon>.png/.json at 1 px per rig unit (the atlas scale),
-//   json { pelvis, neck, muzzle, bore } in output px; bore = the barrel's angle in the drawing (rad).
+// Output: public/sprites/parts/unit_<rig>_<weapon>[_ready|_reload].png/.json at 1 px per rig unit (the atlas
+//   scale), json { pelvis, neck, muzzle, bore, pocket? } in output px; bore = the barrel's angle in the drawing
+//   (rad); pocket = the point the gun turns about between drawings (the butt in the shoulder, a pistol's shoulder).
 // --match: per-channel gain so the unit's mid-tones match the rig's own torso part (the model drifts
 //   the clothing's hue and value; the hips under the unit are the rig's).
 import fs from 'node:fs';
@@ -17,22 +21,28 @@ import sharp from 'sharp';
 import { chromaKey } from './chroma.ts';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const [rig, weapon] = process.argv.slice(2).filter((a) => !a.startsWith('--'));
+const [rig, weapon, modeArg] = process.argv.slice(2).filter((a) => !a.startsWith('--'));
+const mode = modeArg ?? 'aim';
+if (!['aim', 'ready', 'reload'].includes(mode)) throw new Error('mode: aim | ready | reload');
 const name = `${rig}_${weapon}`;
+const outName = mode === 'aim' ? name : `${name}_${mode}`;
 type P = [number, number];
 type Box = [number, number, number, number]; // x0, y0, x1, y1 (source px)
-const src = path.join(ROOT, `tools/rigs/src/aimunit_${name}.png`);
+const src = path.join(ROOT, `tools/rigs/src/${mode}unit_${name}.png`);
 const { data, info } = await sharp(await chromaKey(fs.readFileSync(src))).raw().toBuffer({ resolveWithObject: true });
 const W = info.width, H = info.height;
-const guide = JSON.parse(fs.readFileSync(path.join(ROOT, `tools/rigs/src/aimguide_${name}.json`), 'utf8'));
-const pf = path.join(ROOT, `tools/rigs/src/aimunit_${name}.points.json`);
+const guide = JSON.parse(fs.readFileSync(path.join(ROOT, `tools/rigs/src/${mode}guide_${name}.json`), 'utf8'));
+const pf = path.join(ROOT, `tools/rigs/src/${mode}unit_${name}.points.json`);
 const gs = W / guide.w;
 // a points file may give only some keys (e.g. just cutY / degrey); the rest come from the template
-const pts: { pelvis: P; neck: P; muzzle: P; butt: P; ppu: number; cutY?: number; degrey?: boolean | Box[]; shade?: Box[] } = {
+const pts: { pelvis: P; neck: P; muzzle: P; butt: P; pocket?: P; ppu: number; cutY?: number; hips?: number; cutX?: number; degrey?: boolean | Box[]; shade?: Box[] } = {
+  pocket: guide.pocket?.map((v: number) => v * gs),
   pelvis: guide.pelvis.map((v: number) => v * gs), neck: guide.neck.map((v: number) => v * gs), muzzle: guide.muzzle.map((v: number) => v * gs), butt: guide.butt.map((v: number) => v * gs), ppu: guide.k * gs,
   ...(fs.existsSync(pf) ? JSON.parse(fs.readFileSync(pf, 'utf8')) : {}),
 };
+if (pts.cutY === undefined && pts.hips !== undefined) pts.cutY = pts.pelvis[1] + pts.hips * pts.ppu;
 if (pts.cutY !== undefined) for (let y = Math.round(pts.cutY); y < H; y++) for (let x = 0; x < W; x++) data[(y * W + x) * 4 + 3] = 0;
+if (pts.cutX !== undefined) for (let y = 0; y < H; y++) for (let x = 0; x < Math.min(W, Math.round(pts.cutX)); x++) data[(y * W + x) * 4 + 3] = 0;
 // degrey: the model sometimes leaves a piece of the template (a flat neutral-grey arm, hip or shadow) unpainted
 // behind the figure. Drop large connected areas of flat grey (r = g = b, mid values: the template's greys are
 // 5a..bd), plus a 2 px fringe of near-grey round them. Opt-in per unit: a white or grey garment would match too, so
@@ -140,7 +150,7 @@ if (process.argv.includes('--match')) {
   for (let o = 0; o < buf.length; o += 4) for (let c = 0; c < 3; c++) buf[o + c] = Math.min(255, Math.round(buf[o + c] * gain[c]));
 }
 const out = path.join(ROOT, 'public/sprites/parts');
-await sharp(buf, { raw: { width: ow, height: oh, channels: 4 } }).png({ compressionLevel: 9 }).toFile(path.join(out, `unit_${name}.png`));
+await sharp(buf, { raw: { width: ow, height: oh, channels: 4 } }).png({ compressionLevel: 9 }).toFile(path.join(out, `unit_${outName}.png`));
 const r = (p: P): P => [+((p[0] - x0) * k).toFixed(2), +((p[1] - y0) * k).toFixed(2)];
-fs.writeFileSync(path.join(out, `unit_${name}.json`), JSON.stringify({ id: name, pelvis: r(pts.pelvis), neck: r(pts.neck), muzzle: r(mz), bore: +bore.toFixed(4) }));
-console.log(`wrote public/sprites/parts/unit_${name}.png/.json (${ow}x${oh}) muzzle ${mz.map(Math.round)} (guess ${pts.muzzle.map(Math.round)})`);
+fs.writeFileSync(path.join(out, `unit_${outName}.json`), JSON.stringify({ id: outName, pelvis: r(pts.pelvis), neck: r(pts.neck), muzzle: r(mz), bore: +bore.toFixed(4), ...(pts.pocket ? { pocket: r(pts.pocket) } : {}) }));
+console.log(`wrote public/sprites/parts/unit_${outName}.png/.json (${ow}x${oh}) muzzle ${mz.map(Math.round)} (guess ${pts.muzzle.map(Math.round)})`);
