@@ -8,7 +8,7 @@ import { TRAPS, type Placement, type TrapDef, placementProblem, combos, trapHalf
 import { spriteUrl, spriteExists, img } from '../assets';
 import { ZOMBIES } from '../data/zombies';
 import { RES_ICON } from '../data/world';
-import { tip, chip } from './kit';
+import { tip, chip, qi } from './kit';
 
 /** The road's asphalt: the bottom band of the night backdrop (bg_mid), tiled down with every other
  *  copy mirrored so it never seams, as a data URL (cached). null until the backdrop has loaded. */
@@ -93,7 +93,7 @@ export function renderDeploy(root: HTMLElement, opts: DeployOpts): DeployHandle 
   el.tabIndex = -1;
   root.appendChild(el);
   el.innerHTML = `
-    <header class="dep-h"><h2>${esc(opts.title ?? 'Dusk. The road.')}<span class="qi"${tip(HOW_TO)} aria-label="How to place traps">?</span></h2><span class="dep-count"></span></header>
+    <header class="dep-h"><h2>${esc(opts.title ?? 'The road')}${qi(HOW_TO)}</h2><span class="dep-count"></span></header>
     <div class="dep-kits" role="toolbar" aria-label="Trap kits"></div>
     <div class="dep-scroll"><div class="dep-strip">
       <div class="dep-scene"><img class="dep-wallimg" alt="" draggable="false"><div class="dep-pegs"></div></div>
@@ -231,7 +231,7 @@ export function renderDeploy(root: HTMLElement, opts: DeployOpts): DeployHandle 
       <div class="dep-cm">
         <div class="dep-ct"><b class="t-l"${tip(esc(it.desc))}>${esc(it.name)}</b> <span class="t-s dep-niche">${esc(it.niche)}</span></div>
         <div class="chips">${chips}</div>
-        <div class="dep-vs"><span class="dep-vg"><span class="t-xs">good vs</span>${vs(it.good, false)}</span><span class="dep-vg"><span class="t-xs">poor vs</span>${vs(it.bad, true)}<span class="qi"${tip(esc(it.counter))} aria-label="How the Turned beat it">?</span></span></div>
+        <div class="dep-vs"><span class="dep-vg"><span class="t-xs">good vs</span>${vs(it.good, false)}</span><span class="dep-vg"><span class="t-xs">poor vs</span>${vs(it.bad, true)}${qi(esc(it.counter))}</span></div>
       </div>
       ${placedSel ? '<button type="button" class="dep-remove">Take it up</button>' : ''}`;
   }

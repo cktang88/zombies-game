@@ -3,7 +3,7 @@ import { G, R, setState, save, loadSave, clearSave, log, dateLabel, ICE_DAY } fr
 import { loadAssets, spriteUrl } from './assets';
 import { newGame } from './sim/newgame';
 import { renderDay } from './ui/day';
-import { installKit, tip, ico, chip, fold } from './ui/kit';
+import { installKit, tip, ico, chip, fold, qi } from './ui/kit';
 import { resolveDayWork, dawnTick, nextWeather, prepareRun, tomorrowTeaser, restoreRunMate } from './sim/day';
 import { dailySeed, parseSeed } from './rng';
 import { planNight, afterNight, PERSONAS, nightIntel } from './sim/director';
@@ -295,7 +295,7 @@ function deployStep() {
     const opts: GuardPost[] = ['step', 'loop', 'runner', ...(nest ? ['roof' as GuardPost] : [])];
     const hint: Record<GuardPost, string> = { step: 'shoots over the wall', loop: 'a shotgun at the loophole: shoves harder; gets clawed by big ones', runner: 'carries ammo: everyone reloads faster; shoots only what gets over', roof: 'sees farther and steadier; cannot angle down at the wall' };
     const canNest = !nest && (G.stores.wood ?? 0) >= NEST_COST.wood && (G.stores.scrap ?? 0) >= NEST_COST.scrap;
-    postsEl.innerHTML = `<div class="dep posts"><header class="dep-h"><h2>Posts</h2><span class="dep-count">one at the loophole, one on the roof</span></header>
+    postsEl.innerHTML = `<div class="dep posts"><header class="dep-h"><h2>Posts${qi(`Who stands where. One at the loophole, one on the roof.<br>${opts.map((p) => `<b>${POST_NAMES[p]}</b>: ${esc(hint[p])}`).join('<br>')}`)}</h2></header>
       ${guards.map((s) => {
         const w = G.weapons.find((x) => x.uid === s.weapon);
         const cur = saved[s.id] && opts.includes(saved[s.id]) ? saved[s.id] : '';
@@ -303,7 +303,7 @@ function deployStep() {
           <select data-post="${esc(s.id)}"><option value="" ${cur ? '' : 'selected'}>let them choose</option>${opts.map((p) => `<option value="${p}" ${p === cur ? 'selected' : ''}>${POST_NAMES[p]}</option>`).join('')}</select>
           <span class="dim">${cur ? esc(hint[cur]) : ''}</span></p>`;
       }).join('')}
-      <p class="postrow">${nest ? '<span class="dim">The roof nest is up on the garage.</span>' : `<button type="button" class="mini" data-nest ${canNest ? '' : 'disabled'}>Throw up a roof nest now</button> <span class="dim">${NEST_COST.wood} timber, ${NEST_COST.scrap} scrap (cheaper at the workbench)</span>`}</p></div>`;
+      <p class="postrow">${nest ? '<span class="dim">The roof nest is up on the garage.</span>' : `<button type="button" class="mini" data-nest ${canNest ? '' : 'disabled'}${tip('A nest for one rifle on the garage roof. Cheaper built at the workbench in the day.')}>Throw up a roof nest now</button> <span class="dim">${NEST_COST.wood} timber, ${NEST_COST.scrap} scrap</span>`}</p></div>`;
   };
   const readPosts = () => {
     if (!guards.length) return;
@@ -337,19 +337,18 @@ function deployStep() {
   });
   const plan = crewPlan();
   if (emps.length) {
-    crewEl.innerHTML = `<div class="dep crew"><header class="dep-h"><h2>The guns</h2><span class="dep-count">heavy-weapons training decides how well a crew works one</span></header>
+    crewEl.innerHTML = `<div class="dep crew"><header class="dep-h"><h2>The guns${qi('Heavy-weapons training decides how well a crew works one.')}</h2></header>
       ${emps.map((e, i) => {
         const d = EMPLACEMENTS[e.id];
         const want = plan[String(i)] ?? 'auto';
-        return `<p class="crewrow"><b>${esc(d.name)}</b>
+        return `<p class="crewrow"><b${tip(esc(d.niche))}>${esc(d.name)}</b>
           <span class="dim">${Math.round(e.cond * 100)}%</span>
           <label>post <select data-emp-post="${i}">${d.posts.map((p) => `<option value="${p}" ${p === e.post ? 'selected' : ''}>${p === 'roof' ? 'roof scaffold' : 'firestep'}</option>`).join('')}</select></label>
           <label>crew <select data-emp-crew="${i}">
             <option value="auto" ${want === 'auto' ? 'selected' : ''}>best heavy-trained</option>
             <option value="none" ${want === 'none' ? 'selected' : ''}>nobody (I'll take it: [H])</option>
             ${fighters.map((s) => `<option value="${esc(s.id)}" ${want === s.id ? 'selected' : ''}>${esc(first(s))} · heavy ${level(s, 'heavy')}${s.isLeader ? ' (you)' : ''}</option>`).join('')}
-          </select></label>
-          <span class="dim">${esc(d.niche)}</span></p>`;
+          </select></label></p>`;
       }).join('')}</div>`;
   }
   const readCrew = () => {
@@ -400,7 +399,7 @@ function deployStep() {
     const initial = last.filter((p) => TRAPS[p.trap] && (left[p.trap] = (left[p.trap] ?? 0) - 1) >= 0).slice(0, allowed);
     renderDeploy(rootEl, {
       stock, laneCount: 4, roadMinX: WALL_X, roadMaxX: ROAD_MAX_X, wallX: WALL_X,
-      placementsAllowed: allowed, initial, title: `Dusk, ${dateLabel()}. The road.`,
+      placementsAllowed: allowed, initial, title: 'The road',
       onDone: (ps) => finish(ps.slice(0, allowed)),
     });
   } else {
