@@ -271,11 +271,7 @@ const ART: Record<StationId, () => string> = {
   infirmary: () => pic('cot', 236, 340, 166)
     + pic('medcabinet', 410, 325, 45),
   bunks: () => pic('bunks', 490, 287, 154),
-  radio: () => {
-    const mast = buildingLevel('radio') > 0;
-    return svg(774, 336, 110, 92, `<rect x="4" y="38" width="102" height="10" fill="#3a2f24" ${INK}/><path d="M12 48 v42 M98 48 v42" stroke="#2a2119" stroke-width="6"/>
-      ${mast ? `<rect x="22" y="8" width="62" height="30" rx="3" fill="#3d4136" ${INK}/><circle cx="36" cy="23" r="7" fill="#1a1c17" stroke="#070605" stroke-width="2"/><rect x="50" y="14" width="26" height="8" fill="#b8862f" opacity=".75"/><circle cx="56" cy="30" r="3" fill="#a8462a"/><circle cx="68" cy="30" r="3" fill="#cbbf9f"/><path d="M78 8 l14 -8" stroke="#070605" stroke-width="3"/>` : '<path d="M30 30 h40 v8 h-40z" fill="#2c261f" stroke="#070605" stroke-width="2"/>'}`);
-  },
+  radio: () => pic('radio', 774, 315, 92),
   kitchen: () => svg(212, 498, 92, 114, `<rect x="6" y="30" width="80" height="80" fill="#26221d" ${INK}/><rect x="16" y="54" width="60" height="34" fill="#141210" ${INK} stroke-width="2"/>
       <path d="M22 80 q8 -16 12 -2 q6 -14 10 0 q6 -12 10 0" fill="none" stroke="#c96b2a" stroke-width="3"/><rect x="34" y="0" width="16" height="32" fill="#1d1a16" ${INK}/><rect x="2" y="24" width="88" height="8" fill="#3a332b" ${INK}/>`)
     + svg(316, 470, 120, 50, `<rect x="2" y="30" width="116" height="7" fill="#3a2f24" ${INK}/><rect x="10" y="10" width="14" height="20" rx="3" fill="#6b7a4c" opacity=".85" ${INK} stroke-width="2"/><rect x="28" y="14" width="14" height="16" rx="3" fill="#b8862f" opacity=".7" ${INK} stroke-width="2"/><rect x="48" y="6" width="18" height="24" rx="2" fill="#5a4c3a" ${INK} stroke-width="2"/><rect x="74" y="12" width="30" height="18" fill="#4a3f30" ${INK} stroke-width="2"/>`)
