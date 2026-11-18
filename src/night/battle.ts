@@ -2822,6 +2822,7 @@ export class Battle {
     const p = this.player;
     if (!p) return;
     add('molotov', -1);
+    G.flags.coach_firebomb = true;
     const x = Math.max(WALL_X + 40, Math.min(W - 40, this.mouse.x));
     // it bursts on the lane under the crosshair and spreads about a lane either way
     const y = this.targetLane();
@@ -4394,6 +4395,54 @@ export class Battle {
     }
     return out.slice(0, 6);
   }
+  /**
+   * The first nights' coach: at most two short lines under the news, each with a yellow dot, about
+   * what to do right now. A line retires for good (G.flags.coach_<id>) once the player does it, or
+   * after it has been on screen for a while.
+   */
+  coachT = -1;
+  coachLines(): { id: string; key: string; text: string }[] {
+    if (G.day > 3 || this.done || this.intro > 0 || !keyHintsOn()) return [];
+    const p = this.player, out: { id: string; key: string; text: string }[] = [];
+    if (this.focusing) G.flags.coach_focus = true;
+    if (this.playerReload > 0) G.flags.coach_reload = true;
+    if (this.res.headshots > 0 && this.t > 4) G.flags.coach_head = true;
+    const want = (id: string, key: string, text: string) => { if (!G.flags[`coach_${id}`]) out.push({ id, key, text }); };
+    if (p?.w && !this.jam && this.playerReload <= 0) {
+      const prof = this.eff(p);
+      const mag = this.playerMag.get(p.w.uid) ?? 0;
+      const reserve = prof.ammoRes ? roundsInStores(prof, G.stores) : Infinity;
+      if (reserve > 0 && mag <= Math.max(0, Math.floor(prof.mag * 0.3))) want('reload', 'night.reload', 'Reload before they reach the wall');
+    }
+    if (G.stores.molotov > 0 && this.laneQ.reduce((a, b) => a + b, 0) >= 4) want('firebomb', 'night.firebomb', 'Firebomb the crowd at the wall');
+    if (G.fort.hp / G.fort.maxHp < 0.5 && this.guards.length > 1) want('wall', 'night.wall', 'Pick a guard (1-9), set them to the wall');
+    if (this.t > 2) want('head', 'LMB', 'Aim for the head: one shot, one down');
+    if (this.t > 25) want('focus', 'RMB', 'Hold to steady your aim');
+    return out.slice(0, 2);
+  }
+  drawCoach(c: CanvasRenderingContext2D) {
+    const lines = this.coachLines();
+    const dt = this.coachT < 0 ? 0 : Math.max(0, Math.min(0.1, this.t - this.coachT));
+    this.coachT = this.t;
+    if (!lines.length) return;
+    lines.forEach((l, i) => {
+      // a line seen for 9 seconds has said what it had to
+      const k = `coachT_${l.id}`;
+      const shown = ((G.flags[k] as number) ?? 0) + dt;
+      G.flags[k] = shown;
+      if (shown > 9) G.flags[`coach_${l.id}`] = true;
+      const y = 140 + i * 28;
+      c.save();
+      c.font = `15px ${FONT}`;
+      const tw = c.measureText(l.text).width + 60;
+      const x = W / 2 - tw / 2;
+      c.fillStyle = 'rgba(10,9,8,0.62)';
+      c.beginPath(); c.roundRect(x - 8, y - 18, tw + 16, 26, 4); c.fill();
+      dot(c, x + 6, y - 5, '#e8c040', 4, 0.5 + 0.5 * Math.sin(this.t * 5));
+      hintRow(c, [{ key: l.key, label: l.text, hot: true }], x + 18, y);
+      c.restore();
+    });
+  }
   /** The full key sheet ([F1] held / paused), grouped. */
   keyGroups(): { title: string; rows: Hint[] }[] {
     const multiAmmo = !!(this.player?.w && ammoTypesFor(this.player.w.def).length > 1);
@@ -4441,7 +4490,8 @@ export class Battle {
     c.fillText(`${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`, W / 2, 38);
     // the Turned and the County men are counted apart; a man running for the trees is not "out there"
     const left = Math.max(0, this.plan.spawns.length - Math.min(this.spawnIdx, this.plan.spawns.length)) + this.zombies.filter((z) => z.state !== 'dying' && z.state !== 'flee').length;
-    caps(c, `night ${G.day}  ·  ${this.res.kills} down${this.raidersDown ? `  ·  ${this.raidersDown} county` : ''}  ·  ${left} left`, W / 2, 54, '#a89c84', 'center');
+    // the night's one objective, then the count
+    caps(c, `${left ? 'hold until dawn' : 'the road is clear · hold until dawn'}${left ? `  ·  ${left} left` : ''}  ·  ${this.res.kills} down${this.raidersDown ? `  ·  ${this.raidersDown} county` : ''}`, W / 2, 56, '#d9cdb0', 'center');
     // the Bellwether
     const b = this.boss;
     if (b && b.state !== 'dying' && b.x < W + 20) {
@@ -4589,6 +4639,7 @@ export class Battle {
       }
     }
     this.messages.draw(c, W, 104, narrow ? 30 : 17);
+    if (!narrow) this.drawCoach(c);
     // crosshair: circle sized by real spread, at where the hand points
     if (p && p.w && !this.done) {
       const prof = this.eff(p);
