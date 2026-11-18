@@ -4466,22 +4466,17 @@ export class Battle {
       this.wallShown = Math.max(frac, this.wallShown - 0.0035);
     }
     const wj = this.wallFlash > 0 ? Math.sin(this.wallFlash * 60) * 1.5 * shakeScale() : 0;
-    c.fillStyle = 'rgba(10,9,8,0.7)';
-    c.beginPath(); c.roundRect(20, 14, 300, 38, 4); c.fill();
-    const wallIc = img('icon_st_wall');
-    if (wallIc) c.drawImage(wallIc, 26, 18, 16, 16);
-    caps(c, 'wall', wallIc ? 46 : 28, 29, '#a89c84');
-    c.font = `20px ${FONT}`;
-    c.fillStyle = frac > 0.5 ? '#efe2c2' : frac > 0.25 ? '#e0a050' : '#e06050';
-    c.fillText(`${Math.ceil(G.fort.hp)}`, 27, 49);
+    // top left, one panel: the wall (a segmented bar, no number) over the nerve, both labelled alike
+    panel(c, 20, 14, 300, 52);
+    caps(c, 'wall', 26, 33, '#a89c84');
     const segs = 12;
     for (let i = 0; i < segs; i++) {
       const on = frac * segs > i;
       const ghost = !on && this.wallShown * segs > i;
       c.fillStyle = on ? (frac > 0.5 ? '#8f7a55' : frac > 0.25 ? '#b0702c' : '#a8322a') : ghost ? `rgba(240,220,190,${0.35 + 0.5 * Math.min(1, this.wallFlash * 3)})` : 'rgba(80,70,60,0.3)';
-      c.fillRect(92 + i * 19 + wj, 30, 15, 14);
+      c.fillRect(86 + i * 19 + wj, 22, 15, 12);
     }
-    if (this.wallFlash > 0) { c.strokeStyle = `rgba(220,90,60,${this.wallFlash * 2})`; c.lineWidth = 2; c.strokeRect(21, 15, 298, 36); }
+    if (this.wallFlash > 0) { c.strokeStyle = `rgba(220,90,60,${this.wallFlash * 2})`; c.lineWidth = 2; c.strokeRect(21, 15, 298, 50); }
     // clock: the big number; under it, the night in small caps
     const k = Math.min(1, this.t / this.duration);
     const mins = 18 * 60 + k * 11.5 * 60;
@@ -4491,9 +4486,10 @@ export class Battle {
     c.fillStyle = '#e8dcc0';
     c.fillText(`${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`, W / 2, 38);
     // the Turned and the County men are counted apart; a man running for the trees is not "out there"
-    const left = Math.max(0, this.plan.spawns.length - Math.min(this.spawnIdx, this.plan.spawns.length)) + this.zombies.filter((z) => z.state !== 'dying' && z.state !== 'flee').length;
-    // the night's one objective, then the count
-    caps(c, `${left ? 'hold until dawn' : 'the road is clear · hold until dawn'}${left ? `  ·  ${left} left` : ''}  ·  ${this.res.kills} down${this.raidersDown ? `  ·  ${this.raidersDown} county` : ''}`, W / 2, 56, '#d9cdb0', 'center');
+    let left = Math.max(0, this.plan.spawns.length - Math.min(this.spawnIdx, this.plan.spawns.length));
+    for (const z of this.zombies) if (z.state !== 'dying' && z.state !== 'flee') left++;
+    // one line under the clock (the clock is the objective: dawn): what is still coming, what is down
+    caps(c, `${left ? `${left} to come` : 'road clear · hold until dawn'}  ·  ${this.res.kills} down${this.raidersDown ? `  ·  ${this.raidersDown} county` : ''}`, W / 2, 56, '#d9cdb0', 'center');
     // the Bellwether
     const b = this.boss;
     if (b && b.state !== 'dying' && b.x < W + 20) {
@@ -4608,26 +4604,24 @@ export class Battle {
       if (this.jam) hintRow(c, [{ key: 'night.reload', label: this.jam.clearing > 0 ? 'clearing…' : this.jam.kind === 'barrel' ? 'barrel hot — swap' : this.jam.kind === 'double' ? 'double-feed' : 'jammed', hot: true }], rx - 30, hb + 40, 'right');
     }
     c.shadowBlur = 0; c.shadowColor = 'transparent';
-    // nerve and rally, bottom left above the key line
+    // nerve and rally: the wall panel's second row
     if (p) {
-      const x = 20, y = 64;
-      c.fillStyle = 'rgba(10,9,8,0.6)';
-      c.fillRect(x, y - 12, 222, 22);
+      const x = 20, y = 52; // the second row of the wall panel
       const f = this.nerve / Math.max(1, this.nerveMax);
       if (this.nerveShown < 0) this.nerveShown = f;
       if (f < this.nerveShown - 0.03 && this.nerveFlash <= 0) this.nerveFlash = 0.3;
       this.nerveShown += (f - this.nerveShown) * 0.12;
-      if (this.nerveShown > f) { c.fillStyle = `rgba(230,200,170,${0.3 + this.nerveFlash})`; c.fillRect(x + 66, y - 4, 100 * this.nerveShown, 6); }
+      if (this.nerveShown > f) { c.fillStyle = `rgba(230,200,170,${0.3 + this.nerveFlash})`; c.fillRect(x + 66, y - 4, 130 * this.nerveShown, 6); }
       c.fillStyle = f < 0.25 ? '#c04030' : f < 0.5 ? '#c09040' : '#9db0a0';
-      c.fillRect(x + 66, y - 4, 100 * Math.min(f, this.nerveShown + 0.01), 6);
+      c.fillRect(x + 66, y - 4, 130 * Math.min(f, this.nerveShown + 0.01), 6);
       c.strokeStyle = 'rgba(200,190,160,0.3)';
-      c.strokeRect(x + 66, y - 4, 100, 6);
+      c.strokeRect(x + 66, y - 4, 130, 6);
       caps(c, this.focusing ? 'focus' : 'nerve', x + 6, y + 3, this.focusing ? '#e0d4b0' : '#a89c84');
       // the headshot streak as tally marks, then banked rallies
       c.fillStyle = '#d9c9a0';
-      for (let i = 0; i < this.streak; i++) c.fillRect(x + 172 + i * 4, y - 6, 2, 10);
-      if (this.rally > 0) caps(c, `rally ×${this.rally}`, x + 172 + this.streak * 4 + 4, y + 3, '#e0c070');
-      if (this.rallyT > 0) caps(c, 'rally', x + 172, y + 3, '#e0c070');
+      for (let i = 0; i < this.streak; i++) c.fillRect(x + 204 + i * 4, y - 6, 2, 10);
+      if (this.rally > 0) caps(c, `rally ×${this.rally}`, x + 204 + this.streak * 4 + 4, y + 3, '#e0c070');
+      if (this.rallyT > 0) caps(c, 'rally', x + 204, y + 3, '#e0c070');
     }
     // keys: no wall of them. Only what matters this second, as keycap glyphs, bottom left; the
     // whole sheet while [F1] is held (or paused). A phone, or a canvas too small to read, shows none.

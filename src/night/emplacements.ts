@@ -6,7 +6,7 @@
 // spray, cook the barrel and jam; trained crews fire short bursts and keep it cool. Heavy XP
 // goes to whoever worked it.
 import { is, keyCap } from '../ui/keys';
-import { caps, dot, type Hint } from './hud';
+import { caps, dot, panel, type Hint } from './hud';
 import type { Battle } from './battle';
 import type { BattleHook, Zed, Guardian, SortedDraw } from './hook';
 import type { Traps } from './traps';
@@ -551,13 +551,12 @@ export class Emplacements implements BattleHook {
     c.save();
     c.font = '13px "Special Elite", monospace';
     c.textAlign = 'left';
-    let y = 98; // below the nerve bar
+    let y = 88; // below the wall/nerve panel
     // one compact row per nest: the gun in small caps, who is on it, the rounds big; full words on the forge screen
     for (const m of crewable) {
       const who = m.crew ? (m.byPlayer ? 'you' : first(m.crew.s)) : '—';
       const ammo = m.def.id === 'flamer' ? `${Math.floor(G.stores.fuel ?? 0)}` : `${m.mag}`;
-      c.fillStyle = 'rgba(10,9,8,0.55)';
-      c.beginPath(); c.roundRect(20, y - 13, 210, 24, 3); c.fill();
+      panel(c, 20, y - 14, 300, 24);
       const lw = caps(c, m.def.short, 26, y + 3, m.crew ? '#c9a95a' : '#7a6e58');
       c.font = '13px "Special Elite", monospace';
       c.fillStyle = m.crew ? '#d9cdb0' : '#7a6e58';
@@ -565,15 +564,15 @@ export class Emplacements implements BattleHook {
       c.textAlign = 'right';
       c.font = '15px "Special Elite", monospace';
       c.fillStyle = m.reload > 0 ? '#8f846e' : m.mag === 0 && m.def.id !== 'flamer' ? '#c04030' : '#efe2c2';
-      c.fillText(ammo, 222, y + 3);
+      c.fillText(ammo, 312, y + 3);
       c.textAlign = 'left';
-      if (m.jam > 0) dot(c, 160, y - 2, '#e05040', 3.5);
+      if (m.jam > 0) dot(c, 260, y - 2, '#e05040', 3.5);
       if (m.def.heat) {
-        c.fillStyle = 'rgba(80,70,60,0.5)'; c.fillRect(62, y + 6, 110, 3);
+        c.fillStyle = 'rgba(80,70,60,0.5)'; c.fillRect(62, y + 6, 180, 3);
         c.fillStyle = m.swap > 0 ? '#e07040' : m.heat > 0.75 ? '#d09040' : '#8f7a55';
-        c.fillRect(62, y + 6, 110 * (m.swap > 0 ? 1 : m.heat), 3);
+        c.fillRect(62, y + 6, 180 * (m.swap > 0 ? 1 : m.heat), 3);
       }
-      y += 28;
+      y += 26;
     }
     c.restore();
   }
