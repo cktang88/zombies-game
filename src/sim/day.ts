@@ -790,7 +790,7 @@ function breaksTick(): string[] {
     switch (k) {
       case 'sulk': s.breakState = { kind: 'sulk', days: 1 }; out.push(`${name} refused to work. Sat on the porch all day staring at the river.`); break;
       case 'binge': add('food', -3); out.push(`${name} ate three days of food in one sitting and then cried.`); addThought(s, { id: 'binged', label: 'Binged', mood: 10, days: 1 }, 1); break;
-      case 'drink': add('food', -Math.min(3, G.stores.food)); s.breakState = { kind: 'sulk', days: 1 }; out.push(`${name} drank until ${they(s)} could not stand.`); log('break', `${displayName(s)} went on a bender.`); break;
+      case 'drink': add('food', -Math.min(2, G.stores.food)); s.breakState = { kind: 'sulk', days: 1 }; out.push(`${name} drank until ${they(s)} could not stand.`); log('break', `${displayName(s)} went on a bender.`); break;
       case 'lash': {
         const t = R.pick(living().filter((x) => x !== s));
         if (t) {
