@@ -28,7 +28,7 @@ import { drawProp, drawGunBase, drawGunPart, has, propW } from './props';
 import { QuadRig } from '../anim'; // the dog's quadruped rig
 import { BattleActors, bandsOk } from './actors'; // rigged bodies (src/anim): drawing, deaths, corpses
 import { Sally, SALLY } from './sally';
-import { Ticker, caps, hintRow, keySheet, keyHintsOn, coarsePointer, dot, weaponPanel, FONT, type Hint } from './hud'; // the sortie over the wall
+import { Ticker, caps, hintRow, keySheet, keyHintsOn, coarsePointer, dot, weaponPanel, panel, worldLabel, FONT, type Hint } from './hud'; // the sortie over the wall
 import { react, slideStep, classicPose, IMPACT, type Reaction } from './impact'; // flinch / stagger / stumble / knockdown
 
 export const W = 1280, H = 720;
@@ -893,8 +893,7 @@ export class Battle {
     this.tracers = this.tracers.filter((t) => t.life > 0);
     for (const l of this.lights) l.life -= dt;
     this.lights = this.lights.filter((l) => l.life > 0);
-    for (const t of this.texts) { t.life -= dt; t.y -= dt * 22; }
-    this.texts = this.texts.filter((t) => t.life > 0);
+    { let n = 0; for (const t of this.texts) { t.life -= dt; t.y -= dt * 22; if (t.life > 0) this.texts[n++] = t; } this.texts.length = n; }
     this.messages.tick(dt);
     if (G.fort.hp <= 0 && this.res.wallHeld) {
       this.res.wallHeld = false;
@@ -2904,9 +2903,15 @@ export class Battle {
     // a hit out past the edge of the road (traps, guards' long shots) gets no label: clamped on
     // screen they stacked into a column of "LEGS" at the right edge, pointing at nothing
     if (x > W + 10 || x < -10) return;
-    // the same word close by (a crowd taking a burst): refresh that label instead of stacking another
-    const near = this.texts.find((t) => t.text === text && Math.abs(t.x - x) < 110 && Math.abs(t.y - y) < 80);
-    if (near) { near.life = Math.max(near.life, 1.0); return; }
+    // one message per spot: "KNOCKED DOWN" + "LEGS" + a hint on one body read as noise. A word
+    // near one already showing replaces it if it matters as much (its size), else it is dropped.
+    const near = this.texts.find((t) => Math.abs(t.x - x) < 90 && Math.abs(t.y - y) < 60);
+    if (near) {
+      if (near.text === text) { near.life = Math.max(near.life, 1.0); return; }
+      if (size < near.size) return;
+      near.x = x; near.y = y; near.text = text; near.color = color; near.size = size; near.life = 1.2;
+      return;
+    }
     this.texts.push({ x, y, text, color, size, life: 1.2 });
   }
 
@@ -3207,15 +3212,12 @@ export class Battle {
     this.drawGuardLabels(c);
     for (const gd of this.guards) if (gd.downed && !gd.s.dead && !gd.fled) this.drawDownedLabel(c, gd);
     // texts
+    // one label style (hud worldLabel): 13 px, 16 for the big moments; nothing under 13 (a0031e9)
     for (const t of this.texts) {
-      c.font = `bold ${Math.max(13, t.size)}px "Special Elite", monospace`; // nothing under 13 (a0031e9)
-      c.fillStyle = t.color;
       c.globalAlpha = Math.min(1, t.life * 2);
-      c.textAlign = 'center';
-      const tw = c.measureText(t.text).width;
-      c.fillText(t.text, Math.min(W - 6 - tw / 2, Math.max(6 + tw / 2, t.x)), t.y);
-      c.globalAlpha = 1;
+      worldLabel(c, t.text, t.x, t.y, t.color, t.size >= 14);
     }
+    c.globalAlpha = 1;
     c.restore();
     this.drawHud(c);
     for (const h of this.hooks) h.drawOver?.(c); // night modules

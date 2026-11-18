@@ -121,6 +121,34 @@ export function keySheet(c: CanvasRenderingContext2D, W: number, H: number, grou
   c.restore();
 }
 
+/** The one HUD box: every corner panel (wall, nerve, nests, weapon, road, run status) uses it. */
+export const PANEL_FILL = 'rgba(10,9,8,0.6)';
+export function panel(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+  c.save();
+  c.fillStyle = PANEL_FILL;
+  c.strokeStyle = 'rgba(217,205,176,0.12)';
+  c.lineWidth = 1;
+  c.beginPath(); c.roundRect(x + 0.5, y + 0.5, w - 1, h - 1, 4); c.fill(); c.stroke();
+  c.restore();
+}
+
+/**
+ * The one word-over-a-body style: 13 px (16 for a big moment), centred, on a faint dark backing,
+ * kept on screen. Callers set globalAlpha for fades. Returns the width drawn.
+ */
+export function worldLabel(c: CanvasRenderingContext2D, text: string, x: number, y: number, color: string, big = false): number {
+  c.font = `${big ? 16 : 13}px ${FONT}`;
+  c.textAlign = 'center';
+  const tw = c.measureText(text).width;
+  const cx = Math.min(1280 - 6 - tw / 2, Math.max(6 + tw / 2, x));
+  const h = big ? 18 : 15;
+  c.fillStyle = 'rgba(8,8,10,0.5)';
+  c.fillRect(cx - tw / 2 - 4, y - h + 3, tw + 8, h + 1);
+  c.fillStyle = color;
+  c.fillText(text, cx, y);
+  return tw;
+}
+
 /** Status dot: a filled circle with a dark ring, optionally pulsing. */
 export function dot(c: CanvasRenderingContext2D, x: number, y: number, color: string, r = 3, pulse = 0) {
   c.save();
