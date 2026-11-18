@@ -276,7 +276,7 @@ function gearPeek(s: Survivor) {
   const p = it ? fireProfile(it) : null;
   const rounds = p?.ammoRes ? Math.floor((G.stores[p.ammoRes] ?? 0) / (p.perShot || 1)) : null;
   const gun = it ? `<img class="sv-peekgun" src="${spriteUrl(WEAPONS[it.def].icon)}" alt="" onerror="this.style.display='none'"><span class="t-s">${esc(it.name ? `"${it.name}"` : WEAPONS[it.def].name)}</span>${rounds !== null ? `<b class="t-s ${rounds < 25 ? 'neg' : ''}">${rounds}</b>` : ''}` : '<span class="t-s dim">unarmed</span>';
-  return `<span class="sv-peek"${tip('Gun, rounds, skills, hours and mood: open for the details.')}>${gun}<span class="t-xs">aim ${Math.round(aimFactor(s) * 100)}</span></span>`;
+  return `<span class="sv-peek">${gun}<span class="t-xs"${tip('<b>Aim on the wall</b><br>Shooting, traits, arm wounds, mood and rest.')}>aim ${Math.round(aimFactor(s) * 100)}</span></span>`;
 }
 
 function survivorCard(s: Survivor, dots: Set<string> = new Set()) {
@@ -311,7 +311,6 @@ function survivorCard(s: Survivor, dots: Set<string> = new Set()) {
         ${ammoSelect(G.weapons.find((x) => x.uid === s.weapon), true)}
         ${meleeSelect(s)}
         ${hp ? `<span class="chip"${tip(`<b>${esc(CLASS_NAMES[hp.cls])} ${hp.v}</b><br>${esc(first(s))}'s proficiency (0–10). Grows with drill and use.`)}><b>${esc(CLASS_SHORT[hp.cls])} ${hp.v}</b></span>` : ''}
-        <span class="chip"${tip('<b>Aim on the wall</b><br>Shooting, traits, arm wounds, mood and rest.')}><b>aim ${Math.round(aimFactor(s) * 100)}</b></span>
         ${s.armor ? `<button class="mini" data-act="unarmor" data-id="${s.id}"${tip('Mill-plate vest: wounds 30% lighter. Click to take it off.')}>vest ✓</button>` : (G.flags.armorStock as number) > 0 ? `<button class="mini" data-act="armor" data-id="${s.id}"${tip('Give a mill-plate vest: wounds 30% lighter.')}>+ vest</button>` : ''}
       </div>`, { id: `sv-more-${s.id}`, cls: 'sv-more' })}
     </div>
