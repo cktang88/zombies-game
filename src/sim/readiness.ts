@@ -67,12 +67,15 @@ function ammoCarriers() {
 
 /**
  * Hand every guard who cannot shoot the best rack gun for them (a dry gun goes back on the rack only
- * when a gun with rounds replaces it). Returns who got what, for the report.
+ * when a gun with rounds replaces it). A favourite (★) counts: those whose favourite is on the rack pick first. Returns who got what, for the report.
  */
 export function armEveryone(): { s: Survivor; w: WeaponItem }[] {
   const out: { s: Survivor; w: WeaponItem }[] = [];
   const carriers = ammoCarriers();
-  for (const s of wallLine().idle) {
+  // whoever has their favourite kind of gun on the rack picks first, so the shotgun goes to the shotgun hand
+  const favOnRack = (s: Survivor) => rackGuns().some((w) => weaponClass(w.def) === s.fav && gunRounds(w) >= 1);
+  const idle = wallLine().idle.sort((a, b) => +favOnRack(b) - +favOnRack(a));
+  for (const s of idle) {
     const rack = rackGuns().filter((w) => gunRounds(w) >= 1 || !gunOf(s));
     const w = bestGunFor(s, rack, carriers);
     if (!w) continue;

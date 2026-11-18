@@ -194,9 +194,9 @@ function openTodos(): Todo[] {
     const plan = can ? armPreview() : [];
     const who = line.idle.map((s) => {
       const w = plan.find((p) => p.s === s)?.w;
-      return `${first(s)}${s.weapon ? ' (no rounds)' : ''}${w ? ` → ${WEAPONS[w.def].name.toLowerCase()}` : ''}`;
+      return `${first(s)}${s.weapon ? ' (no rounds)' : ''}${w ? ` → ${WEAPONS[w.def].name.toLowerCase()}${WEAPONS[w.def].cls === s.fav ? ' ★' : ''}` : ''}`;
     }).join(', ');
-    t.push({ id: 'arm', icon: 'pistol', text: `${n} can't shoot tonight${can ? ' · arm ›' : ''}`, tip: `${who}. A guard without a gun or rounds holds a place on the wall and does nothing.${can ? ` Click: hand out the best free gun for each (their proficiency, rounds on hand). ${rack.length} on the rack.` : ' No free gun with rounds on the rack: make or find rounds.'}`, act: can ? 'armall' : undefined, sel: can ? undefined : `.sv-card[data-id="${line.idle[0].id}"] select[data-act=weapon]`, dot: `surv:${line.idle[0].id}`, prio: 14 });
+    t.push({ id: 'arm', icon: 'pistol', text: `${n} can't shoot tonight${can ? ' · arm ›' : ''}`, tip: `${who}. A guard without a gun or rounds holds a place on the wall and does nothing.${can ? ` Click: hand out the best free gun for each (rounds on hand, their favourite ★ first). ${rack.length} on the rack.` : ' No free gun with rounds on the rack: make or find rounds.'}`, act: can ? 'armall' : undefined, sel: can ? undefined : `.sv-card[data-id="${line.idle[0].id}"] select[data-act=weapon]`, dot: `surv:${line.idle[0].id}`, prio: 14 });
   }
   const heat = heatNeed();
   if (heat > G.stores.fuel && !on('scavenge')) {
