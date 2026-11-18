@@ -429,7 +429,7 @@ ul.fort li b { font-family: var(--type); font-weight: normal; color: #efe4cc; }
 .fold.mk[open] .mk-peek { visibility: hidden; }
 .fold.mk > .fold-body { padding: 2px 0 8px; }
 /* pause: keys as caps, an icon on each button, the quit cost on hover */
-.pausebox .pkeys { text-align: center; margin: 2px 0 6px; cursor: help; }
+.pausebox .pkeys { margin-left: 8px; display: inline-flex; gap: 3px; vertical-align: 1px; }
 .pausebox kbd { display: inline-block; min-width: 20px; padding: 1px 5px; border: 1px solid #6a5c46; border-bottom-width: 2px; border-radius: 3px; font: var(--fs-xs) var(--type); color: var(--ink); background: rgba(0, 0, 0, .25); }
 .pausebtns button i { display: inline-block; width: 1.4em; margin-left: -1.4em; font-style: normal; color: var(--dim); }
 .pconfirm { text-align: center; }

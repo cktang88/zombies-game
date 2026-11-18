@@ -20,9 +20,8 @@ export function openPause(host: HTMLElement, o: { where: 'night' | 'run'; resume
   const loss = o.where === 'night' ? 'The night starts over from dusk when you continue.' : 'The run is lost: the leader comes home empty-handed.';
   div.innerHTML = `<div class="modal ledger pausebox" role="dialog" aria-modal="true" aria-labelledby="pause-h">
     <h2 id="pause-h">Paused</h2>
-    <p class="t-xs pkeys"${tip(o.where === 'night' ? 'The road holds still.' : 'The street holds still.')}><kbd>${pk}</kbd> <kbd>Esc</kbd> resume</p>
     <div class="pausebtns">
-      <button class="go" data-p="resume"><i aria-hidden="true">▶</i>Resume</button>
+      <button class="go" data-p="resume"${tip(o.where === 'night' ? 'The road holds still.' : 'The street holds still.')}><i aria-hidden="true">▶</i>Resume <span class="pkeys"><kbd>${pk}</kbd><kbd>Esc</kbd></span></button>
       <button data-p="settings"><i aria-hidden="true">⚙</i>Settings</button>
       <button data-p="help"><i aria-hidden="true">?</i>Help</button>
       <button data-p="quit"><i aria-hidden="true">✕</i>Quit to title</button>
