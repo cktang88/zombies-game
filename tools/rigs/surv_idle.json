@@ -2,7 +2,7 @@
   "id": "surv_idle",
   "source": "surv_idle__riga",
   "height": 240,
-  "aimUnits": { "ar15": "unit_surv_idle_ar15" },
+  "aimUnits": { "ar15": "unit_surv_idle_ar15", "pump": "unit_surv_idle_pump", "smg": "unit_surv_idle_smg", "service9": "unit_surv_idle_service9", "hunting": "unit_surv_idle_hunting" },
   "joints": {
     "headTop": [
       692,

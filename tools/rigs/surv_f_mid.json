@@ -2,7 +2,7 @@
   "id": "surv_f_mid",
   "source": "surv_f_mid__riga",
   "height": 240,
-  "aimUnits": { "pump": "unit_surv_f_mid_pump" },
+  "aimUnits": { "pump": "unit_surv_f_mid_pump", "ar15": "unit_surv_f_mid_ar15", "smg": "unit_surv_f_mid_smg", "service9": "unit_surv_f_mid_service9", "hunting": "unit_surv_f_mid_hunting" },
   "joints": {
     "headTop": [
       643,

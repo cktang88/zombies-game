@@ -2,7 +2,7 @@
   "id": "surv_f_young",
   "source": "surv_f_young__riga",
   "height": 240,
-  "aimUnits": { "m1911": "unit_surv_f_young_m1911" },
+  "aimUnits": { "m1911": "unit_surv_f_young_m1911", "ar15": "unit_surv_f_young_ar15", "pump": "unit_surv_f_young_pump", "smg": "unit_surv_f_young_smg", "hunting": "unit_surv_f_young_hunting" },
   "joints": {
     "headTop": [
       700,
