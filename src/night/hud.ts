@@ -137,6 +137,7 @@ export function panel(c: CanvasRenderingContext2D, x: number, y: number, w: numb
  * kept on screen. Callers set globalAlpha for fades. Returns the width drawn.
  */
 export function worldLabel(c: CanvasRenderingContext2D, text: string, x: number, y: number, color: string, big = false): number {
+  c.save();
   c.font = `${big ? 16 : 13}px ${FONT}`;
   c.textAlign = 'center';
   const tw = c.measureText(text).width;
@@ -146,6 +147,7 @@ export function worldLabel(c: CanvasRenderingContext2D, text: string, x: number,
   c.fillRect(cx - tw / 2 - 4, y - h + 3, tw + 8, h + 1);
   c.fillStyle = color;
   c.fillText(text, cx, y);
+  c.restore();
   return tw;
 }
 
