@@ -219,6 +219,15 @@ function skillsMini(s: Survivor) {
   return `<div class="skmini sv-skills">${top.join('')}<span class="sv-attrs">${attrs.join('')}</span></div>`;
 }
 
+/** The closed line of a survivor's detail fold: their gun as a picture, its rounds, their aim. */
+function gearPeek(s: Survivor) {
+  const it = G.weapons.find((x) => x.uid === s.weapon);
+  const p = it ? fireProfile(it) : null;
+  const rounds = p?.ammoRes ? Math.floor((G.stores[p.ammoRes] ?? 0) / (p.perShot || 1)) : null;
+  const gun = it ? `<img class="sv-peekgun" src="${spriteUrl(WEAPONS[it.def].icon)}" alt="" onerror="this.style.display='none'"><span class="t-s">${esc(it.name ? `"${it.name}"` : WEAPONS[it.def].name)}</span>${rounds !== null ? `<b class="t-s ${rounds < 25 ? 'neg' : ''}">${rounds}</b>` : ''}` : '<span class="t-s dim">unarmed</span>';
+  return `<span class="sv-peek"${tip('Gun, rounds, skills, hours and mood: open for the details.')}>${gun}<span class="t-xs">aim ${Math.round(aimFactor(s) * 100)}</span></span>`;
+}
+
 function survivorCard(s: Survivor, dots: Set<string> = new Set()) {
   computeMood(s);
   const site = survivorSite(s);
@@ -236,8 +245,6 @@ function survivorCard(s: Survivor, dots: Set<string> = new Set()) {
     <div class="body">
       <div class="name"><a data-act="detail" data-id="${s.id}">${esc(displayName(s))}</a> <span class="age t-xs">${s.age}</span>${s.perkOffers?.length ? `<a class="tag sv-perknew" data-act="detail" data-id="${s.id}"${tip(`<b>New perk</b><br>${esc(progressName(s.perkOffers[0].skill))} reached ${s.perkOffers[0].tier}: pick one on the sheet.`)}>${ico('st_perk', '', 'sm')}perk</a>` : ''}${stale ? `<span class="tag carried"${tip("Yesterday's job carried over. Change it, or press Keep to confirm.")}>same?</span>` : ''}</div>
       <div class="sv-state">${moodChip(s)}${statusTags(s)}</div>
-      ${moodBar(s)}
-      ${skillsMini(s)}
       <div class="row sv-jobrow">
         <span class="sv-job"${tip(jobTip)}>${ico('job_' + s.job, '', '')}</span>
         <select data-act="job" data-id="${s.id}" ${disabled ? 'disabled' : ''} aria-label="Job for ${esc(first(s))}">
@@ -251,7 +258,7 @@ function survivorCard(s: Survivor, dots: Set<string> = new Set()) {
         }).join('')}</select>` : ''}
       </div>
       ${st ? `<div class="stock"${tip(`<b>${esc(SITES.find((x) => x.id === site)?.name ?? '')}</b>: ${st.left <= 0 ? 'picked clean' : `${st.left} of ${st.max} left`}<br>Every trip strips it further. ${Math.round(searchFactor(searchHours(s)) * 100)}% of a full search today.`)}>${st.pips}</div>` : ''}
-      ${disabled ? '' : hoursBar(s)}
+      ${fold(gearPeek(s), `${moodBar(s)}${skillsMini(s)}${disabled ? '' : hoursBar(s)}
       <div class="row small sv-gear">
         <select data-act="weapon" data-id="${s.id}" aria-label="Gun for ${esc(first(s))}">
           <option value="">— unarmed —</option>
@@ -262,7 +269,7 @@ function survivorCard(s: Survivor, dots: Set<string> = new Set()) {
         ${hp ? `<span class="chip sv-chip"${tip(`<b>${esc(CLASS_NAMES[hp.cls])} ${hp.v}</b><br>${esc(first(s))}'s proficiency (0–10). Grows with drill and use.`)}><b>${esc(CLASS_SHORT[hp.cls])} ${hp.v}</b></span>` : ''}
         <span class="chip sv-chip"${tip('<b>Aim on the wall</b><br>Shooting, traits, arm wounds, mood and rest.')}><b>aim ${Math.round(aimFactor(s) * 100)}</b></span>
         ${s.armor ? `<button class="mini" data-act="unarmor" data-id="${s.id}"${tip('Mill-plate vest: wounds 30% lighter. Click to take it off.')}>vest ✓</button>` : (G.flags.armorStock as number) > 0 ? `<button class="mini" data-act="armor" data-id="${s.id}"${tip('Give a mill-plate vest: wounds 30% lighter.')}>+ vest</button>` : ''}
-      </div>
+      </div>`, { id: `sv-more-${s.id}`, cls: 'sv-more' })}
     </div>
   </div>`;
 }

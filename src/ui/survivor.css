@@ -100,3 +100,11 @@
   .sv-id h2.t-xl { font-size: 21px; }
   .sv-meta { max-width: 60%; }
 }
+
+/* the card's detail fold: closed, it is one line (gun, rounds, aim); open, the skills, hours, mood and gear */
+.sv-more { margin-top: 6px; border-top: 1px dotted rgba(90, 79, 60, .55); }
+.sv-more > summary { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; }
+.sv-peek { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.sv-peek .sv-peekgun { height: 22px; width: auto; max-width: 64px; object-fit: contain; filter: drop-shadow(0 0 1px rgba(232, 220, 196, .35)); }
+.sv-peek .neg { color: #f08070; }
+.sv-more .fold-body { display: flex; flex-direction: column; gap: 6px; padding: 4px 0 2px; }
