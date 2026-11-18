@@ -72,32 +72,31 @@ and `—` means fallback to the rigged arms.
 | rig | ar15 | carbine | pump | coach | smg | service9 | m1911 | hunting | scoped | autoshot | lmg | lever | revolver |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | surv_rifle | unit | shared (ar15) | unit | shared (pump) | unit | unit | shared (service9) | unit | shared (hunting) | unit | unit | — | — |
-| surv_pistol | unit | shared (ar15) | unit | shared (pump) | unit | unit | shared (service9) | unit | shared (hunting) | — | — | — | unit |
-| surv_shotgun | unit | shared (ar15) | unit | shared (pump) | unit | unit | shared (service9) | unit | shared (hunting) | unit | — | — | — |
+| surv_pistol | unit | shared (ar15) | unit | shared (pump) | unit | unit | shared (service9) | unit | shared (hunting) | unit | unit | — | unit |
+| surv_shotgun | unit | shared (ar15) | unit | shared (pump) | unit | unit | shared (service9) | unit | shared (hunting) | unit | unit | — | — |
 | surv_smg | unit | shared (ar15) | unit | shared (pump) | unit | unit | shared (service9) | unit | shared (hunting) | unit | unit | — | — |
-| surv_idle | unit | shared (ar15) | unit | shared (pump) | unit | unit | shared (service9) | unit | shared (hunting) | unit | — | — | — |
-| surv_f_old | unit | shared (ar15) | unit | shared (pump) | unit | unit | shared (service9) | unit | shared (hunting) | — | — | — | — |
+| surv_idle | unit | shared (ar15) | unit | shared (pump) | unit | unit | shared (service9) | unit | shared (hunting) | unit | unit | — | — |
+| surv_f_old | unit | shared (ar15) | unit | shared (pump) | unit | unit | shared (service9) | unit | shared (hunting) | unit | unit | — | — |
 | surv_f_mid | unit | shared (ar15) | unit | shared (pump) | unit | unit | shared (service9) | unit | shared (hunting) | unit | unit | — | — |
-| surv_m_mid | unit | shared (ar15) | unit | shared (pump) | unit | unit | shared (service9) | unit | shared (hunting) | unit | — | — | — |
-| surv_m_young | unit | shared (ar15) | unit | shared (pump) | unit | unit | shared (service9) | unit | shared (hunting) | — | — | unit | — |
-| surv_f_native | unit | shared (ar15) | unit | shared (pump) | unit | unit | shared (service9) | unit | shared (hunting) | — | — | — | — |
-| surv_m_old | unit | shared (ar15) | unit | shared (pump) | unit | unit | shared (service9) | unit | shared (hunting) | — | unit | — | unit |
-| surv_m_big | unit | shared (ar15) | unit | shared (pump) | unit | unit | shared (service9) | unit | shared (hunting) | — | unit | — | — |
-| surv_f_young | unit | shared (ar15) | unit | shared (pump) | unit | shared (m1911) | unit | unit | shared (hunting) | — | — | — | — |
+| surv_m_mid | unit | shared (ar15) | unit | shared (pump) | unit | unit | shared (service9) | unit | shared (hunting) | unit | unit | — | — |
+| surv_m_young | unit | shared (ar15) | unit | shared (pump) | unit | unit | shared (service9) | unit | shared (hunting) | unit | unit | unit | — |
+| surv_f_native | unit | shared (ar15) | unit | shared (pump) | unit | unit | shared (service9) | unit | shared (hunting) | unit | unit | — | — |
+| surv_m_old | unit | shared (ar15) | unit | shared (pump) | unit | unit | shared (service9) | unit | shared (hunting) | unit | unit | — | unit |
+| surv_m_big | unit | shared (ar15) | unit | shared (pump) | unit | unit | shared (service9) | unit | shared (hunting) | unit | unit | — | — |
+| surv_f_young | unit | shared (ar15) | unit | shared (pump) | unit | shared (m1911) | unit | unit | shared (hunting) | unit | unit | — | — |
 | z_raider | — | — | — | — | — | — | — | — | — | — | — | unit | — |
 | z_raider2 | — | — | unit | shared (pump) | — | — | — | — | — | — | — | — | — |
 
 Totals:
 - 13 survivor rigs × 5 core classes = 65 of 65 covered, by their own unit or, for surv_f_young's service9, by her
   m1911.
-- Auto shotgun: 6 of 13 rigs have a unit.
-- LMG: 5 of 13 rigs have a unit.
+- Auto shotgun: 13 of 13 rigs have a unit (6 from the first pass, 7 from the follow-up pass below).
+- LMG: 13 of 13 rigs have a unit (5 from the first pass, 8 from the follow-up pass below).
 - Signature guns: lever (surv_m_young) and revolver (surv_pistol, surv_m_old).
 - The two raiders keep their single units from main.
 
 Every other gun still falls back to the rigged arms: mp93, revolver on other rigs, snake410, lever on other rigs,
-the bows, the launchers and the tools. The auto shotgun and the LMG also fall back on the rigs that have no unit
-for them.
+the bows, the launchers and the tools.
 
 ### Fixes in this pass, and known compromises
 
@@ -115,6 +114,36 @@ for them.
   re-rolled, and the second take is the one shipped: surv_rifle lmg, surv_f_mid autoshot, surv_pistol service9,
   surv_shotgun service9, surv_shotgun autoshot and surv_m_old service9.
 
+### Follow-up pass: the remaining auto shotgun and LMG units
+
+This pass used the same pipeline and prompts; the templates and manifest entries were already committed. It added
+15 units:
+- auto shotgun: surv_pistol, surv_f_old, surv_m_young, surv_f_native, surv_m_old, surv_m_big, surv_f_young;
+- LMG: surv_pistol, surv_shotgun, surv_idle, surv_f_old, surv_m_mid, surv_m_young, surv_f_native, surv_f_young.
+
+That makes 96 units in all.
+
+- **Checks.** Every new unit was checked at aim, −0.4 and +0.3 with the muzzle cross and bore line. In every case
+  the muzzle sits on the barrel tip and the line runs down the barrel. Both hands are on the gun and every unit
+  faces right. The magenta scan is clean. The grey blobs that remain are real: surv_f_old's grey hair,
+  surv_m_old's sleeve patch, and the steel of the guns. pose-check now skips 95 unit poses.
+- **Overrides.**
+  - surv_pistol autoshot `cutY 768` (jeans).
+  - surv_f_young autoshot `cutY 760` (pale cargo trousers).
+  - surv_m_big autoshot `cutY 805` (grey trousers below the belt). The apron is cut at the same line, and the
+    rig's own apron carries on below it.
+  - surv_f_native autoshot `degrey [[0,110,260,896]]` (the template's torso ghost left behind her back).
+  - surv_shotgun lmg `degrey [[130,740,445,896]]` (the unpainted grey hip under the coat).
+- **Rejects.** Three first generations were rejected and re-rolled once each:
+  - surv_f_old lmg and surv_f_native lmg: both painted the near arm stretched out in front, with no gun in the
+    hand, and left the template's far arm grey.
+  - surv_m_young autoshot: the far arm was left as a flat grey shape. `shade` turned it into a broad flat wedge,
+    so this one was re-rolled instead.
+- **Known compromise.** surv_f_native autoshot shows a second braid tail next to the rig's own at steep aims. A
+  few light-grey edge pixels from the removed ghost also remain along her back. The unit is kept.
+- **Spend.** $1.24 of a $1.30 cap: 18 image calls (15 drawings + 3 re-rolls) at $0.069 each, plus one call that
+  returned no image ($0.0015).
+
 ## Spend
 
 Budget approved: $5.00 including retries.
@@ -125,10 +154,15 @@ Budget approved: $5.00 including retries.
 | Generation log (`gen-parts.ts` reports the cost of each call, including the 6 re-rolls) | 72 calls | $4.97 |
 
 Templates and cuts are local and cost nothing. The log total is just under the $5.00 cap, so this pass made no
-further generations. Filling the remaining auto shotgun (7 rigs) and LMG (8 rigs) gaps would cost about $1.00 more,
-with retries on top.
+further generations. The follow-up pass above filled the auto shotgun and LMG gaps for $1.24, under its own
+$1.30 cap.
 
 ## Contact sheet
 
 `/tmp/claude-0/-home-user/8bd06cb1-c6ac-5391-b55a-fe2040c590af/scratchpad/aimunit3/contact_sheet.png` has one row per
 survivor with all its units at aim (h=400). A third-size copy is `contact_sheet_small.png` in the same folder.
+
+The follow-up pass's 15 units are in
+`/tmp/claude-0/-home-user/8bd06cb1-c6ac-5391-b55a-fe2040c590af/scratchpad/aimunit4/contact_sheet.png`. In the same
+folder, `contact_sheet_small.png` is a third-size copy and `ingame_level.png` shows those rigs in the close-up at
+h=300.
