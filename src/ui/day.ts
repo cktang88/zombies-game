@@ -711,7 +711,7 @@ function armoryHtml() {
     if (p.smoke) tags.push('smoke');
     if (p.explosive) tags.push(`blast ${p.explosive.dmg} r${p.explosive.radius}`);
     if (p.arc) tags.push('lobbed');
-    if (p.recoverable > 0) tags.push(`${Math.round(p.recoverable * 100)}% ammo recovered`);
+    if (!p.ammoRes) tags.push('no ammo: arrows come back at dawn');
     if (p.noise <= 0.6) tags.push('quiet');
     else if (p.noise >= 2.5) tags.push('loud');
     if (p.jam >= 0.02) tags.push(`jams ${Math.round(p.jam * 100)}%`);

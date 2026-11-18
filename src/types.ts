@@ -5,7 +5,7 @@ export type Res = 'food' | 'salvage' | 'meds' | 'fuel'
   // ammunition: three pools (src/data/weapons.ts AMMO_TYPES); every gun draws from one
   | 'pistol' | 'shell' | 'rifle'
   // explosives: one count, thrown at night (firebombs) or fired from a launcher
-  | 'explosive' | 'bolt';
+  | 'explosive';
 export type Stores = Record<Res, number>;
 
 // Five skills (docs/research/19b-simplify-survivors.md). Old saves had crafting, farming and psych: migrateSurvivor folds them in.
@@ -129,7 +129,7 @@ export interface WeaponDef {
   burstGap?: number; // seconds between burst rounds (0 = all at once, e.g. both barrels)
   perShot?: number; // ammo units taken from stores per round (default 1; nails 0.05 scrap)
   jam?: number; // base jam chance per shot on top of wear (improvised guns)
-  recoverable?: number; // 0..1 of spent ammo picked up after the fight (arrows, bolts)
+  recoverable?: number; // 0..1 of spent ammo picked up after the fight (unused: bows draw on no store)
   incendiary?: boolean; // sets the Turned burning (flare gun)
   flare?: boolean; // the shot lights up where it lands for a few seconds
   smoke?: boolean; // big muzzle smoke cloud (black powder)

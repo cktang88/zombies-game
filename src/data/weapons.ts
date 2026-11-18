@@ -116,7 +116,8 @@ export const BURN = { dps: 16, time: 3.5 };
 export const FLARE_LIGHT = { r: 260, time: 9 };
 
 // ---------- ammunition: three pools ----------
-// Every gun draws from one of three pools (or salvage for nail guns, or nothing for bows). A gun's feel
+// Every gun draws from one of three pools (or salvage for nail guns, explosives for launchers, nothing for bows:
+// arrows are walked back in at dawn). A gun's feel
 // is in its own stats (damage, pellets, pierce, spread, perShot), never in a load choice.
 // `caliber` on a WeaponDef is the physical cartridge (sound, tracer, jam clearing); CALIBERS maps it to its pool.
 export interface Caliber { id: string; name: string; types: Res[]; icon: string }
@@ -128,7 +129,7 @@ export const CALIBERS: Record<string, Caliber> = {
   rifle: { id: 'rifle', name: 'Full-power rifle (.30-30 / .308 / .30-06)', types: ['rifle'], icon: 'icon_r556' },
   r556: { id: 'r556', name: '5.56 NATO', types: ['rifle'], icon: 'icon_r556' },
   ball: { id: 'ball', name: '.50 ball & black powder', types: ['rifle'], icon: 'icon_ball' },
-  bolt: { id: 'bolt', name: 'Arrows & bolts', types: ['bolt'], icon: 'icon_bolts' },
+  bolt: { id: 'bolt', name: 'Arrows & bolts (recovered at dawn)', types: [], icon: 'icon_bolts' },
   nails: { id: 'nails', name: 'Nails & rivets (salvage)', types: ['salvage'], icon: 'icon_scrap' },
   rocket: { id: 'rocket', name: '66mm rockets', types: ['explosive'], icon: 'icon_rocket' },
   g40: { id: 'g40', name: '40mm grenades', types: ['explosive'], icon: 'icon_g40' },
@@ -141,12 +142,11 @@ export const AMMO_TYPES: Partial<Record<Res, AmmoType>> = {
   pistol: { res: 'pistol', name: 'Pistol rounds', short: 'pistol', icon: 'icon_ammo', desc: 'Cheap and everywhere: the reloading press turns them out by the box.', guns: 'handguns, the SMG, the farm .22 (half a round a shot)' },
   shell: { res: 'shell', name: 'Shotgun shells', short: 'shells', icon: 'icon_shells', desc: 'The close-range answer: a fistful of pellets and a shove off the wall.', guns: 'every 12-gauge and .410, the flare pistol (two a shot)' },
   rifle: { res: 'rifle', name: 'Rifle rounds', short: 'rifle', icon: 'icon_r556', desc: 'Through one and into the next, at any range. Careful work at the bench.', guns: 'hunting rifles, the muzzleloader, the AR, carbine and MG (half a round a shot)' },
-  bolt: { res: 'bolt', name: 'Broadheads', short: 'broad', icon: 'icon_bolts', desc: 'Dowel shafts and saw-tooth heads. Most come back.', guns: 'bows and crossbows' },
   explosive: { res: 'explosive', name: 'Explosives', short: 'bombs', icon: 'icon_molotov', desc: 'Firebombs and pipe bombs from the still, rockets and grenades off the Line: thrown at night, or fired from a launcher.', guns: 'the throw key (a firebomb), the M72 (two a shot), the thumper and the pipe mortar' },
   salvage: { res: 'salvage', name: 'Salvage (nails & rivets)', short: 'salvage', icon: 'icon_scrap', desc: 'Cut, headed and fed from the salvage pile.', guns: 'nail guns, the nail turret' },
 };
 /** The ammunition pools, in header order (salvage is a material, not counted here). */
-export const AMMO_RES: Res[] = ['pistol', 'shell', 'rifle', 'explosive', 'bolt'];
+export const AMMO_RES: Res[] = ['pistol', 'shell', 'rifle', 'explosive'];
 
 export function ammoLabel(res: Res | null | undefined): string {
   if (!res) return '—';
@@ -271,15 +271,15 @@ export const WEAPONS: Record<string, WeaponDef> = {
   },
   // --- quiet & strange ---
   compound: {
-    id: 'compound', cls: 'bow', name: 'Compound bow', icon: 'icon_bow', ammo: 'bolt', caliber: 'bolt',
-    dmg: 90, rof: 1.1, mag: 1, reload: 0.7, spread: 0.015, pellets: 1, pierce: 1, knock: 6, auto: false, noise: 0.1, recoverable: 0.6, stagger: 0.5,
-    niche: 'Silent, and most arrows come back. Wakes nobody on a daylight run.',
+    id: 'compound', cls: 'bow', name: 'Compound bow', icon: 'icon_bow', ammo: null, caliber: 'bolt',
+    dmg: 90, rof: 1.1, mag: 1, reload: 0.7, spread: 0.015, pellets: 1, pierce: 1, knock: 6, auto: false, noise: 0.1, stagger: 0.5,
+    niche: 'Slow, silent and free: the arrows are pulled out of the dead at dawn. Wakes nobody on a daylight run.',
     desc: 'Bowhunter\'s rig from a deer stand on the Halvorsen forty.',
   },
   crossbow: {
-    id: 'crossbow', cls: 'bow', name: 'Crossbow', icon: 'icon_crossbow', ammo: 'bolt', caliber: 'bolt',
-    dmg: 140, rof: 0.6, mag: 1, reload: 1.7, spread: 0.008, pellets: 1, pierce: 2, knock: 12, auto: false, noise: 0.15, armorPen: 0.4, recoverable: 0.5, craftable: true, stagger: 0.7,
-    niche: 'A silent heavy bolt that pierces two; slow to span.',
+    id: 'crossbow', cls: 'bow', name: 'Crossbow', icon: 'icon_crossbow', ammo: null, caliber: 'bolt',
+    dmg: 140, rof: 0.6, mag: 1, reload: 1.7, spread: 0.008, pellets: 1, pierce: 2, knock: 12, auto: false, noise: 0.15, armorPen: 0.4, craftable: true, stagger: 0.7,
+    niche: 'A silent heavy bolt that pierces two; slow to span, free to shoot.',
     desc: 'Leaf-spring limbs off a Ford, a cable winch, a walnut stock.',
   },
   flaregun: {

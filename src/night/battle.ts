@@ -401,7 +401,7 @@ export class Battle {
   drainOpen = 0;
   covers: { x: number; y: number; w: number; h: number; seed: number }[] = [];
   raidersDown = 0;
-  recover: Partial<Record<Res, number>> = {}; // arrows and bolts to pick up off the road at dawn
+  arrows = 0; // arrows and bolts loosed tonight: walked back in off the road at dawn (bows draw on no store)
   fired = new Map<string, number>(); // rounds per gun tonight, for wear on suppressors and mods
   lobs: Lob[] = []; // grenades and mortar bombs in the air
   laneLast: (Zombie | undefined)[] = [undefined, undefined, undefined, undefined]; // update pass: the last walker seen per lane
@@ -1446,7 +1446,7 @@ export class Battle {
     g.flashSize = fe.size * (far ? 0.85 : 1);
     this.noise += prof.noise * (far ? 0.7 : 1);
     this.fired.set(w.uid, (this.fired.get(w.uid) ?? 0) + 1);
-    if (prof.recoverable > 0 && prof.ammoRes) this.recover[prof.ammoRes] = (this.recover[prof.ammoRes] ?? 0) + prof.recoverable * prof.perShot;
+    if (prof.cls === 'bow') this.arrows++;
     const quiet = prof.noise < 0.5;
     const supp = isSuppressed(w);
     sfx.shoot(def.id, { suppressed: supp, far: far ? 0.4 : false, incendiary: prof.incendiary, pan: panOf(mz.x) * 0.6, volume: far ? 0.8 : 1 });
@@ -4740,10 +4740,7 @@ export class Battle {
       if (w) for (const l of wearMods(w, n)) r.lines.push(l);
     }
     // arrows and bolts off the road
-    for (const [k, v] of Object.entries(this.recover) as [Res, number][]) {
-      const n = Math.floor(v);
-      if (n > 0) { add(k, n); r.lines.push(`Picked ${n} ${ammoLabel(k).toLowerCase()} back out of the road at first light.`); }
-    }
+    if (this.arrows > 0) r.lines.push(r.wallHeld ? `${this.arrows} arrow${this.arrows === 1 ? '' : 's'} pulled back out of the dead at first light.` : 'The arrows went with the wall; there are always more dowels.');
     for (const k of Object.keys(this.ammoStart) as Res[]) {
       const used = (this.ammoStart[k] ?? 0) - (G.stores[k] ?? 0);
       if (used > 0.5) r.ammoUsed[k] = Math.round(used);

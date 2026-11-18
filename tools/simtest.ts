@@ -131,7 +131,8 @@ function economy(n: number) {
         const w = G.weapons.find((x) => x.uid === s.weapon);
         const p = w ? fireProfile(w) : null;
         const want = (need / Math.max(1, wall.length)) * (p?.perShot ?? 1);
-        if (!p?.ammoRes) { short += want; continue; }
+        if (!p) { short += want; continue; }
+        if (!p.ammoRes) continue; // bows: free
         const have = G.stores[p.ammoRes] ?? 0;
         G.stores[p.ammoRes] = Math.max(0, have - want);
         short += Math.max(0, want - have);

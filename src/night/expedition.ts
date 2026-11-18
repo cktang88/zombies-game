@@ -38,7 +38,7 @@ const RUN_YIELD = 0.22; // per-search loot scale: clearing the whole street ≈ 
 // how many of a resource fit in one pack slot (bulky things take more room)
 const STACK: Partial<Record<Res, number>> = {
   food: 6, salvage: 8, meds: 3, fuel: 3,
-  pistol: 20, shell: 8, rifle: 12, explosive: 2, bolt: 12,
+  pistol: 20, shell: 8, rifle: 12, explosive: 2,
 };
 type PackItem = { kind: 'res'; res: Res; n: number } | { kind: 'gun'; def: string; cond: number } | { kind: 'mod'; def: string; cond: number } | { kind: 'melee'; def: string; cond: number };
 const itemSlots = (it: PackItem) => (it.kind === 'gun' ? 3 : it.kind === 'melee' ? 2 : it.kind === 'mod' ? 1 : Math.ceil(it.n / (STACK[it.res] ?? 5)));
@@ -1298,11 +1298,6 @@ export class Expedition {
         changeOpinion(this.mate, this.s, 4);
       }
       if (this.w) for (const l of wearMods(this.w, this.roundsFired)) this.lines.push(l);
-      const rec = this.prof()?.recoverable ?? 0;
-      for (const [k, v] of Object.entries(this.spent)) {
-        const back = Math.floor((v ?? 0) * rec);
-        if (back > 0) { add(k as Res, back); this.lines.push(`${first(this.s)} pulled ${back} ${ammoLabel(k as Res).toLowerCase()} back out of the dead.`); }
-      }
       const total = Object.values(this.loot).reduce((a, b) => a + (b ?? 0), 0);
       if (total > 40) tale(this.s, `Came back from ${this.site.name} loaded down.`);
       log('event', `${displayName(this.s)} led a run to ${this.site.name}${this.mate ? ` with ${displayName(this.mate)}` : ''} and came back.`);

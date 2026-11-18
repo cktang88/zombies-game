@@ -12,9 +12,9 @@ export const FIND_ICON: Record<Find, string> = {
 };
 // a "normal" haul of each per trip: a site's amount against this says whether it is a good place for it
 const TYPICAL: Record<Exclude<Find, 'guns'>, number> = { food: 5, salvage: 10, meds: 3, fuel: 3, ammo: 20 };
-const AMMO: Res[] = ['pistol', 'shell', 'rifle', 'bolt'];
-// shells and bolts count for more than pistol rounds
-const AMMO_W: Partial<Record<Res, number>> = { shell: 1.5, bolt: 1.5 };
+const AMMO: Res[] = ['pistol', 'shell', 'rifle'];
+// shells count for more than pistol rounds
+const AMMO_W: Partial<Record<Res, number>> = { shell: 1.5 };
 
 export interface SiteFind { k: Find; score: number; level: 'lots' | 'some' | 'a little' }
 
