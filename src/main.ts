@@ -18,7 +18,7 @@ import { morningSummary, fateLine, type Fate } from './sim/chronicle';
 import { parseIds } from './sim/incident';
 import { evacuees } from './sim/threads';
 import { scoreCard, recordRun, inscribe, canInscribe, isInscribed, loadLegacy, setBoon, applyBoons, BOONS } from './sim/legacy';
-import type { Survivor } from './types';
+import type { Res, Survivor } from './types';
 import { muted, sfx, music, ambience, stinger } from './audio';
 import { openSettings, setSetting } from './ui/settings';
 import { openHelp } from './ui/help';
@@ -34,7 +34,7 @@ import { takeSpent } from './night/traps';
 import { EMPLACEMENTS, parseEmplacements, stringifyEmplacements, type Post } from './data/emplacements';
 import { crewPlan } from './night/emplacements';
 import { level } from './sim/survivors';
-import { SITES } from './data/world';
+import { SITES, RES_ICON, RES_LABEL } from './data/world';
 import { buildingLevel } from './sim/day';
 import { add } from './state';
 import { mountStage } from './input/stage';
@@ -177,11 +177,13 @@ function afterRun(r: ExpeditionResult) {
   save();
   if (!living().length) return gameOver();
   day();
-  const lootChips = Object.entries(r.loot).filter(([, v]) => v).map(([k, v]) => chip(AMMO_TYPES[k as keyof typeof AMMO_TYPES]?.icon.replace('icon_', '') ?? k, v as number, esc(k))).join('');
+  // the loot as chips (a picture and a number each, the name in its tip); the "Brought home" line only when there are none
+  const lootChips = r.died ? '' : Object.entries(r.loot).filter(([, v]) => v).map(([k, v]) => chip((RES_ICON[k as Res] ?? 'icon_parts').replace('icon_', ''), v as number, `${v} ${esc((RES_LABEL[k as Res] ?? k).toLowerCase())}`)).join('');
+  const rest = lootChips ? lines.slice(1) : lines;
   overlay(`<h2>${r.died ? 'Lost' : 'Back before dark'}</h2>
-    ${lootChips && !r.died ? `<div class="duskchips">${lootChips}</div>` : ''}
-    <p class="t-l">${esc(lines[0])}</p>
-    ${lines.length > 1 ? fold('<span class="t-s">The rest of it</span>', lines.slice(1).map((x) => `<p>${esc(x)}</p>`).join(''), { open: lines.length <= 3, id: 'run-rest' }) : ''}`, () => day());
+    ${lootChips ? `<div class="duskchips">${lootChips}</div>` : ''}
+    ${rest.length ? `<p class="t-l">${esc(rest[0])}</p>` : ''}
+    ${rest.length > 1 ? fold('<span class="t-s">The rest of it</span>', rest.slice(1).map((x) => `<p>${esc(x)}</p>`).join(''), { open: rest.length <= 3, id: 'run-rest' }) : ''}`, () => day());
 }
 
 function overlay(html: string, onClose: () => void) {
