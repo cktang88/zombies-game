@@ -269,7 +269,7 @@ const pic = (id: string, x: number, y: number, w: number, cls = '') => img(`hous
 const INK = 'stroke="#070605" stroke-width="3" stroke-linejoin="round"';
 const ART: Record<StationId, () => string> = {
   infirmary: () => pic('cot', 236, 340, 166)
-    + svg(408, 330, 44, 98, `<rect x="4" y="4" width="36" height="50" fill="#2c261f" ${INK}/><rect x="10" y="12" width="10" height="14" fill="#8e2a20" stroke="#070605" stroke-width="2"/><rect x="24" y="16" width="10" height="10" fill="#cbbf9f" stroke="#070605" stroke-width="2"/><path d="M8 54 v40 M36 54 v40" stroke="#1d1813" stroke-width="4"/>`),
+    + pic('medcabinet', 410, 325, 45),
   bunks: () => svg(548, 292, 104, 136, `<path d="M8 4 v128 M96 4 v128" stroke="#2c241b" stroke-width="8"/><path d="M8 4 v128 M96 4 v128" fill="none" ${INK} stroke-width="2"/>
       <rect x="10" y="40" width="84" height="14" fill="#5a4c3a" ${INK}/><path d="M14 40 q34 -12 76 -2 v2z" fill="#6f6250" ${INK}/>
       <rect x="10" y="104" width="84" height="14" fill="#5a4c3a" ${INK}/><path d="M14 104 q30 -14 76 -4 v4z" fill="#3f4a3a" ${INK}/>`),
