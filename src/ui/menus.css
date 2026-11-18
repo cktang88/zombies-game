@@ -34,4 +34,3 @@
 @media (max-width: 600px) { .stiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* the title: one line, two chips; the rest on hover */
-.title .how .howchip { display: inline-flex; align-items: center; gap: 4px; margin: 6px 6px 0; padding: 2px 8px; border: 1px solid rgba(232,220,196,.2); cursor: help; }
