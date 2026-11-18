@@ -5,7 +5,7 @@
 import type { Survivor } from '../types';
 import { G, R, log, newWeapon, rep, docsFound, ICE_DAY } from '../state';
 import { WEAPONS } from '../data/weapons';
-import { TRAITS } from '../data/traits';
+import { TRAITS, OLD_TRAITS } from '../data/traits';
 import { FACTIONS } from '../data/lore';
 import { living, first, displayName, makeSurvivor, addThought, hasTrait, their, them, changeOpinion } from './survivors';
 import { type Incident, cap, pop, admit, standingWord } from './incident';
@@ -185,8 +185,8 @@ export const HEIR_INCIDENT: Incident = {
     const heir = makeSurvivor({ age: R.int(19, 38) });
     heir.name = `${heir.name.split(' ')[0]} ${surname}`;
     const kin = kinWord(e, heir);
-    // one trait carries down the line
-    const inherit = e.traits.find((t) => TRAITS[t] && !heir.traits.includes(t) && !heir.traits.some((x) => TRAITS[x].conflicts?.includes(t)));
+    // one trait carries down the line (an entry from before the cut to fourteen traits maps to its merged trait)
+    const inherit = e.traits.map((t) => (t in OLD_TRAITS ? OLD_TRAITS[t] : t)).find((t): t is string => !!t && TRAITS[t] && !heir.traits.includes(t) && !heir.traits.some((x) => TRAITS[x].conflicts?.includes(t)));
     if (inherit) heir.traits[heir.traits.length - 1] = inherit;
     const eFirst = e.name.split(' ')[0];
     const deed = e.tale[0].toLowerCase() + e.tale.slice(1).replace(/\.$/, '');
