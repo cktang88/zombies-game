@@ -11,7 +11,9 @@
 //                     or a pistol pulled in to a compressed ready at the chest, muzzle down; head up, eyes forward
 //     reload        → tools/rigs/src/reloadguide_<rig>_<weapon>.*: the reload key drawing: the gun off the shoulder
 //                     at the chest, canted muzzle-up, magazine well toward the support hand, which is at the well
-//                     (the middle of clips.ts reloadMag / reloadPistol)
+//                     (the middle of clips.ts reloadMag / reloadPistol); tube-fed guns at the hip with the support
+//                     hand under the loading port (shellIn), bolt guns level with the strong hand at the open action
+//                     (reloadBolt), revolvers muzzle-down with the support hand over the open cylinder (reloadRevolver)
 // The json also carries `pocket`: the point the gun turns about between drawings (the butt in the shoulder for
 // long guns, the near shoulder for pistols), and `mode`.
 import fs from 'node:fs';
@@ -54,10 +56,17 @@ const fl = A.flip ? -1 : 1;
 let gp: P;
 // gun rotation (rad, + = muzzle down) about `piv`
 let rot = 0, piv: P, pocket: P;
+// the reload key drawing follows the gun's reload kind (clips.ts): mag / pistolMag at the chest, muzzle-up, support
+// hand at the well; shells / lever (shellIn) down at the hip, about level, support hand feeding the loading port from
+// below; bolt (reloadBolt) level at the chest, the strong hand thumbing rounds into the open action, the support hand
+// on the fore-end; revolver (reloadRevolver, the speedloader beat) muzzle-down at the chest, support hand above the
+// swung-out cylinder
+const kind = A.reload;
+const tube = kind === 'shells' || kind === 'lever', bolt = kind === 'bolt', wheel = kind === 'revolver';
 if (mode === 'reload') {
   // off the shoulder, in front of the chest (clips.ts: the workspace at mid-torso, ~22 forward), canted muzzle-up
-  gp = pistol ? at(torsoLen * 0.72, shFwd + 34) : at(torsoLen * 0.62, shFwd + 22);
-  rot = pistol ? -0.4 : -0.3; piv = gp;
+  gp = pistol ? at(torsoLen * 0.72, shFwd + 34) : tube ? at(torsoLen * 0.42, shFwd + 28) : at(torsoLen * 0.62, shFwd + 22);
+  rot = wheel ? 0.6 : pistol ? -0.4 : tube ? -0.04 : bolt ? -0.08 : -0.3; piv = gp;
   pocket = sh;
 } else if (stockless) {
   gp = [sh[0] + (ua + fa) * 0.8, sh[1] - 4];
@@ -94,10 +103,16 @@ function ik(s: P, t: P): [P, P] {
   return [e, [s[0] + dx, s[1] + dy]];
 }
 const wristOf = (palm: P, back: number): P => [palm[0] - back, palm[1] + 2];
-const [nE, nW] = ik(sh, wristOf(gpt(A.grip), hand));
-// the support hand: the fore-end (aim / ready), or at the bottom of the magazine well (reload)
+const rl = mode === 'reload';
+const off = (p: P, dx: number, dy: number): P => [p[0] + dx, p[1] + dy]; // rig units, image axes
+// the strong hand: the grip, or (bolt reload) just above the open action at the port, thumbing a round down
+const [nE, nW] = ik(sh, wristOf(rl && bolt && A.port ? off(gpt(A.port), 0, -5) : gpt(A.grip), hand));
+// the support hand: the fore-end (aim / ready), or in a reload at the bottom of the magazine well (mags), under the
+// loading port (tubes), above the swung-out cylinder (revolver); a bolt reload keeps it on the fore-end
 const well: P | null = A.mag ? [A.mag[0] + A.mag[2] / 2, A.mag[1] + A.mag[3]] : null;
-const fore = mode === 'reload' && well ? gpt(well) : A.fore ? gpt(A.fore) : gpt([A.grip[0] - 2 * fl, A.grip[1] + 6]);
+const fore = rl && tube && A.port ? off(gpt(A.port), 1, 3)
+  : rl && wheel && A.port ? off(gpt(A.port), -1, -15)
+  : rl && !bolt && well ? gpt(well) : A.fore ? gpt(A.fore) : gpt([A.grip[0] - 2 * fl, A.grip[1] + 6]);
 const [fE, fW] = ik(fsh, wristOf([fore[0], fore[1] + 3], hand));
 
 const partPng = async (n: string, grey: string) => {
@@ -117,9 +132,10 @@ const arm = (s: P, e: P, w: P, c: string) => line(s, e, 13, c) + line(e, w, 10, 
 const headRot = -Math.PI / 2 + lean + (mode === 'ready' ? 0.08 : mode === 'reload' ? 0.45 : pistol || hip ? 0.05 : stockless ? 0.15 : 0.3) - Pm.head.rest;
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${H}">
 <rect width="100%" height="100%" fill="#ff00ff"/>
-${arm(fsh, fE, fW, '#5a5a5a')}
+${rl && wheel ? '' : arm(fsh, fE, fW, '#5a5a5a')}
 ${img(torso.url, torso.m.w, torso.m.h, [torso.m.px, torso.m.py], px([0, 0]), -Math.PI / 2 + lean - Pm.torso.rest)}
 ${img(head.url, head.m.w, head.m.h, [head.m.px, head.m.py], px(neck), headRot)}
+${rl && wheel ? arm(fsh, fE, fW, '#5a5a5a') : '' /* the support hand over the open cylinder, in front of the chest and the bowed head */}
 <image href="data:image/png;base64,${gunBuf.toString('base64')}" width="${gm.width}" height="${gm.height}" transform="translate(${px(piv)[0]} ${px(piv)[1]}) rotate(${(rot * 180) / Math.PI}) translate(${-px(piv)[0]} ${-px(piv)[1]}) translate(${px(gp)[0]} ${px(gp)[1]}) scale(${k * K * fl} ${k * K}) translate(${-A.grip[0]} ${-A.grip[1]})"/>
 ${arm(sh, nE, nW, '#bdbdbd')}
 </svg>`;
