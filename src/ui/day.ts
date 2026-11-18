@@ -816,7 +816,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
         ${fc ? `<p class="forecast">${esc(fc)}</p>` : ''}
         ${isOpen('calendar') ? `<div class="calwrap"${dots.has('calendar') ? ' data-dot' : ''}>${revealNote('calendar')}${calendarHtml()}</div>` : ''}
         ${threadsHtml()}
-        ${isOpen('calendar') ? `<div class="weather"${tip(`Tonight feels like ${tp > 60 ? 'a long one' : tp > 30 ? 'a bad one' : 'any other night'}.${heat ? ` The stove will want ${heat} fuel.` : ''}`)}><span class="t-xs">The Weather</span> <b>${persona().name}</b> ${pips(Math.min(5, Math.ceil(tp / 20)), 5, tp > 60 ? 'red' : '')}</div>` : ''}
+        ${isOpen('calendar') ? `<div class="weather"${tip(`<b>How big tonight is</b>: the dots, out of 5.<br>The season's pace: ${esc(persona().name)}.${heat ? `<br>The stove will want ${heat} fuel.` : ''}`)}><span class="t-xs">Tonight</span> <b>${tp > 60 ? 'a long one' : tp > 30 ? 'a bad one' : 'light'}</b> ${pips(Math.min(5, Math.ceil(tp / 20)), 5, tp > 60 ? 'red' : '')}</div>` : ''}
         ${runOpen() ? `<div class="runwrap"${dots.has('run') ? ' data-dot' : ''}>${revealNote('run')}${runHtml()}</div>` : ''}
         <button class="dusk" data-act="dusk">${duskArmed && stale.length ? 'Yesterday\'s jobs are marked. Go anyway ›' : 'Go to the wall at dusk ›'}<small>${esc(keyLabel(keyOf('day.dusk')))}</small></button>
       </section>
