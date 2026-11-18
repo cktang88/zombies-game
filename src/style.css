@@ -310,7 +310,7 @@ dl.keys dd, dl.gloss dd { margin: 0; }
 .calendar { margin: .7em 0; }
 .calendar .calstrip { display: flex; border: 1px solid rgba(200,160,90,.45); border-right: 0; background: rgba(8,7,6,.35); }
 .calendar .calday { flex: 1 1 0; min-width: 0; text-align: center; padding: 4px 0 2px; border-right: 1px solid rgba(200,160,90,.25); }
-.calendar .calday.today { background: rgba(232,210,160,.1); box-shadow: inset 0 -2px 0 #c9a95a; }
+.calendar .calday.today { flex-grow: 1.7; background: rgba(232,210,160,.1); box-shadow: inset 0 -2px 0 #c9a95a; }
 .calendar .calday .cd { font-family: var(--type); font-size: 13px; color: #c9bc9e; white-space: nowrap; }
 .calendar .calday.today .cd { color: var(--ink); }
 .calendar .calday .cg { font-size: 19px; line-height: 1.15; }
