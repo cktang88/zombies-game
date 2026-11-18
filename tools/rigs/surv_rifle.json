@@ -2,7 +2,7 @@
   "id": "surv_rifle",
   "source": "surv_rifle__riga",
   "height": 240,
-  "aimUnits": { "ar15": "unit_surv_rifle_ar15", "pump": "unit_surv_rifle_pump", "service9": "unit_surv_rifle_service9", "smg": "unit_surv_rifle_smg", "hunting": "unit_surv_rifle_hunting" },
+  "aimUnits": { "ar15": "unit_surv_rifle_ar15", "pump": "unit_surv_rifle_pump", "service9": "unit_surv_rifle_service9", "smg": "unit_surv_rifle_smg", "hunting": "unit_surv_rifle_hunting", "autoshot": "unit_surv_rifle_autoshot", "lmg": "unit_surv_rifle_lmg" },
   "joints": {
     "headTop": [
       718,
