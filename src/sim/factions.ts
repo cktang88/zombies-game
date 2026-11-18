@@ -310,8 +310,8 @@ export const FACTION_INCIDENTS: Incident[] = [
         text: `Pastor Engvall walks up Ferry Road herself, in a man's parka and a clerical collar gone grey, leading ${n.name} by the elbow and pulling a sled with a cooler on it.\n\n"We're over a hundred in the gym and the boiler's going. ${first(n)} can work. And there's medicine in the cooler, what we can spare, because you've been good to us. I won't pretend I'm not asking."\n\n${n.name}, ${n.age}. ${n.before}`,
         data: { n },
         choices: [
-          { label: `Take ${first(n)} and the medicine`, hint: '+1 survivor, +3 medicine.', effect: 'both' },
-          { label: 'Take only the medicine', hint: 'Ruth will remember.', effect: 'meds' },
+          { label: `Take ${first(n)} and the medicine`, fx: { people: 1, gain: { meds: 3 }, rep: { parish: 5 } }, effect: 'both' },
+          { label: 'Take only the medicine', hint: 'Ruth will remember.', fx: { gain: { meds: 3 }, rep: { parish: -12 } }, effect: 'meds' },
           { label: 'Send them both back', effect: 'no' },
         ],
       };

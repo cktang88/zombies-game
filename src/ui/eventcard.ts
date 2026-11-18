@@ -1,6 +1,6 @@
 // The incident card: a headline, a face (or an icon), a short hook, and the choices as buttons
 // with consequence icons and a one-line hint. The rest of the text folds away.
-import type { PendingEvent, Survivor, SkillId } from '../types';
+import type { PendingEvent, Survivor, SkillId, ChoiceFx, EventChoice, Res } from '../types';
 import { byId, displayName, first } from '../sim/survivors';
 import { portraitImg } from './portrait';
 import { ico, tip, fold, chip, tag } from './kit';
@@ -8,6 +8,8 @@ import { TRAITS } from '../data/traits';
 import { SKILL_NAMES } from '../data/names';
 import { WEAPONS } from '../data/weapons';
 import { G } from '../state';
+import { RES_ICON, RES_LABEL } from '../data/world';
+import { factionName } from '../sim/incident';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const nl = (s: string) => esc(s).replace(/\n/g, '<br>');
@@ -72,6 +74,32 @@ function strangerHtml(ev: PendingEvent): string {
   return `<div class="evstrs">${st.map((n, i) => strangerRow(n, st.length > 1, i === 0 ? risk : '')).join('')}</div>`;
 }
 
+const resIco = (r: Res) => (RES_ICON[r] ?? 'icon_parts').replace(/^icon_/, '');
+const signed = (n: number) => `${n > 0 ? '+' : '−'}${Math.abs(n)}`;
+/** Can the house pay for this choice? */
+const affordable = (c: EventChoice) => !c.fx?.cost || Object.entries(c.fx.cost).every(([r, n]) => (G.stores[r as Res] ?? 0) >= (n ?? 0));
+/** A choice's real stakes as chips: who goes, what it costs and gives, the odds, the standing it moves. */
+function fxChips(fx: ChoiceFx): string {
+  const out: string[] = [];
+  const w = fx.who ? byId(fx.who) : undefined;
+  if (w) out.push(chip('st_trait', esc(first(w)), `${esc(displayName(w))}${fx.away ? ` goes, away ${fx.away} day${fx.away > 1 ? 's' : ''}` : ''}`));
+  if (fx.away) out.push(chip('st_time', `${fx.away}d away`, `Gone ${fx.away} day${fx.away > 1 ? 's' : ''}: no job, not on the wall.`, 'warn'));
+  for (const [r, n] of Object.entries(fx.cost ?? {}) as [Res, number][]) {
+    if (!(n > 0)) continue;
+    const have = Math.floor(G.stores[r] ?? 0);
+    out.push(chip(resIco(r), `−${n}${have < n ? ` (have ${have})` : ''}`, `Costs ${n} ${esc(RES_LABEL[r]?.toLowerCase() ?? r)}; we have ${have}.`, 'bad'));
+  }
+  for (const [r, n] of Object.entries(fx.gain ?? {}) as [Res, number][]) if (n > 0) out.push(chip(resIco(r), `+${n}`, `${n} ${esc(RES_LABEL[r]?.toLowerCase() ?? r)}`, 'good'));
+  if (fx.gun && WEAPONS[fx.gun]) out.push(chip(WEAPONS[fx.gun].icon.replace(/^icon_/, ''), esc(WEAPONS[fx.gun].name), 'A gun for the rack.', 'good'));
+  if (fx.wall) out.push(chip('st_wall', signed(fx.wall), `Max wall ${signed(fx.wall)}`, fx.wall > 0 ? 'good' : 'bad'));
+  if (fx.people) out.push(chip('st_trait', signed(fx.people), `${fx.people} more in the house: hands, and mouths.`, 'good'));
+  if (fx.mood) out.push(chip(fx.mood > 0 ? 'st_mood_up' : 'st_mood_down', signed(fx.mood), `Mood ${signed(fx.mood)}${w ? ` for ${esc(first(w))}` : ''} for some days`, fx.mood > 0 ? 'good' : 'warn'));
+  if (fx.odds !== undefined) out.push(chip('st_danger', `${Math.round(fx.odds * 100)}%`, `${Math.round(fx.odds * 100)}% it goes well${fx.risk ? `; otherwise ${esc(fx.risk)}` : ''}.`, fx.odds < 0.6 ? 'bad' : 'warn'));
+  else if (fx.risk) out.push(chip('st_danger', 'risk', esc(fx.risk), 'warn'));
+  for (const [f, n] of Object.entries(fx.rep ?? {})) out.push(chip('st_faction', `${esc(factionName(f))} ${signed(n)}`, `Standing with ${esc(factionName(f))} ${signed(n)}`, n > 0 ? 'good' : 'bad'));
+  return out.join('');
+}
+
 /** The modal for G.pendingEvent (keeps .modal.event and [data-act=choice][data-i] for the day screen's handler). */
 export function eventModal(ev: PendingEvent) {
   const paras = ev.text.split(/\n\s*\n/);
@@ -81,9 +109,11 @@ export function eventModal(ev: PendingEvent) {
       <div class="evhead">${face(ev)}<div><h2>${esc(ev.title)}</h2><p class="evhook">${nl(hook)}</p>${strangerHtml(ev)}</div></div>
       ${rest ? fold('<span class="t-s">Read on</span>', `<p>${nl(rest)}</p>`, { cls: 'evmore', open: rest.length < 260 }) : ''}
       <div class="choices">${ev.choices.map((c, i) => {
-        const cs = conseq(c.hint);
+        // real stakes (fx) as chips when the event says them; else icons guessed from the hint
+        const cs = c.fx ? [] : conseq(c.hint);
+        const can = affordable(c);
         // the hint stays visible (a long press on a button would also choose it); icons say what is at stake, their word on hover
-        return `<button data-act="choice" data-i="${i}"><span class="evlabel">${esc(c.label)}</span>${cs.length ? `<span class="evcons">${cs.map(([, id, l]) => `<span data-tip="At stake: ${l}">${ico(id, "", "sm")}</span>`).join('')}</span>` : ''}${c.hint ? `<small>${esc(c.hint)}</small>` : ''}</button>`;
+        return `<button data-act="choice" data-i="${i}"${can ? '' : ' disabled class="cant"'}><span class="evlabel">${esc(c.label)}</span>${cs.length ? `<span class="evcons">${cs.map(([, id, l]) => `<span data-tip="At stake: ${l}">${ico(id, "", "sm")}</span>`).join('')}</span>` : ''}${c.fx ? `<span class="evfx">${fxChips(c.fx)}</span>` : ''}${c.hint ? `<small>${esc(c.hint)}</small>` : ''}</button>`;
       }).join('')}</div>
     </div></div>`;
 }

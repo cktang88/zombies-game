@@ -29,8 +29,8 @@ function newcomerEvent(id: string, title: string, intro: (n: Survivor) => string
         text: `${intro(n)}\n\n${displayName(n)}, ${n.age}. ${n.before} ${n.outbreak}`,
         data: { n, bitten, biteOdds: risky ? 0.3 : 0 },
         choices: [
-          { label: 'Let them in', hint: risky ? 'Another mouth, another pair of hands. A hidden bite would turn inside the wall.' : 'Another mouth, another pair of hands.', effect: 'accept' },
-          { label: 'Check them for bites first', hint: 'Finds a bite if there is one. Strip search in the cold: they think less of you, and their mood drops for days.', effect: 'check' },
+          { label: 'Let them in', fx: { people: 1, ...(risky ? { risk: '3 in 10 off the road hide a bite' } : {}) }, hint: risky ? 'Another mouth, another pair of hands. A hidden bite would turn inside the wall.' : 'Another mouth, another pair of hands.', effect: 'accept' },
+          { label: 'Check them for bites first', fx: { people: 1, mood: -6 }, hint: 'Finds a bite if there is one. Strip search in the cold: they think less of you, and their mood drops for days.', effect: 'check' },
           { label: 'Turn them away', effect: 'refuse' },
         ],
       };
@@ -72,7 +72,7 @@ export const INCIDENTS: Incident[] = [
         id: 'found', title: `Found at ${at}`,
         text: `${by ? first(by) : 'The scavengers'} found someone holed up at ${at}, living on ${R.pick(['communion wafers', 'dog food', 'ketchup packets', 'nothing'])}.\n\n${displayName(n)}, ${n.age}. ${n.before}`,
         data: { n, by: by?.id },
-        choices: [{ label: 'Bring them home', effect: 'accept' }, { label: 'We can\'t feed another', effect: 'refuse' }],
+        choices: [{ label: 'Bring them home', fx: { people: 1 }, effect: 'accept' }, { label: 'We can\'t feed another', effect: 'refuse' }],
       };
     },
     resolve: (c, d) => {
@@ -98,7 +98,7 @@ export const INCIDENTS: Incident[] = [
         id: 'family', title: 'A parent and a child',
         text: `${displayName(a)} and ${a.sex === 'm' ? 'his' : 'her'} ${b.sex === 'm' ? 'son' : 'daughter'} ${first(b)}, walked in from the Corliss road. They saw the Line. "Nobody's crossing. Nobody's ever crossing."\n\nTwo more mouths, and the kid is ${b.age}.`,
         data: { a, b },
-        choices: [{ label: 'Take them both', effect: 'accept' }, { label: 'We can only take one', hint: 'They will not split up.', effect: 'refuse' }],
+        choices: [{ label: 'Take them both', fx: { people: 2 }, effect: 'accept' }, { label: 'We can only take one', hint: 'They will not split up.', effect: 'refuse' }],
       };
     },
     resolve: (c, d) => {
@@ -134,9 +134,9 @@ export const INCIDENTS: Incident[] = [
         text: `Old Peltier tied up at the landing below the house. Ferry families trade with whoever is still breathing.${friend < 1 ? ' He gives us the family price now.' : friend > 1 ? ' He keeps one hand near the shotgun under the tarp.' : ''} "${R.pick(['Ice is coming. After that I\'m nobody.', 'County boys pay in promises. You pay in goods.', 'Don\'t tell the Union I was here.'])}"\n\nHe wants ${price} ${lbl(wants)}. He offers ${offers.n} ${lbl(offers.r)}${gun ? `, or a ${WEAPONS[gun].name.toLowerCase()} for twice the price` : ''}.${special ? `\n\nUnder the tarp, for friends: ${specialPitch}. ${specialPrice} ${lbl(wants)}.` : ''}`,
         data: { wants, price, offers, gun, special, specialPrice },
         choices: [
-          { label: `Trade ${price} ${lbl(wants)} for ${offers.n} ${lbl(offers.r)}`, effect: 'a' },
-          ...(gun ? [{ label: `Trade ${price * 2} ${lbl(wants)} for the ${WEAPONS[gun].name.toLowerCase()}`, effect: 'b' }] : []),
-          ...(special ? [{ label: `Trade ${specialPrice} ${lbl(wants)} for the ${specialName}`, hint: special.kind === 'mod' ? (MODS[special.id]?.niche ?? '') : (AMMO_TYPES[special.id as Res]?.desc ?? ''), effect: 's' }] : []),
+          { label: `Trade ${price} ${lbl(wants)} for ${offers.n} ${lbl(offers.r)}`, fx: { cost: { [wants]: price }, gain: { [offers.r]: offers.n }, rep: { ferry: 8 } }, effect: 'a' },
+          ...(gun ? [{ label: `Trade ${price * 2} ${lbl(wants)} for the ${WEAPONS[gun].name.toLowerCase()}`, fx: { cost: { [wants]: price * 2 }, gun, rep: { ferry: 12 } }, effect: 'b' }] : []),
+          ...(special ? [{ label: `Trade ${specialPrice} ${lbl(wants)} for the ${specialName}`, hint: special.kind === 'mod' ? (MODS[special.id]?.niche ?? '') : (AMMO_TYPES[special.id as Res]?.desc ?? ''), fx: { cost: { [wants]: specialPrice }, ...(special.kind === 'ammo' ? { gain: { [special.id]: (special as { n: number }).n } } : {}), rep: { ferry: 10 } }, effect: 's' }] : []),
           { label: 'Send him on his way', effect: 'c' },
         ],
       };
@@ -179,8 +179,8 @@ export const INCIDENTS: Incident[] = [
         text: `${first(s)} found a house on Birch Street where one of the Turned sits at the kitchen table, hands folded, facing a cold plate. A porch light is on, somehow. There is a full pantry behind it.\n\nIt has not moved. It might be somebody's mother.`,
         data: { s: s.id },
         choices: [
-          { label: 'Put it down, take the pantry', hint: '+food. It was somebody.', effect: 'kill' },
-          { label: 'Leave it be', hint: 'Walk out, close the door.', effect: 'leave' },
+          { label: 'Put it down, take the pantry', hint: 'It was somebody.', fx: { gain: { food: 14 }, who: s.id, mood: hasTrait(s, 'gentle') || hasTrait(s, 'faithful') ? -12 : -4 }, effect: 'kill' },
+          { label: 'Leave it be', hint: 'Walk out, close the door.', fx: { who: s.id, mood: 3 }, effect: 'leave' },
         ],
       };
     },
@@ -215,7 +215,7 @@ export const INCIDENTS: Incident[] = [
         text: `The bite is on ${their(s)} ${PART_NAMES[w.part]}. Already the edges are going the color of weak tea, and there's that smell, sweet like bread.\n\nEveryone knows how this goes. ${limb && doc ? `${first(doc)} says if we take the ${PART_NAMES[w.part]} off today, now, there's a chance. Maybe ${Math.round(chance * 100)}%.` : 'There is nothing to cut off.'}`,
         data: { s: s.id, part: w.part, doc: doc?.id, chance, limb },
         choices: [
-          ...(limb && doc ? [{ label: `Amputate (${Math.round(chance * 100)}%)`, hint: 'Uses medicine if we have it.', effect: 'amp' }] : []),
+          ...(limb && doc ? [{ label: 'Amputate', hint: 'Uses a medicine if we have one (+8%). Loses the limb for good.', fx: { odds: Math.min(1, chance + (G.stores.meds > 0 ? 0.08 : 0)), risk: `${first(s)} dies on the table`, who: s.id }, effect: 'amp' }] : []),
           { label: 'Wait and pray', hint: 'Some people don\'t turn. Some.', effect: 'wait' },
           { label: `Ask ${them(s)} what ${they(s)} want${s.sex === 'm' ? 's' : 's'}`, effect: 'ask' },
         ],
@@ -269,7 +269,7 @@ export const INCIDENTS: Incident[] = [
         id: 'dog', title: 'A dog',
         text: `A shepherd mix has been sitting outside the wall since dawn. Collar tag says ${name.toUpperCase()}, and a phone number in Corliss nobody will ever call again. Ribs showing. It doesn't bark at us. It barks at the treeline.`,
         data: { name },
-        choices: [{ label: `Let ${name} in`, hint: 'Eats a little. Hears them before we do.', effect: 'yes' }, { label: 'Drive it off', effect: 'no' }],
+        choices: [{ label: `Let ${name} in`, hint: 'Eats a little. Hears them before we do.', fx: { mood: 4 }, effect: 'yes' }, { label: 'Drive it off', effect: 'no' }],
       };
     },
     resolve: (c, d) => {
@@ -286,7 +286,7 @@ export const INCIDENTS: Incident[] = [
     make: () => ({
       id: 'rations', title: 'The pantry',
       text: `${G.stores.food} portions in the pantry and ${pop()} people in the house. Somebody has to say it.`,
-      choices: [{ label: 'Half rations', hint: 'Everyone eats half. Mood suffers.', effect: 'half' }, { label: 'Full rations, scavenge harder', effect: 'full' }],
+      choices: [{ label: 'Half rations', hint: 'Everyone eats half: food lasts twice as long, but nobody gets their strength back and mood drops 5 a day.', fx: { mood: -5 }, effect: 'half' }, { label: 'Full rations, scavenge harder', effect: 'full' }],
     }),
     resolve: (c) => {
       G.flags.rations = c === 0 ? 'half' : 'full';
@@ -306,7 +306,7 @@ export const INCIDENTS: Incident[] = [
     make: () => ({
       id: 'union', title: 'Local 41',
       text: `A Union runner in a hard hat with LOCAL 41 stenciled on it comes under a white flag. "Steward Wick says: we've got steam, we've got steel. We need hands that can shoot. Send us one of yours for the week and we'll send back plate for your wall."`,
-      choices: [{ label: 'Send our best shot', hint: 'Lose a survivor for 5 days. Get steel.', effect: 'send' }, { label: 'Send 15 rifle rounds instead', effect: 'ammo' }, { label: '"Everybody works their own shift."', effect: 'no' }],
+      choices: [{ label: 'Send our best shot', hint: 'They stand the mill wall for a week. Steel plate comes back for ours.', fx: { who: [...living()].sort((a, b) => b.skills.shooting - a.skills.shooting)[0]?.id, away: 5, gain: { scrap: 40 }, wall: 80, rep: { union: 25 } }, effect: 'send' }, { label: 'Send 15 rifle rounds instead', fx: { cost: { rifle: 15 }, gain: { scrap: 25 }, rep: { union: 10 } }, effect: 'ammo' }, { label: '"Everybody works their own shift."', fx: { rep: { union: -5 } }, effect: 'no' }],
     }),
     resolve: (c) => {
       G.flags.unionDone = true;
@@ -339,7 +339,7 @@ export const INCIDENTS: Incident[] = [
         id: 'raiders', title: 'Men from the courthouse',
         text: `Three men in county jackets, one with a deputy's star on a lanyard. "Exposure Register says this house hasn't been inspected. Inspection fee is ${n} ${want}. Or we inspect."\n\nThey have a carbine and they look like they've used it.`,
         data: { want, n },
-        choices: [{ label: `Pay ${n} ${want}`, effect: 'pay' }, { label: 'Tell them to get off our road', hint: 'Someone could get shot.', effect: 'fight' }],
+        choices: [{ label: `Pay ${n} ${want}`, fx: { cost: { [want]: n }, mood: -4, rep: { county: 10 } }, effect: 'pay' }, { label: 'Tell them to get off our road', hint: 'Someone could get shot.', fx: { odds: Math.min(0.85, 0.3 + (living().reduce((a, s) => a + s.skills.shooting, 0) + G.weapons.length * 2) * 0.02), risk: `someone is shot and they take the ${want} anyway`, rep: { county: -25 } }, effect: 'fight' }],
       };
     },
     resolve: (c, d) => {
@@ -390,7 +390,7 @@ export const INCIDENTS: Incident[] = [
         id: 'cache', title: 'A deer camp',
         text: `${first(s)} remembers a deer camp up the Route 9 logging road. "Old Nils kept a gun safe up there and a chest freezer of venison. If the freezer's dead the meat's bad, but the safe..." It's a long walk, and alone.`,
         data: { s: s.id },
-        choices: [{ label: `Send ${first(s)}`, hint: 'Gone all day. Could be anything.', effect: 'go' }, { label: 'Too far', effect: 'no' }],
+        choices: [{ label: `Send ${first(s)}`, hint: 'Gone all day. Nearly half the time a gun and rounds; a third of the time only jerky.', fx: { who: s.id, away: 1, odds: 0.8, risk: `${first(s)} comes back hurt, maybe bitten` }, effect: 'go' }, { label: 'Too far', effect: 'no' }],
       };
     },
     resolve: (c, d) => {
@@ -518,7 +518,7 @@ export const INCIDENTS: Incident[] = [
         id: 'fire', title: 'Fire in the woodshed',
         text: `A stovepipe cracked in the night and the woodshed went up. ${first(s)} is already running at it with a wet blanket. Half the timber is in there.`,
         data: { s: s.id },
-        choices: [{ label: 'Everyone fights it', hint: 'Save the wood. Someone may get burned.', effect: 'fight' }, { label: 'Let it burn', hint: 'Lose the timber. Nobody gets hurt.', effect: 'let' }],
+        choices: [{ label: 'Everyone fights it', hint: 'Save most of the wood. Someone may get burned.', fx: { cost: { wood: Math.round(G.stores.wood * 0.2) }, odds: 0.55, risk: `${first(s)} gets burned`, who: s.id }, effect: 'fight' }, { label: 'Let it burn', hint: 'Nobody gets hurt.', fx: { cost: { wood: Math.round(G.stores.wood * 0.6) } }, effect: 'let' }],
       };
     },
     resolve: (c, d) => {
@@ -564,8 +564,8 @@ export const INCIDENTS: Incident[] = [
       id: 'parish', title: 'A note from the Parish',
       text: 'Pinned to the gate under a rock, in Pastor Engvall\'s careful hand:\n\n"To whoever holds the Haugen place. Gene Halvorsen needs insulin and we have nine children with the croup. If you have any medicine at all, leave it at the Legion hall steps. God sees it. So do I. — R.E."',
       choices: [
-        { label: 'Leave 2 medicine at the Legion steps', effect: 'give' },
-        { label: 'We need it ourselves', effect: 'keep' },
+        { label: 'Leave 2 medicine at the Legion steps', fx: { cost: { meds: 2 }, mood: 3, rep: { parish: 20 } }, effect: 'give' },
+        { label: 'We need it ourselves', fx: { rep: { parish: -5 } }, effect: 'keep' },
       ],
     }),
     resolve: (c) => {

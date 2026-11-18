@@ -142,3 +142,11 @@
 .modal.event .evstr .chip.warn { border-color: #a8462a; background: rgba(168, 70, 42, .12); }
 .modal.event .evstr .chip.warn b { color: #7a2414; }
 .modal.event .evstr .tag { color: #4a3f30; border-color: #8a7a5e; }
+/* a choice's real stakes (EventChoice.fx) as chips under its label */
+.modal.event .evfx { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 2px; }
+.modal.event .evfx .chip.bad { border-color: #a8462a; }
+.modal.event .evfx .chip.bad b { color: #7a2414; }
+.modal.event .evfx .chip.good b { color: #3f5a1c; }
+.modal.event .choices button.cant { opacity: .55; cursor: not-allowed; }
+.modal.event .evfx .chip.warn { border-color: #9a6a20; }
+.modal.event .evfx .chip.warn b { color: #6a4210; }

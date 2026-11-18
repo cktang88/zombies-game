@@ -197,6 +197,22 @@ export interface EventChoice {
   hint?: string;
   effect: string; // effect id resolved by events.ts
   data?: Record<string, unknown>;
+  fx?: ChoiceFx; // the real stakes, shown as chips on the card (ui/eventcard.ts); keep in step with resolve()
+}
+
+/** What a choice really does, read off its resolve() code. Every field optional. */
+export interface ChoiceFx {
+  cost?: Partial<Record<Res, number>>; // spent from the stores; the choice is disabled when we cannot pay
+  gain?: Partial<Record<Res, number>>;
+  rep?: Record<string, number>; // faction id → standing change
+  odds?: number; // chance it goes well, 0..1
+  risk?: string; // what can go wrong, a few words (the tip of a danger chip)
+  who?: string; // the survivor id who goes or is at stake
+  away?: number; // days that survivor is away
+  mood?: number; // mood change for the house (or for who)
+  wall?: number; // max wall change
+  people?: number; // newcomers joining
+  gun?: string; // a weapon def gained
 }
 
 export interface PendingEvent {
