@@ -14,43 +14,25 @@ function keyList(ctx: KeyCtx): string {
 }
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
-type Page = 'guide' | 'day' | 'night' | 'runs' | 'turned' | 'moods';
+type Page = 'guide' | 'night' | 'runs' | 'turned' | 'moods';
 let page: Page = 'guide';
 
 /** A picture card: icon or portrait, a name, one line; the rest on hover / long press. */
 const card = (pic: string, name: string, line: string, more = '') =>
   `<div class="hcard"${tip(more)}>${pic}<div><b class="t-m">${name}</b><span class="t-s">${line}</span></div></div>`;
-const JOBS: [string, string, string, string][] = [
-  ['job_repair', 'Repair the wall', 'Burns timber.', 'Building skill. Patches the barricade.'],
-  ['job_scavenge', 'Scavenge', 'Pick a site.', 'Scavenging skill. Sites run dry, and the riskier ones bite back.'],
-  ['job_craft', 'Workshop', 'Works the queue.', 'Crafting skill. <b>A queue with nobody at the bench does nothing.</b>'],
-  ['job_farm', 'Food', 'One a day each.', 'Farming skill. Snares and kale, more with cold frames. Everyone eats one a day.'],
-  ['job_doctor', 'Tend wounded', 'Stops the rot.', 'Medicine. Untended cuts go septic.'],
-  ['job_radio', 'Work the radio', 'Voices, news.', 'Social. Needs a radio mast. Contacts and news from across the river.'],
-  ['job_rest', 'Rest', 'Sleep it off.', 'Recovers rest and lifts the mood a little.'],
-];
-
 const PAGES: Record<Page, { label: string; html: () => string }> = {
-  guide: { label: 'How it works', html: guideHtml },
-  day: {
-    label: 'The day',
-    html: () => `
-      <p class="t-l">One job each. It all comes due at dusk.</p>
-      <div class="hcards">${JOBS.map(([i, n, l, m]) => card(ico(i), n, l, m)).join('')}
-        ${card(ico('st_danger'), 'Lead a run', 'You walk it.', 'The leader can lead a run instead of working: a daylight walk down one street, played by you.')}</div>
-      <p class="t-s"><kbd>${esc(keyLabel(keyOf('day.dusk')))}</kbd> to the wall at dusk · <kbd>${esc(keyLabel(keyOf('day.help')))}</kbd> this ledger · hover anything for more.</p>`,
-  },
+  // the day jobs live in the guide's cards (with what each costs and gives); the day keys sit under it
+  guide: { label: 'How it works', html: () => `${guideHtml()}<p class="t-s hkeys"><kbd>${esc(keyLabel(keyOf('day.dusk')))}</kbd> to the wall at dusk · <kbd>${esc(keyLabel(keyOf('day.help')))}</kbd> this ledger · hover anything for more.</p>` },
   night: {
     label: 'The wall',
     html: () => `
       <p class="t-l">Aim for the head. Hold the wall.</p>
       <div class="hcards">
-        ${card(ico('st_wall'), 'The barricade', 'Your health bar.', 'If it falls, they climb over and the defenders get hurt.')}
         ${card(ico('job_guard'), 'The others', 'Shoot on their own.', 'Everyone else who can fight stands the wall.')}
         ${card(ico('st_noise'), 'Noise', 'Draws stragglers.', 'Every shot carries. Quiet guns draw fewer.')}
         ${card(ico('st_break'), 'Jams', 'Worn guns jam.', 'Keep them maintained in the workshop.')}
       </div>
-      ${fold('<span class="t-s">Keys</span>', keyList('night') + '<p class="t-s">Every key can be changed in Settings › Controls.</p>', { id: 'help-keys-night', open: true })}`,
+      ${fold('<span class="t-s">Keys</span>', keyList('night') + '<p class="t-s">Every key can be changed in Settings › Controls.</p>', { id: 'help-keys-night' })}`,
   },
   runs: {
     label: 'Runs',
@@ -61,7 +43,7 @@ const PAGES: Record<Page, { label: string; html: () => string }> = {
         ${card(ico('st_time'), 'The light', 'About 2½ minutes.', 'After that the dead wake everywhere.')}
         ${card(ico('st_dead'), 'Dying out there', 'The loot stays.', 'What you carried stays in the road.')}
       </div>
-      ${fold('<span class="t-s">Keys</span>', keyList('run'), { id: 'help-keys-run', open: true })}`,
+      ${fold('<span class="t-s">Keys</span>', keyList('run'), { id: 'help-keys-run' })}`,
   },
   turned: {
     label: 'The Turned',
@@ -91,6 +73,7 @@ const PAGES: Record<Page, { label: string; html: () => string }> = {
 export function openHelp(host: HTMLElement = document.body, start?: Page) {
   if (document.querySelector('.overlay.help')) return;
   if (start) page = start;
+  if (!PAGES[page]) page = 'guide';
   const prevFocus = document.activeElement as HTMLElement | null;
   const div = document.createElement('div');
   div.className = 'overlay help';
@@ -100,7 +83,6 @@ export function openHelp(host: HTMLElement = document.body, start?: Page) {
       <h2 id="help-h">The house ledger</h2>
       <nav class="htabs" role="tablist">${(Object.keys(PAGES) as Page[]).map((p) => `<button role="tab" aria-selected="${p === page}" class="${p === page ? 'on' : ''}" data-h="${p}">${PAGES[p].label}</button>`).join('')}</nav>
       <div class="hbody">${PAGES[page].html()}</div>
-      <button class="go" data-h="close">Close</button>
     </div>`;
   };
   const close = () => {
