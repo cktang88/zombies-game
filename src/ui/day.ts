@@ -46,7 +46,7 @@ const JOBS: { id: JobId; label: string; hint: string }[] = [
   { id: 'rest', label: 'Rest', hint: 'Recover. The whole day off.' },
 ];
 
-import { tip, ico, fold, chip, pips, sec } from './kit';
+import { tip, ico, fold, chip, pips, sec, qi } from './kit';
 import './survivor.css';
 
 // What a job is likely to yield today for this survivor (mirrors sim/day.ts resolveDayWork).
@@ -174,7 +174,7 @@ const riskWord = (r: number) => (r < 0.2 ? 'low' : r < 0.4 ? 'some' : r < 0.6 ? 
 function siteStock(id: string) {
   const site = SITES.find((x) => x.id === id)!;
   const left = Math.max(0, (G.flags[`stock_${id}`] as number) ?? site.stock);
-  return { left, max: site.stock, pips: `${'▮'.repeat(left)}${'▯'.repeat(Math.max(0, site.stock - left))}` };
+  return { left, max: site.stock, word: left <= 0 ? 'picked clean' : `${left} of ${site.stock} hauls left` };
 }
 
 // ---- where to scavenge: a picture of what each place gives, not a lottery
@@ -193,12 +193,13 @@ function needs(): Set<Find> {
 }
 const findIcons = (x: (typeof SITES)[number], n = 3) => siteFinds(x).filter((f) => f.level !== 'a little').slice(0, n)
   .map((f) => `<span class="sfind ${f.level === 'lots' ? 'lots' : ''}"${tip(`<b>${FIND_LABEL[f.k]}</b>: ${f.level}`)}>${ico(FIND_ICON[f.k])}</span>`).join('');
-function siteButton(id: string, who: string, hours: number) {
+/** The chosen place: its name, what it has (pictures), the hours, the risk and the stock left (pips). Click to change. */
+function siteButton(id: string, who: string, hours: number, more = '') {
   const x = SITES.find((q) => q.id === id)!;
   const st = siteStock(id);
-  return `<button class="sitebtn" data-act="sitepick" data-id="${who}"${tip(`<b>${esc(x.name)}</b>: ${esc(siteFindsText(x))}<br>Click to choose where to go.`)}>
+  return `<button class="sitebtn" data-act="sitepick" data-id="${who}"${tip(`<b>${esc(x.name)}</b>: ${esc(siteFindsText(x))}<br>${st.word}. Every trip strips it.${more}<br>Click to choose where to go.`)}>
     <span class="sname">${esc(x.name)}</span><span class="sfinds">${findIcons(x)}</span>
-    <span class="smeta t-xs">${travelHours(id)}h walk · ${hours}h ${who === 'run' ? 'street' : 'search'} · ${riskWord(x.risk)} risk · ${st.left <= 0 ? 'picked clean' : `${st.left}/${st.max} left`}</span></button>`;
+    <span class="smeta t-xs"><span>${travelHours(id)}h walk · ${hours}h ${who === 'run' ? 'street' : 'search'} · <span class="${x.risk >= 0.4 ? 'neg' : ''}">${riskWord(x.risk)} risk</span></span>${st.left <= 0 ? '<span class="neg">picked clean</span>' : pips(st.left, st.max)}</span></button>`;
 }
 function sitePickerHtml(who: string) {
   const sv = who === 'run' ? null : byId(who);
@@ -215,14 +216,13 @@ function sitePickerHtml(who: string) {
       ${hit.length ? `<span class="sneed">you need ${hit.map((f) => FIND_LABEL[f.k]).join(', ')}</span>` : ''}
       <span class="sname t-l">${esc(x.name)}</span>
       <span class="sfinds big">${fs.slice(0, 4).map((f) => `<span class="sfind ${f.level === 'lots' ? 'lots' : ''}">${ico(FIND_ICON[f.k])}<i>${FIND_LABEL[f.k]}${f.level === 'lots' ? ' ++' : ''}</i></span>`).join('') || '<i class="dim">odds and ends</i>'}</span>
-      <span class="smeta">${chip('st_time', `${walk}h walk`, 'Walking there and back')}${chip('st_danger', riskWord(x.risk), 'Chance of a bite or a fight', x.risk >= 0.4 ? 'warn' : '')}<span class="chip"${tip(st.left <= 0 ? 'Picked clean: little left to find' : `${st.left} of ${st.max} hauls left. Every trip strips it.`)}>${pips(st.left, st.max)}</span></span>
+      <span class="smeta">${chip('st_time', `${walk}h walk`, 'Walking there and back')}${chip('st_danger', riskWord(x.risk), 'Chance of a bite or a fight', x.risk >= 0.4 ? 'warn' : '')}<span class="chip"${tip(`${st.word}. Every trip strips it.`)}>${pips(st.left, st.max)}</span></span>
       <span class="sdesc t-s">${left}h ${sv ? 'searching' : 'on the street'} · ${esc(x.desc)}</span>
     </button>`;
   }).join('');
   return `<div class="modal sitepick" role="dialog" aria-label="Where to go">
     <button class="close" data-act="closesite" aria-label="Close">×</button>
-    <h2 class="t-xl">Where ${sv ? `does ${esc(first(sv))} scavenge` : 'does the run go'}?</h2>
-    <p class="t-s dim">Every place has its own stock. Big icons: lots of it. Far places eat the day in walking.</p>
+    <h2 class="t-xl">Where ${sv ? `does ${esc(first(sv))} scavenge` : 'does the run go'}? ${qi('Every place has its own stock: the pips. A big icon is a lot of it. Far places eat the day in walking.')}</h2>
     <div class="sitegrid">${cards}</div></div>`;
 }
 
@@ -290,7 +290,6 @@ function survivorCard(s: Survivor, dots: Set<string> = new Set()) {
   const jobDef = JOBS.find((j) => j.id === s.job);
   const drill = s.job === 'drill' ? (() => { const d = drillPlan(s); return d.live ? `${d.rounds} ${esc(ammoLabel(d.ammo).toLowerCase())}` : 'No live rounds: dry-fire.'; })() : '';
   const jobTip = `<b>${esc(jobDef?.label ?? s.job)}</b> · ${esc(jobOutlook(s, s.job))}<br>${esc(jobDef?.hint ?? '')}${drill ? `<br>${drill}` : ''}`;
-  const st = s.job === 'scavenge' ? siteStock(site) : null;
   return `<div class="card surv sv-card ${stale ? 'stale' : ''}" data-id="${s.id}"${dots.has(`surv:${s.id}`) ? ' data-dot' : ''}>
     ${portraitImg(s.sprite, `portrait${s.isLeader ? ' lead' : ''}`)}
     <div class="body">
@@ -301,9 +300,8 @@ function survivorCard(s: Survivor, dots: Set<string> = new Set()) {
         <select data-act="job" data-id="${s.id}" ${disabled ? 'disabled' : ''} aria-label="Job for ${esc(first(s))}"${sysTip('job_' + s.job)}>
           ${JOBS.filter((j) => j.id === s.job || !JOB_REVEAL[j.id] || isOpen(JOB_REVEAL[j.id]!)).map((j) => `<option value="${j.id}" ${s.job === j.id ? 'selected' : ''} title="${esc(sysLine('job_' + j.id))}">${j.label} — ${jobOutlook(s, j.id)}</option>`).join('')}
         </select>
-        ${s.job === 'scavenge' ? siteButton(site, s.id, Math.max(0, jobHours(s) - travelHours(site))) : ''}
+        ${s.job === 'scavenge' ? siteButton(site, s.id, Math.max(0, jobHours(s) - travelHours(site)), `<br>${Math.round(searchFactor(searchHours(s)) * 100)}% of a full search today.`) : ''}
       </div>
-      ${st ? `<div class="stock"${tip(`<b>${esc(SITES.find((x) => x.id === site)?.name ?? '')}</b>: ${st.left <= 0 ? 'picked clean' : `${st.left} of ${st.max} left`}<br>Every trip strips it further. ${Math.round(searchFactor(searchHours(s)) * 100)}% of a full search today.`)}>${st.pips}</div>` : ''}
       ${fold(gearPeek(s), `${moodBar(s)}${skillsMini(s)}${disabled ? '' : hoursBar(s)}
       <div class="row small sv-gear">
         <select data-act="weapon" data-id="${s.id}" aria-label="Gun for ${esc(first(s))}">
@@ -438,19 +436,15 @@ function runHtml() {
   if (!sites.some((x) => x.id === runSite)) runSite = sites[0].id;
   const secs = runDaylightFor(runSite, runLeave);
   const streetH = Math.max(0, DAY_HOURS - runLeave - travelHours(runSite));
-  const site = SITES.find((x) => x.id === runSite)!;
-  const st = siteStock(runSite);
-  const why = `${esc(first(l))} goes on foot, alone or with one other. Far sites eat the day in walking; leaving late leaves less light on the street. ${runLeave ? `${esc(first(l))} works ${runLeave}h at home first.` : `${esc(first(l))} does no other work today.`}`;
+  const why = `${esc(first(l))} walks one place in daylight, alone or with one other. Leaving late leaves less light. ${runLeave ? `Works ${runLeave}h at home first.` : 'No other work today.'}`;
   return `<div class="run">${sec('Lead a run', '', why, 'rhead')}
     ${siteButton(runSite, 'run', streetH)}
     <div class="runrow">
       <select data-act="runleave" aria-label="Leave at">${[0, 2, 4, 6].map((h) => `<option value="${h}" ${h === runLeave ? 'selected' : ''}>leave ${clockLabel(h)}</option>`).join('')}</select>
       ${runMateSelect(l)}
     </div>
-    <div class="runchips">${chip('st_time', `${travelHours(runSite)}h`, 'Walking there and back')}${chip('st_danger', riskWord(site.risk), `Risk at ${esc(site.name)}`, site.risk >= 0.4 ? 'warn' : '')}<span class="chip"${tip(`Loot left at ${esc(site.name)}: ${st.left} of ${st.max}`)}>${pips(st.left, st.max)}</span></div>
-    <div class="rundl"${tip('Grey: work at home · hatched: walking · gold: on the street')}><div class="hstrip">${Array.from({ length: DAY_HOURS }, (_, i) => `<i class="${i < runLeave ? 'wk' : i < runLeave + travelHours(runSite) / 2 ? 'tr' : i < DAY_HOURS - travelHours(runSite) / 2 ? 'st' : 'tr'}"></i>`).join('')}</div>
-    <span class="t-xs">${streetH}h street · ${secs}s light</span></div>
-    <button data-act="run" ${secs < 30 ? 'disabled title="Not enough daylight left to make it worth the walk"' : ''}>Go ›</button></div>`;
+    <div class="rundl"${tip(`07:00–17:00 · grey: work at home · hatched: walking · gold: ${streetH}h on the street, ${secs}s of daylight`)}><div class="hstrip">${Array.from({ length: DAY_HOURS }, (_, i) => `<i class="${i < runLeave ? 'wk' : i < runLeave + travelHours(runSite) / 2 ? 'tr' : i < DAY_HOURS - travelHours(runSite) / 2 ? 'st' : 'tr'}"></i>`).join('')}</div></div>
+    <button data-act="run" ${secs < 30 ? 'disabled title="Not enough daylight left to make it worth the walk"' : ''}>Go · ${secs}s of light ›</button></div>`;
 }
 
 // The picture for a recipe: what it makes.

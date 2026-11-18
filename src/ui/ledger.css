@@ -333,8 +333,6 @@ ul.fort li b { font-family: var(--type); font-weight: normal; color: #efe4cc; }
 .run .rhead { margin-bottom: 4px; }
 .run .runrow { display: flex; gap: 6px; }
 .run .runrow select { flex: 1 1 0; min-width: 0; }
-.runchips { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
-.runchips .ico { width: 24px; height: 24px; }
 
 /* shared cards */
 .chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
@@ -438,7 +436,8 @@ ul.fort li b { font-family: var(--type); font-weight: normal; color: #efe4cc; }
 /* ---- where to scavenge: site button + picker (day.ts siteButton / sitePickerHtml) */
 .sitebtn { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; text-align: left; width: 100%; padding: 6px 10px; }
 .sitebtn .sname { font-size: var(--fs-m); }
-.sitebtn .smeta { grid-column: 1 / -1; color: var(--dim); }
+.sitebtn .smeta { grid-column: 1 / -1; color: var(--dim); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 2px 8px; }
+.sitebtn .smeta .neg { color: #e0705a; }
 .sfinds { display: inline-flex; gap: 4px; align-items: center; }
 .sfind .ico { width: 26px; height: 26px; }
 .sfind.lots .ico { width: 34px; height: 34px; }
