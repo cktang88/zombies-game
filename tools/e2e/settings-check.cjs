@@ -27,7 +27,7 @@ const ok = (cond, what) => { console.log(`${cond ? 'ok  ' : 'FAIL'} ${what}`); i
     if (!(await page.$('.overlay.settings'))) await page.click('[data-act=settings]');
     await page.click(`.overlay.settings [data-tab=${tab}]`);
   };
-  const closeSettings = () => page.click('.overlay.settings .go[data-s=close]');
+  const closeSettings = () => page.click('.overlay.settings [data-s=close]');
 
   // ---------------- audio
   await openSettings('audio');

@@ -325,8 +325,6 @@ export function openSettings(host: HTMLElement = document.body, onClose?: () => 
       <h2 id="set-h">Settings</h2>
       <nav class="htabs" role="tablist">${TABS.map(([t, l]) => `<button role="tab" aria-selected="${t === tab}" class="${t === tab ? 'on' : ''}" data-tab="${t}">${l}</button>`).join('')}</nav>
       <div class="sbody" data-tabbody="${tab}">${body()}</div>
-      <p class="dim small">Saved on this device.</p>
-      <button class="go" data-s="close">Done</button>
     </div>`;
   };
   const redraw = (focusSel?: string) => {
