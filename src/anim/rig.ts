@@ -65,6 +65,8 @@ interface Prop {
 type HandT = { x: number; y: number; rho: number; pose: string } | null;
 
 const ADDITIVE_ALWAYS: Partial<Record<NumCh, true>> = { px: true, py: true };
+/** how far (0..1) each unit drawing leans toward the other's gun angle while aim and low ready cross-dissolve */
+const UNIT_SWING = 0.4;
 let nextSeed = 1;
 
 export function createRig(kind: RigKind, spriteId: string, opts: CreateOpts = {}): Rig {
@@ -115,10 +117,16 @@ export class Rig {
   aimAngle = 0;
   /** closed-loop aim trim: keeps the barrel itself on the aim point (the solve aims from the shoulder) */
   aimCorr = 0;
-  /** aim unit in use this frame (assets.ts UnitDraw: torso + head + arms + gun drawn as one piece), and
-   * its rotation from the drawing's own angle; null = the rigged arms and the gun icon */
+  /** the unit drawing that leads this frame (assets.ts UnitDraw: torso + head + arms + gun drawn as one piece:
+   * aim, low ready or reload), its rotation from the drawing's own angle and where its pelvis is drawn (rig space);
+   * null = the rigged head, arms, hands and gun icon lead. The gun frame (muzzleWorld, flashes, casings, mags)
+   * follows the leading drawing. */
   unit: UnitDraw | null = null;
-  unitRot = 0;
+  unitRot = 0; unitX = 0; unitY = 0;
+  /** every unit drawing on screen this frame, back to front, with its opacity: two while one dissolves into the
+   * other (aim ↔ low ready ↔ reload). cutA = opacity of the rigged head / arms / hands / gun under them. */
+  unitDraws: { u: UnitDraw; x: number; y: number; rot: number; a: number }[] = [];
+  cutA = 1;
   /** closed-loop hip height: px the pelvis is raised so the straighter knee sits at a natural soft bend */
   legTrim = 0;
   recoil = 0; recoilV = 0;
@@ -477,21 +485,14 @@ export class Rig {
       ch.lean -= this.recoil * st.recoilLean;
       ch.px -= this.recoil * st.recoilBack;
     }
-    // aim unit (a rig json with `aimUnits`, docs/research/14 §3): while the gun is up, one drawing of
-    // the torso, head, arms, hands and gun turns as a piece to the aim (±35° of its drawn angle). Its
-    // shoulder pocket rides the torso, and the torso turns with it, so the whole unit pivots on the
-    // hips like the trunk does and the rig's own hips, legs and gait carry on underneath.
-    const U = this.asset!.meta.units?.[this.weaponId ?? ''];
-    this.unit = U && holding && this.gun && raise > 0.5 && ch.ready < 0.5 && this.gunState === 'held' ? U : null;
     // ---- trunk
     const crouchDrop = ch.crouch * g.legLen * 0.5;
     const pelX = ch.px, pelY = ch.py + crouchDrop - this.legTrim;
     const tiltA = -Math.PI / 2 + ch.tilt;
     let T = tiltA + ch.lean;
-    if (this.unit) {
-      const u = this.unit, u0 = Math.atan2(u.neck[1] - u.pelvis[1], u.neck[0] - u.pelvis[0]);
-      this.unitRot = clamp(wrapAngle(aim - u.bore), -0.61, 0.61) - this.recoil * st.recoilLean * 2;
-      T = u0 + this.unitRot;
+    if (this.placeUnits(holding, aim, lr, pelX, pelY)) {
+      const u = this.unit!;
+      T = Math.atan2(u.neck[1] - u.pelvis[1], u.neck[0] - u.pelvis[0]) + this.unitRot;
     }
     const ux = Math.cos(T), uy = Math.sin(T), vx = -uy, vy = ux;
     const pux = Math.cos(tiltA), puy = Math.sin(tiltA), pvx = -puy, pvy = pux;
@@ -526,7 +527,7 @@ export class Rig {
     const gun = this.gun;
     if (holding && gun && this.gunState === 'held' && a!.hold !== 'melee') {
       this.gunVisible = true;
-      const k = a!.len / gun.w;
+      const k = (a!.len / gun.w) * this.unitGunScale();
       const fl = a!.flip ? -1 : 1;
       this.gk = k;
       const loc = (p: [number, number]): [number, number] => [(p[0] - a!.grip[0]) * k * fl, (p[1] - a!.grip[1]) * k];
@@ -568,12 +569,13 @@ export class Rig {
       this.gx = lerp(gX, rX, rw) - Math.cos(this.ga) * this.recoil * 0.9;
       this.gy = lerp(gY, rY, rw) - Math.sin(this.ga) * this.recoil * 0.9;
       if (this.unit) {
-        // the drawn gun: the muzzle from the unit, the gun frame along its barrel (muzzleWorld, flashes, casings)
+        // the drawn gun: the muzzle from the leading unit, the gun frame along its barrel (muzzleWorld, flashes,
+        // casings, the mag in the reload clip)
         const u = this.unit, c = Math.cos(this.unitRot), s = Math.sin(this.unitRot);
         const mx = u.muzzle[0] - u.pelvis[0], my = u.muzzle[1] - u.pelvis[1];
         const kick = this.recoil * 0.9;
         this.ga = this.unitRot + u.bore;
-        const wx = pelX + mx * c - my * s - Math.cos(this.ga) * kick, wy = pelY + mx * s + my * c - Math.sin(this.ga) * kick;
+        const wx = this.unitX + mx * c - my * s - Math.cos(this.ga) * kick, wy = this.unitY + mx * s + my * c - Math.sin(this.ga) * kick;
         this.gx = wx - (muz[0] * Math.cos(this.ga) - muz[1] * Math.sin(this.ga));
         this.gy = wy - (muz[0] * Math.sin(this.ga) + muz[1] * Math.cos(this.ga));
       }
@@ -659,6 +661,81 @@ export class Rig {
     const tn = tip(N_FT, g.ft); set(13, tn[0], tn[1]);
     set(14, J[F_TH], K[F_TH]); set(15, J[F_SN], K[F_SN]); set(16, J[F_FT], K[F_FT]);
     const tf = tip(F_FT, g.ft); set(17, tf[0], tf[1]);
+  }
+
+  /**
+   * Unit drawings (docs/research/14 §3): one drawing of the torso, head, arms, hands and gun per state (aim, low
+   * ready, reload; assets.ts units / unitsReady / unitsReload), in place of the rigged parts. Weights per state:
+   * low ready by the stance's low-ready weight `lr`, reload by the clip's `ready` channel; a state with no drawing
+   * falls back to the rigged parts ("cut"). Between aim and low ready both drawings turn about their shoulder
+   * pocket (one shared butt point) and each leans part of the way (UNIT_SWING) toward the other's gun angle while
+   * they cross-dissolve, so the guns meet part-way without the whole body tipping 40° (lr's own ease: ~0.15 s for the 0.3..0.7 window). The aim drawing turns to the aim
+   * (±35° of its drawn angle) and the low-ready one to the stance's low angle (±17°), each pivoting on the
+   * hips like the trunk, so the rig's own hips, legs and gait carry on underneath.
+   * Fills unitDraws / cutA / unit / unitRot / unitX / unitY; returns true when a unit leads.
+   */
+  private placeUnits(holding: boolean, aim: number, lr: number, pelX: number, pelY: number): boolean {
+    const M = this.asset!.meta, w = this.weaponId ?? '', ch = this.ch, st = this.stance;
+    const UA = M.units?.[w], UR = M.unitsReady?.[w], UX = M.unitsReload?.[w];
+    this.unitDraws.length = 0; this.cutA = 1; this.unit = null;
+    if (!(UA || UR || UX) || !holding || !this.gun || this.gunState !== 'held' || this.anchors!.hold === 'melee') return false;
+    const sm = (e0: number, e1: number, x: number) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
+    const wLow = sm(0.3, 0.7, lr), wX = sm(0.28, 0.5, ch.ready);
+    const kick = this.recoil * st.recoilLean * 2;
+    // the guns' angles where each drawing would rest on its own, and the shared one while they swing
+    const rotA = UA ? clamp(wrapAngle(aim - UA.bore), -0.61, 0.61) - kick : 0;
+    const lowTo = Math.max(aim, st.lowAngle);
+    const rotR = UR ? clamp(wrapAngle(lowTo - UR.bore), -0.3, 0.3) : 0;
+    const gA = UA ? UA.bore + rotA : aim, gR = UR ? UR.bore + rotR : lowTo;
+    const dG = wrapAngle(gR - gA) * UNIT_SWING;
+    const turn = (u: UnitDraw, r: number, p: [number, number]): [number, number] => {
+      const c = Math.cos(r), s = Math.sin(r), dx = p[0] - u.pelvis[0], dy = p[1] - u.pelvis[1];
+      return [dx * c - dy * s, dx * s + dy * c];
+    };
+    // the shared pivot: each drawing's own pocket where it would rest, blended
+    const pa = UA ? turn(UA, rotA, this.pocketOf(UA)) : null, pr = UR ? turn(UR, rotR, this.pocketOf(UR)) : null;
+    const p0 = pa ?? pr, p1 = pr ?? pa;
+    const pvX = p0 ? pelX + lerp(p0[0], p1![0], wLow) : pelX, pvY = p0 ? pelY + lerp(p0[1], p1![1], wLow) : pelY;
+    const place = (u: UnitDraw, r: number, wt: number) => {
+      if (wt <= 0.001) return;
+      const o = turn(u, r, this.pocketOf(u));
+      this.unitDraws.push({ u, x: pvX - o[0], y: pvY - o[1], rot: r, a: wt });
+    };
+    // back to front: (the rigged parts) < low ready < aim < reload; each layer at min(1, 2 w) so the one on top
+    // fades in over a solid layer below it and the one below fades out under a solid one (no see-through mid-way)
+    const wAim = (1 - wLow) * (1 - wX), wReady = wLow * (1 - wX);
+    let cut = 0;
+    if (UR) place(UR, rotR - dG * (1 - wLow), wReady); else cut += wReady;
+    if (UA) place(UA, rotA + dG * wLow, wAim); else cut += wAim;
+    if (UX) { if (wX > 0.001) this.unitDraws.push({ u: UX, x: pelX, y: pelY, rot: 0, a: wX }); } else cut += wX;
+    if (!this.unitDraws.length) return false;
+    let lead = this.unitDraws[0];
+    for (const d of this.unitDraws) if (d.a > lead.a) lead = d;
+    const leadW = lead.a;
+    for (const d of this.unitDraws) d.a = Math.min(1, d.a * 2);
+    this.cutA = cut > 0.001 ? Math.min(1, cut * 2) : 0;
+    if (cut > leadW) return false; // the rigged parts lead
+    this.unit = lead.u; this.unitRot = lead.rot; this.unitX = lead.x; this.unitY = lead.y;
+    return true;
+  }
+  /** The gun icon's size against the unit drawings' gun (assets.ts gunScale: the model draws pistols ~1.3x and
+   * long guns a touch larger than the icon): the held icon and the gun frame (muzzle, grip, mag, port) are scaled to
+   * it, so the rigged arms and gun in a reload with no reload drawing match the drawings either side, and mags /
+   * casings come off the drawn gun's own well and port. 1 for a rig with no unit for this gun. */
+  private unitGunScale(): number {
+    return this.asset?.meta.gunScale?.[this.weaponId ?? ''] ?? 1;
+  }
+  /** A unit's pivot between drawings (drawing px): the cut's own `pocket`, else the butt along the drawn bore
+   * (long guns: the icon's muzzle-to-butt length back from the muzzle), else the shoulder (pistols). */
+  private pocketOf(u: UnitDraw): [number, number] {
+    if (u.pocket) return u.pocket;
+    const a = this.anchors!, g = this.geo!;
+    if (a.hold !== 'pistol' && a.butt && this.gun) {
+      const L = Math.abs(a.muzzle[0] - a.butt[0]) * (a.len / this.gun.w) * this.unitGunScale();
+      return [u.muzzle[0] - Math.cos(u.bore) * L, u.muzzle[1] - Math.sin(u.bore) * L];
+    }
+    const t = Math.atan2(u.neck[1] - u.pelvis[1], u.neck[0] - u.pelvis[0]), ux = Math.cos(t), uy = Math.sin(t);
+    return [u.pelvis[0] + ux * g.sh[0] - uy * g.sh[1], u.pelvis[1] + uy * g.sh[0] + ux * g.sh[1]];
   }
 
   /**
@@ -913,13 +990,14 @@ export class Rig {
     const melee = this.anchors?.hold === 'melee';
     // the support role's props (mag, shell, round, speedloader) ride the hand on its physical side
     const supFar = this.swap;
-    const unit = this.unit;
+    // unit drawings (placeUnits) replace the head, both arms, both hands and the gun: those slots are drawn at
+    // cutA (skipped at 0), the drawings over them after the last slot (every slot after the head is one of them)
+    const draws = this.unitDraws, base = this.baseAlpha;
     for (const slot of this.layers) {
-    // an aim unit replaces the head, both arms, both hands and the gun (it is drawn in the head's slot)
-    if (unit) {
-      if (slot === 'head') { this.part(ctx, atlas, TORSO, unit.part, false, 0, 0, pg); continue; }
-      if (slot === 'gun') { if (this.flashMuzzle > 0) this.drawFlash(ctx); continue; }
-      if (slot === 'fUA' || slot === 'fFA' || slot === 'fH' || slot === 'nShadow' || slot === 'nUA' || slot === 'nFA' || slot === 'nH') continue;
+    const cut = draws.length > 0 && (slot === 'head' || slot === 'gun' || slot === 'fUA' || slot === 'fFA' || slot === 'fH' || slot === 'nShadow' || slot === 'nUA' || slot === 'nFA' || slot === 'nH');
+    if (cut) {
+      if (this.cutA <= 0) continue;
+      this.baseAlpha = base * this.cutA; ctx.globalAlpha = this.baseAlpha;
     }
     switch (slot) {
       case 'fLeg':
@@ -957,7 +1035,22 @@ export class Rig {
       case 'slung': if (this.gunState === 'slung' && this.gun && this.weaponId && !melee) this.drawSlung(ctx); break;
       case 'string': if (this.anchors?.hold === 'bow' && this.gunVisible) this.drawString(ctx); break;
     }
+    if (cut) { this.baseAlpha = base; ctx.globalAlpha = base; }
     }
+    if (draws.length) {
+      for (const d of draws) { ctx.globalAlpha = base * d.a; this.unitPart(ctx, atlas, d, 0, 0, pg); }
+      ctx.globalAlpha = base;
+      if (this.unit && this.flashMuzzle > 0) this.drawFlash(ctx);
+    }
+  }
+  /** One unit drawing (placeUnits): its pelvis at (d.x, d.y) rig space, turned by d.rot from the drawing. */
+  private unitPart(ctx: CanvasRenderingContext2D, src: CanvasImageSource, d: { u: UnitDraw; x: number; y: number; rot: number }, ox: number, oy: number, grow: number) {
+    const m = this.asset!.meta.parts[d.u.part];
+    if (!m) return;
+    const S = this.ds, F = this.df, c = Math.cos(d.rot), s = Math.sin(d.rot);
+    this.xf(ctx, S * F * c, S * s, -S * F * s, S * c, this.dx + S * F * (d.x + ox), this.dy + S * (d.y + oy));
+    if (grow) ctx.drawImage(src, m.x - grow, m.y - grow, m.w + grow * 2, m.h + grow * 2, -m.px - grow, -m.py - grow, m.w + grow * 2, m.h + grow * 2);
+    else ctx.drawImage(src, m.x, m.y, m.w, m.h, -m.px, -m.py, m.w, m.h);
   }
   /** What the hand on this physical side carries, drawn under its fingers: the support role's mag /
    * prop when `support`, else the trigger role's prop (an arrow from the quiver). */
@@ -970,13 +1063,16 @@ export class Rig {
 
   /** Every body part from one flat atlas (outline, rim, flash), offset by (ox, oy) rig units. */
   private drawSil(ctx: CanvasRenderingContext2D, src: CanvasImageSource, ox: number, oy: number, grow: number) {
-    const unit = this.unit;
-    if (unit) this.part(ctx, src, TORSO, unit.part, false, ox, oy, grow);
+    const draws = this.unitDraws, ga = ctx.globalAlpha;
     for (let i = 0; i < PART_COUNT; i++) {
       if (i === HEAD && this.hideHead) continue;
-      if (unit && (i === HEAD || i === N_UA || i === N_FA || i === N_H || i === F_UA || i === F_FA || i === F_H)) continue;
+      const cut = draws.length > 0 && (i === HEAD || i === N_UA || i === N_FA || i === N_H || i === F_UA || i === F_FA || i === F_H);
+      if (cut && this.cutA <= 0) continue;
+      ctx.globalAlpha = cut ? ga * this.cutA : ga;
       this.part(ctx, src, i, i === N_H ? this.nearHand : i === F_H ? this.farHand : PART_NAMES[i], i === HEAD && this.headFlip > 0.5, ox, oy, grow);
     }
+    for (const d of draws) { ctx.globalAlpha = ga * d.a; this.unitPart(ctx, src, d, ox, oy, grow); }
+    ctx.globalAlpha = ga;
   }
 
   /** setTransform composed with the camera transform of this draw. */

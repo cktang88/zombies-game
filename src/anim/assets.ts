@@ -28,10 +28,26 @@ export interface RigMeta {
   aimUnits?: Record<string, string>;
   /** filled at load from `aimUnits` (+ AIM_UNIT_SHARES): weapon id → the drawing (an atlas part named after the unit) */
   units?: Record<string, UnitDraw>;
+  /** LOW-READY units (tools/aim-guide.ts `ready`): the same one-piece drawing with the gun muzzle-down at low ready,
+   * drawn while the gun is held but not aiming; the rig cross-dissolves it with the aim unit as the gun comes up.
+   * weapon id → unit_<name>_ready. A rig json may give it; else it comes from parts/unit_index.json. */
+  readyUnits?: Record<string, string>;
+  /** RELOAD key drawings (tools/aim-guide.ts `reload`): gun canted at the chest, support hand at the magazine well,
+   * drawn through the middle of a reload clip. weapon id → unit_<name>_reload (same sources as readyUnits). */
+  reloadUnits?: Record<string, string>;
+  /** filled at load from readyUnits / reloadUnits (+ AIM_UNIT_SHARES) */
+  unitsReady?: Record<string, UnitDraw>;
+  unitsReload?: Record<string, UnitDraw>;
+  /** the units' drawn gun against the gun icon (parts/unit_index.json cutGunScale, + AIM_UNIT_SHARES): weapon id → scale */
+  gunScale?: Record<string, number>;
 }
 /** One aim unit: its pelvis, neck and muzzle inside the drawing (rig units, from its top-left) and
  * the barrel's angle in the drawing. */
-export interface UnitDraw { part: string; pelvis: [number, number]; neck: [number, number]; muzzle: [number, number]; bore: number }
+export interface UnitDraw {
+  part: string; pelvis: [number, number]; neck: [number, number]; muzzle: [number, number]; bore: number;
+  /** the point the gun turns about between drawings (the butt in the shoulder; a pistol's shoulder), when the cut knows it */
+  pocket?: [number, number];
+}
 /** One kit drawing: its elbow bend (deg, forearm turned up from a level upper arm) and its
  * shoulder / elbow / wrist inside the drawing (rig units, from the drawing's top-left). */
 export interface KitDraw { part: string; bend: number; s: [number, number]; e: [number, number]; wr: [number, number] }
@@ -162,11 +178,18 @@ export function aimUnitsWithShares(own: Record<string, string>): Record<string, 
   for (const [w, n] of Object.entries(own)) for (const s of AIM_UNIT_SHARES[w] ?? []) if (!(s in out)) out[s] = n;
   return out;
 }
-/** The atlas with the rig's aim unit drawings stacked under it, one part per drawing (named after the unit);
- * every gun that uses a drawing (its own and the AIM_UNIT_SHARES borrowers) points at the same part. */
+/** parts/unit_index.json: the low-ready and reload units per rig (kept out of the rig jsons, which other tools rewrite) */
+let unitIndex: Promise<{ readyUnits?: Record<string, Record<string, string>>; reloadUnits?: Record<string, Record<string, string>>; cutGunScale?: Record<string, Record<string, number>> }> | null = null;
+function loadUnitIndex() {
+  unitIndex ??= fetch(`${base()}sprites/parts/unit_index.json`).then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
+  return unitIndex;
+}
+/** The atlas with the rig's unit drawings (aim, low ready, reload) stacked under it, one part per drawing (named
+ * after the unit); every gun that uses a drawing (its own and the AIM_UNIT_SHARES borrowers) points at the same part. */
 async function withUnits(im: CanvasImageSource & { width: number; height: number }, meta: RigMeta): Promise<HTMLCanvasElement | null> {
   const got: [string, UnitDraw & { im: HTMLImageElement }][] = [];
-  for (const n of new Set(Object.values(meta.aimUnits!))) {
+  const all = [meta.aimUnits, meta.readyUnits, meta.reloadUnits].flatMap((m) => Object.values(m ?? {}));
+  for (const n of new Set(all)) {
     const r = await fetch(`${base()}sprites/parts/${n}.json`).catch(() => null);
     const uim = r?.ok ? await loadImage(`${base()}sprites/parts/${n}.png`) : null;
     if (!r?.ok || !uim) continue;
@@ -180,7 +203,7 @@ async function withUnits(im: CanvasImageSource & { width: number; height: number
   const x = c.getContext('2d')!;
   x.drawImage(im, 0, 0);
   let y = im.height;
-  meta.units = {};
+  meta.units = {}; meta.unitsReady = {}; meta.unitsReload = {};
   const byName = new Map(got);
   for (const [, u] of got) {
     x.drawImage(u.im, 0, y);
@@ -188,10 +211,19 @@ async function withUnits(im: CanvasImageSource & { width: number; height: number
     meta.parts[u.part] = { x: 0, y, w: u.im.width, h: u.im.height, px: u.pelvis[0], py: u.pelvis[1], tx: u.neck[0], ty: u.neck[1], rest: Math.atan2(u.neck[1] - u.pelvis[1], u.neck[0] - u.pelvis[0]), len };
     y += u.im.height;
   }
-  for (const [weapon, n] of Object.entries(aimUnitsWithShares(meta.aimUnits!))) {
-    const u = byName.get(n);
-    if (u) meta.units[weapon] = { part: u.part, pelvis: u.pelvis, neck: u.neck, muzzle: u.muzzle, bore: u.bore };
-  }
+  const fill = (own: Record<string, string> | undefined, to: Record<string, UnitDraw>, sameAim = false) => {
+    for (const [weapon, n] of Object.entries(aimUnitsWithShares(own ?? {}))) {
+      const u = byName.get(n);
+      // a low-ready / reload drawing goes to a borrower only while that gun is still aimed with the owner's drawing
+      // (not once it has an aim unit of its own: the gun would change shape between the drawings)
+      if (sameAim && !(weapon in (own ?? {}))) {
+        const owner = Object.keys(own ?? {}).find((w) => (AIM_UNIT_SHARES[w] ?? []).includes(weapon));
+        if (!owner || meta.units![weapon]?.part !== meta.units![owner]?.part) continue;
+      }
+      if (u) to[weapon] = { part: u.part, pelvis: u.pelvis, neck: u.neck, muzzle: u.muzzle, bore: u.bore, pocket: u.pocket };
+    }
+  };
+  fill(meta.aimUnits, meta.units); fill(meta.readyUnits, meta.unitsReady, true); fill(meta.reloadUnits, meta.unitsReload, true);
   return c;
 }
 function repack(im: CanvasImageSource, meta: RigMeta): HTMLCanvasElement {
@@ -275,7 +307,18 @@ export function loadRig(id: string): Promise<RigAsset | null> {
         let raw: CanvasImageSource | null = await loadImage(`${base()}sprites/parts/${id}.png`);
         if (!raw) throw new Error('no atlas');
         if (meta.kit) raw = (await withKit(raw as HTMLImageElement, meta)) ?? raw;
-        if (meta.aimUnits) raw = (await withUnits(raw as HTMLCanvasElement, meta)) ?? raw;
+        if (meta.aimUnits) {
+          const ix = await loadUnitIndex();
+          meta.readyUnits ??= ix.readyUnits?.[id];
+          meta.reloadUnits ??= ix.reloadUnits?.[id];
+          raw = (await withUnits(raw as HTMLCanvasElement, meta)) ?? raw;
+          // a gun's scale goes to every gun drawn by the same aim drawing (the AIM_UNIT_SHARES borrowers without their own)
+          const gs = meta.gunScale ?? ix.cutGunScale?.[id];
+          if (gs) {
+            meta.gunScale = {};
+            for (const [w, v] of Object.entries(gs)) for (const [w2, u] of Object.entries(meta.units ?? {})) if (u.part === meta.units?.[w]?.part) meta.gunScale[w2] = v;
+          }
+        }
         // re-pack with a transparent gutter round every part, so the dilated (outline) and
         // offset (rim) silhouettes of a part never pick up its neighbour
         const im = repack(raw, meta);
