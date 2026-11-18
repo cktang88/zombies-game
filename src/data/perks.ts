@@ -16,8 +16,6 @@ export type PerkFx =
   | 'tendHeal' // sim/day doctor: a dressed wound loses this much more severity
   | 'scav' // sim/day scavenge haul: x(1 + v) (summed over the team)
   | 'scavDanger' // sim/day scavenge danger: x(1 + v)
-  | 'farm' // sim/day farmAmount: x(1 + v)
-  | 'farmCold' // sim/day farmAmount cold/snow penalty: 0.6 + v
   | 'radio' // sim/day radio work: x(1 + v)
   | 'aura' // sim/survivors moodBreakdown: + v mood to everyone else in the house
   | 'counsel' // sim/survivors counsel power: x(1 + v)
@@ -43,10 +41,10 @@ export const PERK_LIST: PerkDef[] = [
   P('building', 4, 'thrifty', 'Thrifty', 'Patches the wall with 40% less timber.', { repairWood: -0.4 }),
   P('building', 7, 'iron_back', 'Iron back', 'Wall repairs go 50% further.', { repair: 0.5 }),
   P('building', 7, 'tireless', 'Tireless', 'Work tires them 40% less.', { drain: -0.4 }),
-  P('crafting', 4, 'tinker', 'Tinker', '25% more bench work done.', { craft: 0.25 }),
-  P('crafting', 4, 'steady_pace', 'Steady pace', 'Work tires them 30% less.', { drain: -0.3 }),
-  P('crafting', 7, 'master_hand', 'Master hand', '50% more bench work done.', { craft: 0.5 }),
-  P('crafting', 7, 'armorer', 'Armorer', 'Keeps a gun clean: 25% fewer jams.', { jam: -0.25 }),
+  P('building', 4, 'tinker', 'Tinker', '25% more bench work done.', { craft: 0.25 }),
+  P('building', 4, 'steady_pace', 'Steady pace', 'Work tires them 30% less.', { drain: -0.3 }),
+  P('building', 7, 'master_hand', 'Master hand', '50% more bench work done.', { craft: 0.5 }),
+  P('building', 7, 'armorer', 'Armorer', 'Keeps a gun clean: 25% fewer jams.', { jam: -0.25 }),
   P('medicine', 4, 'field_medic', 'Field medic', 'Tends 50% more wounds a day.', { care: 0.5 }),
   P('medicine', 4, 'clean_hands', 'Clean hands', 'A dressed wound starts 15% better off.', { tendHeal: 0.15 }),
   P('medicine', 7, 'surgeon', 'Surgeon', 'A dressed wound starts 30% better off.', { tendHeal: 0.3 }),
@@ -55,18 +53,14 @@ export const PERK_LIST: PerkDef[] = [
   P('scavenging', 4, 'deep_pockets', 'Deep pockets', 'Brings home 15% more.', { scav: 0.15 }),
   P('scavenging', 7, 'ghost', 'Ghost', 'Half the trouble on a search.', { scavDanger: -0.5 }),
   P('scavenging', 7, 'packrat', 'Packrat', 'Brings home 30% more.', { scav: 0.3 }),
-  P('farming', 4, 'green_thumb', 'Green thumb', '25% more food from the garden.', { farm: 0.25 }),
-  P('farming', 4, 'frost_hardy', 'Frost-hardy', 'Cold and snow cost the harvest far less.', { farmCold: 0.25 }),
-  P('farming', 7, 'root_cellar', 'Root cellar', '50% more food from the garden.', { farm: 0.5 }),
-  P('farming', 7, 'cold_frames', 'Cold frames', 'Grows as much in the cold as in the clear, and 15% more.', { farmCold: 0.4, farm: 0.15 }),
   P('social', 4, 'easy_talker', 'Easy talker', 'Radio work goes 30% further: a clear signal at dusk (pack names, tighter counts) without a lookout.', { radio: 0.3 }),
   P('social', 4, 'warmth', 'Warmth', 'Everyone else in the house: mood +2.', { aura: 2 }),
   P('social', 7, 'the_voice', 'The voice', 'Radio work goes 60% further: a clear signal at dusk even on a bad day.', { radio: 0.6 }),
   P('social', 7, 'anchor', 'Anchor', 'Everyone else in the house: mood +4.', { aura: 4 }),
-  P('psych', 4, 'good_listener', 'Good listener', 'Counselling goes 25% deeper.', { counsel: 0.25 }),
-  P('psych', 4, 'thick_skin', 'Thick skin', 'Breaks 3 mood later.', { breakAt: -3 }),
-  P('psych', 7, 'confessor', 'Confessor', 'Counselling goes 50% deeper.', { counsel: 0.5 }),
-  P('psych', 7, 'unshakable', 'Unshakable', 'Breaks 6 mood later.', { breakAt: -6 }),
+  P('social', 4, 'good_listener', 'Good listener', 'Counselling goes 25% deeper.', { counsel: 0.25 }),
+  P('social', 4, 'thick_skin', 'Thick skin', 'Breaks 3 mood later.', { breakAt: -3 }),
+  P('social', 7, 'confessor', 'Confessor', 'Counselling goes 50% deeper.', { counsel: 0.5 }),
+  P('social', 7, 'unshakable', 'Unshakable', 'Breaks 6 mood later.', { breakAt: -6 }),
 ];
 
 export const PERKS: Record<string, PerkDef> = Object.fromEntries(PERK_LIST.map((p) => [p.id, p]));

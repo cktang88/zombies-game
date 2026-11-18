@@ -18,7 +18,7 @@ import { TRAPS } from '../data/traps';
 import {
   buildingLevel, queueRecipe, WEATHER_LABEL, DAY_HOURS, DEFAULT_HOURS, jobHours, setJobHours, hoursAvailable, travelHours, survivorSite,
   searchHours, searchFactor, planConfirmed, confirmPlan, ranToday, onRunToday, runDaylightFor, prepareRun, clockLabel, heatNeed,
-  drillPlan, emplacements, tomorrowTeaser, oilGuns, clearPile, choreHand, craftPoints, repairPlan, radioWorkOf, dailyFood, halfRations, fortCount, fortRoom, breakChance, counselPlan, COUNSEL_BREAK,
+  drillPlan, emplacements, tomorrowTeaser, oilGuns, clearPile, choreHand, craftPoints, farmAmount, repairPlan, radioWorkOf, dailyFood, halfRations, fortCount, fortRoom, breakChance, counselPlan, COUNSEL_BREAK,
 } from '../sim/day';
 import { calendar } from '../sim/calendar';
 import { armEveryone, wallLine, gunRounds, ammoUse, SHOTS_PER_GUN_NIGHT } from '../sim/readiness';
@@ -38,11 +38,11 @@ import { todayHtml, dotKeys, pickTodo, applyFlash, markSeen, setRevealAll, isOpe
 const JOBS: { id: JobId; label: string; hint: string }[] = [
   { id: 'repair', label: 'Repair the wall', hint: 'Building. 1 timber per 25 wall; without timber, a quarter as much. Hard on the back.' },
   { id: 'scavenge', label: 'Scavenge', hint: 'Scavenging. Risky. The walk there and back eats the day.' },
-  { id: 'craft', label: 'Workshop', hint: 'Crafting. Works the queue.' },
-  { id: 'farm', label: 'Food', hint: 'Farming. Snares, cold frames.' },
+  { id: 'craft', label: 'Workshop', hint: 'Building. Works the queue.' },
+  { id: 'farm', label: 'Food', hint: 'Anyone can farm: snares, kale, cold frames. A Green thumb brings in half again.' },
   { id: 'doctor', label: 'Tend wounded', hint: 'Medicine.' },
   { id: 'drill', label: 'Drill', hint: 'Shooting practice. Burns rounds; dry-fire teaches half as much. At Shooting 3+ they also watch the road: dusk tells you what is coming.' },
-  { id: 'counsel', label: 'Counsel', hint: 'Talk the worst-off down. Fewer breaks tomorrow.' },
+  { id: 'counsel', label: 'Counsel', hint: 'Social. Talk the worst-off down. Fewer breaks tomorrow.' },
   { id: 'radio', label: 'Work the radio', hint: 'Social. Needs a radio mast. Dusk tells you what is coming tonight, wave by wave.' },
   { id: 'rest', label: 'Rest', hint: 'Recover. The whole day off.' },
 ];
@@ -63,11 +63,9 @@ function jobOutlook(s: Survivor, j: JobId): string {
       return p.short ? `+${p.gain} wall · out of timber` : `+${p.gain} wall · ${p.wood} timber`;
     }
     case 'craft':
-      return G.craftQueue.length ? `${Math.round((3 + skillOf(s, 'crafting') * 0.9) * m * f)} work on the queue` : 'queue is empty';
-    case 'farm': {
-      const cold = G.weather === 'cold' || G.weather === 'snow' ? 0.6 : 1;
-      return `~${Math.round((1.5 + skillOf(s, 'farming') * 0.45 + buildingLevel('garden') * 2.2) * m * cold * f)} food`;
-    }
+      return G.craftQueue.length ? `${Math.round(craftPoints(s, m * f))} work on the queue` : 'queue is empty';
+    case 'farm':
+      return `~${farmAmount(s, m * f)} food${hasTrait(s, 'greenthumb') ? ' · green thumb' : ''}`;
     case 'doctor': {
       const hurt = living().reduce((a, p) => a + p.wounds.filter((w) => !w.tended && !w.hidden).length, 0);
       return hurt ? `tends ${Math.min(hurt, Math.max(1, Math.round((2 + skillOf(s, 'medicine')) * m * f)))} of ${hurt} wounds` : 'nobody needs tending';
@@ -87,7 +85,7 @@ function jobOutlook(s: Survivor, j: JobId): string {
       const r = living().filter((o) => o !== s && breakChance(o, false) > 0).sort((a, b) => breakChance(b, false) - breakChance(a, false))[0];
       if (r) return `talks ${first(r)} down (${pct(breakChance(r, false))}→${pct(breakChance(r, false) * COUNSEL_BREAK)})`;
       const low = living().filter((o) => o !== s && (o.mood < 60 || o.breakState)).length;
-      return low ? `${low} could use it · counsel ${s.skills.psych ?? 0}` : 'everyone is holding';
+      return low ? `${low} could use it · social ${s.skills.social}` : 'everyone is holding';
     }
     case 'radio':
       return !buildingLevel('radio') ? 'needs a radio mast' : radioWorkOf(s, m * f) >= RADIO_STRONG ? 'tonight\'s numbers and packs' : `tonight's numbers · social ${s.skills.social}`;

@@ -11,7 +11,7 @@ import { RECIPES, BUILDINGS, RES_ICON, RES_LABEL, FORT_CAP } from './world';
 import { AMMO_TYPES, ammoLabel } from './weapons';
 import { EMPLACEMENTS } from './emplacements';
 import { TRAPS, placementsAllowed } from './traps';
-import { DAY_HOURS, DEFAULT_HOURS, DRILL_ROUNDS, SITE_TRAVEL, RUN_SEC_PER_HOUR, REPAIR_WOOD_PER, REPAIR_NO_WOOD } from '../sim/day';
+import { DAY_HOURS, DEFAULT_HOURS, DRILL_ROUNDS, SITE_TRAVEL, RUN_SEC_PER_HOUR, REPAIR_WOOD_PER, REPAIR_NO_WOOD, FARM_BASE, FARM_FRAME, FARM_COLD } from '../sim/day';
 import { SALLY } from '../night/sally';
 
 /** One icon and an amount: "3 ×timber". `i` is an icon id (public/sprites/icon_<i>.png); `s` a word shown beside it even in compact rows. */
@@ -61,7 +61,7 @@ const range = (lo: number, hi: number) => (lo === hi ? `${lo}` : `${lo}–${hi}`
 // Yields per 8-hour day, skill 0..10 (mirrors sim/day.ts repairAmount / craftPoints / farmAmount / careCount).
 const REPAIR = { base: 40, perSkill: 9, woodPer: REPAIR_WOOD_PER, noWood: REPAIR_NO_WOOD };
 const CRAFT = { base: 3, perSkill: 0.9 };
-const FARM = { base: 1.5, perSkill: 0.45, perFrame: 2.2, cold: 0.6 };
+const FARM = { base: FARM_BASE, perFrame: FARM_FRAME, cold: FARM_COLD }; // no skill: a Green thumb ×1.5
 const CARE = { base: 2, perSkill: 1 };
 // Night (mirrors night/battle.ts: setFocus/tickNerve, useRally, dogBark, the floodlight bonus, spikes, wire, molotov).
 const NERVE = { base: 55, perShot: 4, focusDrain: 20, focusMin: 10, rally: 20, rallySec: 4 };
@@ -114,7 +114,7 @@ function build(): SystemDef[] {
       id: 'job_craft', group: 'jobs', icon: 'job_craft', name: 'Workshop',
       what: 'Works through the craft queue.',
       spend: [hours(DEFAULT_HOURS), { i: 'scrap', t: 'whatever the queued recipes cost' }, tired],
-      get: [{ i: 'job_craft', n: range(CRAFT.base, Math.round(CRAFT.base + 10 * CRAFT.perSkill)), t: 'work points a day (Crafting 0–10)' }],
+      get: [{ i: 'job_craft', n: range(CRAFT.base, Math.round(CRAFT.base + 10 * CRAFT.perSkill)), t: 'work points a day (Building 0–10)' }],
       tradeoff: 'Turns stores into ammo and traps, but only if something is queued.',
       when: 'The queue has work in it and the stores can pay.',
       key: 'Empty queue = a wasted day',
@@ -123,8 +123,8 @@ function build(): SystemDef[] {
       id: 'job_farm', group: 'jobs', icon: 'job_farm', name: 'Food',
       what: 'Snares, kale, and the cold frames.',
       spend: [hours(DEFAULT_HOURS), tired],
-      get: [{ i: 'food', n: `${range(Math.round(FARM.base), Math.round(FARM.base + 10 * FARM.perSkill))}`, t: `food, +${FARM.perFrame} per cold-frame level` }],
-      tradeoff: `Safe, steady food, but small, and ×${FARM.cold} in frost.`,
+      get: [{ i: 'food', n: `~${Math.round(FARM.base)}`, t: `food, +${FARM.perFrame} per cold-frame level; ×1.5 for a Green thumb` }],
+      tradeoff: `No skill needed, so anyone free can do it; small, and ×${FARM.cold} in frost.`,
       when: 'Food will not last the week.',
       key: `Cold frames: ${garden.maxLevel} levels`,
     },

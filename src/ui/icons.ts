@@ -4,8 +4,8 @@
  * skill_<SkillId>, job_<JobId>, and st_* status/stat markers.
  */
 export const UI_ICONS = [
-  'skill_shooting', 'skill_building', 'skill_crafting', 'skill_medicine',
-  'skill_scavenging', 'skill_farming', 'skill_social', 'skill_psych',
+  'skill_shooting', 'skill_building', 'skill_medicine',
+  'skill_scavenging', 'skill_social',
   'job_guard', 'job_repair', 'job_scavenge', 'job_craft', 'job_farm', 'job_doctor',
   'job_rest', 'job_radio', 'job_cook', 'job_drill', 'job_counsel',
   'st_wound', 'st_bite', 'st_sick', 'st_tired', 'st_hungry', 'st_cold',

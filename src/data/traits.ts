@@ -37,8 +37,8 @@ export const TRAITS: Record<string, TraitDef> = {
   faithful: { id: 'faithful', name: 'Faithful', desc: 'Prays. Takes comfort in burials and in the Parish.', mood: 2 },
   secretive: { id: 'secretive', name: 'Secretive', desc: 'Keeps things to themself. Might hide a bite.' },
   nightowl: { id: 'nightowl', name: 'Night owl', desc: 'Sharper after dark. Better aim on the wall at night.', accuracy: 0.06 },
-  greenthumb: { id: 'greenthumb', name: 'Green thumb', desc: 'Things grow for them.', skill: { farming: 2 } },
-  tinkerer: { id: 'tinkerer', name: 'Tinkerer', desc: 'Can fix anything with wire and spite.', skill: { crafting: 2 } },
+  greenthumb: { id: 'greenthumb', name: 'Green thumb', desc: 'The garden grows half again for them.' },
+  tinkerer: { id: 'tinkerer', name: 'Tinkerer', desc: 'Can fix anything with wire and spite.', skill: { building: 2 } },
   coward: { id: 'coward', name: 'Coward', desc: 'Flinches when they reach the wall. May flee the line.', accuracy: -0.04, breakAt: 6 },
 };
 

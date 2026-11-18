@@ -6,7 +6,8 @@ export type Res = 'food' | 'scrap' | 'wood' | 'parts' | 'meds' | 'fuel' | 'cloth
   | 'rocket' | 'g40' | 'g40_buck' | 'pipebomb';
 export type Stores = Record<Res, number>;
 
-export type SkillId = 'shooting' | 'building' | 'crafting' | 'medicine' | 'scavenging' | 'farming' | 'social' | 'psych';
+// Five skills (docs/research/19b-simplify-survivors.md). Old saves had crafting, farming and psych: migrateSurvivor folds them in.
+export type SkillId = 'shooting' | 'building' | 'medicine' | 'scavenging' | 'social';
 export type BodyPart = 'head' | 'torso' | 'larm' | 'rarm' | 'lleg' | 'rleg';
 
 export interface Wound {

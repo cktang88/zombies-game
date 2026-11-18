@@ -82,19 +82,20 @@ export interface Todo {
   done?: boolean;
 }
 
-const BEST: Record<string, SkillId> = { repair: 'building', farm: 'farming', craft: 'crafting', doctor: 'medicine', scavenge: 'scavenging' };
+const BEST: Record<string, SkillId> = { repair: 'building', craft: 'building', doctor: 'medicine', scavenge: 'scavenging' };
 /** Who to suggest for a job: free hands first (resting or idle), then the most skilled. */
 function bestFor(job: string): Survivor | undefined {
   const sk = BEST[job];
   const able = living().filter((s) => canWork(s) && !onRunToday(s) && !isBitten(s));
   const idle = (s: Survivor) => (s.job === 'rest' && s.rest > 0.6 ? 2 : 0);
-  return able.sort((a, b) => idle(b) - idle(a) || (sk ? b.skills[sk] - a.skills[sk] : 0))[0];
+  const thumb = (s: Survivor) => (job === 'farm' && s.traits.includes('greenthumb') ? 1 : 0); // farming is a plain job: a Green thumb is the pick
+  return able.sort((a, b) => idle(b) - idle(a) || thumb(b) - thumb(a) || (sk ? b.skills[sk] - a.skills[sk] : 0))[0];
 }
 /** Who to put on Counsel for this person: a free hand who is not them, the best talker first. */
 function counselFor(r: Survivor): Survivor | undefined {
   const able = living().filter((s) => s !== r && canWork(s) && !onRunToday(s) && !isBitten(s) && s.job !== 'counsel');
   const idle = (s: Survivor) => (s.job === 'rest' && s.rest > 0.6 ? 2 : 0);
-  return able.sort((a, b) => idle(b) - idle(a) || b.skills.psych - a.skills.psych)[0];
+  return able.sort((a, b) => idle(b) - idle(a) || b.skills.social - a.skills.social)[0];
 }
 const jobSel = (s: Survivor | undefined) => (s ? `.sv-card[data-id="${s.id}"] select[data-act=job]` : '.people');
 const on = (job: string) => living().some((s) => s.job === job && canWork(s));

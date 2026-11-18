@@ -314,7 +314,7 @@ export function resolveDayWork(): string[] {
         const targets = counselTargets(s, hours);
         if (!targets.length) out.push(`${first(s)} made coffee and listened. Nobody needed talking down today.`);
         for (const t of targets) out.push(counsel(s, t, Math.min(1.2, f)));
-        gainXp(s, 'psych', XP_PER_HOUR * hours * 0.5);
+        gainXp(s, 'social', XP_PER_HOUR * hours * 0.5);
         break;
       }
       case 'rest':
@@ -375,17 +375,22 @@ export function repairPlan(s: Survivor, m: number, wood = G.stores.wood ?? 0, ro
   return { gain: Math.min(full, Math.round(timbered + (full - timbered) * REPAIR_NO_WOOD)), wood: Math.floor(wood), short: true };
 }
 export function craftPoints(s: Survivor, m: number) {
-  return (3 + skillOf(s, 'crafting') * 0.9) * m * perkMul(s, 'craft');
+  return (3 + skillOf(s, 'building') * 0.9) * m * perkMul(s, 'craft');
 }
+/** Food from a day on the garden. No skill: anyone can set snares and pick kale (m = workMult × hours/8, so the
+ *  tired and hurt bring in less). The cold frames and a Green thumb are what make a farmer. */
+export const FARM_BASE = 2.4;
+export const FARM_FRAME = 2.2;
+export const FARM_COLD = 0.6;
 export function farmAmount(s: Survivor, m: number, garden = buildingLevel('garden'), weather = G.weather) {
-  const cold = weather === 'cold' || weather === 'snow' ? Math.min(1, 0.6 + perkFx(s, 'farmCold')) : 1;
-  return Math.round((1.5 + skillOf(s, 'farming') * 0.45 + garden * 2.2) * m * cold * perkMul(s, 'farm'));
+  const cold = weather === 'cold' || weather === 'snow' ? FARM_COLD : 1;
+  return Math.round((FARM_BASE + garden * FARM_FRAME) * m * cold * (hasTrait(s, 'greenthumb') ? 1.5 : 1));
 }
 export function careCount(s: Survivor, m: number) {
   return Math.max(1, Math.round((2 + skillOf(s, 'medicine')) * m * perkMul(s, 'care')));
 }
 function jobSkill(j: string) {
-  return ({ repair: 'building', craft: 'crafting', farm: 'farming', doctor: 'medicine', scavenge: 'scavenging', radio: 'social', guard: 'shooting', drill: 'shooting', counsel: 'psych' } as const)[j as 'repair'];
+  return ({ repair: 'building', craft: 'building', doctor: 'medicine', scavenge: 'scavenging', radio: 'social', guard: 'shooting', drill: 'shooting', counsel: 'social' } as const)[j as 'repair'];
 }
 
 function scavenge(siteId: string, team: Survivor[]): string[] {
@@ -477,7 +482,7 @@ export function finishRecipe(id: string, by?: Survivor): string {
   if (r.empRepair) G.flags.emplacements = repairEmplacement(G.flags.emplacements);
   if (r.weapon) {
     const w = newWeapon(r.weapon, 0.9);
-    if (by && R.chance(0.25 + by.skills.crafting * 0.03)) {
+    if (by && R.chance(0.25 + by.skills.building * 0.03)) {
       w.name = `${first(by)}'s ${R.pick(['Widowmaker', 'Bad News', 'Last Word', 'Hymnal', 'Second Shift', 'Ferryman\'s Fee'])}`;
       w.cond = 1;
       // a masterwork comes with something extra built in

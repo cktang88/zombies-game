@@ -5,7 +5,8 @@ import { weaponClass, type WeaponClass } from '../data/weapons';
 import { PERKS, perksFor, PERK_TIERS, type PerkFx } from '../data/perks';
 import { FIRST_M, FIRST_F, LAST, BEFORE, OUTBREAK, NICKS } from '../data/names';
 
-export const SKILLS: SkillId[] = ['shooting', 'building', 'crafting', 'medicine', 'scavenging', 'farming', 'social', 'psych'];
+// Five skills, each with one job and one line (SKILL_LINES). Farming is a plain job anyone can do.
+export const SKILLS: SkillId[] = ['shooting', 'building', 'medicine', 'scavenging', 'social'];
 // sprites by sex and age bracket (young <30, mid <55, old)
 const SPRITES: Record<string, string[]> = {
   m0: ['surv_smg', 'surv_m_young'], m1: ['surv_rifle', 'surv_m_mid', 'surv_m_big'], m2: ['surv_shotgun', 'surv_m_old'],
@@ -295,10 +296,10 @@ export function xpProgress(s: Survivor, k: ProgressKey) {
   return lvl >= 10 ? 1 : Math.max(0, Math.min(1, (s.xp?.[k] ?? 0) / xpNeeded(lvl)));
 }
 const LEVEL_WORDS: Partial<Record<ProgressKey, string>> = {
-  shooting: 'shooting straight', building: 'building', crafting: 'the bench work', medicine: 'stitching', scavenging: 'finding things',
-  farming: 'growing things', social: 'talking to people', psych: 'talking people down', courage: 'standing the wall', grit: 'going without', heavy: 'working the gun nest',
+  shooting: 'shooting straight', building: 'building', medicine: 'stitching', scavenging: 'finding things',
+  social: 'talking to people', courage: 'standing the wall', grit: 'going without', heavy: 'working the gun nest',
 };
-const KEY_NAMES: Record<string, string> = { courage: 'Courage', grit: 'Grit', heavy: 'Heavy weapons', psych: 'Counsel' };
+const KEY_NAMES: Record<string, string> = { courage: 'Courage', grit: 'Grit', heavy: 'Heavy weapons' };
 export function progressName(k: ProgressKey) {
   if (k.startsWith('prof_')) return CLASS_SHORT[k.slice(5) as WeaponClass] ?? k.slice(5);
   return KEY_NAMES[k] ?? k[0].toUpperCase() + k.slice(1);
@@ -337,9 +338,27 @@ export function gainXp(s: Survivor, k: ProgressKey, amount: number): boolean {
 export function drainLevelUps(): string[] {
   return levelUps.splice(0);
 }
-/** Old saves: fill in psych, attributes, xp and base values. Safe to call repeatedly. */
+/**
+ * Old saves: fold the eight old skills into five, fill in attributes, xp and base values. Safe to call repeatedly.
+ * building = max(building, crafting); social = max(social, psych); farming is dropped (a plain job now).
+ */
 export function migrateSurvivor(s: Survivor) {
-  if (s.skills.psych == null) s.skills.psych = Math.max(0, Math.min(10, Math.round(s.skills.social * 0.6)));
+  const old = s.skills as Record<string, number>;
+  const fold = (into: SkillId, from: string) => {
+    if (old[from] == null) return;
+    if (old[from] > old[into]) {
+      old[into] = old[from];
+      if (s.xp) s.xp[into] = Math.max(s.xp[into] ?? 0, s.xp[from] ?? 0);
+    }
+    delete old[from];
+    if (s.xp) delete s.xp[from];
+    if (s.base) { s.base[into] = Math.max(s.base[into] ?? 0, s.base[from] ?? 0); delete s.base[from]; }
+  };
+  fold('building', 'crafting');
+  fold('social', 'psych');
+  if (old.farming != null) { delete old.farming; if (s.xp) delete s.xp.farming; if (s.base) delete s.base.farming; }
+  for (const k of SKILLS) old[k] ??= 0;
+  s.passions = [...new Set(s.passions.map((p) => ({ crafting: 'building', psych: 'social' } as Record<string, SkillId>)[p] ?? p).filter((p) => (SKILLS as string[]).includes(p)))] as SkillId[];
   s.attrs ??= baseAttrs(s, false);
   s.xp ??= {};
   s.prof ??= baseProf(s);
@@ -381,7 +400,7 @@ export function choosePerk(s: Survivor, id: string): string {
 export function autoPerk(s: Survivor, options: string[]): string {
   const job: Partial<Record<string, PerkFx[]>> = {
     guard: ['aim', 'weakspot', 'jamClear', 'reload', 'jam'], drill: ['aim', 'reload', 'jamClear'], repair: ['repair', 'repairWood'], craft: ['craft'],
-    doctor: ['care', 'tendHeal'], scavenge: ['scav', 'scavDanger'], farm: ['farm', 'farmCold'], radio: ['radio'], counsel: ['counsel'],
+    doctor: ['care', 'tendHeal'], scavenge: ['scav', 'scavDanger'], radio: ['radio'], counsel: ['counsel'],
   };
   const want = job[s.job] ?? [];
   const score = (id: string) => Object.keys(PERKS[id].fx).reduce((a, k) => a + (want.includes(k as PerkFx) ? 2 : 0), 0) + (options.indexOf(id) === 0 ? 0.5 : 0);
@@ -564,13 +583,13 @@ export function counselled(s: Survivor) {
   return d !== undefined && d >= G.day - 1;
 }
 /**
- * Talk a survivor down. `by` is the counsellor (null = an incident or stranger, psych 4 assumed).
+ * Talk a survivor down. `by` is the counsellor (null = an incident or stranger, Social 4 assumed).
  * Removes or halves their worst negative thought, adds a small "talked it through" lift, may lift a sulk or
- * catatonia, and marks them counselled (dawn break chance x0.35). Awards psych XP to `by`. Returns a report line.
+ * catatonia, and marks them counselled (dawn break chance x0.35). Awards Social XP to `by`. Returns a report line.
  */
 export function counsel(by: Survivor | null, t: Survivor, power = 1): string {
   if (by) power *= perkMul(by, 'counsel');
-  const skill = by ? skillOf(by, 'psych') : 4;
+  const skill = by ? skillOf(by, 'social') : 4;
   const worst = t.thoughts.filter((x) => x.mood < 0).sort((a, b) => a.mood - b.mood)[0];
   let what = '';
   if (worst) {
@@ -591,7 +610,7 @@ export function counsel(by: Survivor | null, t: Survivor, power = 1): string {
   }
   if (by) {
     changeOpinion(t, by, 4);
-    gainXp(by, 'psych', 12);
+    gainXp(by, 'social', 12);
   }
   computeMood(t);
   return `${by ? first(by) : 'Someone'} sat with ${first(t)}${what}.${lifted}`;

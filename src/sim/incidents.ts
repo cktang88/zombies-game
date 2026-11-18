@@ -347,7 +347,7 @@ export const MORE_INCIDENTS: Incident[] = [
     cooldown: 7,
     weight: () => (buildingLevel('generator') && (G.fort.lights > 0 || (G.fort.turrets ?? 0) > 0) && !G.flags.lightsOff ? 0.5 : 0),
     make: () => {
-      const tech = [...adults()].sort((a, b) => b.skills.crafting - a.skills.crafting)[0];
+      const tech = [...adults()].sort((a, b) => b.skills.building - a.skills.building)[0];
       return {
         id: 'generator', title: 'The generator',
         text: `The diesel coughed at four in the morning, ran rough, and died. ${tech ? `${first(tech)} has it half apart on a tarp: "Injector pump. I can fix it if we have parts. Otherwise we're dark tonight."` : 'Nobody in the house knows engines.'}\n\nWithout it: no floodlights, no turrets.`,

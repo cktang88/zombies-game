@@ -355,7 +355,7 @@ G.director.mode = 'quiet'; G.day = 1; console.log('quiet:', calendar(10).map((c)
   const auto = settlePerkOffers();
   check(auto.length === 1 && s.perks!.length === 2 && !(s as Survivor).perkOffers!.length, `auto-pick at the second dawn: ${auto}`);
   console.log('perks:', auto[0]);
-  for (const sk of ['shooting', 'building', 'crafting', 'medicine', 'scavenging', 'farming', 'social', 'psych'] as const)
+  for (const sk of ['shooting', 'building', 'medicine', 'scavenging', 'social'] as const)
     for (const t of [4, 7] as const) check(perksFor(sk, t).length === 2, `two perks for ${sk} ${t}`);
   check(PERK_LIST.every((p) => Object.keys(p.fx).length > 0) && new Set(PERK_LIST.map((p) => p.id)).size === PERK_LIST.length, 'perk ids unique, all have effects');
 
