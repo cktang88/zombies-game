@@ -674,3 +674,45 @@ New knobs in `DIRECTOR_TUNE` (director.ts): `tideSub` splits the tide's middle w
 Sanity (sub-waves on): day 8 (no tide) passive FELL ×2, decent 0 ×2; day 23 decent Crossing held −197. Day 20 tide with sub-waves applied had decent FELL where the bunched run held −291, but the same run's non-tide (tunnel) night also flipped (−48 → FELL), so that is mostly bot noise; `tideSubTo` keeps later tides exactly as before anyway.
 
 Reading: the sub-waves turn the result into a slope. With 3 sub-waves at tideMid 1.45 a passive house breaks or nearly breaks (−331..FELL) and a decent leader holds at a plank cost (−135..−272), as wanted. Caveat: the harness is noisy: the decent bot aims with `Math.random`, the bunched baseline did not reproduce §11b's coin-flip this time, and the guards end the night with every round of r22/revolver/lever spent, so ammo, not arrival shape, sets the ceiling. 2 seeds is a signal, not proof; rerun with more seeds before going further. New default: tideSub 3, tideGap 0.1, tideSubTo 12, tideMid 1.45.
+
+## 12. Four resources, three ammo pools (docs/research/19-simplify-resources.md)
+
+Nine materials became four (**food, salvage, fuel, medicine**) and nineteen kinds of ammunition became
+three pools (**pistol, shell, rifle**) plus one count of **explosives**. Bows draw on nothing; nail guns
+and the nail turret draw salvage.
+
+**Conversion (data, loot, migration):** salvage = scrap + timber + cloth + 2 × parts; liquor = 1.5 food.
+Pistol = FMJ + HP + .22 × ½; shells = buck + slug + flechette + dragon + flare; rifle = FMJ + SP + AP +
+5.56 × ½ + .50 ball; explosives = firebombs + pipe bombs + 40 mm + 2 × rockets. Old broadheads → 0.4 salvage.
+
+**Guns that keep their old cost through perShot:** farm .22 0.5 pistol; AR-15, Guard carbine, LMG and the
+MG nest 0.5 rifle (they also take +0.25 armorPen, what 5.56 gave); .410 0.5 shell (as before); flare pistol
+2 shells; M72 2 explosives; nailer 0.08 / rivet 0.25 / turret 0.05 salvage.
+
+**Recipes:** pistol ×36 (2 salvage, 1 fuel; was ×40), shells ×16 (3 salvage, 1 fuel), rifle ×15 (5 salvage,
+1 fuel, workbench 2), firebombs & pipe bombs ×3 (2 fuel, 2 salvage, still), a round from the still (3 food:
++8 mood 2 days, a sulk ends, Drinkers settled two dawns). Cut: hollow-points, slugs, flechettes, dragon's
+breath, .22, soft-points, AP, 5.56, .50 ball, broadheads, fire bolts, flare shells, pipe bombs, liquor.
+
+**Loot (per full run):** salvage at ×0.75 of the summed old materials (one fungible pile is worth more than
+four); folded special loads counted short (.22 a quarter, slugs/AP/SP/5.56/flares partly). Route 9 11
+salvage, 10 pistol, 2 shells; mill yard and hardware 18 salvage; gun shop 40 pistol, 13 shells, 15 rifle;
+courthouse 26 pistol, 8 shells, 6 rifle, 1.2 explosives; Corliss 36 rifle, 16 pistol, 3 explosives.
+**Start:** 18 food, 40 salvage, 4 fuel, 2 meds, 70 pistol, 20 shells, 10 rifle.
+
+**Economy (simtest, 60 houses, days 1–15):**
+
+| | ammo at day 10 | ammo at day 15 | nights from day 10 with <1 night of ammo | stove short (days 12+) | living at day 15 |
+|---|---|---|---|---|---|
+| before | 0.7 nights | 0.6 nights | 82% | 50% | 3.6 |
+| after the merge, before tuning | 1.3 | 1.3 | 66% | 47% | — |
+| after (shipped) | 0.8 | 0.7 | 78% | 49% | 3.8 |
+
+Food per person reads lower (6.0 / 6.9 days vs 7.7 / 11.1) because more people live: total food at day 15
+is 19 vs 24 with 3.8 mouths vs 3.6, and benders now drink 2 food. Salvage piles to ~127 by day 15 in the
+bot, which builds nothing (the old bot's scrap+timber+cloth+2×parts was ~163).
+
+**Real nights (night-balance.cjs; snapshots folded with the same table, .22 at ¼):** days 3, 8, 18 hold
+and fall as before; day 23 (Crossing) still falls for passive and decent; day 13 (tide/tunnel) now just
+holds for the decent leader (−375 and −391 of 420, deaths 2 and 1) where it fell before (the leader's pistol
+pool carries some of the old .22 bricks). Ammo stays the thing that runs out.
