@@ -330,12 +330,21 @@ function build(): SystemDef[] {
     },
     {
       id: 'skills', group: 'build', icon: 'st_perk', name: 'Skills & perks',
-      what: 'Work raises a skill; at 4 and 7 pick a perk.',
+      what: 'Five skills: Shooting, Building, Medicine, Scavenging, Social. Work raises one; at 4 and 7 pick a perk.',
       spend: [{ i: 'st_time', t: 'days on the same job' }],
-      get: [{ i: 'st_perk', n: 2, t: 'perks per skill (at 4 and 7)' }, { i: 'st_xp', t: 'better yields' }],
+      get: [{ i: 'st_perk', n: 2, t: 'perks per skill (at 4 and 7): faster or surer, more or safer' }, { i: 'st_xp', t: 'better yields' }],
       tradeoff: 'Specialists get perks; swapping jobs keeps everyone middling.',
       when: 'Keep people on jobs they have a passion for.',
       key: 'Passion: ×1.5 XP',
+    },
+    {
+      id: 'people', group: 'build', icon: 'st_trait', name: 'Courage, traits, favourite gun',
+      what: 'Courage holds the wall at night; each trait names a decision; a favourite gun handles 3 better.',
+      spend: [{ i: 'st_courage', t: 'nights on the wall raise Courage; a death or a fall shakes it' }],
+      get: [{ i: 'st_trait', t: 'who stands the wall, who goes out, who you counsel, who eats more' }, { i: 'skill_shooting', n: '+3', t: 'handling with their favourite kind of gun (★)' }],
+      tradeoff: 'A Coward with a good gun is still a Coward; a Tough one with no gun still takes the hits.',
+      when: 'Hover a trait on the sheet: the line says what to do with them.',
+      key: '★ in the give menu',
     },
     {
       id: 'town', group: 'build', icon: 'st_faction', name: 'The town',
