@@ -16,7 +16,7 @@ function amt(a: Amt, full: boolean) {
   const n = a.n !== undefined && a.n !== '' ? `<b>${esc(String(a.n))}</b>` : '';
   return full
     ? `<li class="gx-amt">${ico(a.i)}${n}<span>${esc(a.t)}</span></li>`
-    : `<span class="gx-amt"${tip(esc(`${a.n !== undefined ? `${a.n} ` : ''}${a.t}`))}>${ico(a.i)}${n}</span>`;
+    : `<span class="gx-amt${/^([-−]|×0|0$)/.test(String(a.n ?? "")) ? " neg" : ""}"${tip(esc(`${a.n !== undefined ? `${a.n} ` : ''}${a.t}`))}>${ico(a.i)}${n}${a.s ? `<em>${esc(a.s)}</em>` : ''}</span>`;
 }
 const amts = (list: Amt[], full: boolean) => (full ? `<ul class="gx-list">${list.map((a) => amt(a, true)).join('')}</ul>` : `<span class="gx-row">${list.map((a) => amt(a, false)).join('')}</span>`);
 
@@ -62,8 +62,8 @@ function sysHtml(s: SystemDef) {
 function matrixHtml() {
   return `<p class="t-s">The big choices side by side. Hover an icon for its words; click a row for the whole card.</p>
   ${matrix().map((b) => `<section class="gx-mblock"><h3 class="t-l">${esc(b.title)}</h3>
-    <table class="gx-matrix"><thead><tr><th class="t-xs">Choice</th><th class="t-xs">You spend</th><th class="t-xs"></th><th class="t-xs">You get</th><th class="t-xs">The catch</th></tr></thead><tbody>
-    ${b.rows.map((r) => `<tr${r.sys ? ` data-h="g:sys:${r.sys}" class="go"` : ''}>
+    <table class="gx-matrix"><colgroup><col class="c-choice"><col class="c-spend"><col class="c-arrow"><col class="c-get"><col></colgroup><thead><tr><th class="t-xs">Choice</th><th class="t-xs">You spend</th><th class="t-xs"></th><th class="t-xs">You get</th><th class="t-xs">The catch</th></tr></thead><tbody>
+    ${b.rows.map((r) => `<tr${r.sys ? ` data-h="g:sys:${r.sys}" class="gx-go"` : ''}>
       <th scope="row">${ico(r.icon)}<span>${esc(r.label)}</span></th>
       <td class="spend">${amts(r.spend, false)}</td><td class="gx-arrow">→</td><td class="get">${amts(r.get, false)}</td>
       <td class="t-s">${esc(r.catch)}</td></tr>`).join('')}

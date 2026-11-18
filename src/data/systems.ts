@@ -14,8 +14,8 @@ import { TRAPS, placementsAllowed } from './traps';
 import { DAY_HOURS, DEFAULT_HOURS, DRILL_ROUNDS, SITE_TRAVEL, RUN_SEC_PER_HOUR } from '../sim/day';
 import { SALLY } from '../night/sally';
 
-/** One icon and an amount: "3 ×timber". `i` is an icon id (public/sprites/icon_<i>.png). */
-export interface Amt { i: string; n?: string | number; t: string }
+/** One icon and an amount: "3 ×timber". `i` is an icon id (public/sprites/icon_<i>.png); `s` a word shown beside it even in compact rows. */
+export interface Amt { i: string; n?: string | number; t: string; s?: string }
 
 export type SysGroup = 'jobs' | 'day' | 'build' | 'night';
 export const GROUPS: { id: SysGroup; label: string; line: string }[] = [
@@ -202,7 +202,7 @@ function build(): SystemDef[] {
       key: 'Half rations: ×0.5 food, −5 mood',
     },
     {
-      id: 'chores', group: 'day', icon: 'st_time', name: 'Chores',
+      id: 'chores', group: 'day', icon: 'cloth', name: 'Chores',
       what: 'One-click jobs from whoever has spare hours.',
       spend: [hours(1, 'and a rag or 1 fuel: oil the guns'), hours('3 / 1', 'haul the bodies, or 2 fuel to burn')],
       get: [{ i: 'st_break', n: `÷${COLD_JAM}`, t: 'jams tonight in the cold' }, { i: 'st_wall', t: 'no ramp of bodies at the wall' }],
@@ -230,7 +230,7 @@ function build(): SystemDef[] {
       key: 'Starts at 300',
     },
     {
-      id: 'fortify', group: 'build', icon: 'st_wall', name: 'Reinforce',
+      id: 'fortify', group: 'build', icon: 'scrap', name: 'Reinforce',
       what: 'Sheet steel and railroad ties: a bigger wall.',
       spend: recipeAmts('fortify'),
       get: [{ i: 'st_wall', n: '+60', t: 'max wall, for good' }],
@@ -408,13 +408,13 @@ function ammoRow(res: Res): MatrixRow | null {
   const n = r?.gives?.[res] ?? 0;
   const get: Amt[] = [];
   const dmg = a.dmgSet ? null : a.dmgMul ?? 1;
-  if (dmg !== null && dmg !== 1) get.push({ i: 'st_danger', n: `×${dmg}`, t: 'damage' });
-  if (a.pierceAdd) get.push({ i: 'st_xp', n: `${a.pierceAdd > 0 ? '+' : ''}${a.pierceAdd}`, t: 'pierce (bodies it goes through)' });
-  if (a.pierceSet === 0) get.push({ i: 'st_xp', n: '0', t: 'pierce: stops in the first body' });
-  if (a.armorPen) get.push({ i: 'st_wall', n: `${a.armorPen > 0 ? '+' : ''}${a.armorPen}`, t: 'vs plate (Deputies)' });
-  if (a.knockMul && a.knockMul !== 1) get.push({ i: 'st_break', n: `×${a.knockMul}`, t: 'shove' });
-  if (a.incendiary) get.push({ i: 'molotov', t: 'sets them burning' });
-  if (!get.length) get.push({ i: a.icon.replace(/^icon_/, ''), t: 'the baseline round' });
+  if (dmg !== null && dmg !== 1) get.push({ i: 'st_danger', n: `×${dmg}`, t: 'damage', s: 'dmg' });
+  if (a.pierceAdd) get.push({ i: 'st_xp', n: `${a.pierceAdd > 0 ? '+' : ''}${a.pierceAdd}`, t: 'pierce (bodies it goes through)', s: 'pierce' });
+  if (a.pierceSet === 0) get.push({ i: 'st_xp', n: '0', t: 'pierce: stops in the first body', s: 'pierce' });
+  if (a.armorPen) get.push({ i: 'st_wall', n: `${a.armorPen > 0 ? '+' : ''}${a.armorPen}`, t: 'vs plate (Deputies)', s: 'plate' });
+  if (a.knockMul && a.knockMul !== 1) get.push({ i: 'st_break', n: `×${a.knockMul}`, t: 'shove', s: 'shove' });
+  if (a.incendiary) get.push({ i: 'molotov', t: 'sets them burning', s: 'burns' });
+  if (!get.length) get.push({ i: a.icon.replace(/^icon_/, ''), t: 'the baseline round', s: 'baseline' });
   return {
     label: a.name, icon: a.icon.replace(/^icon_/, ''),
     spend: r ? [...costAmts(r.cost), { i: 'job_craft', n: r.work, t: 'bench work' }, { i: a.icon.replace(/^icon_/, ''), n: `→${n}`, t: 'rounds per batch' }] : [{ i: 'st_danger', t: 'found only' }],
