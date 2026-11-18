@@ -74,7 +74,6 @@
 /* a tide on the way: the sky goes red and the panels warm a little */
 .day.dread header { background: rgba(26,8,7,.78); border-bottom-color: rgba(168,50,42,.45); }
 .day.dread .ice b, .day.dread header .date b { text-shadow: 0 0 12px rgba(176,48,42,.35); }
-.modal .tonight { font-family: var(--type); font-size: 13px; border-top: 1px dashed #5a4f3c; border-bottom: 1px dashed #5a4f3c; padding: 6px 0; margin: 10px 0; color: #d8c79a; }
 .teaser { font-family: var(--type); font-size: 13px; color: #c9a95a; margin-top: 10px; }
 .teaser b { display: block; font-size: 13px; letter-spacing: .2em; text-transform: uppercase; color: var(--dim); font-weight: normal; }
 .modal .saved { font-size: 13px; color: var(--dim); font-family: var(--type); letter-spacing: .1em; text-transform: uppercase; }

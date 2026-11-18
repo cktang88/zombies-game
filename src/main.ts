@@ -211,7 +211,6 @@ function dusk() {
     if (res) rounds.set(res, Math.floor(G.stores[res] ?? 0));
   }
   const totalRounds = AMMO_RES.reduce((a, k) => a + Math.floor(G.stores[k] ?? 0), 0);
-  const tonight = `Tonight: ${plan.special ?? 'the usual'}. ${wall.length} at the wall. ${[...rounds.values()].reduce((a, b) => a + b, 0)} rounds for the guns we carry (${totalRounds} in the house). Wall ${Math.ceil(G.fort.hp)}/${G.fort.maxHp}.`;
   const teaser = tomorrowTeaser();
   const intel = nightIntel(plan);
   const big = plan.special === 'tide' || plan.special === 'crossing' || plan.special === 'horde';
@@ -232,7 +231,6 @@ function dusk() {
     </div>
     ${intel.length ? `<div class="intel"><b>What we know</b>${intel.map((l, i) => `<p class="${i === 0 && intel.length > 1 ? 'who' : ''}">${esc(l)}</p>`).join('')}</div>` : ''}
     ${lines.length ? `<div class="duskwork"><div class="t-xs">The day's work</div>${duskFolds(lines)}</div>` : ''}
-    <div class="tonight" hidden>${esc(tonight)}</div>
     <div class="teaser"><b>Tomorrow</b>${esc(teaser)}</div>
     <div class="saved"${tip('Saved at dusk. Quitting now costs you the night.')}>saved at dusk</div></div>`, () => deployStep());
 }
@@ -257,7 +255,7 @@ function duskFolds(lines: string[]): string {
   }
   return [...groups].map(([k, ls]) => {
     const name = DUSK_CATS.find((c) => c[0] === k)?.[1] ?? 'The house';
-    return fold(`${ico(k)}<span>${name}</span><span class="t-xs">${ls.length}</span><span class="t-s fold-peek">${esc(ls[0])}</span>`, ls.map((l) => `<p>${esc(l)}</p>`).join(''), { id: `dusk-${k}` });
+    return fold(`${ico(k)}<span>${name}</span>${ls.length > 1 ? `<span class="t-xs">${ls.length}</span>` : ''}<span class="t-s fold-peek">${esc(ls[0])}</span>`, ls.map((l) => `<p>${esc(l)}</p>`).join(''), { id: `dusk-${k}` });
   }).join('');
 }
 
