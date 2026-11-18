@@ -220,11 +220,14 @@ function dusk() {
   G.flags.wallAtDusk = G.fort.hp;
   const line = wallLine();
   const wall = line.at;
-  const rounds = new Map<string, number>();
+  const rounds = new Map<Res, { n: number; guns: number; per: number }>();
   for (const s of wall) {
     const w = G.weapons.find((x) => x.uid === s.weapon);
-    const res = w ? fireProfile(w).ammoRes : null;
-    if (res) rounds.set(res, Math.floor(G.stores[res] ?? 0));
+    const p = w ? fireProfile(w) : null;
+    if (!p?.ammoRes) continue;
+    const e = rounds.get(p.ammoRes) ?? { n: Math.floor(G.stores[p.ammoRes] ?? 0), guns: 0, per: 0 };
+    e.guns++; e.per += 20 * p.perShot;
+    rounds.set(p.ammoRes, e);
   }
   const totalRounds = AMMO_RES.reduce((a, k) => a + Math.floor(G.stores[k] ?? 0), 0);
   const teaser = tomorrowTeaser();
@@ -236,7 +239,6 @@ function dusk() {
   save();
   if (big) window.setTimeout(() => stinger('dread'), 250);
   const threat = big ? (plan.special === 'crossing' ? 'The Crossing. Everything on the east bank is coming over the ice.' : plan.special === 'tide' ? 'A tide night. The whole east bank moves.' : 'A horde on the road tonight.') : '';
-  const gunRounds = [...rounds.values()].reduce((a, b) => a + b, 0);
   overlay(`<div class="duskrep"><h2>Dusk, ${dateLabel()}</h2>
     <p class="headline t-l">${esc(plan.label)}</p>
     ${big ? `<p class="stamp threat">${esc(threat)}</p>` : ''}
@@ -244,7 +246,7 @@ function dusk() {
       ${chip('st_danger', esc(specialName(plan.special)), specialTip(plan.special), big ? 'warn' : '')}
       ${chip('st_wall', `${Math.ceil(G.fort.hp)}/${G.fort.maxHp}`, 'The wall at dusk.')}
       ${chip('job_guard', `${wall.length} at the wall${line.idle.length ? ` · ${line.idle.length} can't shoot` : ''}`, `${wall.length} at the wall tonight${line.idle.length ? `. Can't shoot: ${line.idle.map((s) => `${first(s)} (${s.weapon ? 'no rounds' : 'no gun'})`).join(', ')}` : ''}.${line.sitOut.length ? ` Sitting out (six places): ${line.sitOut.map(first).join(', ')}.` : ''}`, line.idle.length ? 'warn' : '')}
-      ${chip('ammo', gunRounds, `${gunRounds} rounds for the guns we carry; ${totalRounds} in the house.`, gunRounds < wall.length * 20 ? 'warn' : '')}
+      ${[...rounds.entries()].map(([res, e]) => { const a = AMMO_TYPES[res]!; return chip(a.icon.replace(/^icon_/, ''), `${e.n} ${a.short}`, `${e.n} ${a.name.toLowerCase()} for ${e.guns === 1 ? 'one gun' : `${e.guns} guns`} at the wall (${totalRounds} rounds of every kind in the house).`, e.n < e.per ? 'warn' : ''); }).join('')}
     </div>
     ${intel.length ? `<div class="intel"><b>What we know</b>${intel.map((l, i) => `<p class="${i === 0 && intel.length > 1 ? 'who' : ''}">${esc(l)}</p>`).join('')}</div>` : ''}
     ${lines.length ? `<div class="duskwork"><div class="t-xs">The day's work</div>${duskFolds(lines)}</div>` : ''}

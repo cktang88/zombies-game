@@ -35,7 +35,7 @@ export function showDawnReport(app: HTMLElement, d: DawnData, onClose: () => voi
   const top = Object.entries(r.killsBy ?? {}).sort((a, b) => b[1] - a[1])[0];
   const mvp = top && top[1] > 0 ? byId(top[0]) : undefined;
   const spent = Object.entries(r.ammoUsed ?? {}).filter(([, v]) => v);
-  const totalSpent = spent.reduce((a, [, v]) => a + (v ?? 0), 0);
+  const totalSpent = spent.reduce((a, [k, v]) => a + (AMMO_TYPES[k as Res] ? v ?? 0 : 0), 0); // rounds and explosives; salvage fed to nail guns is in the tip
 
   const div = document.createElement('div');
   div.className = 'overlay dawn';

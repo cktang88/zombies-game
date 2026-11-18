@@ -11,7 +11,7 @@ import { living, first, canWork, isBitten, computeMood } from '../sim/survivors'
 import { RECIPES, RES_LABEL } from '../data/world';
 import { buildingLevel, onRunToday, ranToday, heatNeed, planConfirmed, dailyFood, halfRations, breakChance, counselPlan, COUNSEL_BREAK } from '../sim/day';
 import { calendar } from '../sim/calendar';
-import { fireProfile, ammoLabel } from '../data/weapons';
+import { fireProfile, ammoLabel, AMMO_TYPES } from '../data/weapons';
 import { canFight } from '../sim/survivors';
 import { wallLine, rackGuns, canArmAnyone, armPreview, SHOTS_PER_GUN_NIGHT } from '../sim/readiness';
 import { WEAPONS } from '../data/weapons';
@@ -174,8 +174,8 @@ function openTodos(): Todo[] {
       if (queued) continue;
       const name = ammoLabel(a.res).toLowerCase();
       t.push(r
-        ? { id: `ammo_${a.res}`, icon: 'ammo', text: `Make ${name} · ${a.have} left`, tip: `${a.have ? `Only ${a.have}` : 'No'} ${name} for ${a.guns === 1 ? 'one gun' : `${a.guns} guns`} on the wall: about one night's shooting is ${SHOTS_PER_GUN_NIGHT * a.guns}. Queue ${r.name} and put someone at the bench.`, tab: 'workshop', sel: `[data-act=queue][data-id="${r.id}"]`, dot: 'tab:workshop', prio: a.have < 10 * a.guns ? 18 : 22 }
-        : { id: `ammo_${a.res}`, icon: 'ammo', text: `Find ${name} · ${a.have} left`, tip: `Nothing in the workshop makes ${name} yet. Scavengers and runs bring it home.`, sel: '.people', prio: 26 });
+        ? { id: `ammo_${a.res}`, icon: (AMMO_TYPES[a.res]?.icon ?? 'icon_ammo').replace(/^icon_/, ''), text: `Make ${name} · ${a.have} left`, tip: `${a.have ? `Only ${a.have}` : 'No'} ${name} for ${a.guns === 1 ? 'one gun' : `${a.guns} guns`} on the wall: about one night's shooting is ${SHOTS_PER_GUN_NIGHT * a.guns}. Queue ${r.name} and put someone at the bench.`, tab: 'workshop', sel: `[data-act=queue][data-id="${r.id}"]`, dot: 'tab:workshop', prio: a.have < 10 * a.guns ? 18 : 22 }
+        : { id: `ammo_${a.res}`, icon: (AMMO_TYPES[a.res]?.icon ?? 'icon_ammo').replace(/^icon_/, ''), text: `Find ${name} · ${a.have} left`, tip: `Nothing in the workshop makes ${name} yet. Scavengers and runs bring it home.`, sel: '.people', prio: 26 });
     }
   }
   // who may break at dawn (sim/day.ts breaksTick: 20 / 45 / 80 % under the lines, counsel ×0.35)
