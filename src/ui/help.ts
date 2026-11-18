@@ -32,7 +32,7 @@ const PAGES: Record<Page, { label: string; html: () => string }> = {
         ${card(ico('st_noise'), 'Noise', 'Draws stragglers.', 'Every shot carries. Quiet guns draw fewer.')}
         ${card(ico('st_break'), 'Jams', 'Worn guns jam.', 'Keep them maintained in the workshop.')}
       </div>
-      ${fold('<span class="t-s">Keys</span>', keyList('night') + '<p class="t-s">Every key can be changed in Settings › Controls.</p>', { id: 'help-keys-night' })}`,
+      ${fold(`<span class="t-s">Keys</span> <span class="t-xs fold-peek">mouse aims · click fires · ${esc(keyLabel(keyOf('night.reload')))} reload · Esc pause</span>`, keyList('night') + '<p class="t-s">Every key can be changed in Settings › Controls.</p>', { id: 'help-keys-night' })}`,
   },
   runs: {
     label: 'Runs',
