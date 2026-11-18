@@ -308,11 +308,7 @@ export function resolveDayWork(): string[] {
         break;
       }
       case 'counsel': {
-        const sessions = Math.max(1, Math.floor(hours / 4));
-        const targets = living()
-          .filter((o) => o !== s && !counselled(o) && (o.mood < 60 || o.breakState || o.thoughts.some((t) => t.mood <= -6)))
-          .sort((a, b) => (a.mood - breakThresholds(a).minor) - (b.mood - breakThresholds(b).minor))
-          .slice(0, sessions);
+        const targets = counselTargets(s, hours);
         if (!targets.length) out.push(`${first(s)} made coffee and listened. Nobody needed talking down today.`);
         for (const t of targets) out.push(counsel(s, t, Math.min(1.2, f)));
         gainXp(s, 'psych', XP_PER_HOUR * hours * 0.5);
@@ -676,16 +672,43 @@ function socialTick(): string[] {
   return out;
 }
 
+/** Who a counsellor talks down today: the ones nearest their break line, one per 4 hours. */
+function counselTargets(s: Survivor, hours: number, done: (o: Survivor) => boolean = counselled) {
+  return living()
+    .filter((o) => o !== s && !done(o) && (o.mood < 60 || o.breakState || o.thoughts.some((t) => t.mood <= -6)))
+    .sort((a, b) => (a.mood - breakThresholds(a).minor) - (b.mood - breakThresholds(b).minor))
+    .slice(0, Math.max(1, Math.floor(hours / 4)));
+}
+/** Who today's counsellors will reach at dusk (target → counsellor), as resolveDayWork will do it. */
+export function counselPlan(): Map<Survivor, Survivor> {
+  const out = new Map<Survivor, Survivor>();
+  for (const s of living()) {
+    if (s.job !== 'counsel' || !canWork(s) || onRunToday(s) || jobHours(s) <= 0) continue;
+    for (const t of counselTargets(s, jobHours(s), (o) => counselled(o) || out.has(o))) out.set(t, s);
+  }
+  return out;
+}
+
+/** Dawn break chance per tier (minor / major / extreme line), and the cut counsel makes. */
+export const BREAK_P = [0, 0.2, 0.45, 0.8];
+export const COUNSEL_BREAK = 0.35;
+/** How far below their break lines a survivor's mood is: 0 none, 1 minor, 2 major, 3 extreme. */
+export function breakTier(s: Survivor, mood = s.mood): number {
+  const th = breakThresholds(s);
+  return mood < th.extreme ? 3 : mood < th.major ? 2 : mood < th.minor ? 1 : 0;
+}
+/** The chance they break at dawn at this mood (breaksTick rolls exactly this). */
+export function breakChance(s: Survivor, counsel = counselled(s)): number {
+  if (s.breakState || s.dead) return 0;
+  return BREAK_P[breakTier(s)] * (counsel ? COUNSEL_BREAK : 1);
+}
+
 function breaksTick(): string[] {
   const out: string[] = [];
   for (const s of living()) {
     if (s.breakState) continue;
     const m = s.mood;
-    const th = breakThresholds(s);
-    let tier = 0;
-    if (m < th.extreme) tier = 3;
-    else if (m < th.major) tier = 2;
-    else if (m < th.minor) tier = 1;
+    const tier = breakTier(s);
     if (!tier) {
       if (m > 82 && R.chance(0.12)) {
         G.flags[`inspired_${s.id}`] = true;
@@ -693,8 +716,7 @@ function breaksTick(): string[] {
       }
       continue;
     }
-    const p = [0, 0.2, 0.45, 0.8][tier] * (counselled(s) ? 0.35 : 1);
-    if (!R.chance(p)) continue;
+    if (!R.chance(breakChance(s))) continue;
     // resolve: Darkest-Dungeon-style turn from breaking to standing
     const partner = closeTo(s).length > 0;
     if (R.chance(0.12 + (hasTrait(s, 'ironwill') ? 0.1 : 0) + (partner ? 0.06 : 0))) {

@@ -7,9 +7,9 @@
 // in the table shows that system without a "new" dot.
 import type { Survivor, Res, SkillId } from '../types';
 import { G } from '../state';
-import { living, first, canWork, isBitten } from '../sim/survivors';
+import { living, first, canWork, isBitten, computeMood } from '../sim/survivors';
 import { RECIPES, RES_LABEL } from '../data/world';
-import { buildingLevel, onRunToday, ranToday, heatNeed, planConfirmed } from '../sim/day';
+import { buildingLevel, onRunToday, ranToday, heatNeed, planConfirmed, breakChance, counselPlan, COUNSEL_BREAK } from '../sim/day';
 import { calendar } from '../sim/calendar';
 import { fireProfile, ammoLabel } from '../data/weapons';
 import { canFight } from '../sim/survivors';
@@ -90,6 +90,12 @@ function bestFor(job: string): Survivor | undefined {
   const idle = (s: Survivor) => (s.job === 'rest' && s.rest > 0.6 ? 2 : 0);
   return able.sort((a, b) => idle(b) - idle(a) || (sk ? b.skills[sk] - a.skills[sk] : 0))[0];
 }
+/** Who to put on Counsel for this person: a free hand who is not them, the best talker first. */
+function counselFor(r: Survivor): Survivor | undefined {
+  const able = living().filter((s) => s !== r && canWork(s) && !onRunToday(s) && !isBitten(s) && s.job !== 'counsel');
+  const idle = (s: Survivor) => (s.job === 'rest' && s.rest > 0.6 ? 2 : 0);
+  return able.sort((a, b) => idle(b) - idle(a) || b.skills.psych - a.skills.psych)[0];
+}
 const jobSel = (s: Survivor | undefined) => (s ? `.sv-card[data-id="${s.id}"] select[data-act=job]` : '.people');
 const on = (job: string) => living().some((s) => s.job === job && canWork(s));
 
@@ -153,6 +159,14 @@ function openTodos(): Todo[] {
         ? { id: `ammo_${a.res}`, icon: 'ammo', text: `Make ${name} · ${a.have} left`, tip: `${a.have ? `Only ${a.have}` : 'No'} ${name} for ${a.guns === 1 ? 'one gun' : `${a.guns} guns`} on the wall: about one night's shooting is ${SHOTS_PER_GUN_NIGHT * a.guns}. Queue ${r.name} and put someone at the bench.`, tab: 'workshop', sel: `[data-act=queue][data-id="${r.id}"]`, dot: 'tab:workshop', prio: a.have < 10 * a.guns ? 18 : 22 }
         : { id: `ammo_${a.res}`, icon: 'ammo', text: `Find ${name} · ${a.have} left`, tip: `Nothing in the workshop makes ${name} yet. Scavengers and runs bring it home.`, sel: '.people', prio: 26 });
     }
+  }
+  // who may break at dawn (sim/day.ts breaksTick: 20 / 45 / 80 % under the lines, counsel ×0.35)
+  const plan = counselPlan();
+  const risky = people.filter((s) => { computeMood(s); return breakChance(s) > 0 && !plan.has(s); }).sort((a, b) => breakChance(b) - breakChance(a));
+  if (risky.length) {
+    const r = risky[0], p = breakChance(r), pc = (x: number) => `${Math.round(x * 100)}%`;
+    const by = counselFor(r);
+    t.push({ id: 'break', icon: 'st_break', text: `${first(r)} may break · ${pc(p)} → ${pc(p * COUNSEL_BREAK)} with counsel`, tip: `Mood ${Math.round(r.mood)}, under the break line. At dawn: ${pc(p)} to break (a lost day, smashed tools, walking out, or worse).${risky.length > 1 ? ` Also: ${risky.slice(1).map((o) => `${first(o)} ${pc(breakChance(o))}`).join(', ')}.` : ''} A counsellor talks the worst-off down first, one per 4 hours.${by ? ` Click: put ${first(by)} on Counsel.` : ''}`, act: by ? `counsel:${by.id}` : undefined, sel: by ? `.sv-card[data-id="${by.id}"] select[data-act=job]` : `.sv-card[data-id="${r.id}"]`, dot: `surv:${r.id}`, prio: p >= 0.45 ? 11 : 20 });
   }
   // guards who cannot shoot: a wall place wasted (battle.ts updateGuard returns without a gun)
   const line = wallLine();

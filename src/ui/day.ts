@@ -11,14 +11,14 @@ import { SITES, BUILDINGS, RECIPES, RES_LABEL, RES_ICON } from '../data/world';
 import {
   living, displayName, first, moodBreakdown, computeMood, moodWord, breakThresholds, pain, woundLabel, byId, canWork, canFight,
   isBitten, SKILLS, aimFactor, skillOf, workMult, attr, ATTRS, ATTR_NAMES, level, xpProgress, topSkills, heldProf, prof,
-  WEAPON_CLASSES, CLASS_SHORT, progressName, choosePerk, type ProgressKey,
+  WEAPON_CLASSES, CLASS_SHORT, progressName, choosePerk, their, them, type ProgressKey,
 } from '../sim/survivors';
 import { PERKS } from '../data/perks';
 import { TRAPS } from '../data/traps';
 import {
   buildingLevel, queueRecipe, WEATHER_LABEL, DAY_HOURS, DEFAULT_HOURS, jobHours, setJobHours, hoursAvailable, travelHours, survivorSite,
   searchHours, searchFactor, planConfirmed, confirmPlan, ranToday, onRunToday, runDaylightFor, prepareRun, clockLabel, heatNeed,
-  drillPlan, emplacements, tomorrowTeaser, oilGuns, clearPile, choreHand,
+  drillPlan, emplacements, tomorrowTeaser, oilGuns, clearPile, choreHand, breakChance, counselPlan, COUNSEL_BREAK,
 } from '../sim/day';
 import { calendar } from '../sim/calendar';
 import { armEveryone, wallLine, gunRounds } from '../sim/readiness';
@@ -81,6 +81,8 @@ function jobOutlook(s: Survivor, j: JobId): string {
       return live ? `${rounds} rounds, ${emplacements().length ? '+ gun nest' : 'live fire'}` : 'dry-fire, half pace';
     }
     case 'counsel': {
+      const r = living().filter((o) => o !== s && breakChance(o, false) > 0).sort((a, b) => breakChance(b, false) - breakChance(a, false))[0];
+      if (r) return `talks ${first(r)} down (${pct(breakChance(r, false))}→${pct(breakChance(r, false) * COUNSEL_BREAK)})`;
       const low = living().filter((o) => o !== s && (o.mood < 60 || o.breakState)).length;
       return low ? `${low} could use it · counsel ${s.skills.psych ?? 0}` : 'everyone is holding';
     }
@@ -131,6 +133,14 @@ const signed = (v: number) => `${v > 0 ? '+' : v < 0 ? '−' : '±'}${Math.abs(v
 const moodTone = (s: Survivor) => (s.mood > 50 ? 'hi' : s.mood > breakThresholds(s).minor ? 'mid' : 'lo');
 /** icon with a word that shows only while the icon art is missing (survivor.css hides .fb once it loads) */
 const icoFb = (id: string, word: string, cls = 'sm') => `${ico(id, '', cls)}<span class="fb">${esc(word)}</span>`;
+const pct = (p: number) => `${Math.round(p * 100)}%`;
+/** Dawn break risk at today's mood: the chance as things stand (counsel planned or done) and without it. */
+function breakRisk(s: Survivor) {
+  const raw = breakChance(s, false);
+  if (!raw) return null;
+  const by = counselPlan().get(s);
+  return { raw, now: by ? raw * COUNSEL_BREAK : breakChance(s), by };
+}
 const stChip = (st: string, text: string, tipHtml: string, cls = '') =>
   `<span class="chip ${cls}"${tip(tipHtml)}>${ico('st_' + st, '', 'sm')}<b>${text}</b></span>`;
 
@@ -157,6 +167,8 @@ function moodBar(s: Survivor) {
 function statusTags(s: Survivor) {
   const t: string[] = [];
   if (s.isLeader) t.push(stChip('faction', 'lead', '<b>Leads the house</b><br>Goes on the runs. If they fall, it is over.', 'lead'));
+  const risk = breakRisk(s);
+  if (risk) t.push(stChip('break', pct(risk.now), `<b>May break at dawn · ${pct(risk.now)}</b><br>Mood ${Math.round(s.mood)}, under ${their(s)} break line (${Math.round(breakThresholds(s).minor)}).${risk.by ? ` ${esc(first(risk.by))} counsels ${them(s)} today: ${pct(risk.raw)} → ${pct(risk.now)}.` : risk.now < risk.raw ? ' Counselled: the chance is cut.' : ` Counsel cuts it to ${pct(risk.raw * COUNSEL_BREAK)}.`}<br><span class="dim">A break can be a lost day's work, smashed tools, or worse.</span>`, risk.now >= 0.4 ? 'bad' : 'warn'));
   if (s.breakState) t.push(stChip('break', esc(s.breakState.kind === 'away' ? 'away' : s.breakState.kind), `<b>Mental break</b><br>${esc(s.breakState.kind)}, ${Math.ceil(s.breakState.days)} more day${Math.ceil(s.breakState.days) === 1 ? '' : 's'}. Counsel helps.`, 'bad'));
   const p = pain(s);
   const wounds = s.wounds.filter((w) => !w.hidden);
@@ -944,6 +956,10 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
       const go = pickTodo(+el.dataset.i!);
       if (go.tab) { tab = go.tab; markSeen(go.tab); }
       if (go.act === 'armall') armAll(report);
+      else if (go.act?.startsWith('counsel:')) {
+        const c = byId(go.act.slice(8));
+        if (c) { c.job = 'counsel'; confirmPlan(c); sfx.ui('stamp'); }
+      }
       else sfx.ui('paper');
       h.rerender();
       return;
