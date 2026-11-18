@@ -43,7 +43,8 @@ const MIN_FULL_RIGS = 8; // the adaptive budget's floor before falling back to C
 let fullRigs = FULL_RIGS;
 /** The cel shadow bands redraw a body in a clip (one or two extra rig passes): the first thing to go
  * under frame pressure, before the full-rig budget shrinks (and long before the Classic fallback). */
-export const bandsOk = () => !dbg.noBands && (dbg.forceBands || (fullRigs === FULL_RIGS && dbg.frameMs < 20));
+// (only once the frame watch has seen enough frames to know: a slow machine never bakes the atlases)
+export const bandsOk = () => !dbg.noBands && (dbg.forceBands || (frameWatched() > 30 && fullRigs === FULL_RIGS && dbg.frameMs < 20));
 const MAX_RAGDOLLS = 24;
 
 // ------------------------------------------------------------------ on / off, fallback
@@ -58,6 +59,8 @@ export function animFallback(reason: string) {
   fallback = reason;
   console.warn(`[anim] rigged animation off, using Classic: ${reason}`);
 }
+let watched = 0;
+const frameWatched = () => watched;
 type Dbg = { budget?: number; noBands?: boolean; forceBands?: boolean; upd: number; drawFull: number; drawLod: number; noFallback?: boolean; frameMs: number; rigMs: number; fullRigs: number; lodRigs: number; ragdolls: number; acc: { n: number; frame: number; rig: number; max: number } };
 const dbg: Dbg = { upd: 0, drawFull: 0, drawLod: 0, frameMs: 0, rigMs: 0, fullRigs: 0, lodRigs: 0, ragdolls: 0, acc: { n: 0, frame: 0, rig: 0, max: 0 } };
 /** debug handle for tests: globalThis.__anim */
@@ -84,7 +87,7 @@ class FrameWatch {
     const dt = this.last ? now - this.last : 0;
     this.last = now;
     dbg.frameMs = dbg.frameMs * 0.9 + dt * 0.1;
-    if (dt > 0 && dt < 250) { dbg.acc.n++; dbg.acc.frame += dt; dbg.acc.rig += rigMs; dbg.acc.max = Math.max(dbg.acc.max, dt); }
+    if (dt > 0 && dt < 250) { watched++; dbg.acc.n++; dbg.acc.frame += dt; dbg.acc.rig += rigMs; dbg.acc.max = Math.max(dbg.acc.max, dt); }
     dbg.rigMs = dbg.rigMs * 0.9 + rigMs * 0.1;
     if (dt <= 0 || dt > 250) { this.slowFor = 0; return; } // a hitch or a background tab: not "consistently"
     const slow = dt > 25 && rigMs > dt * 0.25;

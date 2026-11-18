@@ -207,7 +207,7 @@ The complaint: figures standing close blended together, and the frame was one bl
 - *Sodium / lantern rim outside the ink* on the defenders, at High only.
 - *Row value stagger.* The far row is cooler, darker and blue-hazed (b 0.84, s 0.72); the near row is warm and saturated (b 1.1, s 1.25).
 - *Occlusion halo.* A body that overlaps one standing behind it draws a soft dark blob just before itself in the sorted pass, so the figure behind darkens round its silhouette. Medium and High.
-- *Governor.* The bands, rims and halos go first under frame pressure (`bandsOk`: the full-rig budget is intact and the smoothed frame time is under 20 ms). That happens before the full-rig budget shrinks and long before the Classic fallback. Tests can force them with `__anim.dbg.forceBands` or switch them off with `noBands`.
+- *Governor.* The bands, rims and halos go first under frame pressure (`bandsOk`: the frame watch has seen 30 frames, the full-rig budget is intact, and the smoothed frame time is under 20 ms, so a slow machine never even bakes the atlases). That happens before the full-rig budget shrinks and long before the Classic fallback. Tests can force them with `__anim.dbg.forceBands` or switch them off with `noBands`.
 
 **Practicals:** the sodium floodlight pools have an orange skirt and a hot pale core; the beam is a warm additive shaft. Its hole in the darkness mask was cut from 0.85 to 0.5 so the road behind the Turned keeps its dark. The lamp heads use cached soft dots, and a flash gets a white-hot core. These are additive and emissive only, so nothing else blooms; the GL bloom in `vfx/gl.ts` is unchanged.
 
