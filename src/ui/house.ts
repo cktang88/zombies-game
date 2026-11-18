@@ -270,9 +270,7 @@ const INK = 'stroke="#070605" stroke-width="3" stroke-linejoin="round"';
 const ART: Record<StationId, () => string> = {
   infirmary: () => pic('cot', 236, 340, 166)
     + pic('medcabinet', 410, 325, 45),
-  bunks: () => svg(548, 292, 104, 136, `<path d="M8 4 v128 M96 4 v128" stroke="#2c241b" stroke-width="8"/><path d="M8 4 v128 M96 4 v128" fill="none" ${INK} stroke-width="2"/>
-      <rect x="10" y="40" width="84" height="14" fill="#5a4c3a" ${INK}/><path d="M14 40 q34 -12 76 -2 v2z" fill="#6f6250" ${INK}/>
-      <rect x="10" y="104" width="84" height="14" fill="#5a4c3a" ${INK}/><path d="M14 104 q30 -14 76 -4 v4z" fill="#3f4a3a" ${INK}/>`),
+  bunks: () => pic('bunks', 490, 287, 154),
   radio: () => {
     const mast = buildingLevel('radio') > 0;
     return svg(774, 336, 110, 92, `<rect x="4" y="38" width="102" height="10" fill="#3a2f24" ${INK}/><path d="M12 48 v42 M98 48 v42" stroke="#2a2119" stroke-width="6"/>
