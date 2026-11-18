@@ -554,7 +554,7 @@ function cardHtml(x: Card, ending: string) {
     <div class="gd"><b>${label}</b> <span${tip(`${s.age}${s.child ? ' (a child)' : ''} · ${s.kills} put down · ${s.daysSurvived} days`)}>${ico('st_dead', '', 'sm')}${s.kills} ${ico('st_time', '', 'sm')}${s.daysSurvived}d</span></div>
     <div class="ge">${esc(line)}</div>
     ${s.tales.length ? fold(`<span class="t-xs">${s.tales.length} ${s.tales.length === 1 ? 'tale' : 'tales'}</span>`, `<ul>${s.tales.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>`) : ''}
-    ${isInscribed(s) ? '<div class="gd inscribed"><b>Inscribed in the Ledger.</b></div>' : canInscribe(s) ? `<button class="mute" data-act="inscribe" data-id="${esc(s.id)}" data-fate="${label}">Inscribe in the Ledger</button>` : ''}</div></div>`;
+    ${isInscribed(s) ? '<div class="gd inscribed"><b>Inscribed in the Ledger.</b></div>' : canInscribe(s) ? `<button class="mute" data-act="inscribe" data-id="${esc(s.id)}" data-fate="${label}"${tip('Write this name in the Ledger.')}>Inscribe</button>` : ''}</div></div>`;
 }
 
 function endScreen(o: { title: string; cls?: string; intro: string; cards: Card[]; ending: string; buttons: string; fresh: string[] }) {
@@ -564,7 +564,7 @@ function endScreen(o: { title: string; cls?: string; intro: string; cards: Card[
   app.innerHTML = `<div class="over ${o.cls ?? ''}" data-ending="${esc(o.ending)}">
     <div class="plate p-${esc(plate)}" aria-hidden="true"><i style="background-image:url(${spriteUrl(plate === 'fell' ? 'bg_mid' : 'bg_far')})"></i><i style="background-image:url(${artUrl(`end_${plate}`)})"></i></div>
     <h1>${esc(o.title)}</h1>
-    <p class="sub">${dateLabel(1)} – ${dateLabel()} · ${G.day} days · ${G.stats.kills} of the Turned put down · ${G.stats.headshots} headshots · seed ${G.seed}</p>
+    <p class="sub">${dateLabel(1)} – ${dateLabel()} · seed ${G.seed}</p>
     <div class="endtop${o.intro ? '' : ' solo'}">${o.intro ? `<p class="epi">${esc(o.intro)}</p>` : ''}<div class="endscore">${scoreHtml(o.fresh)}</div></div>
     <h2>What became of them</h2>
     <p class="t-s inscribe-note"${tip('Their people may come to the gate in another November.')}>Inscribe up to two names in the Ledger.</p>
