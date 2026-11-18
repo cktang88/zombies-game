@@ -117,7 +117,8 @@ function openTodos(): Todo[] {
   const frac = G.fort.hp / G.fort.maxHp;
   const ws = isOpen('workshop');
 
-  if (G.day === 1 && people.some((s) => canWork(s) && !planConfirmed(s)))
+  // day 1: open until the player has set (or re-set) anyone's job; the defaults are sensible
+  if (G.day === 1 && !people.some((s) => planConfirmed(s)))
     t.push({ id: 'jobs1', icon: 'job_guard', text: 'Pick a job for each person', tip: 'The line in each job list says what it will yield today. Hover the picture for more.', sel: '.sv-card select[data-act=job]', prio: 5 });
 
   if (frac < 0.7 && !on('repair')) {
