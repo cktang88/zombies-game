@@ -334,6 +334,28 @@ G.director.mode = 'quiet'; G.day = 1; console.log('quiet:', calendar(10).map((c)
   console.log(`sprites: ${dup} shared over 300 new games`);
 }
 
+// ---------- old saves: eight skills, proficiencies, grit and 24 traits fold on load ----------
+{
+  newGame('siege', 4646);
+  const s = makeSurvivor({ traits: [], passions: [] }) as Survivor & Record<string, unknown>;
+  Object.assign(s, {
+    skills: { shooting: 2, building: 3, crafting: 6, medicine: 1, scavenging: 2, farming: 5, social: 1, psych: 4 },
+    passions: ['crafting', 'farming'], traits: ['nightowl', 'jittery', 'faithful', 'optimist'],
+    attrs: { courage: 4, grit: 8 }, prof: { shotgun: 5, rifle: 2 }, training: { heavy: 3 }, fav: undefined,
+    perks: ['tinker', 'mason', 'confessor'], perkOffers: [], xp: { crafting: 300, prof_shotgun: 50, grit: 10 },
+  });
+  migrateSurvivor(s);
+  const sk = s.skills as Record<string, number>;
+  check(sk.building === 6 && sk.social === 4 && sk.shooting === 5 && sk.crafting === undefined && sk.farming === undefined && sk.psych === undefined, `skills fold: ${JSON.stringify(sk)}`);
+  check(s.fav === 'shotgun' && !s.prof && !s.training, `favourite from the best proficiency: ${s.fav}`);
+  check(s.traits.join() === 'steady,gentle,tough', `traits map (steady wins over coward, grit 8 is Tough): ${s.traits}`);
+  check(s.attrs!.grit === undefined && s.passions.join() === 'building', `grit and old passions go: ${JSON.stringify(s.attrs)} ${s.passions}`);
+  check(s.perks!.join() === 'mason' && s.perkOffers!.some((o) => o.skill === 'social' && o.tier === 4), `cut perks drop and the tier is re-offered: ${s.perks} ${JSON.stringify(s.perkOffers)}`);
+  const before = JSON.stringify(s);
+  migrateSurvivor(s);
+  check(JSON.stringify(s) === before, 'migration is idempotent');
+}
+
 // ---------- perks at skill 4 / 7 ----------
 {
   newGame('siege', 4747);
