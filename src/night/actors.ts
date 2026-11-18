@@ -784,26 +784,33 @@ export class BattleActors implements BattleHook {
     const flood = Math.min(3, G.fort.lights);
     const left = flood > 0 || g.x > 120; // the light is to the left of this body (screen space)
     const rimA = (look.rim ?? 0) * (flood > 0 ? 1 : Math.max(0.55, 1 - Math.abs(g.x - 120) / 420));
-    const d = +(look.outline * 0.6).toFixed(1);
+    const d = +(look.outline * 0.9).toFixed(1);
     applyLook(rig, { look, variant: 0, lit: true, shade: false, rimColor: flood > 0 ? SODIUM : LANTERN, rimA: +rimA.toFixed(2), rimDx: left ? -d : d, rimDy: -d * 0.4 }, scale, g.face);
     rig.overlay = this.b.selected() === g ? { src: silAtlas(rig.asset!, LANTERN), alpha: 0.16 } : null;
     rig.draw(c, g.x, g.y, scale, g.face, undefined, this.cam);
     rig.hasDrawn = true;
-    if (!this.frontFlash(g.x, g.y - SH * g.sc * 0.6)) {
-      // the shadow band: the far half of the body (from the light) redrawn in the shaded, cooler grade,
-      // clipped to a slanted half-plane (cel style: one hard terminator, no per-pixel work)
+    const q = fxQuality();
+    if (q !== 'low' && !this.frontFlash(g.x, g.y - SH * g.sc * 0.6)) {
+      // cel bands by light direction (docs/research/04 §5): the far half of the body (from the light)
+      // redrawn in the shaded, cooler grade, clipped to a slanted half-plane (one hard terminator, no
+      // per-pixel work); at High a third, deepest band on the far edge stands in for a normal-mapped
+      // falloff (the bevel: the silhouette turning away from the light)
       const h = SH * g.sc, dir = left ? 1 : -1;
-      const x0 = g.x + dir * h * 0.03, lean = dir * h * 0.08;
-      c.save();
-      c.beginPath();
-      c.moveTo(x0 + lean, g.y - h * 1.25); c.lineTo(x0 + dir * h, g.y - h * 1.25);
-      c.lineTo(x0 + dir * h, g.y + 4); c.lineTo(x0 - lean, g.y + 4);
-      c.closePath();
-      c.clip();
-      applyLook(rig, { look: { ...look, fog: look.fog + 0.2, haze: SHADOW_HAZE }, variant: 0, lit: false, shade: true, rimColor: DARK, rimA: 0, rimDx: 0, rimDy: 0 }, scale, g.face);
-      rig.overlay = null;
-      rig.draw(c, g.x, g.y, scale, g.face, undefined, this.cam);
-      c.restore();
+      const band = (from: number, lean: number, shadeLook: Look) => {
+        const x0 = g.x + dir * h * from, l = dir * h * lean;
+        c.save();
+        c.beginPath();
+        c.moveTo(x0 + l, g.y - h * 1.25); c.lineTo(x0 + dir * h, g.y - h * 1.25);
+        c.lineTo(x0 + dir * h, g.y + 4); c.lineTo(x0 - l, g.y + 4);
+        c.closePath();
+        c.clip();
+        applyLook(rig, { look: shadeLook, variant: 0, lit: false, shade: true, rimColor: DARK, rimA: 0, rimDx: 0, rimDy: 0 }, scale, g.face);
+        rig.overlay = null;
+        rig.draw(c, g.x, g.y, scale, g.face, undefined, this.cam);
+        c.restore();
+      };
+      band(0.03, 0.08, { ...look, fog: look.fog + 0.2, haze: SHADOW_HAZE });
+      if (q === 'high') band(0.12, 0.05, { ...look, b: +(look.b * 0.72).toFixed(3), fog: look.fog + 0.34, haze: SHADOW_HAZE });
     }
     this.rigMs += performance.now() - t0;
     return true;

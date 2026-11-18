@@ -76,14 +76,14 @@ export const TURNED_LOOK: Look[] = [
   { b: 1.55, s: 0.8, fog: 0.11, haze: '#86928a', outline: 2, rim: 0.8 },
   { b: 1.62, s: 0.84, fog: 0.07, haze: '#8f9a88', outline: 2.4, rim: 0.9 },
 ];
-/** The defenders, value-staggered by row (docs/research/04 §8): the far row cooler, darker and hazed
+/** The defenders, value-staggered by row (docs/research/04 §5): the far row cooler, darker and hazed
  * blue, the near row a warm, saturated key (scarves and caps pop), so two survivors side by side on
  * alternate rows never share a value. A plain ink line; the rim is the light behind the line
  * (sodium floodlights / the lantern), set per frame in actors.drawGuard, saturated and near-full
  * alpha so it reads as light, not the brown halo a faint warm band made (critique #9). */
 export const GUARD_LOOK: Look[] = [
-  { b: 0.95, s: 0.8, fog: 0.14, haze: '#7a8cb4', outline: 2, rim: 0.8 },
-  { b: 1.0, s: 1.18, fog: 0, outline: 2.2, rim: 0.95 },
+  { b: 0.84, s: 0.72, fog: 0.2, haze: '#6a7cae', outline: 2, rim: 0.8 },
+  { b: 1.1, s: 1.25, fog: 0, outline: 2.2, rim: 0.95 },
 ];
 /** Practical light colours: sodium floodlights, the lantern, a cold moon fill. */
 export const SODIUM = '#ffa040', LANTERN = '#ffc070', MOONLIT = '#9fb8e8';
@@ -271,6 +271,20 @@ function vignette(): HTMLCanvasElement {
   const v = c.createRadialGradient(0, 0, H * 0.32, 0, 0, H * 0.72);
   v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.38)');
   c.fillStyle = v; c.fillRect(-W, -H, W * 2, H * 2);
+  return cv;
+}
+
+let skyGlowCv: HTMLCanvasElement | null = null;
+function skyGlow(): HTMLCanvasElement {
+  if (skyGlowCv) return skyGlowCv;
+  const cv = skyGlowCv = document.createElement('canvas');
+  cv.width = 320; cv.height = 60;
+  const c = cv.getContext('2d')!;
+  c.translate(220, 32); // the gradient fades out inside the strip on every side (no seams)
+  c.scale(2.4, 0.7);
+  const g = c.createRadialGradient(0, 0, 0, 0, 0, 40);
+  g.addColorStop(0, 'rgba(150,62,34,0.2)'); g.addColorStop(0.6, 'rgba(110,40,40,0.07)'); g.addColorStop(1, 'rgba(80,30,40,0)');
+  c.fillStyle = g; c.fillRect(-80, -60, 160, 120);
   return cv;
 }
 
@@ -3242,7 +3256,7 @@ export class Battle {
   }
 
   /**
-   * Occlusion shadow (docs/research/04 §8): a body standing in front of another darkens the one
+   * Occlusion shadow (docs/research/04 §5): a body standing in front of another darkens the one
    * behind it round its own silhouette, a soft dark halo drawn just before it in the sorted pass.
    * Only where something stands behind and overlaps, so an empty road keeps its value.
    */
@@ -4112,8 +4126,8 @@ export class Battle {
     for (let i = 0; i < flood; i++) {
       const px = 260 - i * 90;
       const bg = c.createLinearGradient(px, 0, 1100, 0);
-      bg.addColorStop(0, 'rgba(255,170,80,0.06)');
-      bg.addColorStop(1, 'rgba(255,170,80,0)');
+      bg.addColorStop(0, 'rgba(255,150,60,0.1)');
+      bg.addColorStop(1, 'rgba(255,150,60,0)');
       c.fillStyle = bg;
       c.beginPath();
       c.moveTo(px, 380); c.lineTo(1200, 560 - i * 30); c.lineTo(1200, 720); c.lineTo(px, 400);
@@ -4123,6 +4137,9 @@ export class Battle {
         c.drawImage(softDot('255,236,200'), hx - 12, 381 - 8, 24, 16);
       }
     }
+    // the sky glow: a dull ember over the far town (fires on the horizon), one cached strip, so the
+    // sky is not one flat blue (hue spread across the frame, docs/research/04 §5)
+    c.drawImage(skyGlow(), 0, 200, W, 240);
     for (const l of this.lights) {
       // the white-hot core of a flash: the one moment the frame clips to white
       if (l.max < 0.1 && l.life > 0) { const r = Math.min(40, l.r * 0.12); c.globalAlpha = Math.min(1, l.life / l.max) * 0.85; c.drawImage(softDot('255,248,230'), l.x - r, l.y - r, r * 2, r * 2); c.globalAlpha = 1; }
@@ -4139,13 +4156,21 @@ export class Battle {
   }
 
   /**
-   * The final grade (docs/research/04 §8), Effects quality High only (Medium / Low keep the blue
-   * darkness, the pools and the cached vignette + top falloff, which cost nothing new):
-   *  · split toning: a cold blue soft-light wash (shadows go blue, the lit warm stays warm);
-   *  · exposure / highlight push: the frame added onto itself at 30% (one blit, no blur).
+   * The final grade (docs/research/04 §5), Effects quality High only (Medium / Low keep the blue
+   * darkness, the pools and the cached vignette + top falloff, which cost nothing new). Four
+   * full-frame blend layers, no readback, no per-pixel JS:
+   *  · split toning, shadow leg: a cold blue soft-light wash (the darks go blue);
+   *  · S-curve toe / black point: a colour-burn by a near-white, a touch bluer (levels: y = (x − k)/(1 − k)
+   *    with k ≈ 0.05, at 65%), so the deep darks sink to near-black and keep a blue cast;
+   *  · S-curve shoulder / exposure: the frame added onto itself at 45%, so the gap between the deep
+   *    darks and the lit grows and lamp heads, flash cores and sodium rims clip toward white;
+   *  · split toning, highlight leg: a colour-dodge by a dark amber (R ×1.12, G ×1.05, B ×1): a
+   *    proportional warm shift, so it shows in the highlights and leaves the blue darks alone.
+   * The Canvas2D path serves both the GL and the 2D effects layer: a GL grade would need the whole
+   * 2D frame uploaded as a texture every frame (vfx/gl.ts only does that inside a haze scissor).
    */
   gradeTone?: CanvasGradient;
-  /** the grade's own cost (ms, smoothed): on a software-rastered canvas the two full-frame blends cost
+  /** the grade's own cost (ms, smoothed): on a software-rastered canvas the full-frame blends cost
    * several ms, so past GRADE_BUDGET it switches itself off for the night (a GPU canvas pays ~0) */
   gradeMs = 0; gradeN = 0; gradeOff = false;
   drawGrade(c: CanvasRenderingContext2D) {
@@ -4160,13 +4185,19 @@ export class Battle {
     c.globalAlpha = 0.32;
     c.fillStyle = this.gradeTone;
     c.fillRect(-40, -40, W + 80, H + 80);
-    // exposure: the frame added onto itself (×1.3), so the gap between the deep darks and the lit
-    // grows by 30% and lamp heads, flash cores and sodium rims clip toward white; done after the
-    // blue soft-light so the cold shadows keep their tint
     c.setTransform(1, 0, 0, 1, 0, 0);
+    const cw = this.canvas.width, ch = this.canvas.height;
+    c.globalCompositeOperation = 'color-burn';
+    c.globalAlpha = 0.65;
+    c.fillStyle = 'rgb(242,243,249)';
+    c.fillRect(0, 0, cw, ch);
     c.globalCompositeOperation = 'lighter';
-    c.globalAlpha = 0.3;
+    c.globalAlpha = 0.45;
     c.drawImage(this.canvas, 0, 0);
+    c.globalCompositeOperation = 'color-dodge';
+    c.globalAlpha = 1;
+    c.fillStyle = 'rgb(27,12,0)';
+    c.fillRect(0, 0, cw, ch);
     c.restore();
     const dt = performance.now() - t0;
     this.gradeMs = this.gradeN++ ? this.gradeMs * 0.9 + dt * 0.1 : dt;
