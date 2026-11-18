@@ -317,8 +317,8 @@ export function nightIntel(plan: NightPlan | null = G.nextNight): string[] {
   const clear = !!radio && radioSignal() >= RADIO_STRONG;
   const fuzz = (n: number) => {
     const s = radio ?? look;
-    if (s && s.traits.includes('grim')) return Math.ceil(n * 1.3);
-    if (s && s.traits.includes('jittery')) return Math.max(n, Math.round(n * R.range(1, 1.5)));
+    if (s && s.traits.includes('fragile')) return Math.ceil(n * 1.3); // the frightened count high
+    if (s && s.traits.includes('coward')) return Math.max(n, Math.round(n * R.range(1, 1.5)));
     return Math.max(1, Math.round(n * (clear ? R.range(0.85, 1.15) : R.range(0.7, 1.3))));
   };
   out.push(`${who}:`);

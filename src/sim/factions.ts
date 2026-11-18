@@ -257,7 +257,7 @@ export const FACTION_INCIDENTS: Incident[] = [
       }
       if (c === 1) return 'She nodded like she\'d expected it. "Everybody works a shift," she said, to nobody, and left.';
       G.flags.thomasLie = true;
-      for (const s of living()) if (hasTrait(s, 'kind') || hasTrait(s, 'faithful')) addThought(s, { id: 'lied_wick', label: 'We lied to a mother', mood: -4, days: 4 }, 1);
+      for (const s of living()) if (hasTrait(s, 'kind') || hasTrait(s, 'gentle')) addThought(s, { id: 'lied_wick', label: 'We lied to a mother', mood: -4, days: 4 }, 1);
       return 'Something in her face came undone. "Grace Island," she said. "He always liked the island." She left us a box of shotgun shells.' + (add('shell', 12), shiftRep('union', 10));
     },
   },
@@ -326,7 +326,7 @@ export const FACTION_INCIDENTS: Incident[] = [
       }
       if (c === 1) {
         add('meds', 3);
-        for (const s of living()) if (hasTrait(s, 'kind') || hasTrait(s, 'faithful')) addThought(s, { id: 'took_meds', label: 'We took the medicine and not the person', mood: -6, days: 4 }, 1);
+        for (const s of living()) if (hasTrait(s, 'kind') || hasTrait(s, 'gentle')) addThought(s, { id: 'took_meds', label: 'We took the medicine and not the person', mood: -6, days: 4 }, 1);
         return `Ruth left the cooler. She did not say anything. ${first(n)} walked back with her.` + shiftRep('parish', -12);
       }
       return `"God keep you," Ruth said, and meant it, which was worse.` + shiftRep('parish', -4);
@@ -354,7 +354,7 @@ export const FACTION_INCIDENTS: Incident[] = [
         return '"Thank you," she said. "I\'ll hold you to that. God will too, but I\'m closer."' + shiftRep('parish', -5);
       }
       if (c === 1) {
-        for (const s of living()) if (hasTrait(s, 'faithful') || hasTrait(s, 'gentle')) addThought(s, { id: 'blessed', label: 'Pastor Ruth blessed the ashes', mood: 6, days: 4 }, 1);
+        for (const s of living()) if (hasTrait(s, 'gentle')) addThought(s, { id: 'blessed', label: 'Pastor Ruth blessed the ashes', mood: 6, days: 4 }, 1);
         log('event', 'Pastor Engvall knelt on the road where we burned our dead and prayed over the ashes.');
         return 'She knelt in the wet ash in the road and prayed for a long time. Some of us knelt with her.' + shiftRep('parish', -10);
       }
@@ -382,14 +382,14 @@ export const FACTION_INCIDENTS: Incident[] = [
       G.flags.basementDone = true;
       const s = byId(d.s as string)!;
       if (c === 0 && !s.dead) {
-        addThought(s, { id: 'basement', label: 'The gym basement', mood: hasTrait(s, 'gentle') || hasTrait(s, 'faithful') ? -16 : -9, days: 7 }, 1);
+        addThought(s, { id: 'basement', label: 'The gym basement', mood: hasTrait(s, 'gentle') ? -16 : -9, days: 7 }, 1);
         tale(s, 'Went down into the Parish basement for Pastor Ruth, and did what she could not.');
         log('tale', `${displayName(s)} went down into the Parish gym basement with a flashlight and a rifle. Pastor Engvall held the light.`);
         return `Ruth held the flashlight. She said each of their names before ${first(s)} fired. Eleven names. ${first(s)} has not talked about it.` + shiftRep('parish', 30);
       }
       if (c === 1) return 'The boy ran back. We did not hear what happened.' + shiftRep('parish', -3);
       log('event', 'We told the County what the Parish kept in the gym basement.');
-      for (const o of living()) if (hasTrait(o, 'faithful') || hasTrait(o, 'kind')) addThought(o, { id: 'betrayed_parish', label: 'We sold out the Parish', mood: -8, days: 5 }, 1);
+      for (const o of living()) if (hasTrait(o, 'kind') || hasTrait(o, 'gentle')) addThought(o, { id: 'betrayed_parish', label: 'We sold out the Parish', mood: -8, days: 5 }, 1);
       return 'Hale went in with six men and gasoline. Afterwards Ruth Engvall stood in the gym doorway for a whole day and did not speak.' + shiftRep('county', 25) + shiftRep('parish', -45);
     },
   },
@@ -476,7 +476,7 @@ export const FACTION_INCIDENTS: Incident[] = [
     resolve: (c) => {
       G.flags.ferryWord = true;
       if (c === 1) { G.flags.ferryNo = true; return 'Peltier shrugged. "Most do." He finished the cigarette and went back down to the water.'; }
-      for (const s of living()) addThought(s, { id: 'ferry_hope', label: 'There might be a way across', mood: hasTrait(s, 'optimist') ? 8 : 4, days: 6 }, 1);
+      for (const s of living()) addThought(s, { id: 'ferry_hope', label: 'There might be a way across', mood: hasTrait(s, 'kind') ? 8 : 4, days: 6 }, 1);
       log('event', 'Old Peltier told us about a last crossing, before the ice.');
       return '"Keep your powder dry and your fuel cans full," Peltier said. "And stay on the right side of Marie Doucette."';
     },

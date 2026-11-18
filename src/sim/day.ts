@@ -596,7 +596,7 @@ export function dawnTick(): string[] {
         if (R.chance(0.3)) w.bleeding = false;
       }
       if (w.kind === 'bite' && w.infected) continue;
-      const heal = (w.tended ? 0.14 : 0.05) * (1 + inf * 0.35) * (hasTrait(s, 'slowhealer') ? 0.6 : hasTrait(s, 'tough') ? 1.2 : 1);
+      const heal = (w.tended ? 0.14 : 0.05) * (1 + inf * 0.35) * (hasTrait(s, 'tough') ? 1.2 : 1);
       w.severity -= heal;
       if (!w.tended && (w.kind === 'laceration' || w.kind === 'gunshot') && R.chance(0.06)) {
         w.infected = true;
@@ -783,7 +783,7 @@ function breaksTick(): string[] {
       ? [{ k: 'sulk', w: 3 }, { k: 'binge', w: 2 }, { k: 'lash', w: hasTrait(s, 'abrasive') ? 4 : 1.5 }, { k: 'drink', w: hasTrait(s, 'drinker') ? 5 : buildingLevel('still') ? 1 : 0 }]
       : tier === 2
         ? [{ k: 'catatonic', w: 2 }, { k: 'wander', w: 2 }, { k: 'smash', w: 1.2 }, { k: 'hidebite', w: isBitten(s) ? 5 : 0 }]
-        : [{ k: 'wander', w: 2 }, { k: 'desert', w: living().length >= 3 ? 2 : 0 }, { k: 'catatonic', w: 1.5 }, { k: 'endit', w: hasTrait(s, 'fragile') || hasTrait(s, 'grim') ? 1 : 0.3 }];
+        : [{ k: 'wander', w: 2 }, { k: 'desert', w: living().length >= 3 ? 2 : 0 }, { k: 'catatonic', w: 1.5 }, { k: 'endit', w: hasTrait(s, 'fragile') ? 1 : 0.3 }];
     if (s.child) { if (tier >= 2) { s.breakState = { kind: 'sulk', days: 1 }; out.push(`${first(s)} cried all day and would not come out from under the table.`); } continue; }
     const k = R.weighted(options, (o) => o.w)!.k;
     const name = first(s);

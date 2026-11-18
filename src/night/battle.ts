@@ -576,7 +576,6 @@ export class Battle {
       let max = 55 + 4 * s.skills.shooting + (attr(s, 'courage') - 4) * 2;
       if (hasTrait(s, 'ironwill')) max += 15;
       if (hasTrait(s, 'steady')) max += 10;
-      if (hasTrait(s, 'jittery')) max -= 15;
       if (hasTrait(s, 'fragile')) max -= 10;
       if (hasTrait(s, 'coward')) max -= 20;
       if (s.mood < 25) max -= 10;
@@ -2090,7 +2089,7 @@ export class Battle {
     const fog = this.plan.special === 'fog';
     const roof = g.post === 'roof';
     // guards only engage what they can make out in the dark
-    const range = Math.max(WALL_X + ((fog ? 640 : 820) - WALL_X) * Battle.tune.guardRange + Math.min(FORT_CAP.light!, G.fort.lights) * 130 + (hasTrait(g.s, 'nightowl') ? 120 : 0) + (roof ? 260 : 0), g.x + SH * 0.45 + prof.light);
+    const range = Math.max(WALL_X + ((fog ? 640 : 820) - WALL_X) * Battle.tune.guardRange + Math.min(FORT_CAP.light!, G.fort.lights) * 130 + (hasTrait(g.s, 'steady') ? 120 : 0) + (roof ? 260 : 0), g.x + SH * 0.45 + prof.light);
     const marked = this.mark ? this.zombies.find((z) => z.id === this.mark!.id) : undefined;
     // orders (bloodlust can't hold its fire for long)
     let order = g.order;

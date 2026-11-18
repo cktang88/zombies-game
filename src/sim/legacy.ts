@@ -216,7 +216,7 @@ export const HEIR_INCIDENT: Incident = {
       heir.weapon = w.uid;
       log('tale', `${displayName(heir)} came home to Ferry Road carrying "${loom.name}", ${loom.kills} notches on the stock.`);
     }
-    for (const s of living()) if (s !== heir && hasTrait(s, 'faithful')) addThought(s, { id: 'heir', label: 'The names come back', mood: 4, days: 4 }, 1);
+    for (const s of living()) if (s !== heir && hasTrait(s, 'gentle')) addThought(s, { id: 'heir', label: 'The names come back', mood: 4, days: 4 }, 1);
     if (living()[0] && living()[0] !== heir) changeOpinion(heir, living()[0], 10);
     return `${heir.name.split(' ')[0]} walked through the house touching the door frames. "${R.pick(['It\'s smaller than in the stories.', 'This is the wall? This is it?', 'They said there was a dog.', 'I always wanted to see it.'])}"`;
   },

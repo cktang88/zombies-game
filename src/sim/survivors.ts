@@ -1,6 +1,6 @@
 import type { Survivor, SkillId, Thought, Wound, BodyPart, Scar } from '../types';
 import { G, R, uid, log } from '../state';
-import { TRAITS, TRAIT_IDS } from '../data/traits';
+import { TRAITS, TRAIT_IDS, OLD_TRAITS } from '../data/traits';
 import { weaponClass, type WeaponClass } from '../data/weapons';
 import { PERKS, perksFor, PERK_TIERS, type PerkFx } from '../data/perks';
 import { FIRST_M, FIRST_F, LAST, BEFORE, OUTBREAK, NICKS } from '../data/names';
@@ -81,7 +81,6 @@ export function makeSurvivor(opts: Partial<Survivor> = {}): Survivor {
     if (traits.includes(t) || traits.some((x) => TRAITS[x].conflicts?.includes(t))) continue;
     traits.push(t);
   }
-  for (const t of traits) for (const [k, v] of Object.entries(TRAITS[t].skill ?? {})) skills[k as SkillId] = Math.min(10, skills[k as SkillId] + (v ?? 0));
   const passions = R.shuffle([...SKILLS]).slice(0, R.int(1, 2));
   const s: Survivor = {
     id: uid('s'),
@@ -157,7 +156,6 @@ export function pain(s: Survivor) {
 export interface MoodPart { label: string; v: number }
 export function moodBreakdown(s: Survivor): MoodPart[] {
   const parts: MoodPart[] = [{ label: 'Baseline: the end of the world', v: 46 }];
-  for (const t of s.traits) if (TRAITS[t].mood) parts.push({ label: TRAITS[t].name, v: TRAITS[t].mood! });
   if (s.hunger < 0.1) parts.push({ label: 'Starving', v: -25 });
   else if (s.hunger < 0.35) parts.push({ label: 'Hungry', v: -10 });
   else if (s.hunger > 0.85) parts.push({ label: 'Well fed', v: 4 });
@@ -170,7 +168,7 @@ export function moodBreakdown(s: Survivor): MoodPart[] {
   if (lover) parts.push({ label: `Together with ${first(byId(lover[0])!)}`, v: 8 });
   if (hasTrait(s, 'drinker') && !G.flags[`drank_${s.id}`]) parts.push({ label: 'Needs a drink', v: -6 });
   if (G.weather === 'cold' && G.stores.fuel <= 0) parts.push({ label: 'Freezing in the dark', v: -10 });
-  if (G.weather === 'snow') parts.push({ label: 'First snow', v: hasTrait(s, 'optimist') ? 3 : -3 });
+  if (G.weather === 'snow') parts.push({ label: 'First snow', v: -3 });
   for (const o of living()) if (o !== s && !o.child) { const a = perkFx(o, 'aura'); if (a) parts.push({ label: `${first(o)} is around`, v: a }); }
   for (const t of s.thoughts) parts.push({ label: t.label, v: Math.round(t.mood) });
   return parts;
@@ -198,7 +196,6 @@ export function moodWord(m: number) {
 // ---------- capability ----------
 export function workMult(s: Survivor) {
   let m = 1;
-  for (const t of s.traits) m += TRAITS[t].work ?? 0;
   m -= Math.min(0.7, pain(s) * 0.4 * (hasTrait(s, 'tough') ? 0.6 : 1)); // Tough: pain slows them less
   for (const sc of s.scars) m += sc.work ?? 0;
   if (s.rest < 0.25) m -= 0.2;
@@ -214,7 +211,7 @@ export function skillOf(s: Survivor, k: SkillId) {
 // ---------- progression: skills and courage grow with use ----------
 // API for other systems (night/combat, events, runs):
 //   gainXp(s, key, amount)  award XP. key = any SkillId or 'courage'.
-//                           Passions give x1.5, Grim/Idle x0.8. Level-up at xp >= 100 * (level + 1), max 10.
+//                           Passions give x1.5. Level-up at xp >= 100 * (level + 1), max 10.
 //                           Negative amounts shake it (a trauma can drop courage a level).
 //                           Level-ups queue a line for the report; drainLevelUps() collects them.
 //   level(s, key)           the current 0..10 value of a skill or attribute.
@@ -259,7 +256,6 @@ export function baseAttrs(s: Pick<Survivor, 'traits'>, roll = true): { courage: 
   if (t('ironwill')) courage += 2;
   if (t('coward')) courage -= 3;
   if (t('fragile')) courage -= 1;
-  if (t('jittery')) courage -= 1;
   if (t('bloodlust')) courage += 1;
   const c = (v: number) => Math.max(0, Math.min(10, Math.round(v)));
   return { courage: c(courage) };
@@ -311,7 +307,6 @@ export function gainXp(s: Survivor, k: ProgressKey, amount: number): boolean {
   if (lvl >= 10) return false;
   let mult = 1;
   if ((s.passions as string[]).includes(k)) mult *= 1.5;
-  if (s.traits.includes('grim') || s.traits.includes('lazy')) mult *= 0.8;
   s.xp[k] = (s.xp[k] ?? 0) + amount * mult;
   let up = false;
   while (lvl < 10 && (s.xp[k] ?? 0) >= xpNeeded(lvl)) {
@@ -327,6 +322,16 @@ export function gainXp(s: Survivor, k: ProgressKey, amount: number): boolean {
 /** Level-up lines queued since the last call (shown in the dusk and dawn reports). */
 export function drainLevelUps(): string[] {
   return levelUps.splice(0);
+}
+/** Old saves: the 24 old traits become the 14 (OLD_TRAITS in data/traits.ts), keeping the first of a conflicting pair. */
+export function migrateTraits(s: Survivor) {
+  const out: string[] = [];
+  for (const id of s.traits) {
+    const t = id in OLD_TRAITS ? OLD_TRAITS[id] : TRAITS[id] ? id : null;
+    if (!t || out.includes(t) || out.some((x) => TRAITS[x].conflicts?.includes(t))) continue;
+    out.push(t);
+  }
+  s.traits = out;
 }
 /**
  * Old saves: fold the eight old skills into five, fill in attributes, xp and base values. Safe to call repeatedly.
@@ -356,6 +361,7 @@ export function migrateSurvivor(s: Survivor) {
     if (s.xp) for (const k of Object.keys(s.xp)) if (k.startsWith('prof_') || k === 'heavy') delete s.xp[k];
   }
   if (!s.child && !s.fav) s.fav = rollFav();
+  migrateTraits(s);
   // grit was an attribute: the grittiest become Tough
   if (s.attrs && s.attrs.grit != null) {
     if (s.attrs.grit >= 7 && !s.traits.includes('tough')) s.traits.push('tough');

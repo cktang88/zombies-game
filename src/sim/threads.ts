@@ -72,7 +72,7 @@ const DEFS: ThreadDef[] = [
       pay({ meds: 3 });
       const runner = lowestSpotlight(living().filter((s) => !s.child));
       if (runner && R.chance(0.25)) wound(runner, 'scratch', R.range(0.15, 0.3));
-      const earl = makeSurvivor({ name: 'Earl Haugland', sex: 'm', age: 71, traits: ['kind', 'slowhealer'], before: 'The town doctor for thirty-one years. Delivered half of Vessey, and buried a fair share of it.', outbreak: 'Held the Manor attic with four residents and a diabetic girl.' });
+      const earl = makeSurvivor({ name: 'Earl Haugland', sex: 'm', age: 71, traits: ['kind', 'gentle'], before: 'The town doctor for thirty-one years. Delivered half of Vessey, and buried a fair share of it.', outbreak: 'Held the Manor attic with four residents and a diabetic girl.' });
       earl.skills.medicine = 8; earl.skills.social = Math.max(earl.skills.social, 5); earl.skills.shooting = 1;
       admit(earl, 'gate');
       tale(earl, 'Kept five people alive in the Manor attic on a radio and a prayer.');

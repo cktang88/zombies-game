@@ -39,7 +39,7 @@ function newcomerEvent(id: string, title: string, intro: (n: Survivor) => string
       const n = d.n as Survivor;
       if (c === 2) {
         log('event', `We turned ${displayName(n)} away at the gate.`);
-        for (const s of living()) if (hasTrait(s, 'kind') || hasTrait(s, 'faithful')) addThought(s, { id: 'turned_away', label: 'We turned someone away', mood: -6, days: 4 }, 1);
+        for (const s of living()) if (hasTrait(s, 'kind') || hasTrait(s, 'gentle')) addThought(s, { id: 'turned_away', label: 'We turned someone away', mood: -6, days: 4 }, 1);
         return `${first(n)} walked back toward town. Nobody watched ${them(n)} go.`;
       }
       if (c === 1 && d.bitten) {
@@ -179,7 +179,7 @@ export const INCIDENTS: Incident[] = [
         text: `${first(s)} found a house on Birch Street where one of the Turned sits at the kitchen table, hands folded, facing a cold plate. A porch light is on, somehow. There is a full pantry behind it.\n\nIt has not moved. It might be somebody's mother.`,
         data: { s: s.id },
         choices: [
-          { label: 'Put it down, take the pantry', hint: 'It was somebody.', fx: { gain: { food: 14 }, who: s.id, mood: hasTrait(s, 'gentle') || hasTrait(s, 'faithful') ? -12 : -4 }, effect: 'kill' },
+          { label: 'Put it down, take the pantry', hint: 'It was somebody.', fx: { gain: { food: 14 }, who: s.id, mood: hasTrait(s, 'gentle') ? -12 : -4 }, effect: 'kill' },
           { label: 'Leave it be', hint: 'Walk out, close the door.', fx: { who: s.id, mood: 3 }, effect: 'leave' },
         ],
       };
@@ -188,7 +188,7 @@ export const INCIDENTS: Incident[] = [
       const s = byId(d.s as string)!;
       if (c === 0) {
         add('food', 14);
-        if (hasTrait(s, 'gentle') || hasTrait(s, 'faithful')) addThought(s, { id: 'kin_killed', label: 'Killed one at its own kitchen table', mood: -12, days: 6 }, 1);
+        if (hasTrait(s, 'gentle')) addThought(s, { id: 'kin_killed', label: 'Killed one at its own kitchen table', mood: -12, days: 6 }, 1);
         else addThought(s, { id: 'kin_killed', label: 'The kitchen on Birch Street', mood: -4, days: 3 }, 1);
         log('event', `${displayName(s)} put down the Turned woman on Birch Street and emptied her pantry. +14 food.`);
         return `It didn't fight. It just looked at the door, like it was expecting someone else.`;
@@ -472,12 +472,12 @@ export const INCIDENTS: Incident[] = [
       if (c === 0) {
         for (const s of living()) {
           s.rest -= 0.1;
-          addThought(s, { id: 'buried', label: `We buried ${first(g)} properly`, mood: hasTrait(s, 'faithful') ? 8 : 4, days: 4 }, 1);
+          addThought(s, { id: 'buried', label: `We buried ${first(g)} properly`, mood: hasTrait(s, 'gentle') ? 8 : 4, days: 4 }, 1);
         }
         log('event', `We buried ${displayName(g)} behind the house. ${R.pick(['Someone said a few words.', 'Nobody knew what to say.', 'The dog would not leave the grave.', 'It started to snow while we filled it in.'])}`);
         return 'We marked it with a ' + R.pick(['ferry oar', 'hockey stick', 'mill sign', 'cross of lath', 'stack of river stones']) + '.' + (rep('parish') > -40 ? shiftRep('parish', 3) : '');
       }
-      for (const s of living()) if (hasTrait(s, 'faithful') || hasTrait(s, 'gentle')) addThought(s, { id: 'burned', label: `We burned ${first(g)} like trash`, mood: -6, days: 4 }, 1);
+      for (const s of living()) if (hasTrait(s, 'gentle')) addThought(s, { id: 'burned', label: `We burned ${first(g)} like trash`, mood: -6, days: 4 }, 1);
       log('event', `We burned ${displayName(g)} on the road. The smoke went east, toward the river.`);
       G.flags.burned = ((G.flags.burned as number) ?? 0) + 1;
       // the Parish watches the smoke; a promise to bury, broken, costs more
@@ -548,7 +548,7 @@ export const INCIDENTS: Incident[] = [
     resolve: (c) => {
       G.flags.quietMet = true;
       if (c === 0) {
-        for (const s of living()) if (hasTrait(s, 'faithful') || hasTrait(s, 'gentle')) addThought(s, { id: 'quiet_hope', label: 'Maybe there is another way', mood: 6, days: 4 }, 1);
+        for (const s of living()) if (hasTrait(s, 'gentle')) addThought(s, { id: 'quiet_hope', label: 'Maybe there is another way', mood: 6, days: 4 }, 1);
         log('lore', 'A man of the Quiet came to the wall and talked for an hour about listening. He left a jar of pond sludge on the gatepost. Nobody touched it.');
         G.flags.quietJar = true;
         return 'He left a jar of the sludge on the gatepost. "For when you\'re ready."';
@@ -573,11 +573,11 @@ export const INCIDENTS: Incident[] = [
         add('meds', -2);
         const note = shiftRep('parish', 20);
         G.flags.parish = ((G.flags.parish as number) ?? 0) + 1;
-        for (const s of living()) addThought(s, { id: 'charity', label: 'We helped the Parish', mood: hasTrait(s, 'faithful') || hasTrait(s, 'kind') ? 8 : 3, days: 5 }, 1);
+        for (const s of living()) addThought(s, { id: 'charity', label: 'We helped the Parish', mood: hasTrait(s, 'kind') || hasTrait(s, 'gentle') ? 8 : 3, days: 5 }, 1);
         log('event', 'We left medicine on the Legion hall steps for the Parish.');
         return 'The next morning there is a loaf of bread on our gatepost, wrapped in a dish towel.' + note;
       }
-      for (const s of living()) if (hasTrait(s, 'kind') || hasTrait(s, 'faithful')) addThought(s, { id: 'refused_parish', label: 'We let the Parish children cough', mood: -6, days: 4 }, 1);
+      for (const s of living()) if (hasTrait(s, 'kind') || hasTrait(s, 'gentle')) addThought(s, { id: 'refused_parish', label: 'We let the Parish children cough', mood: -6, days: 4 }, 1);
       return 'Nobody mentions the note again.' + shiftRep('parish', -5);
     },
   },

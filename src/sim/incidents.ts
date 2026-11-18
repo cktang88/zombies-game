@@ -249,7 +249,7 @@ export const MORE_INCIDENTS: Incident[] = [
     weight: () => (G.day > 4 && flagN('children') < 2 ? 0.25 + popIntent() * 0.3 : 0),
     make: () => {
       const a = makeSurvivor({ age: R.int(26, 48) });
-      const k = makeSurvivor({ age: R.int(6, 11), traits: [R.pick(['optimist', 'kind', 'nightowl', 'secretive'])] });
+      const k = makeSurvivor({ age: R.int(6, 11), traits: [R.pick(['kind', 'gentle', 'secretive', 'fragile'])] });
       k.name = `${k.name.split(' ')[0]} ${a.name.split(' ').slice(1).join(' ')}`;
       k.child = true;
       k.before = R.pick(['Third grade at Vessey Elementary. Wants to drive the ferry when grown.', 'Second grade. Collects river stones. Knows every dog in town by name.', 'Fifth grade. Was in the Christmas pageant. Was going to be a shepherd.']);
@@ -268,7 +268,7 @@ export const MORE_INCIDENTS: Incident[] = [
     resolve: (c, d) => {
       const a = d.a as Survivor, k = d.k as Survivor;
       if (c === 1) {
-        for (const s of living()) addThought(s, { id: 'turned_kid', label: 'We turned away a child', mood: hasTrait(s, 'grim') ? -4 : -10, days: 6 }, 1);
+        for (const s of living()) addThought(s, { id: 'turned_kid', label: 'We turned away a child', mood: -10, days: 6 }, 1);
         log('event', `We turned away ${a.name} and a child of ${k.age} at the gate.`);
         return `${first(k)} woke up as they walked away and looked back at us over ${first(a)}'s shoulder the whole way down Ferry Road.`;
       }
@@ -376,7 +376,7 @@ export const MORE_INCIDENTS: Incident[] = [
     weight: () => (G.flags.quietJar && !G.flags.quietReturn && G.day > 10 ? 0.9 : 0),
     make: () => {
       const cand = adults().filter((s) => !s.breakState);
-      const s = R.weighted(cand, (x) => (hasTrait(x, 'gentle') || hasTrait(x, 'faithful') || x.mood < 35 ? 3 : 1) / (1 + x.tales.length));
+      const s = R.weighted(cand, (x) => (hasTrait(x, 'gentle') || x.mood < 35 ? 3 : 1) / (1 + x.tales.length));
       if (!s) return null;
       G.flags.quietReturn = true;
       return {
@@ -461,7 +461,7 @@ export const MORE_INCIDENTS: Incident[] = [
         if (c === 1) { G.flags.radioThread = 'ignored'; log('lore', 'A voice calling itself Harbor Two offered a boat. We did not answer.'); return 'It called for an hour, then stopped. We will never know.'; }
         G.flags.radioThread = 'answered';
         G.flags.radioNext = G.day + 2;
-        for (const s of living()) addThought(s, { id: 'harbor', label: 'Harbor Two. A boat.', mood: hasTrait(s, 'grim') ? 0 : 6, days: 4 }, 1);
+        for (const s of living()) addThought(s, { id: 'harbor', label: 'Harbor Two. A boat.', mood: hasTrait(s, 'fragile') ? 0 : 6, days: 4 }, 1);
         log('lore', 'We answered the voice calling itself Harbor Two, and told it where we are.');
         return '"Copy, Ferry Road. Stand by." Static.';
       }
@@ -551,7 +551,7 @@ export const MORE_INCIDENTS: Incident[] = [
     },
     resolve: (c, d) => {
       log('lore', 'The All Saints\' bell rang again for forty minutes before dawn. The Turned all faced the church while it rang.');
-      for (const o of living()) addThought(o, { id: 'bell', label: 'The bell at Trinity', mood: hasTrait(o, 'faithful') ? -8 : -4, days: 3 }, 1);
+      for (const o of living()) addThought(o, { id: 'bell', label: 'The bell at Trinity', mood: hasTrait(o, 'gentle') ? -8 : -4, days: 3 }, 1);
       const s = d.s ? byId(d.s as string) : undefined;
       if (c !== 0 || !s || s.dead) return 'Nobody slept. Nobody said why.';
       const doc = R.chance(0.6) ? findDoc() : null;
