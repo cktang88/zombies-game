@@ -173,6 +173,11 @@ export class Expedition {
   t = 0;
   daylight: number;
   dayMax = 150;
+  walkSpeed = 150; // px/s this frame (hurt legs and an overfull pack slow it)
+  /** Seconds to walk home (the left edge) from here at the current pace. */
+  walkHome() { return Math.max(0, this.px - 22) / Math.max(1, this.walkSpeed); }
+  /** Less light left than the walk home needs, with a fifth to spare. */
+  lightShort() { return this.daylight < this.walkHome() * 1.2; }
   zs: EZ[] = [];
   spots: Spot[] = [];
   parts: P[] = [];
@@ -487,6 +492,7 @@ export class Expedition {
     const legHurt = this.s.wounds.filter((w) => w.part === 'lleg' || w.part === 'rleg').reduce((a, w) => a + w.severity, 0) + (this.s.scars.some((x) => x.label.includes('leg')) ? 0.6 : 0);
     const over = Math.max(0, this.slots() - this.cap());
     const speed = 150 * Math.max(0.35, 1 - legHurt * 0.5) * Math.max(0.45, 1 - over * 0.07);
+    this.walkSpeed = speed;
     const grabbed = this.zs.some((z) => z.state === 'grab' && z.grabWho !== 'm');
     if (this.downed > 0 || this.dragging) this.updDowned(dt);
     else if (!grabbed && !this.searching) {
@@ -569,6 +575,11 @@ export class Expedition {
       if (x > 0 && x < this.len) this.zs.push(this.mk(R.chance(0.6) ? ZOMBIES.sleeper : ZOMBIES.deer, x, 'walk'));
     }
     if (Math.floor(this.daylight) === 30 && Math.floor(this.daylight + dt) === 31) this.say('The light is going. Get back.', 4);
+    // the walk home against the light left: the first time it runs short, say so (once a game)
+    if (this.daylight > 0 && this.lightShort() && !G.flags.runHomeHint && this.t > 3) {
+      G.flags.runHomeHint = 1;
+      this.say(`Turn back now: ${Math.ceil(this.walkHome())} s to walk home and the light is going. The mark on the light bar is the walk.`, 6);
+    }
     if (Math.floor(this.daylight) === 0 && Math.floor(this.daylight + dt) === 1) this.say('Dusk. They are waking up everywhere.', 5);
     // a groan now and then from something close (sleepers breathe; the awake ones moan)
     this.idleT -= dt;
@@ -1677,7 +1688,14 @@ export class Expedition {
       if (word) caps(c, word, 198, y + 4, wordCol);
     };
     const dl = Math.max(0, this.daylight);
-    bar('icon_st_time', 64, dl / this.dayMax, dl > 40 ? '#c9b27a' : '#b0502c', this.daylight > 0 ? undefined : 'dusk');
+    const short = this.daylight > 0 && this.lightShort();
+    bar('icon_st_time', 64, dl / this.dayMax, dl > 40 && !short ? '#c9b27a' : '#b0502c', this.daylight > 0 ? (short ? 'go home' : undefined) : 'dusk');
+    // the walk home from here: a notch on the light bar; when the light reaches it, it is time to be walking
+    if (this.daylight > 0) {
+      const nx = 42 + 150 * Math.min(1, this.walkHome() / this.dayMax);
+      c.fillStyle = 'rgba(0,0,0,0.7)'; c.fillRect(nx - 2, 64 - 7, 4, 13);
+      c.fillStyle = short ? '#ff6a4a' : '#efe2c2'; c.fillRect(nx - 1, 64 - 6, 2, 11);
+    }
     const hp = Math.max(0, 1 - pain(this.s) / 1.45);
     bar('icon_st_wound', 78, hp, hp > 0.5 ? '#9db070' : '#c04030');
     bar('icon_st_tired', 92, this.stamina / 100, this.stamina < 25 ? '#b0502c' : '#8aa6c0');
