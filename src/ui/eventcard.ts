@@ -46,8 +46,8 @@ export function eventModal(ev: PendingEvent) {
       ${rest ? fold('<span class="t-s">Read on</span>', `<p>${nl(rest)}</p>`, { cls: 'evmore', open: rest.length < 260 }) : ''}
       <div class="choices">${ev.choices.map((c, i) => {
         const cs = conseq(c.hint);
-        // the hint stays visible (a long press on a button would also choose it); icons say what is at stake
-        return `<button data-act="choice" data-i="${i}"><span class="evlabel">${esc(c.label)}</span>${cs.length ? `<span class="evcons">${cs.map(([, id, l]) => ico(id, '', 'sm') + `<i>${l}</i>`).join('')}</span>` : ''}${c.hint ? `<small>${esc(c.hint)}</small>` : ''}</button>`;
+        // the hint stays visible (a long press on a button would also choose it); icons say what is at stake, their word on hover
+        return `<button data-act="choice" data-i="${i}"><span class="evlabel">${esc(c.label)}</span>${cs.length ? `<span class="evcons">${cs.map(([, id, l]) => `<span data-tip="At stake: ${l}">${ico(id, "", "sm")}</span>`).join('')}</span>` : ''}${c.hint ? `<small>${esc(c.hint)}</small>` : ''}</button>`;
       }).join('')}</div>
     </div></div>`;
 }

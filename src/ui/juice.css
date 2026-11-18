@@ -140,7 +140,6 @@
 .modal.event .evmore > summary { color: #5a4e3c; }
 .modal.event .choices button { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .modal.event .evcons { display: inline-flex; gap: 8px; align-items: center; font-family: var(--type); font-size: 13px; letter-spacing: .04em; color: #6a5c46; }
-.modal.event .evcons i { font-style: normal; margin: 0 4px 0 2px; }
 @media (max-width: 600px) { .modal.event .evface, .modal.event .evface img { width: 52px; height: auto; } }
 
 /* dusk: a headline and chips first, the day's work folded by job */
