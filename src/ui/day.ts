@@ -212,12 +212,12 @@ function sitePickerHtml(who: string) {
     const hit = fs.filter((f) => need.has(f.k));
     const walk = travelHours(x.id);
     const left = sv ? Math.max(0, jobHours(sv) - walk) : Math.max(0, DAY_HOURS - runLeave - walk);
-    return `<button class="sitecard ${x.id === cur ? 'on' : ''} ${st.left <= 0 ? 'clean' : ''} ${hit.length ? 'need' : ''}" data-act="sitechoose" data-id="${x.id}">
+    return `<button class="sitecard ${x.id === cur ? 'on' : ''} ${st.left <= 0 ? 'clean' : ''} ${hit.length ? 'need' : ''}" data-act="sitechoose" data-id="${x.id}"${tip(esc(x.desc))}>
       ${hit.length ? `<span class="sneed">you need ${hit.map((f) => FIND_LABEL[f.k]).join(', ')}</span>` : ''}
       <span class="sname t-l">${esc(x.name)}</span>
-      <span class="sfinds big">${fs.slice(0, 4).map((f) => `<span class="sfind ${f.level === 'lots' ? 'lots' : ''}">${ico(FIND_ICON[f.k])}<i>${FIND_LABEL[f.k]}${f.level === 'lots' ? ' ++' : ''}</i></span>`).join('') || '<i class="dim">odds and ends</i>'}</span>
+      <span class="sfinds big">${fs.slice(0, 4).map((f) => `<span class="sfind ${f.level === 'lots' ? 'lots' : ''}">${ico(FIND_ICON[f.k])}<i>${FIND_LABEL[f.k]}</i></span>`).join('') || '<i class="dim">odds and ends</i>'}</span>
       <span class="smeta">${chip('st_time', `${walk}h walk`, 'Walking there and back')}${chip('st_danger', riskWord(x.risk), 'Chance of a bite or a fight', x.risk >= 0.4 ? 'warn' : '')}<span class="chip"${tip(`${st.word}. Every trip strips it.`)}>${pips(st.left, st.max)}</span></span>
-      <span class="sdesc t-s">${left}h ${sv ? 'searching' : 'on the street'} · ${esc(x.desc)}</span>
+      <span class="sdesc t-s">${left}h ${sv ? 'searching' : 'on the street'}</span>
     </button>`;
   }).join('');
   return `<div class="modal sitepick" role="dialog" aria-label="Where to go">
