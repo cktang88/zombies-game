@@ -339,7 +339,7 @@ G.director.mode = 'quiet'; G.day = 1; console.log('quiet:', calendar(10).map((c)
   newGame('siege', 4747);
   G.day = 3;
   const s = living()[1];
-  s.skills.shooting = 3; s.xp = {}; delete s.perks; delete s.perkOffers; s.passions = []; s.traits = [];
+  for (const k of Object.keys(s.skills)) s.skills[k as 'shooting'] = 3; s.xp = {}; delete s.perks; delete s.perkOffers; s.passions = []; s.traits = [];
   migrateSurvivor(s); // an old save: no perk fields
   check(Array.isArray(s.perks) && perkFx(s, 'aim') === 0, 'old survivor loads with no perks');
   gainXp(s, 'shooting', 400);
@@ -366,19 +366,13 @@ G.director.mode = 'quiet'; G.day = 1; console.log('quiet:', calendar(10).map((c)
   const near = (a: number, b: number, msg: string) => check(Math.abs(a - b) < 1e-6, `${msg}: ${a} vs ${b}`);
   const gun = fireProfile(newWeapon('service9'));
   near(clearTime(gun, w('tap_rack'), 'tap')!, clearTime(gun, base, 'tap')! * 0.6, 'Tap-rack clears 40% faster');
-  near(shooterMods(w('quick_hands'), 'handgun', true).reloadMul!, shooterMods(base, 'handgun', true).reloadMul! * 0.85, 'Quick hands');
-  near(shooterMods(w('armorer'), 'handgun', true).jamMul!, shooterMods(base, 'handgun', true).jamMul! * 0.75, 'Armorer');
+  near(shooterMods(w('quick_hands'), 'handgun', true).reloadMul!, shooterMods(base, 'handgun', true).reloadMul! * 0.75, 'Quick hands');
   check(perkFx(w('bead'), 'weakspot') > 0, 'Bead weakspot');
   near(aimFactor(w('dead_eye')), Math.min(1.2, aimFactor(base) + 0.08), 'Dead eye');
   check(Math.abs(repairAmount(w('mason'), 1) - repairAmount(base, 1) * 1.25) <= 1, 'Mason +25%');
-  check(repairAmount(w('iron_back'), 1) > repairAmount(w('mason'), 1) && repairAmount(w('mason'), 1) > repairAmount(base, 1), 'repair perks');
-  near(craftPoints(w('tinker'), 1), craftPoints(base, 1) * 1.25, 'Tinker');
   near(craftPoints(w('master_hand'), 1), craftPoints(base, 1) * 1.5, 'Master hand');
-  check(farmAmount(w('root_cellar'), 1, 1, 'clear') > farmAmount(w('green_thumb'), 1, 1, 'clear') && farmAmount(w('green_thumb'), 1, 1, 'clear') > farmAmount(base, 1, 1, 'clear'), 'farm perks');
-  check(farmAmount(w('frost_hardy'), 1, 2, 'snow') > farmAmount(base, 1, 2, 'snow') && farmAmount(w('frost_hardy'), 1, 2, 'clear') === farmAmount(base, 1, 2, 'clear'), 'Frost-hardy only in the cold');
+  check(farmAmount({ ...base, traits: ['greenthumb'] }, 1, 1, 'clear') > farmAmount(base, 1, 1, 'clear') && farmAmount(base, 1, 2, 'snow') < farmAmount(base, 1, 2, 'clear'), 'Green thumb farms more; frost costs the harvest');
   check(careCount(w('triage'), 1) > careCount(w('field_medic'), 1) && careCount(w('field_medic'), 1) > careCount(base, 1), 'care perks');
-  near(breakThresholds(w('unshakable')).minor, breakThresholds(base).minor - 6, 'Unshakable');
-  near(breakThresholds(w('thick_skin')).minor, breakThresholds(base).minor - 3, 'Thick skin');
   // day work: timber, fatigue, dressing, radio
   const dayRun = (id: string | null, setup: (x: Survivor) => void) => {
     newGame('quiet', 4800);
@@ -393,7 +387,7 @@ G.director.mode = 'quiet'; G.day = 1; console.log('quiet:', calendar(10).map((c)
   const wood = (id: string | null) => { let w0 = 0; dayRun(id, (x) => { x.job = 'repair'; G.fort.hp = 50; G.stores.wood = 999; w0 = G.stores.wood; }); return w0 - G.stores.wood; };
   check(wood('thrifty') < wood(null), `Thrifty uses less timber ${wood('thrifty')} < ${wood(null)}`);
   const rest = (id: string | null) => dayRun(id, (x) => { x.job = 'repair'; }).rest;
-  check(rest('tireless') > rest(null) && rest('steady_pace') > rest(null), 'Tireless / Steady pace tire less');
+  check(rest('tireless') > rest(null), 'Tireless tires less');
   const sev = (id: string | null) => { let p: Survivor | undefined; dayRun(id, (x) => { x.job = 'doctor'; p = living()[1]; p.wounds = []; wound(p, 'laceration', 0.2, 'larm'); }); return p!.wounds[0].severity; };
   check(sev('surgeon') < sev('clean_hands') && sev('clean_hands') < sev(null), 'dressing perks');
   const radio = (id: string | null) => { dayRun(id, (x) => { x.job = 'radio'; G.buildings.push({ id: 'radio', level: 1 }); G.flags.radioWork = 0; }); return G.flags.radioWork as number; };
@@ -412,7 +406,7 @@ G.director.mode = 'quiet'; G.day = 1; console.log('quiet:', calendar(10).map((c)
   a.perks = ['anchor'];
   check(moodBreakdown(b).reduce((t, p) => t + p.v, 0) === m0 + 4 && !moodBreakdown(a).some((p) => p.label.includes(a.name.split(' ')[0]) && p.v === 4), 'Anchor lifts the others');
   const lift = (id: string | null) => { a.perks = id ? [id] : []; b.thoughts = []; counsel(a, b); return b.thoughts.find((t) => t.id === 'counselled')!.mood; };
-  check(lift('confessor') > lift('good_listener') && lift('good_listener') >= lift(null), `counselling perks ${lift('confessor')} ${lift('good_listener')} ${lift(null)}`);
+  check(lift('good_listener') > lift(null), `Good listener counsels deeper ${lift('good_listener')} ${lift(null)}`);
 }
 
 const ids = INCIDENTS.map((i) => i.id);

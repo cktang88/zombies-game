@@ -69,7 +69,7 @@ export function shooterMods(s: Survivor, cls: FireProfile['cls'], forGuard: bool
   const steady = hasTrait(s, 'steady') ? 0.75 : 1;
   return {
     reloadMul: (1.15 - pv * 0.035) * perkMul(s, 'reload'), // prof 0: 15% slower, prof 10: 20% faster; perks
-    jamMul: (1.25 - pv * 0.06) * perkMul(s, 'jam'), // prof 10: about half the jams; perks
+    jamMul: 1.25 - pv * 0.06, // handling 10: about half the jams
     spreadMul: forGuard ? 1.1 - pv * 0.025 : 1, // the player's own hand is the player's spread
     bloomMul: steady,
   };

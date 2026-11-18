@@ -181,7 +181,7 @@ export function computeMood(s: Survivor) {
 }
 
 export function breakThresholds(s: Survivor) {
-  const shift = s.traits.reduce((a, t) => a + (TRAITS[t].breakAt ?? 0), 0) - (attr(s, 'courage') - 4) * 0.8 + perkFx(s, 'breakAt');
+  const shift = s.traits.reduce((a, t) => a + (TRAITS[t].breakAt ?? 0), 0) - (attr(s, 'courage') - 4) * 0.8;
   return { minor: 28 + shift, major: 15 + shift, extreme: 6 + shift };
 }
 
@@ -364,6 +364,13 @@ export function migrateSurvivor(s: Survivor) {
   s.prof ??= baseProf(s);
   s.base ??= { ...s.skills, ...s.attrs };
   s.perks ??= [];
+  // perks that were cut drop; a stale offer goes; a tier the skill has reached with no perk is offered again
+  s.perks = s.perks.filter((id) => PERKS[id]);
+  if (s.perkOffers) s.perkOffers = s.perkOffers.filter((o) => (SKILLS as string[]).includes(o.skill) && o.options.every((id) => PERKS[id]));
+  for (const k of SKILLS) for (const t of PERK_TIERS) {
+    if (s.skills[k] < t || s.perks.some((id) => PERKS[id].skill === k && PERKS[id].tier === t) || s.perkOffers?.some((o) => o.skill === k && o.tier === t)) continue;
+    (s.perkOffers ??= []).push({ skill: k, tier: t, options: perksFor(k, t).map((p) => p.id), day: G.day });
+  }
 }
 // ---------- perks (src/data/perks.ts): a skill reaching 4 and 7 offers two, one is kept ----------
 // API: perkFx(s, fx) sums a perk effect (0 without perks); perkMul(s, fx) = 1 + perkFx. Combat reads them
@@ -399,7 +406,7 @@ export function choosePerk(s: Survivor, id: string): string {
 /** What a survivor would pick left to themself: the perk that fits the work they do. */
 export function autoPerk(s: Survivor, options: string[]): string {
   const job: Partial<Record<string, PerkFx[]>> = {
-    guard: ['aim', 'weakspot', 'jamClear', 'reload', 'jam'], drill: ['aim', 'reload', 'jamClear'], repair: ['repair', 'repairWood'], craft: ['craft'],
+    guard: ['aim', 'weakspot', 'jamClear', 'reload'], drill: ['aim', 'reload', 'jamClear'], repair: ['repair', 'repairWood'], craft: ['craft'],
     doctor: ['care', 'tendHeal'], scavenge: ['scav', 'scavDanger'], radio: ['radio'], counsel: ['counsel'],
   };
   const want = job[s.job] ?? [];
