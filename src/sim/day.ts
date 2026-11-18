@@ -202,6 +202,9 @@ export function resolveDayWork(): string[] {
   const workers = living();
   const siteRuns: Record<string, Survivor[]> = {};
   restoreRunMate(); // the run companion worked the morning before leaving
+  // today's radio work (director.ts intelTier reads it at dusk and through the night)
+  G.flags.radioWork = 0;
+  G.flags.radioDay = G.day;
   for (const s of workers) {
     const away = onRunToday(s);
     const hours = jobHours(s);
@@ -291,7 +294,7 @@ export function resolveDayWork(): string[] {
           out.push(`${first(s)} turned the dial of a dead transistor radio.`);
           break;
         }
-        G.flags.radioWork = ((G.flags.radioWork as number) ?? 0) + (1 + skillOf(s, 'social') * 0.2) * m * f * perkMul(s, 'radio');
+        G.flags.radioWork = ((G.flags.radioWork as number) ?? 0) + radioWorkOf(s, m * f);
         out.push(`${first(s)} worked the CB for ${hours}h.`);
         break;
       }
@@ -353,6 +356,11 @@ export function resolveDayWork(): string[] {
 export function repairAmount(s: Survivor, m: number) {
   return Math.round((40 + skillOf(s, 'building') * 9) * m * perkMul(s, 'repair'));
 }
+/** Radio work for a day (m = workMult × hours/8): Social and the Easy talker / The voice perks raise it. */
+export function radioWorkOf(s: Survivor, m: number) {
+  return (1 + skillOf(s, 'social') * 0.2) * m * perkMul(s, 'radio');
+}
+
 /** Wall per timber: 1 timber patches this much (a Thrifty builder uses less). */
 export const REPAIR_WOOD_PER = 25;
 /** Without timber a repairer only manages this fraction: boards pulled off the shed, the car door re-hung. */

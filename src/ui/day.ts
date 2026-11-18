@@ -18,11 +18,11 @@ import { TRAPS } from '../data/traps';
 import {
   buildingLevel, queueRecipe, WEATHER_LABEL, DAY_HOURS, DEFAULT_HOURS, jobHours, setJobHours, hoursAvailable, travelHours, survivorSite,
   searchHours, searchFactor, planConfirmed, confirmPlan, ranToday, onRunToday, runDaylightFor, prepareRun, clockLabel, heatNeed,
-  drillPlan, emplacements, tomorrowTeaser, oilGuns, clearPile, choreHand, craftPoints, repairPlan, fortCount, fortRoom, breakChance, counselPlan, COUNSEL_BREAK,
+  drillPlan, emplacements, tomorrowTeaser, oilGuns, clearPile, choreHand, craftPoints, repairPlan, radioWorkOf, fortCount, fortRoom, breakChance, counselPlan, COUNSEL_BREAK,
 } from '../sim/day';
 import { calendar } from '../sim/calendar';
 import { armEveryone, wallLine, gunRounds, ammoUse, SHOTS_PER_GUN_NIGHT } from '../sim/readiness';
-import { persona, forecast, threatPoints } from '../sim/director';
+import { persona, forecast, threatPoints, RADIO_STRONG } from '../sim/director';
 import { sfx, music, stinger, distant } from '../audio';
 import { openSettings } from './settings';
 import { is, keyLabel, keyOf } from './keys';
@@ -90,7 +90,7 @@ function jobOutlook(s: Survivor, j: JobId): string {
       return low ? `${low} could use it · counsel ${s.skills.psych ?? 0}` : 'everyone is holding';
     }
     case 'radio':
-      return buildingLevel('radio') ? `tonight's numbers · social ${s.skills.social}` : 'needs a radio mast';
+      return !buildingLevel('radio') ? 'needs a radio mast' : radioWorkOf(s, m * f) >= RADIO_STRONG ? 'tonight\'s numbers and packs' : `tonight's numbers · social ${s.skills.social}`;
     case 'rest':
       return s.rest < 0.6 ? 'sleeps it off' : 'a day off';
     default:

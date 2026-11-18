@@ -282,11 +282,22 @@ function intelSources() {
   const look = living().filter((s) => s.job === 'drill' && s.skills.shooting >= 3).sort((a, b) => b.skills.shooting - a.skills.shooting)[0];
   return { radio, look };
 }
+/** Radio work (sim/day.ts radioWorkOf) at or over this is a clear signal: pack names and timing without a lookout, tighter counts. */
+export const RADIO_STRONG = 2.3;
+/** Today's radio work (sim/day.ts resolveDayWork), 0 before dusk or on another day. */
+function radioSignal(): number {
+  return G.flags.radioDay === G.day ? +(G.flags.radioWork ?? 0) || 0 : 0;
+}
+/**
+ * Radio alone: tier 1, or 2 with a clear signal (radio work ≥ RADIO_STRONG: Social, Easy talker,
+ * The voice). A lookout adds 1. Both: tier 3 when the lookout has Shooting 6+ or the signal is clear.
+ */
 export function intelTier(): number {
   const { radio, look } = intelSources();
-  let t = (radio ? 1 : 0) + (look ? 1 : 0);
-  if (radio && look && look.skills.shooting >= 6) t = 3;
-  return t;
+  const strong = !!radio && radioSignal() >= RADIO_STRONG;
+  let t = (radio ? (strong ? 2 : 1) : 0) + (look ? 1 : 0);
+  if (radio && look && (look.skills.shooting >= 6 || strong)) t = 3;
+  return Math.min(3, t);
 }
 const PLURAL: Record<string, [string, string]> = {
   sleeper: ['Sleeper', 'Sleepers'], deer: ['Deer', 'Deer'], drag: ['Drag', 'Drags'], pulper: ['Pulper', 'Pulpers'], crier: ['Crier', 'Criers'],
@@ -303,11 +314,12 @@ export function nightIntel(plan: NightPlan | null = G.nextNight): string[] {
   const out: string[] = [];
   const end = Math.max(1, ...plan.spawns.map((s) => s.t));
   const waves = ['First wave', plan.special === 'tide' ? 'Second wave, the tide itself (twice the first)' : 'Second wave', 'Late'];
+  const clear = !!radio && radioSignal() >= RADIO_STRONG;
   const fuzz = (n: number) => {
     const s = radio ?? look;
     if (s && s.traits.includes('grim')) return Math.ceil(n * 1.3);
     if (s && s.traits.includes('jittery')) return Math.max(n, Math.round(n * R.range(1, 1.5)));
-    return Math.max(1, Math.round(n * R.range(0.7, 1.3)));
+    return Math.max(1, Math.round(n * (clear ? R.range(0.85, 1.15) : R.range(0.7, 1.3))));
   };
   out.push(`${who}:`);
   for (let w = 0; w < 3; w++) {
