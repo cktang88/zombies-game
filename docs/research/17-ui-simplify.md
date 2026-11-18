@@ -44,11 +44,11 @@ tip (`kit.tip`), never drop a fact outright.
 
 ## Dead CSS removed
 
-`.warns*`, `.wchip`, `.mood .why*`, `.jobhint`, `.trait`, `.skill`/`.skill.prog` (old sheet rows), `.profs`, `.hrow`, `.ammochip*`, `.gun*`, `.stats*`, `ul.fort`, `.date .seed`, the old `.tag` tone classes, `.tag.carried`, `.carryover*`, `.surv .prof`, `.surv .stock*`, `.runchips`, `.qm`, `.mini.hb`, `.td-all` link styling, `.stores span*`, `.schip*`, `.sv-chip*` tones, `.sv-perknew`, `.calhead`, `.weather`.
+`.warns*`, `.wchip`, `.mood .why*`, `.jobhint`, `.trait`, `.skill`/`.skill.prog` (old sheet rows), `.profs`, `.hrow`, `.ammochip*`, `.gun*`, `.stats*`, `ul.fort`, `.date .seed`, the old `.tag` tone classes, `.tag.carried`, `.carryover*`, `.surv .prof`, `.surv .stock*`, `.runchips`, `.qm`, `.mini.hb`, `.td-all` link styling, `.stores span*`, `.schip*`, `.sv-chip*` tones, `.sv-perknew`, `.calhead`, `.calkey`, `.weather`.
 
 ## Left for later
 
-- `.calendar .calkey` and `.forecast` (only shown on days 1–2 now) are still in style.css; `.calkey` may be dead.
+- `.forecast` now shows only before the calendar opens (days 1–2).
 - The Today strip's "Ready for dusk ›" item is a second dusk button when the list is done; kept as the list's finish line.
 
 - The centre tabs (workshop, armory, town) each still build their own card grids (`.wcard`, `.gcard`, `.ftile`, `.sitecard`): one "picture card" component would fold four styles into one.

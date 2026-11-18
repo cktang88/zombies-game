@@ -291,7 +291,6 @@ dl.keys dd, dl.gloss dd { margin: 0; }
 .calendar .calday.red .cg { color: #d0463c; text-shadow: 0 0 6px rgba(208,70,60,.35); }
 .calendar .calday.ice .cg { color: #a8d0e4; }
 .calendar .calday.crossing { outline: 1px solid #a8d0e4; outline-offset: -1px; }
-.calendar .calkey { font-size: 13px; color: #b5a98f; margin-top: 4px; line-height: 1.35; }
 .calendar .smell { margin-top: .5em; font-size: 13px; }
 .calendar .smell .row { display: flex; align-items: center; gap: .5em; }
 .calendar .smell .bar { flex: 1; height: 7px; background: rgba(255,255,255,.12); }
