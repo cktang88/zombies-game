@@ -266,6 +266,7 @@ const img = (id: string, x: number, y: number, w: number, cls = '') => `<img cla
 const svg = (x: number, y: number, w: number, h: number, body: string, cls = '') => `<svg class="hv-art ${cls}" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px" viewBox="0 0 ${w} ${h}" aria-hidden="true">${body}</svg>`;
 /** a painted prop from public/sprites/house/ (3× the scene's units), `w` scene units wide */
 const pic = (id: string, x: number, y: number, w: number, cls = '') => img(`house/${id}`, x, y, w, cls);
+const GRAVE: [string, number, number][] = [['grave_cross', 46, 66], ['grave_board', 34, 62], ['grave_stone', 33, 58]];
 const INK = 'stroke="#070605" stroke-width="3" stroke-linejoin="round"';
 const ART: Record<StationId, () => string> = {
   infirmary: () => pic('cot', 236, 340, 166)
@@ -296,8 +297,10 @@ const ART: Record<StationId, () => string> = {
   wall: () => img('emp_scaffold', 1252, 506, 150, 'hv-back') + img('fort_light', 1232, 430, 58, 'hv-back') + img('barricade', 1262, 450, 196),
   gate: () => pic('gate', 1450, 482, 109)
     + img('obj_duffel', 1500, 606, 64) + img('obj_sign_stop', 1560, 514, 38),
-  graves: () => G.graves.slice(0, 4).map((g, i) => svg(30 + i * 36, 572 - (i % 2) * 6, 30, 70, `<path d="M15 4 v62 M4 20 h22" stroke="#4a4235" stroke-width="6" stroke-linecap="round"/><path d="M15 4 v62 M4 20 h22" stroke="#070605" stroke-width="1.5"/>`)).join('')
-    + svg(24, 628, 150, 16, '<ellipse cx="75" cy="10" rx="72" ry="6" fill="#241e18"/>'),
+  graves: () => G.graves.slice(0, 4).map((g, i) => {
+    const [id, w, h] = GRAVE[i % GRAVE.length];
+    return pic(id, 46 + i * 38 - w / 2, 636 - h - (i % 2) * 3, w);
+  }).join('') + (G.graves.length ? pic('mound', 22, 624, 150) : ''),
 };
 
 /** The house shell: the painted cut-away (roof, chimney, two floors, five empty rooms, the side door) over
