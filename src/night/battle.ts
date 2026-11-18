@@ -4333,11 +4333,10 @@ export class Battle {
   drawThreatRibbon(c: CanvasRenderingContext2D) {
     const tier = intelTier();
     const look = 20 + (this.guards.some((g) => g.post === 'roof' && this.standing(g)) ? 10 : 0);
-    const x0 = W - 330, x1 = W - 22, y = 22;
+    const x0 = W - 322, x1 = W - 28, y = 22; // the panel lines up with the weapon panel under it
     const up = this.plan.spawns.slice(this.spawnIdx).filter((s) => s.t - this.t < look);
     c.save();
-    c.fillStyle = 'rgba(10,9,8,0.55)';
-    c.fillRect(x0 - 8, y - 12, x1 - x0 + 16, 30);
+    panel(c, x0 - 8, y - 14, x1 - x0 + 16, 32);
     c.font = '13px "Special Elite", monospace';
     c.textAlign = 'left';
     c.fillStyle = '#7d7462';
@@ -4541,18 +4540,15 @@ export class Battle {
       // top right, under the road ribbon (hud weaponPanel): at the bottom right it sat on the near
       // lanes' spawn edge, over the very bodies the player is reading (critique #1)
       const { rx, hb } = weaponPanel(W, coarsePointer());
-      const pg = c.createLinearGradient(rx - 330, 0, rx - 20, 0);
-      pg.addColorStop(0, 'rgba(10,9,8,0)'); pg.addColorStop(0.35, 'rgba(10,9,8,0.32)'); pg.addColorStop(1, 'rgba(10,9,8,0.45)');
-      c.fillStyle = pg;
-      c.fillRect(rx - 330, hb - 92, 310, 74);
+      panel(c, rx - 330, hb - 92, 310, 114); // the melee row ([V] + tool + stamina, night/melee.ts) sits in its foot
       c.shadowColor = 'rgba(0,0,0,0.9)'; c.shadowBlur = 3;
       if (icon) {
         const ih = 44, iw = Math.min(150, (icon.width / icon.height) * ih);
         c.drawImage(icon, rx - 320, hb - 84, iw, (icon.height / icon.width) * iw);
       }
       c.textAlign = 'right';
-      // the name, small; the mag, big; the reserve, small beside it
-      caps(c, p.w.name ? `"${p.w.name}"` : def.name, rx - 30, hb - 78, '#9a8e76', 'right');
+      // the picture is the gun (its name shows at the cursor on a swap, and on the armory screen);
+      // the mag, big; the reserve, small beside it
       const mag = this.playerMag.get(p.w.uid) ?? 0;
       const cap = prof.mag;
       const chamber = hasChamber(p.w, prof) && mag > cap ? 1 : 0;
@@ -4578,9 +4574,9 @@ export class Battle {
       const aic = at ? img(at.icon) : undefined;
       let ax = rx - 30;
       if (prof.ammoRes) {
-        const aw = caps(c, at?.short ?? ammoLabel(prof.ammoRes), ax, hb - 60, prof.incendiary ? '#d08040' : '#b8ab90', 'right');
+        const aw = caps(c, at?.short ?? ammoLabel(prof.ammoRes), ax, hb - 70, prof.incendiary ? '#d08040' : '#b8ab90', 'right');
         ax -= aw + 4;
-        if (aic) { const ih = 14, iw = (aic.width / aic.height) * ih; c.drawImage(aic, ax - iw, hb - 71, iw, ih); ax -= iw + 4; }
+        if (aic) { const ih = 14, iw = (aic.width / aic.height) * ih; c.drawImage(aic, ax - iw, hb - 81, iw, ih); ax -= iw + 4; }
       }
       const modes = fireModes(p.w, this.prof(p.w, p.s));
       if (modes.length > 1) {
@@ -4588,7 +4584,7 @@ export class Battle {
         const n = m === 'semi' ? 1 : m === 'burst' ? 3 : 6;
         ax -= 8;
         c.fillStyle = '#d9cdb0';
-        for (let i = 0; i < n; i++) c.fillRect(ax - i * (m === 'auto' ? 3 : 5), hb - 68, m === 'auto' ? 2 : 3, 8);
+        for (let i = 0; i < n; i++) c.fillRect(ax - i * (m === 'auto' ? 3 : 5), hb - 78, m === 'auto' ? 2 : 3, 8);
       }
       if (this.usesTube(p.w, prof) && !hard) {
         const tube = this.tubeOf(p.w, mag);
