@@ -320,7 +320,7 @@ function backdrop(): string {
     <path d="M946 452 L1176 476" stroke="#0a0806" stroke-width="12"/><path d="M946 452 L1176 476" stroke="#3a3128" stroke-width="7"/><path d="M1168 476 V640" stroke="#2a2119" stroke-width="7"/>
     ${radio ? '<path d="M820 160 V40 M808 70 L832 70 M812 100 L828 100 M820 40 L770 150 M820 40 L870 150" stroke="#0a0806" stroke-width="3" fill="none"/><circle cx="820" cy="38" r="3" fill="#a8462a"/>' : ''}
   </svg>
-  <img class="hv-shell hv-house" src="${spriteUrl('house/house_cutaway')}" alt="" draggable="false" style="left:140px;top:94px;width:810px">
+  <img class="hv-shell hv-house" src="${import.meta.env.BASE_URL}sprites/house/house_cutaway.webp" alt="" draggable="false" style="left:140px;top:94px;width:810px">
   <div class="hv-shell hv-lamps">${BULBS.map(([x, y], i) => `<i style="left:${x}px;top:${y}px;animation-delay:${(-i * 1.37).toFixed(2)}s"></i>`).join('')}</div>`;
 }
 
