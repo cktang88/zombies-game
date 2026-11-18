@@ -897,6 +897,9 @@ export class Rig {
     if (!o.noCollapse) rd.collapse(o.impulse?.x ?? 0, o.impulse?.y ?? 0, this.crawling);
     this.ragdoll = rd;
     this.actions = [];
+    // the unit drawings (an upright torso + arms + gun painted as one) can't follow a falling body:
+    // from here on the rigged head and arms are drawn
+    this.unitDraws.length = 0; this.unit = null; this.cutA = 1;
     // the gun falls free
     if (this.gun && this.gunVisible) {
       this.props.push({ kind: 'gun', x: this.gx, y: this.gy, vx: (o.impulse?.x ?? 0) * 0.2 + 20, vy: -60, a: this.ga, va: 4, life: 3, k: this.gk, src: this.gun.full, flip: this.anchors?.flip });
