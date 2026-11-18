@@ -232,6 +232,11 @@ const scenes = {
   for (const name of want) {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 2 });
     const page = await ctx.newPage();
+    // Show the full lighting a GPU machine gets: headless software canvas would otherwise trip the governors.
+    if (!process.env.SHOTS_GOVERNED) await page.addInitScript(() => setInterval(() => {
+      const a = globalThis.__anim; if (a?.dbg) { a.dbg.forceBands = true; a.dbg.noFallback = true; }
+      const b = globalThis.__battle; if (b) b.gradeOff = false;
+    }, 100));
     const errs = [];
     page.on('pageerror', (e) => errs.push(String(e)));
     try {
