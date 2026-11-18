@@ -7,9 +7,10 @@
 // Built lazily (systems()) so this module never touches night/sally.ts or sim/day.ts while the
 // module graph is still loading (battle.ts → pause → help → guide → here would be a cycle).
 import type { Res } from '../types';
-import { RECIPES, BUILDINGS, RES_ICON, RES_LABEL, FORT_CAP } from './world';
-import { AMMO_TYPES, ammoLabel } from './weapons';
+import { RECIPES, BUILDINGS, RES_ICON, RES_LABEL, FORT_CAP, SITES } from './world';
+import { AMMO_TYPES, ammoLabel, MELEE, MODS, MOD_SLOTS } from './weapons';
 import { EMPLACEMENTS } from './emplacements';
+import { ZOMBIES } from './zombies';
 import { TRAPS, placementsAllowed } from './traps';
 import { DAY_HOURS, DEFAULT_HOURS, DRILL_ROUNDS, SITE_TRAVEL, RUN_SEC_PER_HOUR, REPAIR_WOOD_PER, REPAIR_NO_WOOD, FARM_BASE, FARM_FRAME, FARM_COLD } from '../sim/day';
 import { SALLY } from '../night/sally';
@@ -17,12 +18,13 @@ import { SALLY } from '../night/sally';
 /** One icon and an amount: "3 ×salvage". `i` is an icon id (public/sprites/icon_<i>.png); `s` a word shown beside it even in compact rows. */
 export interface Amt { i: string; n?: string | number; t: string; s?: string }
 
-export type SysGroup = 'stores' | 'jobs' | 'day' | 'build' | 'night';
+export type SysGroup = 'stores' | 'jobs' | 'day' | 'build' | 'items' | 'night';
 export const GROUPS: { id: SysGroup; label: string; line: string }[] = [
   { id: 'stores', label: 'The stores', line: 'Four materials, three kinds of rounds, one count of explosives. Each forces one choice.' },
   { id: 'jobs', label: 'Day jobs', line: 'One job each. Paid for in hours and tiredness.' },
   { id: 'day', label: 'The day', line: 'What the house needs, and the leader\'s run.' },
   { id: 'build', label: 'Build & arm', line: 'Stores in, defences and ammunition out.' },
+  { id: 'items', label: 'Kit', line: 'Five hand weapons, six attachments, six trap kits. One job each; the depth is in the pairs.' },
   { id: 'night', label: 'The night', line: 'What you can do at the wall.' },
 ];
 
@@ -73,6 +75,79 @@ const WIRE = { slow: 0.55, band: 90, max: FORT_CAP.wire! };
 const DOG = { aim: 0.15, sec: 5, mood: 4 };
 const COUNSEL_BREAK = 0.35; // sim/survivors.ts counsel(): dawn break chance ×0.35
 const COLD_JAM = 1.7; // night/battle.ts: un-oiled guns in the cold jam ×1.7
+
+// ---------- kit: one card per hand weapon, attachment and trap kit (docs/research/19c-simplify-items.md) ----------
+/** The catch and the moment for each item; its one-line identity is the item's own `niche`. */
+const MELEE_CALL: Record<string, [string, string]> = {
+  knife: ['Quick and silent, but weak and no shove: a crowd at the wall walks through it.', 'Runs among Sleepers, and finishing what crawls.'],
+  hatchet: ['Good at everything, best at nothing, and it dulls fastest.', 'Whoever has nothing better: the first thing the forge makes.'],
+  bat: ['Shoves them off the wall but kills slowly.', 'A guard who has to hold a lane while the others reload.'],
+  crowbar: ['Never needs the bench and opens everything twice as fast, but hits one at a time.', 'The leader\'s run: doors, cars, caches.'],
+  fireaxe: ['Cleaves three at once, but slow, tiring and loud.', 'A strong guard at the wall when a pack climbs.'],
+};
+const MOD_CALL: Record<string, [string, string]> = {
+  scope: ['Pinpoint far out, slow onto the next target, and it takes the optic slot from a red dot.', 'A steady rifle on the roof; Criers at the back of the road.'],
+  reddot: ['Fast onto the next one and a tighter shotgun cone, but not as tight as a scope.', 'Shotguns and pistols at the wall against a crowd.'],
+  suppressor: ['Fewer stragglers hear you, but a little weaker, and it burns out.', 'Runs, and nights you want to stay quiet.'],
+  flashlight: ['You see them and so does the wall, but only down that barrel.', 'Fog, no moon, no floodlights.'],
+  extmag: ['Half again more rounds, but a slower reload.', 'A gun that runs dry in the middle of a crowd.'],
+  sling: ['Quicker swaps and steadier strings of fire, on long guns only.', 'A rifle or SMG that changes targets a lot.'],
+};
+const TRAP_CALL: Record<string, string> = {
+  snare: 'Deer and Buck nights; in front of the nails or the oil.',
+  roofnails: 'Slow walkers in one lane; behind a snare wire.',
+  beartrap: 'A Ferryman or Buck night; under the nail bomb.',
+  oil: 'Where the lure pulls them, lit when they bunch.',
+  tincan: 'Beside the nail bomb or the oil; a Crier night.',
+  nailbomb: 'A packed road; beside the lure.',
+};
+const turned = (ids: string[]) => ids.map((id) => (id === 'tunneler' ? 'tunnelling Drags' : ZOMBIES[id]?.name ?? id)).join(', ');
+const foundAt = (key: 'melee' | 'mods', id: string) => SITES.filter((x) => x[key]?.includes(id)).map((x) => x.name);
+function where(key: 'melee' | 'mods', id: string, field: 'melee' | 'mod'): Amt[] {
+  const r = RECIPES.find((x) => x[field] === id && !x.hidden);
+  const sites = foundAt(key, id);
+  return [
+    ...(r ? recipeAmts(r.id) : []),
+    ...(sites.length ? [{ i: 'job_scavenge', t: `found: ${sites.slice(0, 3).join(', ')}${sites.length > 3 ? '…' : ''}` }] : []),
+  ];
+}
+function itemCards(): SystemDef[] {
+  const out: SystemDef[] = [];
+  for (const m of Object.values(MELEE)) {
+    const speed = Math.round(10 / (m.swingTime + m.recovery)) / 10;
+    out.push({
+      id: `melee_${m.id}`, group: 'items', icon: m.icon.replace(/^icon_/, ''), name: m.name, what: m.niche,
+      spend: [...where('melee', m.id, 'melee'), { i: 'st_break', n: m.wear <= 0.001 ? 'never' : m.wear >= 0.004 ? 'fast' : 'slow', t: 'wears out' }],
+      get: [
+        { i: 'st_dead', n: m.dmg, t: `damage a hit${m.arc > 1 ? `, up to ${m.arc} at once` : ''}` },
+        { i: 'st_time', n: `${speed}/s`, t: 'swings a second' },
+        { i: 'st_wall', n: m.knock, t: 'shove' },
+        { i: 'st_noise', n: m.noise === 0 ? 'silent' : m.noise, t: 'noise a swing' },
+        ...(m.pry ? [{ i: 'job_scavenge', n: `×${m.pry}`, t: 'opens doors, cars and caches faster' }] : []),
+        ...(m.finisher ? [{ i: 'st_bite', t: 'kills sleeping and crawling ones outright' }] : []),
+      ],
+      tradeoff: MELEE_CALL[m.id]?.[0] ?? m.niche, when: MELEE_CALL[m.id]?.[1] ?? '', key: 'One per survivor, beside the gun ([V] at the wall)',
+    });
+  }
+  for (const m of Object.values(MODS)) {
+    out.push({
+      id: `mod_${m.id}`, group: 'items', icon: m.icon.replace(/^icon_/, ''), name: m.name, what: m.niche,
+      spend: where('mods', m.id, 'mod'),
+      get: [{ i: m.icon.replace(/^icon_/, ''), t: `the ${MOD_SLOTS.find((x) => x.id === m.slot)!.name} slot` }],
+      tradeoff: MOD_CALL[m.id]?.[0] ?? m.niche, when: MOD_CALL[m.id]?.[1] ?? '', key: 'Fit in the Armory: one per slot',
+    });
+  }
+  for (const t of Object.values(TRAPS)) {
+    const r = RECIPES.find((x) => x.trap === t.id);
+    out.push({
+      id: `trap_${t.id}`, group: 'items', icon: t.icon.replace(/^icon_/, ''), name: t.name, what: t.niche,
+      spend: r ? recipeAmts(r.id) : [],
+      get: [{ i: 'st_dead', t: `good against ${turned(t.good)}` }, ...(t.bad.length ? [{ i: 'st_danger', t: `poor against ${turned(t.bad)}` }] : [])],
+      tradeoff: t.counter, when: TRAP_CALL[t.id] ?? '', key: t.key ? `[${t.key}] ${t.autoWhen ? `(or on its own when ${t.autoWhen})` : ''}`.trim() : t.retrieve === 'yes' ? 'Comes back at dawn if unspent' : t.retrieve === 'no' ? 'Used up' : 'Sometimes comes back',
+    });
+  }
+  return out;
+}
 
 let cache: SystemDef[] | null = null;
 /** Every system, in guide order. */
@@ -359,11 +434,11 @@ function build(): SystemDef[] {
     },
     {
       id: 'traps', group: 'build', icon: 'trap_bear', name: 'Traps',
-      what: 'Kits you place on the road at dusk.',
+      what: 'Six kits, one job each (trip, cut, hold, burn, pull, blow), placed on the road at dusk.',
       spend: [{ i: 'scrap', t: 'salvage and fuel per kit' }, { i: 'job_craft', n: range(Math.min(...trapCosts), Math.max(...trapCosts)), t: 'bench work per kit' }],
       get: [{ i: 'trap_nails', t: 'damage, holds and slows while you shoot' }, { i: 'st_wall', t: 'fewer reach the wall' }],
-      tradeoff: 'They work while you shoot, but each kit is bench time.',
-      when: 'You know what is coming (radio) and can match the trap.',
+      tradeoff: 'They work while you shoot, but each kit is bench time. Alone each does one thing; in pairs they kill crowds.',
+      when: 'You know what is coming (radio) and can match the trap: the dusk planner marks the kits that suit tonight.',
       key: `${placementsAllowed(0)} placements + 1 per 3 Building`,
     },
     {
@@ -395,7 +470,7 @@ function build(): SystemDef[] {
     },
     {
       id: 'mods', group: 'build', icon: 'mod_scope', name: 'Attachments',
-      what: 'Scopes, mags, suppressors fitted in the armory.',
+      what: 'Six attachments, one per slot: scope or red dot, suppressor, flashlight, extended mag, sling.',
       spend: [{ i: 'scrap', t: 'salvage' }, { i: 'job_craft', t: 'bench work' }],
       get: [{ i: 'mod_scope', t: 'one stat better, often another worse' }],
       tradeoff: 'Every attachment helps one thing and usually costs another.',
@@ -475,6 +550,7 @@ function build(): SystemDef[] {
       when: 'Whenever the event offers it.',
       key: 'Barks before you see them',
     },
+    ...itemCards(),
   ];
   return out;
 }
