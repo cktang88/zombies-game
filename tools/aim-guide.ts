@@ -17,7 +17,10 @@ const meta = JSON.parse(fs.readFileSync(path.join(ROOT, `public/sprites/parts/${
 const atlas = path.join(ROOT, `public/sprites/parts/${rig}.png`);
 const A = WEAPON_ANCHORS[weapon];
 const W = 1024, H = 768, K = 4; // image px per rig unit
-const O: [number, number] = [230, 650]; // the pelvis, image px
+// a stockless long gun (the riot auto-shotgun's bird's-head grip: `butt` is a few icon px behind the grip) is not
+// shouldered: it is held out in front of the chest at shoulder height, the trigger arm bent, sighting down the rib
+const stockless = A.hold === 'long' && A.butt !== undefined && Math.abs(A.grip[0] - A.butt[0]) < 30;
+const O: [number, number] = [stockless ? 150 : 230, 650]; // the pelvis, image px (further left when the gun is held out)
 type P = [number, number];
 const px = (p: P): P => [O[0] + p[0] * K, O[1] + p[1] * K];
 
@@ -36,9 +39,6 @@ const k = A.len / (await sharp(path.join(ROOT, `public/sprites/${A.icon}.png`)).
 const fl = A.flip ? -1 : 1;
 // gun placement: rig units, gun horizontal, `grip` at gp
 let gp: P;
-// a stockless long gun (the riot auto-shotgun's bird's-head grip: `butt` is a few px behind the grip) is not
-// shouldered: it is held out in front of the chest at shoulder height, the trigger arm bent, sighting down the rib
-const stockless = !pistol && A.butt !== undefined && Math.abs(A.grip[0] - A.butt[0]) * k < 8;
 if (stockless) gp = [sh[0] + (ua + fa) * 0.8, sh[1] - 4];
 else if (!pistol) {
   const pocket = hip ? at(torsoLen - 50, shFwd + 18) : at(torsoLen - 3, shFwd + 14);

@@ -5,7 +5,7 @@
 // Points (source px): tools/rigs/src/aimunit_<rig>_<weapon>.points.json when present, else the template's
 // own (tools/rigs/src/aimguide_<rig>_<weapon>.json, scaled to the source size: the model keeps the
 // template's layout, so the gun lands where the template put it):
-//   { pelvis?, neck?, muzzle?, butt? (any point back along the bore), ppu? (source px per rig unit), cutY?, degrey? }
+//   { pelvis?, neck?, muzzle?, butt? (any point back along the bore), ppu? (source px per rig unit), cutY?, degrey?, shade? }
 //   (keys left out come from the template)
 // Output: public/sprites/parts/unit_<rig>_<weapon>.png/.json at 1 px per rig unit (the atlas scale),
 //   json { pelvis, neck, muzzle, bore } in output px; bore = the barrel's angle in the drawing (rad).
@@ -20,6 +20,7 @@ const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
 const [rig, weapon] = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const name = `${rig}_${weapon}`;
 type P = [number, number];
+type Box = [number, number, number, number]; // x0, y0, x1, y1 (source px)
 const src = path.join(ROOT, `tools/rigs/src/aimunit_${name}.png`);
 const { data, info } = await sharp(await chromaKey(fs.readFileSync(src))).raw().toBuffer({ resolveWithObject: true });
 const W = info.width, H = info.height;
@@ -27,16 +28,23 @@ const guide = JSON.parse(fs.readFileSync(path.join(ROOT, `tools/rigs/src/aimguid
 const pf = path.join(ROOT, `tools/rigs/src/aimunit_${name}.points.json`);
 const gs = W / guide.w;
 // a points file may give only some keys (e.g. just cutY / degrey); the rest come from the template
-const pts: { pelvis: P; neck: P; muzzle: P; butt: P; ppu: number; cutY?: number; degrey?: boolean } = {
+const pts: { pelvis: P; neck: P; muzzle: P; butt: P; ppu: number; cutY?: number; degrey?: boolean | Box[]; shade?: Box[] } = {
   pelvis: guide.pelvis.map((v: number) => v * gs), neck: guide.neck.map((v: number) => v * gs), muzzle: guide.muzzle.map((v: number) => v * gs), butt: guide.butt.map((v: number) => v * gs), ppu: guide.k * gs,
   ...(fs.existsSync(pf) ? JSON.parse(fs.readFileSync(pf, 'utf8')) : {}),
 };
 if (pts.cutY !== undefined) for (let y = Math.round(pts.cutY); y < H; y++) for (let x = 0; x < W; x++) data[(y * W + x) * 4 + 3] = 0;
 // degrey: the model sometimes leaves a piece of the template (a flat neutral-grey arm, hip or shadow) unpainted
 // behind the figure. Drop large connected areas of flat grey (r = g = b, mid values: the template's greys are
-// 5a..bd), plus a 2 px fringe of near-grey round them. Opt-in per unit: a white or grey garment would match too.
-if (pts.degrey) {
-  const flat = (i: number) => { const r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2]; return data[i * 4 + 3] > 0 && Math.max(r, g, b) - Math.min(r, g, b) <= 8 && r >= 110 && r <= 225; };
+// 5a..bd), plus a 2 px fringe of near-grey round them. Opt-in per unit: a white or grey garment would match too, so
+// `degrey` may instead be a list of boxes (source px) that the dropped grey must lie in.
+// shade: [[x0, y0, x1, y1], ...] (source px) — boxes where the grey is the FAR ARM the model left unpainted: there it is
+// not dropped (the hand would float) but repainted as the arm in shadow (the figure's own mid-tone at ~half value,
+// keeping the template's light / dark step); the rig's outline pass inks it like any other edge.
+const inBox = (bs: Box[] | undefined, i: number) => (bs ?? []).some(([a, b, c, d]) => { const x = i % W, y = (i - x) / W; return x >= a && x <= c && y >= b && y <= d; });
+const inShade = (i: number) => inBox(pts.shade, i);
+const inDrop = (i: number) => pts.degrey === true || inBox(Array.isArray(pts.degrey) ? pts.degrey : undefined, i);
+if (pts.degrey || pts.shade) {
+  const flat = (i: number) => { const r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2]; return data[i * 4 + 3] > 0 && (inShade(i) || inDrop(i)) && Math.max(r, g, b) - Math.min(r, g, b) <= 8 && r >= (inShade(i) ? 72 : 110) && r <= 225; };
   const seen = new Uint8Array(W * H), kill = new Uint8Array(W * H);
   for (let i = 0; i < W * H; i++) {
     if (seen[i] || !flat(i)) continue;
@@ -57,9 +65,23 @@ if (pts.degrey) {
     }
     for (const i of add) kill[i] = 1;
   }
-  let n = 0;
-  for (let i = 0; i < W * H; i++) if (kill[i]) { data[i * 4 + 3] = 0; n++; }
-  console.log(`degrey: dropped ${n} px of template grey`);
+  // the shade colour: the figure's own coloured (not grey) mid-tones, averaged
+  const tone = [0, 0, 0]; let tn = 0;
+  for (let i = 0; i < W * H; i++) {
+    if (kill[i] || data[i * 4 + 3] < 200) continue;
+    const r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2];
+    if (Math.max(r, g, b) - Math.min(r, g, b) > 16 && r + g + b > 150 && r + g + b < 520) { tone[0] += r; tone[1] += g; tone[2] += b; tn++; }
+  }
+  let n = 0, sh = 0;
+  for (let i = 0; i < W * H; i++) {
+    if (!kill[i]) continue;
+    if (inShade(i)) {
+      const v = 0.42 + 0.25 * (data[i * 4] / 255); // keep the template's light / dark arm step, darker overall
+      for (let c = 0; c < 3; c++) data[i * 4 + c] = Math.round((tone[c] / Math.max(1, tn)) * v);
+      data[i * 4 + 3] = 255; sh++;
+    } else { data[i * 4 + 3] = 0; n++; }
+  }
+  console.log(`degrey: dropped ${n} px of template grey, shaded ${sh} px as the far arm`);
 }
 
 // drop specks: keep connected components (alpha > 100) of at least 1% of the largest
