@@ -24,7 +24,8 @@ const URL = process.argv[2] ?? 'http://localhost:4192/';
   step('day 1');
   // the run panel opens on day 4; show everything now (the Today strip's link)
   await page.click('[data-act=revealall]');
-  // a run: walk out a little, then home off the left edge
+  // a run: the gate (the house view's station for runs), then walk out a little, and home off the left edge
+  if (await page.$('[data-hs=gate]')) await page.evaluate(() => document.querySelector('[data-hs=gate]').click());
   await page.click('[data-act=run]');
   await page.waitForSelector('.stage canvas');
   await page.waitForTimeout(1200);

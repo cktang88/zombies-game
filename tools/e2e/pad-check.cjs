@@ -29,7 +29,7 @@ const URL = process.argv[2] ?? 'http://localhost:4192/';
   const active = () => page.evaluate(() => { const a = document.activeElement; return a ? `${a.tagName.toLowerCase()}${a.className ? '.' + String(a.className).split(' ')[0] : ''}` : ''; });
 
   await page.goto(URL);
-  await page.evaluate(() => localStorage.clear());
+  await page.evaluate(() => { localStorage.clear(); localStorage.setItem('vessey-day-view', 'ledger'); }); // the ledger's folds and cards
   await page.reload();
   await page.waitForSelector('.personas button', { timeout: 30000 });
   await page.click('[data-act=new][data-id=siege]');

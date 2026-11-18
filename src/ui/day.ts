@@ -33,6 +33,7 @@ import { calendarHtml } from '../sim/calendar';
 import { juiceAfterRender } from './juice';
 import { siteFinds, siteFindsText, FIND_ICON, FIND_LABEL, type Find } from './sites';
 import { sysTip, sysLine } from './guide';
+import { houseView, houseHtml, mountHouse, houseClick, houseTodo, bindHouse, viewButton, type HouseCtx } from './house';
 import { todayHtml, dotKeys, pickTodo, applyFlash, markSeen, setRevealAll, isOpen, revealNote, runOpen, JOB_REVEAL, type RevealId } from './today';
 
 const JOBS: { id: JobId; label: string; hint: string }[] = [
@@ -839,22 +840,37 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
   if (!tabs.includes(tab)) tab = tabs.includes('workshop') ? 'workshop' : 'wall';
   const strip = todayHtml(keyLabel(keyOf('day.dusk')));
   const dots = dotKeys();
+  const calBlock = isOpen('calendar') ? `<div class="calwrap"${dots.has('calendar') ? ' data-dot' : ''}>${revealNote('calendar')}${calendarHtml({
+    flavour: fc,
+    tonight: { word: tp > 60 ? 'BIG' : tp > 30 ? 'bad' : 'light', big: tp > 60, tip: `How big: ${pips(Math.min(5, Math.ceil(tp / 20)), 5, tp > 60 ? 'red' : '')} (${tp > 60 ? 'a long one' : tp > 30 ? 'a bad one' : 'light'})<br>The season's pace: ${esc(persona().name)}.${heat ? `<br>The stove wants ${heat} fuel.` : ''}` },
+  })}</div>` : '';
+  const duskBtn = `<button class="dusk" data-act="dusk">${duskArmed && stale.length ? 'Go anyway ›' : 'Go to the wall at dusk ›'}<small>${esc(keyLabel(keyOf('day.dusk')))}</small></button>`;
+  const keepBtn = stale.length ? `<button class="mini keepbtn ${duskArmed ? 'flash' : ''}" data-act="keepplans"${tip(`Yesterday's job${stale.length === 1 ? '' : 's'} carried over (the gold edge): ${esc(stale.map(first).join(', '))}. Keep, or change each one.`)}>Keep ${stale.length === 1 ? `${esc(first(stale[0]))}'s job` : `all ${stale.length}`} ✓</button>` : '';
+  const house = houseView();
+  const hctx: HouseCtx = {
+    dots, today: strip, report, forecast: fc ?? '', calendar: calBlock, threads: threadsHtml(), keep: keepBtn, dusk: duskBtn,
+    survivorCard, statusTags, moodChip, jobOutlook, jobs: JOBS, costHtml,
+    siteButton: (s) => siteButton(survivorSite(s), s.id, Math.max(0, jobHours(s) - travelHours(survivorSite(s)))),
+    workshop: workshopHtml, wall: wallHtml, armory: armoryHtml, town: townHtml, chronicle: chronicleHtml, graves: gravesHtml, run: runHtml,
+    openSitePick: (id) => { sitePick = id; }, rerender: h.rerender,
+  };
+  bindHouse(hctx);
   const sky = dread ? 'linear-gradient(rgba(70,14,10,.62),rgba(24,8,8,.78) 45%,rgba(10,10,12,.92))' : 'linear-gradient(rgba(10,10,12,.72),rgba(10,10,12,.9))';
-  root.innerHTML = `<div class="day ${duskArmed && stale.length ? 'armed' : ''} ${dread ? 'dread' : ''}" style="background-image:${sky},url(${spriteUrl('bg_far')})">
+  root.innerHTML = `<div class="day ${house ? 'hv' : ''} ${duskArmed && stale.length ? 'armed' : ''} ${dread ? 'dread' : ''}" style="background-image:${sky},url(${spriteUrl('bg_far')})">
     <header>
       <div class="date"${tip(`This town's seed: ${G.seed}${G.flags.daily ? ` · daily ${esc(String(G.flags.daily))}` : ''}. Start a new game from it on the title screen to replay the same Vessey.`)}><b class="t-xl">${dateLabel()}</b> <span class="t-xs">day ${G.day}</span> <span class="t-s wx">${WEATHER_LABEL[G.weather] ?? G.weather}</span></div>
       <div class="ice"${tip(ice > 0 ? `The river freezes in ${ice} day${ice === 1 ? '' : 's'}. Then the dead can cross.` : ice === 0 ? 'The river is freezing tonight.' : 'The river is ice.')}>${ico('st_cold')}<b>${ice > 0 ? `${ice}d` : ice === 0 ? 'tonight' : 'ice'}</b></div>
-      <div class="hbtns"><button class="icon" data-act="help" aria-label="Help and controls" title="Help and controls">?</button><button class="icon" data-act="settings" aria-label="Settings" title="Settings">⚙</button></div>
+      <div class="hbtns">${viewButton()}<button class="icon" data-act="help" aria-label="Help and controls" title="Help and controls">?</button><button class="icon" data-act="settings" aria-label="Settings" title="Settings">⚙</button></div>
       <div class="stores">${STORE_RES.filter((r) => isOpen('stores') || ['food', 'salvage', 'fuel'].includes(r)).map((r) => {
         const low = (r === 'food' && G.stores.food < eat * 2) || (r === 'fuel' && G.stores.fuel < heat);
         const use = r === 'food' ? foodTip(eatN, half) : r === 'fuel' && heat ? `The stove burns ${heat} tonight.` : '';
         return `<span data-res="${r}" class="chip lg ${low ? 'warn' : ''}"${tip(`<b>${RES_LABEL[r]}</b><br>${STORE_USE[r] ?? ''}${use ? `<br>${use}` : ''}`)}><img src="${spriteUrl(RES_ICON[r])}" alt="${RES_LABEL[r]}"><span class="n">${Math.floor(G.stores[r] ?? 0)}</span>${r === 'fuel' && heat ? `<em>−${heat}</em>` : r === 'food' && eat ? `<em>−${eatN}${half ? ' · ½' : ''}</em>` : ''}</span>`;
       }).join('')}${ammoChips()}</div>
     </header>
-    ${strip}
+    ${house ? houseHtml(hctx) : `${strip}
     <main>
       <section class="people">
-        <h2 class="t-l">The house <span class="t-xs"${tip(`${living().length} living · eat ${eatN}/day${G.flags.dog ? ` · and ${esc(String(G.flags.dog))}` : ''} · daylight ${clockLabel(0)}–${clockLabel(DAY_HOURS)}`)}>${living().length} living${G.flags.dog ? ' + dog' : ''}</span>${stale.length ? `<button class="mini keepbtn ${duskArmed ? 'flash' : ''}" data-act="keepplans"${tip(`Yesterday's job${stale.length === 1 ? '' : 's'} carried over (the gold edge): ${esc(stale.map(first).join(', '))}. Keep, or change each one.`)}>Keep ${stale.length === 1 ? `${esc(first(stale[0]))}'s job` : `all ${stale.length}`} ✓</button>` : ''}</h2>
+        <h2 class="t-l">The house <span class="t-xs"${tip(`${living().length} living · eat ${eatN}/day${G.flags.dog ? ` · and ${esc(String(G.flags.dog))}` : ''} · daylight ${clockLabel(0)}–${clockLabel(DAY_HOURS)}`)}>${living().length} living${G.flags.dog ? ' + dog' : ''}</span>${keepBtn}</h2>
         ${living().map((s) => survivorCard(s, dots)).join('')}
       </section>
       <section class="center">
@@ -866,20 +882,18 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
         <h2 class="t-l">This morning</h2>
         <div class="lines">${report.length ? report.slice(0, 2).map((l) => `<p>${esc(l)}</p>`).join('') + (report.length > 2 ? fold(`<span class="t-xs">+${report.length - 2} more</span>`, report.slice(2).map((l) => `<p>${esc(l)}</p>`).join('')) : '') : '<p class="t-s">A quiet morning.</p>'}</div>
         ${fc && !isOpen('calendar') ? `<p class="forecast">${esc(fc)}</p>` : ''}
-        ${isOpen('calendar') ? `<div class="calwrap"${dots.has('calendar') ? ' data-dot' : ''}>${revealNote('calendar')}${calendarHtml({
-          flavour: fc,
-          tonight: { word: tp > 60 ? 'BIG' : tp > 30 ? 'bad' : 'light', big: tp > 60, tip: `How big: ${pips(Math.min(5, Math.ceil(tp / 20)), 5, tp > 60 ? 'red' : '')} (${tp > 60 ? 'a long one' : tp > 30 ? 'a bad one' : 'light'})<br>The season's pace: ${esc(persona().name)}.${heat ? `<br>The stove wants ${heat} fuel.` : ''}` },
-        })}</div>` : ''}
+        ${calBlock}
         ${threadsHtml()}
         ${runOpen() ? `<div class="runwrap"${dots.has('run') ? ' data-dot' : ''}>${revealNote('run')}${runHtml()}</div>` : ''}
-        <button class="dusk" data-act="dusk">${duskArmed && stale.length ? 'Go anyway ›' : 'Go to the wall at dusk ›'}<small>${esc(keyLabel(keyOf('day.dusk')))}</small></button>
+        ${duskBtn}
       </section>
-    </main>
+    </main>`}
     ${G.pendingEvent ? eventModal(G.pendingEvent) : ''}
     ${sel ? `<div class="overlay" data-act="closedetail">${detailHtml(sel)}</div>` : ''}
     ${sitePick && !sel ? `<div class="overlay" data-act="closesite">${sitePickerHtml(sitePick)}</div>` : ''}
     ${G.pendingEvent || sel ? '' : hintHtml()}
   </div>`;
+  if (house) mountHouse(root);
   if (!G.pendingEvent && !sel) markHintTarget(root);
   juiceAfterRender(root);
   applyFlash(root);
@@ -954,6 +968,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
     h.rerender();
   };
   root.onclick = (e) => {
+    if (houseClick(e)) return;
     const el = (e.target as HTMLElement).closest('[data-act]') as HTMLElement | null;
     if (!el) return;
     const act = el.dataset.act;
@@ -976,6 +991,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
     else if (act === 'todo') {
       const go = pickTodo(+el.dataset.i!);
       if (go.tab) { tab = go.tab; markSeen(go.tab); }
+      houseTodo(go);
       if (go.act === 'armall') armAll(report);
       else if (go.act === 'fullrations') { G.flags.rations = 'full'; report.unshift('Back to full rations.'); sfx.ui('stamp'); }
       else if (go.act?.startsWith('counsel:')) {

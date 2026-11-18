@@ -23,7 +23,32 @@ const URL = process.argv[2] ?? 'http://localhost:4192/';
   await page.click('[data-act=new][data-id=siege]');
   await page.waitForSelector('.day');
 
+  // the house view (the default day screen): a station zooms in with its panel, Esc steps back out,
+  // a person opens their card, L flips to the ledger and back
+  ok(!!(await page.$('.hv-scene')), 'the day opens on the house view');
+  await page.evaluate(() => document.querySelector('[data-hs=wall]').click());
+  await page.waitForSelector('.hv-panel[data-panel=wall]');
+  ok(!!(await page.$('.hv-panel .wallbar')), 'the wall zooms in with its panel');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(150);
+  ok(!(await page.$('.hv-panel')), 'Esc steps back out of the wall');
+  const sid = await page.evaluate(() => { const s = __G.survivors.find((x) => !x.dead && x.job !== 'repair'); return s && s.id; });
+  await page.evaluate((id) => document.querySelector(`[data-sv="${id}"]`).click(), sid);
+  await page.waitForSelector(`.hv-panel .sv-card[data-id="${sid}"]`);
+  ok(true, 'a person opens their card');
+  await page.evaluate(() => document.querySelector('[data-hs=wall]').click());
+  await page.waitForTimeout(150);
+  ok(await page.evaluate((id) => __G.survivors.find((x) => x.id === id).job === 'repair', sid), 'with a person picked, clicking the wall puts them on repair');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('l');
+  await page.waitForTimeout(150);
+  ok(!(await page.$('.hv-scene')) && !!(await page.$('.day .people .sv-card')), 'L flips to the ledger');
+  await page.keyboard.press('l');
+  await page.waitForTimeout(150);
+  ok(!!(await page.$('.hv-scene')), 'L flips back to the house');
+
   // the survivor sheet: Esc closes it
+  await page.evaluate(() => document.querySelector('[data-sv]').click());
   await page.click('.day a[data-act=detail]');
   await page.waitForSelector('.overlay[data-act=closedetail]');
   await page.keyboard.press('Escape');

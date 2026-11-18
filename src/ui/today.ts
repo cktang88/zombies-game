@@ -274,12 +274,12 @@ export function todayHtml(duskKey: string): string {
 // ---------------------------------------------------------------- jump and flash
 let pendingFlash: string | null = null;
 /** Remember a todo's target; the day screen flashes it after its next render. Returns the tab to open, if any. */
-export function pickTodo(i: number): { tab?: string; act?: string; id?: string } {
+export function pickTodo(i: number): { tab?: string; act?: string; id?: string; sel?: string; dot?: string } {
   const t = current[i];
   if (!t) return {};
   if (t.isNew) markSeen(t.id.replace(/^new_/, ''));
   pendingFlash = t.sel ?? null;
-  return { tab: t.tab, act: t.done ? undefined : t.act, id: t.id };
+  return { tab: t.tab, act: t.done ? undefined : t.act, id: t.id, sel: t.sel, dot: t.dot };
 }
 /** After a render: scroll the pending target into view (opening its folds) and pulse it. */
 export function applyFlash(root: HTMLElement) {

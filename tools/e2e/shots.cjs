@@ -25,7 +25,7 @@ async function boot(page, mutate) {
   await page.goto(URL);
   let s = save;
   if (mutate) { const g = JSON.parse(save); mutate(g); s = JSON.stringify(g); }
-  await page.evaluate((s) => { localStorage.clear(); if (s) localStorage.setItem('vessey-save-v1', s); localStorage.setItem('vessey-onboarding-v1', 'done'); }, s);
+  await page.evaluate((s) => { localStorage.clear(); if (s) localStorage.setItem('vessey-save-v1', s); localStorage.setItem('vessey-onboarding-v1', 'done'); localStorage.setItem('vessey-day-view', process.env.SHOTS_VIEW ?? 'ledger'); }, s);
   await page.reload();
   await page.waitForSelector('.personas button', { timeout: 30000 });
   await page.waitForTimeout(400);
