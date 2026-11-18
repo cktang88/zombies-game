@@ -7,19 +7,9 @@
 
 /* ---- the card */
 .sv-card .body { gap: 5px; }
-.sv-card .name a { font-size: var(--fs-l); font-weight: 600; }
+.sv-card .name > a:first-child { font-size: var(--fs-l); font-weight: 600; }
 .sv-card .name .age { font-weight: normal; }
-.sv-card .tag.sv-perknew { font-size: 13px; padding: 1px 5px; }
-.sv-perknew { display: inline-flex; align-items: center; gap: 2px; color: var(--ochre); border-color: #8a6a2a; text-decoration: none; }
-.sv-perknew .ico { width: 14px; height: 14px; }
 .sv-state { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-.sv-chip { padding: 1px 6px 1px 2px; gap: 3px; }
-.sv-chip .ico.sm { width: 18px; height: 18px; }
-.sv-chip:not(:has(.ico)) { padding-left: 6px; }
-.sv-chip.bad { border-color: #8e2a20; color: #f0a090; background: rgba(142, 42, 32, .18); }
-.sv-chip.bite { background: var(--blood); color: #fff; }
-.sv-chip.lead { border-color: #6a5426; color: var(--ochre); }
-.sv-chip.lo { opacity: .55; }
 .sv-mood b { font-size: var(--fs-m); }
 .sv-mood.hi { border-color: var(--moss); } .sv-mood.hi b { color: #b8d080; }
 .sv-mood.mid { border-color: #6a5426; } .sv-mood.mid b { color: #e0b860; }

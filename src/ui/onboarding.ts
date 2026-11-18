@@ -85,7 +85,7 @@ export function hintHtml(): string {
     <div class="hint-n">${s + 1} / ${HINTS.length}</div>
     <h3 id="hint-h">${ico(h.icon)}${h.title}</h3>
     <p>${h.short}<span class="qi"${tip(h.text)} aria-label="More">?</span></p>
-    <div class="hint-b"><button class="mini" data-act="hint-skip">Don't show these</button><button data-act="hint-next">${s + 1 === HINTS.length ? 'Got it' : 'Next ›'}</button></div>
+    <div class="hint-b"><button class="mini link" data-act="hint-skip">Don't show these</button><button data-act="hint-next">${s + 1 === HINTS.length ? 'Got it' : 'Next ›'}</button></div>
   </aside>`;
 }
 

@@ -3,9 +3,14 @@
 //   tip(html)            → attribute string for any element: data-tip="…" (hover / focus / long press)
 //   ico(id, label?)      → <img> of public/sprites/icon_<id>.png (hidden if missing), label as its tip
 //   fold(head, body, o)  → a collapsible section (<details>): head shows the summary, body the rest
-//   chip(icon, text, t)  → a compact icon+value chip with a tooltip
-//   pips(n, max)         → ●●●○○ skill/level pips
-// Type scale: .t-xl (screen titles) .t-l (section heads) .t-m (body) .t-s (secondary) .t-xs (meta).
+//   chip(icon, text, t)  → a compact icon+value chip with a tooltip. Tones (cls): warn bad good lead lo none; size: lg
+//   tag(text, t, cls)    → a small uppercase label (a state word, "new", "perk"). Tones: good warn bad
+//   qi(t)                → the one "what is this?" mark: a small circled i, the sentence in its tip
+//   sec(title, meta, t)  → the one section head: a .t-l title, a .t-xs count/meta, an optional qi
+//   pips(n, max)         → ●●●○○ skill/level/stock pips (cls 'red' for danger)
+// Buttons: plain <button>; small ones are <button class="mini"> (tone: urgent), a quiet text link is
+// <button class="mini link">. Nothing else: no per-screen chip, tag, header or help-mark styles.
+// Type scale: .t-xl (screen titles) .t-l (section heads) .t-m (body) .t-s (secondary) .t-xs (meta). Floor 13px.
 
 const escAttr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -31,6 +36,14 @@ function hashStr(s: string): string {
 
 export const chip = (icon: string, text: string | number, tipHtml = '', cls = '') =>
   `<span class="chip ${cls}"${tip(tipHtml)}>${icon ? ico(icon) : ''}<b>${text}</b></span>`;
+
+export const tag = (text: string, tipHtml = '', cls = '') => `<span class="tag ${cls}"${tip(tipHtml)}>${text}</span>`;
+
+export const qi = (tipHtml: string) => `<span class="qi"${tip(tipHtml)} aria-label="About this">i</span>`;
+
+/** A section head: title, then a dim count or note, then (optionally) the qi with the sentence. */
+export const sec = (title: string, meta: string | number = '', tipHtml = '', cls = '') =>
+  `<div class="sechead ${cls}"><span class="t-l">${title}</span>${meta !== '' ? `<span class="t-xs">${meta}</span>` : ''}${tipHtml ? qi(tipHtml) : ''}</div>`;
 
 export const pips = (n: number, max = 10, cls = '') => {
   const f = Math.max(0, Math.min(max, Math.round(n)));

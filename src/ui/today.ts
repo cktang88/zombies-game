@@ -219,7 +219,7 @@ export function todayHtml(duskKey: string): string {
   return `<div class="today" role="list" aria-label="Today">
     <span class="td-h t-l"${tip('What needs doing before dusk, most urgent first. Click one to go there.')}>Today${left ? ` <b>${left}</b>` : ''}</span>
     ${items}${ready}
-    ${early ? `<button class="mini td-all" data-act="revealall"${tip('New screens open over the first days. Show them all now.')}>show everything</button>` : ''}
+    ${early ? `<button class="mini link td-all" data-act="revealall"${tip('New screens open over the first days. Show them all now.')}>show everything</button>` : ''}
   </div>`;
 }
 

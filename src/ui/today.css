@@ -20,8 +20,7 @@
 .today .td.done .td-t { text-decoration: line-through; text-decoration-color: rgba(232, 220, 192, .5); }
 .today .td.new { border-style: dashed; }
 .today .td.ready { background: linear-gradient(rgba(255, 190, 140, .07), rgba(0, 0, 0, .2)), #4a2a20; border-color: #8a5a3e; color: #f2e6c8; padding: 6px 14px; }
-.today .td-all { margin-left: auto; font-size: 13px; color: var(--dim); background: transparent; border-color: transparent; box-shadow: none; text-decoration: underline dotted; }
-.today .td-all:hover { color: #e8dcc0; }
+.today .td-all { margin-left: auto; }
 
 /* the attention dot: a small yellow disc on the top-right corner */
 .adot, [data-dot]::after {

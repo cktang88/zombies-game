@@ -46,7 +46,7 @@ const JOBS: { id: JobId; label: string; hint: string }[] = [
   { id: 'rest', label: 'Rest', hint: 'Recover. The whole day off.' },
 ];
 
-import { tip, ico, fold, chip, pips } from './kit';
+import { tip, ico, fold, chip, pips, sec } from './kit';
 import './survivor.css';
 
 // What a job is likely to yield today for this survivor (mirrors sim/day.ts resolveDayWork).
@@ -131,7 +131,7 @@ const moodTone = (s: Survivor) => (s.mood > 50 ? 'hi' : s.mood > breakThresholds
 /** icon with a word that shows only while the icon art is missing (survivor.css hides .fb once it loads) */
 const icoFb = (id: string, word: string, cls = 'sm') => `${ico(id, '', cls)}<span class="fb">${esc(word)}</span>`;
 const stChip = (st: string, text: string, tipHtml: string, cls = '') =>
-  `<span class="chip sv-chip ${cls}"${tip(tipHtml)}>${ico('st_' + st, '', 'sm')}<b>${text}</b></span>`;
+  `<span class="chip ${cls}"${tip(tipHtml)}>${ico('st_' + st, '', 'sm')}<b>${text}</b></span>`;
 
 function moodTip(s: Survivor, n = 6) {
   const th = breakThresholds(s);
@@ -141,7 +141,7 @@ function moodTip(s: Survivor, n = 6) {
 /** mood as one coloured number; the reasons are in its tooltip */
 function moodChip(s: Survivor) {
   const up = s.mood > 50;
-  return `<span class="chip sv-chip sv-mood ${moodTone(s)}"${tip(moodTip(s))}>${ico(up ? 'st_mood_up' : 'st_mood_down', '', 'sm')}<b>${Math.round(s.mood)}</b></span>`;
+  return `<span class="chip sv-mood ${moodTone(s)}"${tip(moodTip(s))}>${ico(up ? 'st_mood_up' : 'st_mood_down', '', 'sm')}<b>${Math.round(s.mood)}</b></span>`;
 }
 
 function moodBar(s: Survivor) {
@@ -248,7 +248,7 @@ function hoursBar(s: Survivor) {
   const short = s.job === 'rest' ? (away ? `run ${clockLabel(avail)}` : 'rest') : `${h}h`;
   return `<div class="hours sv-hours" aria-label="Day plan for ${esc(first(s))}">
     <div class="hstrip"${tip(`${label}<br>${legend}`)}>${cells.join('')}</div>
-    <span class="hlabel t-s ${noSearch ? 'bad' : ''}">${short}</span>${can ? `<button class="mini hb" data-act="hrs" data-d="-1" data-id="${s.id}" aria-label="Fewer hours" ${h <= 1 ? 'disabled' : ''}>−</button><button class="mini hb" data-act="hrs" data-d="1" data-id="${s.id}" aria-label="More hours" ${h >= avail ? 'disabled' : ''}>+</button>` : ''}
+    <span class="hlabel t-s ${noSearch ? 'bad' : ''}">${short}</span>${can ? `<button class="mini" data-act="hrs" data-d="-1" data-id="${s.id}" aria-label="Fewer hours" ${h <= 1 ? 'disabled' : ''}>−</button><button class="mini" data-act="hrs" data-d="1" data-id="${s.id}" aria-label="More hours" ${h >= avail ? 'disabled' : ''}>+</button>` : ''}
   </div>`;
 }
 
@@ -261,7 +261,7 @@ function skillPip(s: Survivor, k: SkillId) {
 function skillsMini(s: Survivor) {
   const top = topSkills(s, 2).map((k) => skillPip(s, k));
   const heavy = s.training?.heavy ?? 0;
-  const at = (st: string, word: string, v: number, t: string) => `<span class="chip sv-chip sv-attr"${tip(t)}>${icoFb(st, word)}<b>${v}</b></span>`;
+  const at = (st: string, word: string, v: number, t: string) => `<span class="chip sv-attr"${tip(t)}>${icoFb(st, word)}<b>${v}</b></span>`;
   const attrs = [
     at('st_courage', 'nerve', attr(s, 'courage'), `<b>Courage ${attr(s, 'courage')}</b><br>Nerve on the wall: holds when it breaks.`),
     at('st_grit', 'grit', attr(s, 'grit'), `<b>Grit ${attr(s, 'grit')}</b><br>Shrugs off fatigue and pain.`),
@@ -294,7 +294,7 @@ function survivorCard(s: Survivor, dots: Set<string> = new Set()) {
   return `<div class="card surv sv-card ${stale ? 'stale' : ''}" data-id="${s.id}"${dots.has(`surv:${s.id}`) ? ' data-dot' : ''}>
     ${portraitImg(s.sprite, `portrait${s.isLeader ? ' lead' : ''}`)}
     <div class="body">
-      <div class="name"><a data-act="detail" data-id="${s.id}">${esc(displayName(s))}</a> <span class="age t-xs">${s.age}</span>${s.perkOffers?.length ? `<a class="tag sv-perknew" data-act="detail" data-id="${s.id}"${tip(`<b>New perk</b><br>${esc(progressName(s.perkOffers[0].skill))} reached ${s.perkOffers[0].tier}: pick one on the sheet.`)}>${ico('st_perk', '', 'sm')}perk</a>` : ''}${stale ? `<span class="tag carried"${tip("Yesterday's job carried over. Change it, or press Keep to confirm.")}>same?</span>` : ''}</div>
+      <div class="name"><a data-act="detail" data-id="${s.id}">${esc(displayName(s))}</a> <span class="age t-xs">${s.age}</span>${s.perkOffers?.length ? `<a class="tag warn" data-act="detail" data-id="${s.id}"${tip(`<b>New perk</b><br>${esc(progressName(s.perkOffers[0].skill))} reached ${s.perkOffers[0].tier}: pick one on the sheet.`)}>${ico('st_perk', '', 'sm')}perk</a>` : ''}${stale ? `<span class="tag carried"${tip("Yesterday's job carried over. Change it, or press Keep to confirm.")}>same?</span>` : ''}</div>
       <div class="sv-state">${moodChip(s)}${statusTags(s)}</div>
       <div class="row sv-jobrow">
         <span class="sv-job"${tip(jobTip)}>${ico('job_' + s.job, '', '')}</span>
@@ -312,8 +312,8 @@ function survivorCard(s: Survivor, dots: Set<string> = new Set()) {
         </select>
         ${ammoSelect(G.weapons.find((x) => x.uid === s.weapon), true)}
         ${meleeSelect(s)}
-        ${hp ? `<span class="chip sv-chip"${tip(`<b>${esc(CLASS_NAMES[hp.cls])} ${hp.v}</b><br>${esc(first(s))}'s proficiency (0–10). Grows with drill and use.`)}><b>${esc(CLASS_SHORT[hp.cls])} ${hp.v}</b></span>` : ''}
-        <span class="chip sv-chip"${tip('<b>Aim on the wall</b><br>Shooting, traits, arm wounds, mood and rest.')}><b>aim ${Math.round(aimFactor(s) * 100)}</b></span>
+        ${hp ? `<span class="chip"${tip(`<b>${esc(CLASS_NAMES[hp.cls])} ${hp.v}</b><br>${esc(first(s))}'s proficiency (0–10). Grows with drill and use.`)}><b>${esc(CLASS_SHORT[hp.cls])} ${hp.v}</b></span>` : ''}
+        <span class="chip"${tip('<b>Aim on the wall</b><br>Shooting, traits, arm wounds, mood and rest.')}><b>aim ${Math.round(aimFactor(s) * 100)}</b></span>
         ${s.armor ? `<button class="mini" data-act="unarmor" data-id="${s.id}"${tip('Mill-plate vest: wounds 30% lighter. Click to take it off.')}>vest ✓</button>` : (G.flags.armorStock as number) > 0 ? `<button class="mini" data-act="armor" data-id="${s.id}"${tip('Give a mill-plate vest: wounds 30% lighter.')}>+ vest</button>` : ''}
       </div>`, { id: `sv-more-${s.id}`, cls: 'sv-more' })}
     </div>
@@ -338,7 +338,7 @@ function perksHtml(s: Survivor) {
   if (!kept.length && !offers.length) return '';
   const body = `${offers.map((o) => `<div class="sv-offer"><div class="t-xs">${esc(progressName(o.skill))} ${o.tier} · choose one</div>
       <div class="sv-offers">${o.options.map((id) => `<button class="sv-perkbtn" data-act="perk" data-id="${s.id}" data-perk="${id}"><b class="t-m">${esc(PERKS[id].name)}</b><span class="t-s">${esc(PERKS[id].desc)}</span></button>`).join('')}</div></div>`).join('')}
-    ${kept.length ? `<div class="sv-chips">${kept.map((id) => `<span class="chip sv-chip"${tip(`<b>${esc(PERKS[id].name)}</b> · ${esc(progressName(PERKS[id].skill))} ${PERKS[id].tier}<br>${esc(PERKS[id].desc)}`)}>${ico('st_perk', '', 'sm')}<b>${esc(PERKS[id].name)}</b></span>`).join('')}</div>` : ''}`;
+    ${kept.length ? `<div class="sv-chips">${kept.map((id) => `<span class="chip"${tip(`<b>${esc(PERKS[id].name)}</b> · ${esc(progressName(PERKS[id].skill))} ${PERKS[id].tier}<br>${esc(PERKS[id].desc)}`)}>${ico('st_perk', '', 'sm')}<b>${esc(PERKS[id].name)}</b></span>`).join('')}</div>` : ''}`;
   const head = `<span class="t-l">Perks</span>${offers.length ? `<span class="sv-meta sv-hot">${ico('st_perk', '', 'sm')}${offers.length} to choose</span>` : `<span class="sv-meta">${kept.length}</span>`}`;
   // an open offer always shows (no remembered state); kept perks remember the reader's choice
   return offers.length ? fold(head, body, { open: true, cls: 'sv-fold sv-perks' }) : fold(head, body, { id: 'sv-perks', open: false, cls: 'sv-fold' });
@@ -358,7 +358,7 @@ function detailHtml(s: Survivor) {
   const mp = (p: { label: string; v: number }) => `<div class="mp ${p.v >= 0 ? 'pos' : 'neg'}"><span>${esc(p.label)}</span><b>${signed(p.v)}</b></div>`;
 
   const traits = fold(`<span class="t-l">Traits</span><span class="sv-meta">${s.traits.map((t) => esc(TRAITS[t].name)).join(' · ')}</span>`,
-    `<div class="sv-chips">${s.traits.map((t) => `<span class="chip sv-chip"${tip(`<b>${esc(TRAITS[t].name)}</b><br>${esc(TRAITS[t].desc)}`)}>${ico('st_trait', '', 'sm')}<b>${esc(TRAITS[t].name)}</b></span>`).join('')}</div>`,
+    `<div class="sv-chips">${s.traits.map((t) => `<span class="chip"${tip(`<b>${esc(TRAITS[t].name)}</b><br>${esc(TRAITS[t].desc)}`)}>${ico('st_trait', '', 'sm')}<b>${esc(TRAITS[t].name)}</b></span>`).join('')}</div>`,
     { id: 'sv-traits', open: true, cls: 'sv-fold' });
 
   const skills = fold(`<span class="t-l">Skills</span><span class="sv-meta">best ${esc(SKILL_NAMES[best])} ${s.skills[best]}</span>`,
@@ -367,7 +367,7 @@ function detailHtml(s: Survivor) {
     ${progRow(s, 'courage', ATTR_NAMES.courage, 'st_courage')}${progRow(s, 'grit', ATTR_NAMES.grit, 'st_grit')}
     ${heavy > 0 || emplacements().length ? progRow(s, 'heavy', progressName('heavy'), 'st_wall') : ''}
     <div class="t-xs sv-sub">Guns</div>
-    <div class="sv-chips">${WEAPON_CLASSES.map((c) => `<span class="chip sv-chip sv-gun ${prof(s, c) >= 5 ? 'good' : prof(s, c) <= 1 ? 'lo' : ''}"${tip(`<b>${esc(CLASS_NAMES[c])} ${prof(s, c)}</b><br>${Math.round(xpProgress(s, `prof_${c}`) * 100)}% to the next`)}><b>${esc(CLASS_SHORT[c])} ${prof(s, c)}</b></span>`).join('')}</div>`,
+    <div class="sv-chips">${WEAPON_CLASSES.map((c) => `<span class="chip sv-gun ${prof(s, c) >= 5 ? 'good' : prof(s, c) <= 1 ? 'lo' : ''}"${tip(`<b>${esc(CLASS_NAMES[c])} ${prof(s, c)}</b><br>${Math.round(xpProgress(s, `prof_${c}`) * 100)}% to the next`)}><b>${esc(CLASS_SHORT[c])} ${prof(s, c)}</b></span>`).join('')}</div>`,
     { id: 'sv-skills', open: true, cls: 'sv-fold' });
 
   const mood = fold(`<span class="t-l">Mood</span><span class="sv-meta"><b class="sv-big ${moodTone(s)}">${Math.round(s.mood)}</b> ${esc(moodWord(s.mood))}</span>`,
@@ -378,7 +378,7 @@ function detailHtml(s: Survivor) {
 
   const body = fold(`<span class="t-l">Body</span><span class="sv-meta">${wounds.length ? `${ico('st_wound', '', 'sm')}${wounds.length} wound${wounds.length > 1 ? 's' : ''}` : 'whole'} · rested ${Math.round(s.rest * 100)}%</span>`,
     `${wounds.map((w) => `<div class="sv-wound"${tip(`<b>${esc(woundLabel(w))}</b><br>${Math.round(w.severity * 100)}% severe${w.tended ? ' · tended' : ' · untended'}${w.bleeding ? '<br>Bleeding.' : ''}${w.infected ? (w.kind === 'bite' ? '<br>The Turn.' : '<br>Infected.') : ''}`)}>${ico(w.kind === 'bite' ? 'st_bite' : 'st_wound', '', 'sm')}<span>${esc(woundLabel(w))}</span><span class="xpbar sev"><i style="width:${w.severity * 100}%"></i></span>${w.bleeding ? '<b class="neg">bleeding</b>' : ''}${w.infected ? `<b class="neg">${w.kind === 'bite' ? 'the Turn' : 'infected'}</b>` : ''}${w.tended ? '<span class="t-xs">tended</span>' : ''}</div>`).join('') || '<div class="t-s">Whole, for now.</div>'}
-    ${s.scars.length ? `<div class="sv-chips">${s.scars.map((sc) => `<span class="chip sv-chip"${tip('<b>Scar</b><br>For good.')}><b>${esc(sc.label)}</b></span>`).join('')}</div>` : ''}
+    ${s.scars.length ? `<div class="sv-chips">${s.scars.map((sc) => `<span class="chip"${tip('<b>Scar</b><br>For good.')}><b>${esc(sc.label)}</b></span>`).join('')}</div>` : ''}
     <div class="sv-chips">${stChip('tired', `${Math.round(s.rest * 100)}%`, `<b>Rested ${Math.round(s.rest * 100)}%</b>`)}${stChip('hungry', `${Math.round(s.hunger * 100)}%`, `<b>Fed ${Math.round(s.hunger * 100)}%</b>`)}</div>`,
     { id: 'sv-body', open: wounds.length > 0, cls: 'sv-fold' });
 
@@ -441,7 +441,7 @@ function runHtml() {
   const site = SITES.find((x) => x.id === runSite)!;
   const st = siteStock(runSite);
   const why = `${esc(first(l))} goes on foot, alone or with one other. Far sites eat the day in walking; leaving late leaves less light on the street. ${runLeave ? `${esc(first(l))} works ${runLeave}h at home first.` : `${esc(first(l))} does no other work today.`}`;
-  return `<div class="run"><div class="t-l rhead"${tip(why)}>Lead a run <span class="qm">?</span></div>
+  return `<div class="run">${sec('Lead a run', '', why, 'rhead')}
     ${siteButton(runSite, 'run', streetH)}
     <div class="runrow">
       <select data-act="runleave" aria-label="Leave at">${[0, 2, 4, 6].map((h) => `<option value="${h}" ${h === runLeave ? 'selected' : ''}>leave ${clockLabel(h)}</option>`).join('')}</select>
@@ -701,7 +701,7 @@ function armoryHtml() {
       <div class="gmeta">${condBar(k.cond)}<span class="t-xs">${holder ? esc(first(holder)) : 'rack'}</span></div></div>`;
   }).join('');
   return `<div class="armory">
-  <div class="sechead"><span class="t-l">Guns</span> <span class="t-xs">${guns.length}</span><span class="qm"${tip('Weapons on the rack can be picked up on the wall at night with [Q] or number keys. Worn guns jam. On a daylight run, [T] switches bullet type. Hover a gun for its numbers; click a slot to fit an attachment.')}>?</span></div>
+  <div class="sechead"><span class="t-l">Guns</span> <span class="t-xs">${guns.length}</span><span class="qi"${tip('Weapons on the rack can be picked up on the wall at night with [Q] or number keys. Worn guns jam. On a daylight run, [T] switches bullet type. Hover a gun for its numbers; click a slot to fit an attachment.')}>i</span></div>
   <div class="gungrid">${gunCards}</div>
   ${fold(`<span class="t-l">Ammunition</span> <span class="t-xs">${total} rounds</span>`, stock, { id: 'arm-ammo' })}
   ${fold(`<span class="t-l">Spare attachments</span> <span class="t-xs">${spare.length}</span>`, `<div class="chips">${spare.length ? spare.map((m) => `<span class="chip"${tip(`<b>${esc(MODS[m.def].name)}</b><br>${esc(MODS[m.def].niche)}`)}><img src="${spriteUrl(MODS[m.def].icon)}" alt=""><b>${esc(MODS[m.def].name.toLowerCase())}</b>${m.cond < 1 ? ` ${Math.round(m.cond * 100)}%` : ''}</span>`).join('') : '<span class="t-s">None. Craft them or find them on runs.</span>'}</div>`, { id: 'arm-mods' })}
@@ -758,7 +758,7 @@ function ammoChip() {
   const total = rows.reduce((a, r) => a + r.n, 0);
   const keys = rows.flatMap((r) => r.types).join(' ');
   const t = `<b>Ammunition</b><br>${rows.filter((r) => r.n).map((r) => `${esc(r.c.name.replace(/\s*\(.*\)/, ''))}: ${r.types.filter((x) => (G.stores[x] ?? 0) >= 1).map((x) => `${Math.floor(G.stores[x] ?? 0)} ${esc((AMMO_TYPES[x]?.short ?? ammoLabel(x)).toLowerCase())}`).join(' · ')}`).join('<br>')}`;
-  return `<span class="schip ammochip" data-res-group="${keys}"${tip(t)}><img src="${spriteUrl(RES_ICON.light)}" alt="rounds"><span class="n">${total}</span></span>`;
+  return `<span class="chip lg" data-res-group="${keys}"${tip(t)}><img src="${spriteUrl(RES_ICON.light)}" alt="rounds"><span class="n">${total}</span></span>`;
 }
 
 let duskArmed = false; // first dusk press with carried-over plans only highlights them
@@ -795,7 +795,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
       <div class="stores">${STORE_RES.filter((r) => isOpen('stores') || ['food', 'wood', 'scrap', 'fuel'].includes(r) || (r === 'molotov' && G.stores.molotov > 0)).map((r) => {
         const low = (r === 'food' && G.stores.food < eat * 2) || (r === 'fuel' && G.stores.fuel < heat);
         const use = r === 'food' ? `Eat ${eat}/day.` : r === 'fuel' && heat ? `The stove burns ${heat} tonight.` : '';
-        return `<span data-res="${r}" class="schip ${low ? 'low' : ''}"${tip(`<b>${RES_LABEL[r]}</b><br>${STORE_USE[r] ?? ''}${use ? `<br>${use}` : ''}`)}><img src="${spriteUrl(RES_ICON[r])}" alt="${RES_LABEL[r]}"><span class="n">${Math.floor(G.stores[r] ?? 0)}</span>${r === 'fuel' && heat ? `<em class="heat">−${heat}</em>` : r === 'food' && eat ? `<em>−${eat}</em>` : ''}</span>`;
+        return `<span data-res="${r}" class="chip lg ${low ? 'warn' : ''}"${tip(`<b>${RES_LABEL[r]}</b><br>${STORE_USE[r] ?? ''}${use ? `<br>${use}` : ''}`)}><img src="${spriteUrl(RES_ICON[r])}" alt="${RES_LABEL[r]}"><span class="n">${Math.floor(G.stores[r] ?? 0)}</span>${r === 'fuel' && heat ? `<em>−${heat}</em>` : r === 'food' && eat ? `<em>−${eat}</em>` : ''}</span>`;
       }).join('')}${ammoChip()}</div>
     </header>
     ${strip}
