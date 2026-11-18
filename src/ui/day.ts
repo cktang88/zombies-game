@@ -30,7 +30,7 @@ import { hintHtml, markHintTarget, nextHint, skipHints } from './onboarding';
 import { threadsHtml } from '../sim/threads';
 import { calendarHtml } from '../sim/calendar';
 import { juiceAfterRender } from './juice';
-import { siteFindsText } from './sites';
+import { siteFinds, siteFindsText, FIND_ICON, FIND_LABEL, type Find } from './sites';
 import { sysTip, sysLine } from './guide';
 import { todayHtml, dotKeys, pickTodo, applyFlash, markSeen, setRevealAll, isOpen, revealNote, runOpen, JOB_REVEAL, type RevealId } from './today';
 
@@ -177,6 +177,55 @@ function siteStock(id: string) {
   return { left, max: site.stock, pips: `${'▮'.repeat(left)}${'▯'.repeat(Math.max(0, site.stock - left))}` };
 }
 
+// ---- where to scavenge: a picture of what each place gives, not a lottery
+let sitePick: string | null = null; // survivor id or 'run' while the picker is open
+/** What the house is short of today (the picker marks the places that have it). */
+function needs(): Set<Find> {
+  const n = new Set<Find>();
+  const eat = Math.max(1, living().length);
+  if (G.stores.food / eat < 3) n.add('food');
+  if (G.stores.fuel < heatNeed() + 2) n.add('fuel');
+  if (living().some((x) => x.wounds.length)) n.add('meds');
+  if (G.fort.hp < G.fort.maxHp * 0.6 && G.stores.wood < 8) n.add('wood');
+  const shortGun = living().some((x) => { const w = G.weapons.find((g) => g.uid === x.weapon); const a = w ? (w.ammoType ?? WEAPONS[w.def]?.ammo) : null; return a && a !== 'scrap' && (G.stores[a as Res] ?? 0) < 25; });
+  if (shortGun) n.add('ammo');
+  return n;
+}
+const findIcons = (x: (typeof SITES)[number], n = 3) => siteFinds(x).filter((f) => f.level !== 'a little').slice(0, n)
+  .map((f) => `<span class="sfind ${f.level === 'lots' ? 'lots' : ''}"${tip(`<b>${FIND_LABEL[f.k]}</b>: ${f.level}`)}>${ico(FIND_ICON[f.k])}</span>`).join('');
+function siteButton(id: string, who: string, hours: number) {
+  const x = SITES.find((q) => q.id === id)!;
+  const st = siteStock(id);
+  return `<button class="sitebtn" data-act="sitepick" data-id="${who}"${tip(`<b>${esc(x.name)}</b>: ${esc(siteFindsText(x))}<br>Click to choose where to go.`)}>
+    <span class="sname">${esc(x.name)}</span><span class="sfinds">${findIcons(x)}</span>
+    <span class="smeta t-xs">${travelHours(id)}h walk · ${hours}h ${who === 'run' ? 'street' : 'search'} · ${riskWord(x.risk)} risk · ${st.left <= 0 ? 'picked clean' : `${st.left}/${st.max} left`}</span></button>`;
+}
+function sitePickerHtml(who: string) {
+  const sv = who === 'run' ? null : byId(who);
+  const cur = sv ? survivorSite(sv) : runSite;
+  const need = needs();
+  const sites = SITES.filter((x) => x.minDay <= G.day);
+  const cards = sites.map((x) => {
+    const st = siteStock(x.id);
+    const fs = siteFinds(x).filter((f) => f.level !== 'a little');
+    const hit = fs.filter((f) => need.has(f.k));
+    const walk = travelHours(x.id);
+    const left = sv ? Math.max(0, jobHours(sv) - walk) : Math.max(0, DAY_HOURS - runLeave - walk);
+    return `<button class="sitecard ${x.id === cur ? 'on' : ''} ${st.left <= 0 ? 'clean' : ''} ${hit.length ? 'need' : ''}" data-act="sitechoose" data-id="${x.id}">
+      ${hit.length ? `<span class="sneed">you need ${hit.map((f) => FIND_LABEL[f.k]).join(', ')}</span>` : ''}
+      <span class="sname t-l">${esc(x.name)}</span>
+      <span class="sfinds big">${fs.slice(0, 4).map((f) => `<span class="sfind ${f.level === 'lots' ? 'lots' : ''}">${ico(FIND_ICON[f.k])}<i>${FIND_LABEL[f.k]}${f.level === 'lots' ? ' ++' : ''}</i></span>`).join('') || '<i class="dim">odds and ends</i>'}</span>
+      <span class="smeta">${chip('st_time', `${walk}h walk`, 'Walking there and back')}${chip('st_danger', riskWord(x.risk), 'Chance of a bite or a fight', x.risk >= 0.4 ? 'warn' : '')}<span class="chip"${tip(st.left <= 0 ? 'Picked clean: little left to find' : `${st.left} of ${st.max} hauls left. Every trip strips it.`)}>${pips(st.left, st.max)}</span></span>
+      <span class="sdesc t-s">${left}h ${sv ? 'searching' : 'on the street'} · ${esc(x.desc)}</span>
+    </button>`;
+  }).join('');
+  return `<div class="modal sitepick" role="dialog" aria-label="Where to go">
+    <button class="close" data-act="closesite" aria-label="Close">×</button>
+    <h2 class="t-xl">Where ${sv ? `does ${esc(first(sv))} scavenge` : 'does the run go'}?</h2>
+    <p class="t-s dim">Every place has its own stock. Big icons: lots of it. Far places eat the day in walking.</p>
+    <div class="sitegrid">${cards}</div></div>`;
+}
+
 // 07:00–17:00 strip: walking (hatched), working, resting, away on a run. The words are in its tooltip.
 function hoursBar(s: Survivor) {
   const avail = hoursAvailable(s);
@@ -252,12 +301,7 @@ function survivorCard(s: Survivor, dots: Set<string> = new Set()) {
         <select data-act="job" data-id="${s.id}" ${disabled ? 'disabled' : ''} aria-label="Job for ${esc(first(s))}"${sysTip('job_' + s.job)}>
           ${JOBS.filter((j) => j.id === s.job || !JOB_REVEAL[j.id] || isOpen(JOB_REVEAL[j.id]!)).map((j) => `<option value="${j.id}" ${s.job === j.id ? 'selected' : ''} title="${esc(sysLine('job_' + j.id))}">${j.label} — ${jobOutlook(s, j.id)}</option>`).join('')}
         </select>
-        ${s.job === 'scavenge' ? `<select data-act="site" data-id="${s.id}" aria-label="Where ${esc(first(s))} scavenges">${sites.map((x) => {
-          const xs = siteStock(x.id);
-          const walk = travelHours(x.id);
-          const search = Math.max(0, jobHours(s) - walk);
-          return `<option value="${x.id}" ${site === x.id ? 'selected' : ''}>${x.name}: ${siteFindsText(x)} · ${walk}h walk, ${search}h search · ${xs.left <= 0 ? 'picked clean' : `${xs.left}/${xs.max} left`} · ${riskWord(x.risk)} risk</option>`;
-        }).join('')}</select>` : ''}
+        ${s.job === 'scavenge' ? siteButton(site, s.id, Math.max(0, jobHours(s) - travelHours(site))) : ''}
       </div>
       ${st ? `<div class="stock"${tip(`<b>${esc(SITES.find((x) => x.id === site)?.name ?? '')}</b>: ${st.left <= 0 ? 'picked clean' : `${st.left} of ${st.max} left`}<br>Every trip strips it further. ${Math.round(searchFactor(searchHours(s)) * 100)}% of a full search today.`)}>${st.pips}</div>` : ''}
       ${fold(gearPeek(s), `${moodBar(s)}${skillsMini(s)}${disabled ? '' : hoursBar(s)}
@@ -398,10 +442,7 @@ function runHtml() {
   const st = siteStock(runSite);
   const why = `${esc(first(l))} goes on foot, alone or with one other. Far sites eat the day in walking; leaving late leaves less light on the street. ${runLeave ? `${esc(first(l))} works ${runLeave}h at home first.` : `${esc(first(l))} does no other work today.`}`;
   return `<div class="run"><div class="t-l rhead"${tip(why)}>Lead a run <span class="qm">?</span></div>
-    <select data-act="runsite" aria-label="Run destination">${sites.map((x) => {
-      const s2 = siteStock(x.id);
-      return `<option value="${x.id}" ${x.id === runSite ? 'selected' : ''}>${x.name}: ${siteFindsText(x)} · ${travelHours(x.id)}h · ${s2.left <= 0 ? 'picked clean' : `${s2.left}/${s2.max}`} · ${riskWord(x.risk)} risk</option>`;
-    }).join('')}</select>
+    ${siteButton(runSite, 'run', streetH)}
     <div class="runrow">
       <select data-act="runleave" aria-label="Leave at">${[0, 2, 4, 6].map((h) => `<option value="${h}" ${h === runLeave ? 'selected' : ''}>leave ${clockLabel(h)}</option>`).join('')}</select>
       ${runMateSelect(l)}
@@ -782,6 +823,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
     </main>
     ${G.pendingEvent ? eventModal(G.pendingEvent) : ''}
     ${sel ? `<div class="overlay" data-act="closedetail">${detailHtml(sel)}</div>` : ''}
+    ${sitePick && !sel ? `<div class="overlay" data-act="closesite">${sitePickerHtml(sitePick)}</div>` : ''}
     ${G.pendingEvent || sel ? '' : hintHtml()}
   </div>`;
   if (!G.pendingEvent && !sel) markHintTarget(root);
@@ -863,6 +905,17 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
     if (!el) return;
     const act = el.dataset.act;
     if (el.tagName === 'SELECT') return;
+    if (act === 'sitepick') { sitePick = el.dataset.id!; sfx.ui('paper'); h.rerender(); return; }
+    if (act === 'closesite') {
+      if (e.target !== el && el.classList.contains('overlay')) return;
+      sitePick = null; h.rerender(); return;
+    }
+    if (act === 'sitechoose') {
+      const id = el.dataset.id!;
+      if (sitePick === 'run') runSite = id;
+      else { const sv = byId(sitePick ?? ''); if (sv) { G.flags[`site_${sv.id}`] = id; confirmPlan(sv); } }
+      sitePick = null; sfx.ui(); h.rerender(); return;
+    }
     if (act === 'closedetail') {
       if (e.target !== el && el.classList.contains('overlay')) return;
       detail = null;
@@ -974,9 +1027,9 @@ function installKeys() {
     if (e.key === 'Escape' && !e.defaultPrevented && G.phase === 'day') {
       const ovs = document.querySelectorAll('.overlay');
       const top = ovs[ovs.length - 1] as HTMLElement | undefined;
-      if (top?.dataset.act === 'closedetail' && top.closest('.day')) {
+      if ((top?.dataset.act === 'closedetail' || top?.dataset.act === 'closesite') && top.closest('.day')) {
         e.preventDefault();
-        (top.querySelector('.close[data-act=closedetail]') as HTMLElement | null)?.click();
+        (top.querySelector(`.close[data-act=${top.dataset.act}]`) as HTMLElement | null)?.click();
         return;
       }
     }
