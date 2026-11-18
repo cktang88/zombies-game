@@ -1,6 +1,6 @@
 // Balance harness for the night fight. See docs/balance.md.
 //   npx tsx tools/balance.ts [--quick] [--md out.md] [--only base|patch]
-//   npx tsx tools/balance.ts --cell <gun[/ammo]> [patch] [--z <zombie>]   (debug one gun)
+//   npx tsx tools/balance.ts --cell <gun> [patch] [--z <zombie>]   (debug one gun)
 //
 // Monte-Carlo model of src/night/battle.ts geometry (muzzle, hitbox(), castShot(), damage(),
 // bloom) driven by the fireProfile() contract in src/data/weapons.ts, for every gun x ammo type x
@@ -314,13 +314,10 @@ function profiles(): Prof[] {
   for (const id of WEAPON_ORDER) {
     const def = WEAPONS[id];
     if (!def || def.explosive) continue; // area weapons (launchers) need a blast model: not simulated
-    const list: (Res | null)[] = [def.ammo];
-    for (const a of list) {
-      const w: WeaponItem = { uid: 'b', def: id, cond: 1, kills: 0 };
-      const p = fireProfile(w);
-      p.switchTime += SWITCH_PATCH[id] ?? 0;
-      out.push({ key: a && a !== def.ammo ? `${id}/${AMMO_TYPES[a]?.short ?? a}` : id, gun: id, ammo: a, p, def });
-    }
+    // one pool per gun now (docs/research/19-simplify-resources.md): one profile each, no alternate loads
+    const p = fireProfile({ uid: 'b', def: id, cond: 1, kills: 0 } as WeaponItem);
+    p.switchTime += SWITCH_PATCH[id] ?? 0;
+    out.push({ key: id, gun: id, ammo: def.ammo ?? null, p, def });
   }
   return out;
 }
@@ -385,7 +382,7 @@ interface Analysis { md: string; checks: { name: string; pass: boolean; detail: 
 function analyse(rows: Row[], label: string): Analysis {
   const L: string[] = [];
   const checks: Analysis['checks'] = [];
-  const defaults = rows.filter((r) => !r.pr.key.includes('/'));
+  const defaults = rows;
   // ---- table A: per gun/ammo summary at skill 5
   L.push(`### ${label}: per gun & ammo (skill 5, Sleeper unless noted)`, '');
   L.push('| gun/ammo | dmg×pel | 1st pull %Slp | RPK spray@400 | RPK tap@400 | tap÷spray@700 | TTK s (comp.) | HS% (comp.) | Deer TTK | Deputy RPK (comp.) | Ferry TTK | wave k/min | wall-s/Slp | cost/kill | noise/kill |');
@@ -509,14 +506,6 @@ function analyse(rows: Row[], label: string): Analysis {
     spongeRows.push(`${z} ${f1(m)}s (${f1(m / ZOMBIES[z].cost)} s/threat-pt)`);
   }
   L.push(`### ${label}: median competent TTK per Turned (s, and s per threat point)`, '', spongeRows.join(' · '), '');
-  // ammo types that are traps: alt ammo worse than default on every zombie (TTK and cost)
-  const traps: string[] = [];
-  for (const r of rows.filter((x) => x.pr.key.includes('/'))) {
-    const base = rows.find((x) => x.pr.key === x.pr.gun && x.pr.gun === r.pr.gun)!;
-    const better = zids.some((z) => competent(r, z).ttk < competent(base, z).ttk * 0.97) || Math.max(r.crowdSpray.kpm, r.crowdTap.kpm) > Math.max(base.crowdSpray.kpm, base.crowdTap.kpm) * 1.03 || competent(r, 'sleeper').wall > competent(base, 'sleeper').wall * 1.1 || (r.pr.p.incendiary && !base.pr.p.incendiary) || r.pr.p.flare;
-    if (!better) traps.push(r.pr.key);
-  }
-  checks.push({ name: 'no trap ammo (alt ammo better than default somewhere)', pass: traps.length === 0, detail: traps.join(', ') || 'none' });
   L.push(`### ${label}: checks`, '');
   for (const c of checks) L.push(`- ${c.pass ? 'PASS' : 'FAIL'} — ${c.name}: ${c.detail}`);
   L.push('');
@@ -650,7 +639,7 @@ function feel(rows: Row[]): string {
   const L: string[] = [];
   L.push('| gun | class | pull dmg (body) | hitstop ms | shake px | recoil kick px | knock px/hit | knock feel |');
   L.push('|---|---|---|---|---|---|---|---|');
-  for (const r of rows.filter((x) => !x.pr.key.includes('/'))) {
+  for (const r of rows) {
     const p = r.pr.p;
     const pull = p.dmg * p.pellets * p.burst;
     // hitstop scales with log of trigger-pull damage relative to a Sleeper, clamped; autos get none per shot
@@ -678,21 +667,19 @@ const WEAPON_PATCH: Record<string, WPatch> = {};
 // extra swing time added on top of fireProfile().switchTime (WeaponDef.switchTime is now real)
 const PATCH_SWITCH: Record<string, number> = {};
 const SWITCH_PATCH: Record<string, number> = {};
-const AMMO_PATCH: Partial<Record<Res, Record<string, number | boolean | string>>> = {};
 // newgame.ts starting stores override (src now starts at 70 pistol rounds; the doc proposed 80)
 const START_PATCH: Partial<Record<Res, number>> = {};
 const START: Partial<Record<Res, number>> = {};
 const ZOMBIE_PATCH: Record<string, Partial<ZombieDef>> = {};
 const RECIPE_PATCH: Record<string, { cost?: Partial<Record<Res, number>>; gives?: Partial<Record<Res, number>>; work?: number }> = {};
 const SITE_PATCH: Record<string, Partial<Record<Res, number>>> = {};
-export const PATCH = { model: PATCH_MODEL, weapons: WEAPON_PATCH, ammo: AMMO_PATCH, zombies: ZOMBIE_PATCH, recipes: RECIPE_PATCH, sites: SITE_PATCH };
+export const PATCH = { model: PATCH_MODEL, weapons: WEAPON_PATCH, zombies: ZOMBIE_PATCH, recipes: RECIPE_PATCH, sites: SITE_PATCH };
 
 function applyPatch() {
   M = { ...BASE_MODEL, ...PATCH_MODEL };
   Object.assign(SWITCH_PATCH, PATCH_SWITCH);
   Object.assign(START, START_PATCH);
   for (const [id, p] of Object.entries(WEAPON_PATCH)) if (WEAPONS[id]) Object.assign(WEAPONS[id], p);
-  for (const [id, p] of Object.entries(AMMO_PATCH)) { const a = AMMO_TYPES[id as Res]; if (a && p) Object.assign(a, p); }
   for (const [id, p] of Object.entries(ZOMBIE_PATCH)) if (ZOMBIES[id]) Object.assign(ZOMBIES[id], p);
   for (const [id, p] of Object.entries(RECIPE_PATCH)) { const r = RECIPES.find((x) => x.id === id); if (r) { if (p.cost) r.cost = p.cost; if (p.gives) r.gives = p.gives; if (p.work) r.work = p.work; } }
   for (const [id, p] of Object.entries(SITE_PATCH)) { const st = SITES.find((x) => x.id === id); if (st) Object.assign(st.loot, p); }
@@ -702,7 +689,6 @@ function patchList(): string {
   let n = 0;
   const base = snapshot.weapons;
   for (const [id, p] of Object.entries(WEAPON_PATCH)) for (const [k, v] of Object.entries(p)) { n++; L.push(`- weapons.ts \`${id}.${k}\`: ${String((base[id] as unknown as Record<string, unknown>)?.[k] ?? '—')} → **${String(v)}**`); }
-  for (const [id, p] of Object.entries(AMMO_PATCH)) for (const [k, v] of Object.entries(p ?? {})) { n++; L.push(`- weapons.ts AMMO_TYPES \`${id}.${k}\`: ${String((snapshot.ammo[id] as Record<string, unknown> | undefined)?.[k] ?? '—')} → **${String(v)}**`); }
   for (const [id, p] of Object.entries(ZOMBIE_PATCH)) for (const [k, v] of Object.entries(p)) { n++; L.push(`- zombies.ts \`${id}.${k}\`: ${String((snapshot.zombies[id] as unknown as Record<string, unknown>)?.[k] ?? '—')} → **${String(v)}**`); }
   for (const [id, p] of Object.entries(RECIPE_PATCH)) { n++; L.push(`- world.ts recipe \`${id}\`: ${JSON.stringify(snapshot.recipes[id])} → **${JSON.stringify({ ...snapshot.recipes[id], ...p })}**`); }
   for (const [k, v] of Object.entries(START_PATCH)) { n++; L.push(`- newgame.ts starting stores \`${k}\`: 130 → **${v}**`); }
@@ -713,7 +699,6 @@ function patchList(): string {
 }
 const snapshot = {
   weapons: JSON.parse(JSON.stringify(WEAPONS)) as Record<string, WeaponDef>,
-  ammo: JSON.parse(JSON.stringify(AMMO_TYPES)) as Record<string, unknown>,
   zombies: JSON.parse(JSON.stringify(ZOMBIES)) as Record<string, ZombieDef>,
   sites: Object.fromEntries(SITES.map((x) => [x.id, { ...x.loot }])) as Record<string, Partial<Record<Res, number>>>,
   recipes: Object.fromEntries(RECIPES.map((r) => [r.id, { cost: r.cost, gives: r.gives, work: r.work }])) as Record<string, { cost: unknown; gives: unknown; work: number }>,
