@@ -193,6 +193,9 @@ export interface Guard {
   flashAng?: number;
   flashSize?: number;
   kick?: number; // px the sprite is shoved back at full recoil
+  // ---- label (drawGuardLabels): when their pain last went up, so the name shows for a moment ----
+  labelPain?: number;
+  hurtAt?: number;
 }
 /** Where a guard stands (research 05 §5). */
 export type Post = 'step' | 'roof' | 'loop' | 'runner';
@@ -3660,11 +3663,13 @@ export class Battle {
   }
 
   /**
-   * Names, health bars, status and moodles for every standing guard, drawn after the actors (so
+   * Names, health bars, status and moodles, drawn after the actors (so
    * no body or prop covers them) and de-collided: each label is pushed up until it clears the
    * ones already placed. When the line is crowded a label shrinks to the name and the bar; the
    * status line and the moodle come back for the leader, the selected guard and the one under
    * the mouse, or when there is room for them.
+   * Only for the leader, the guard under the mouse or selected, and one something is happening to
+   * (17c): six names over the firestep all night was noise.
    */
   drawGuardLabels(c: CanvasRenderingContext2D) {
     const gs = this.guards.filter((g) => !g.s.dead && !g.fled && !g.downed);
@@ -3679,6 +3684,14 @@ export class Battle {
     const focus = (g: Guard) => g === hovered || g === sel;
     for (const g of gs) {
       const isP = g === this.player;
+      // a name only for you, the one looked at or selected, or one something is happening to:
+      // just hurt, badly hurt, hauling someone, panicking or raging, bitten
+      const pn = pain(g.s);
+      if (g.labelPain !== undefined && pn > g.labelPain + 0.01) g.hurtAt = this.t;
+      g.labelPain = pn;
+      const show = isP || g === hovered || g === sel || !!g.dragging || !!g.mode || (isBitten(g.s) && !g.s.wounds.some((w) => w.hidden))
+        || pn / DOWN_PAIN > 0.5 || (g.hurtAt !== undefined && this.t - g.hurtAt < 3);
+      if (!show) continue;
       c.font = '13px "Special Elite", monospace';
       const name = first(g.s) + (isP ? ' ◆' : '');
       const lines: Lab['lines'] = [];
