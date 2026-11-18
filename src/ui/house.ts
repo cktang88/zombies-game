@@ -126,7 +126,7 @@ const jobOpen = (j: JobId) => !JOB_REVEAL[j] || isOpen(JOB_REVEAL[j]!);
 // ---------------------------------------------------------------- focus and camera
 type Focus = { kind: 'st'; id: StationId } | { kind: 'sv'; id: string } | null;
 let focus: Focus = null;
-let noteOpen = true;
+let noteOpen: boolean | null = null; // first render: open, except on a phone
 let lastCam: Cam | null = null;
 let lastFocusKey = '';
 const scrollMem = new Map<string, number>();
@@ -137,7 +137,7 @@ interface Cam { k: number; tx: number; ty: number }
 const phone = () => window.innerWidth < 760;
 function baseCam(ww: number, wh: number): Cam {
   if (phone()) {
-    const k = Math.min(0.75, Math.max(0.42, (wh - 70) / H));
+    const k = Math.min(0.95, Math.max(0.42, (wh - 70) / H));
     return { k, tx: 0, ty: Math.max(0, (wh - 70 - H * k) / 2) };
   }
   const k = Math.min(ww / W, (wh - 64) / H);
@@ -489,6 +489,7 @@ export function houseHtml(ctx: HouseCtx): string {
   const people = living().filter((s) => placed.has(s.id));
   const away = living().filter((s) => !placed.has(s.id));
   const cam = lastCam ?? { k: 0.8, tx: 0, ty: 0 };
+  if (noteOpen === null) noteOpen = !phone();
   const left = ctx.today.match(/class="td (?!done)/g)?.length ?? 0;
   return `<div class="hv-wrap ${focus ? 'zoomed' : ''} ${focus?.kind === 'sv' ? 'picking' : ''}">
     <div class="hv-scroll"><div class="hv-sizer">
@@ -518,6 +519,13 @@ export function mountHouse(root: HTMLElement) {
   const scene = wrap.querySelector('.hv-scene') as HTMLElement;
   const ww = wrap.clientWidth, wh = wrap.clientHeight;
   const { cam, side, pw } = camFor(focus, ww, wh);
+  const panel = wrap.querySelector('.hv-panel') as HTMLElement | null;
+  const fr = focusRect(focus);
+  if (phone() && panel && fr) {
+    // the sheet covers the bottom: lift the scene so what it is about shows above it
+    const free = wh - 64 - panel.offsetHeight;
+    cam.ty = Math.max(free - H * cam.k, Math.min(0, free / 2 - (fr.y + fr.h / 2) * cam.k));
+  }
   const key = focusKey(focus);
   const moved = !!lastCam && key !== lastFocusKey;
   const scroller = wrap.querySelector('.hv-scroll') as HTMLElement;
@@ -533,7 +541,6 @@ export function mountHouse(root: HTMLElement) {
   lastCam = cam;
   lastFocusKey = key;
   // the panel beside what it is about
-  const panel = wrap.querySelector('.hv-panel') as HTMLElement | null;
   if (panel) {
     if (!phone()) {
       panel.style.width = `${pw}px`;

@@ -123,6 +123,7 @@ p.hv-here { display: block; }
   .hv-scroll { overflow-x: auto; overflow-y: hidden; bottom: 64px; }
   .hv-sizer { width: auto; }
   .hv-note { top: 8px; right: 8px; left: 8px; width: auto; transform: none; max-height: 55%; }
+  .hv-scene.anim { transition: transform .3s ease-out; }
   .hv-note:not(.open) { left: auto; }
   .hv-panel { left: 0 !important; right: 0 !important; top: auto !important; bottom: 64px; width: auto !important; max-height: 62%; border-left: 0; border-right: 0; }
   .hv-hint { display: none; }
