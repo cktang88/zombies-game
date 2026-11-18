@@ -286,7 +286,7 @@ export const INCIDENTS: Incident[] = [
     make: () => ({
       id: 'rations', title: 'The pantry',
       text: `${G.stores.food} portions in the pantry and ${pop()} people in the house. Somebody has to say it.`,
-      choices: [{ label: 'Half rations', hint: 'Everyone eats half: food lasts twice as long, but nobody gets their strength back and mood drops 5 a day.', fx: { mood: -5 }, effect: 'half' }, { label: 'Full rations, scavenge harder', effect: 'full' }],
+      choices: [{ label: 'Half rations', hint: 'Everyone eats half: food lasts twice as long, but hunger falls a little every day (people starve slowly) and mood drops 5 a day.', fx: { mood: -5 }, effect: 'half' }, { label: 'Full rations, scavenge harder', effect: 'full' }],
     }),
     resolve: (c) => {
       G.flags.rations = c === 0 ? 'half' : 'full';

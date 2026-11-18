@@ -195,11 +195,11 @@ function build(): SystemDef[] {
     {
       id: 'upkeep', group: 'day', icon: 'food', name: 'Food & heat',
       what: 'Every mouth eats; frost nights burn fuel in the stove.',
-      spend: [{ i: 'food', n: 1, t: 'per person per day' }, { i: 'fuel', n: '1/3', t: 'per person on frost nights' }],
+      spend: [{ i: 'food', n: 1, t: 'per person per day (big eaters 1.6, ascetics 0.7)' }, { i: 'fuel', n: '1/3', t: 'per person on frost nights' }],
       get: [{ i: 'st_hungry', t: 'no hunger, no freezing' }],
       tradeoff: 'Every new face is a gun on the wall and a mouth to feed.',
       when: 'Watch the −N under food and fuel at the top.',
-      key: 'Half rations: ×0.5 food, −5 mood',
+      key: 'Half rations: ×0.5 food, −5 mood, hunger falls',
     },
     {
       id: 'chores', group: 'day', icon: 'cloth', name: 'Chores',

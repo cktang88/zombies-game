@@ -9,7 +9,7 @@ import type { Survivor, Res, SkillId } from '../types';
 import { G } from '../state';
 import { living, first, canWork, isBitten, computeMood } from '../sim/survivors';
 import { RECIPES, RES_LABEL } from '../data/world';
-import { buildingLevel, onRunToday, ranToday, heatNeed, planConfirmed, breakChance, counselPlan, COUNSEL_BREAK } from '../sim/day';
+import { buildingLevel, onRunToday, ranToday, heatNeed, planConfirmed, dailyFood, halfRations, breakChance, counselPlan, COUNSEL_BREAK } from '../sim/day';
 import { calendar } from '../sim/calendar';
 import { fireProfile, ammoLabel } from '../data/weapons';
 import { canFight } from '../sim/survivors';
@@ -123,7 +123,7 @@ function ammoRuns(): { res: Res; have: number; guns: number }[] {
 function openTodos(): Todo[] {
   const t: Todo[] = [];
   const people = living();
-  const eat = people.length;
+  const eat = dailyFood(people);
   const frac = G.fort.hp / G.fort.maxHp;
   const ws = isOpen('workshop');
 
@@ -139,8 +139,12 @@ function openTodos(): Todo[] {
     const days = Math.floor(G.stores.food / eat);
     if (days < 3 && !on('farm')) {
       const s = bestFor('farm');
-      t.push({ id: 'food', icon: 'food', text: days < 1 ? 'Find food · none left' : `Find food · ${days}d left`, tip: `Everyone eats one a day.${s ? ` Put ${first(s)} on Food, or send a scavenger.` : ''}`, sel: jobSel(s), dot: s ? `surv:${s.id}` : undefined, prio: days < 2 ? 12 : 30 });
+      t.push({ id: 'food', icon: 'food', text: days < 1 ? 'Find food · none left' : `Find food · ${days}d left`, tip: `The house eats ${+eat.toFixed(1)} a day.${s ? ` Put ${first(s)} on Food, or send a scavenger.` : ''}`, sel: jobSel(s), dot: s ? `surv:${s.id}` : undefined, prio: days < 2 ? 12 : 30 });
     }
+  }
+  if (halfRations() && people.length) {
+    const full = dailyFood(people) * 2;
+    t.push({ id: 'rations', icon: 'st_hungry', text: 'Half rations · hunger falls', tip: `Everyone eats half (${+eat.toFixed(1)} a day, not ${+full.toFixed(1)}), so hunger falls a little every day: people starve slowly, and mood is −5. Click: back to full rations (${Math.floor(G.stores.food / full)} days of food at full).`, act: 'fullrations', prio: G.stores.food >= full * 4 ? 24 : 33 });
   }
   const tonight = calendar(3);
   const red = (k: string) => k === 'tide' || k === 'crossing' || k === 'band' || k === 'horde' || k === 'raiders';

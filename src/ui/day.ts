@@ -11,14 +11,14 @@ import { SITES, BUILDINGS, RECIPES, RES_LABEL, RES_ICON, FORT_CAP } from '../dat
 import {
   living, displayName, first, moodBreakdown, computeMood, moodWord, breakThresholds, pain, woundLabel, byId, canWork, canFight,
   isBitten, SKILLS, aimFactor, skillOf, workMult, attr, ATTRS, ATTR_NAMES, level, xpProgress, topSkills, heldProf, prof,
-  WEAPON_CLASSES, CLASS_SHORT, progressName, choosePerk, their, them, type ProgressKey,
+  WEAPON_CLASSES, CLASS_SHORT, progressName, choosePerk, their, them, hasTrait, type ProgressKey,
 } from '../sim/survivors';
 import { PERKS } from '../data/perks';
 import { TRAPS } from '../data/traps';
 import {
   buildingLevel, queueRecipe, WEATHER_LABEL, DAY_HOURS, DEFAULT_HOURS, jobHours, setJobHours, hoursAvailable, travelHours, survivorSite,
   searchHours, searchFactor, planConfirmed, confirmPlan, ranToday, onRunToday, runDaylightFor, prepareRun, clockLabel, heatNeed,
-  drillPlan, emplacements, tomorrowTeaser, oilGuns, clearPile, choreHand, craftPoints, repairPlan, radioWorkOf, fortCount, fortRoom, breakChance, counselPlan, COUNSEL_BREAK,
+  drillPlan, emplacements, tomorrowTeaser, oilGuns, clearPile, choreHand, craftPoints, repairPlan, radioWorkOf, dailyFood, halfRations, fortCount, fortRoom, breakChance, counselPlan, COUNSEL_BREAK,
 } from '../sim/day';
 import { calendar } from '../sim/calendar';
 import { armEveryone, wallLine, gunRounds, ammoUse, SHOTS_PER_GUN_NIGHT } from '../sim/readiness';
@@ -198,7 +198,7 @@ let sitePick: string | null = null; // survivor id or 'run' while the picker is 
 /** What the house is short of today (the picker marks the places that have it). */
 function needs(): Set<Find> {
   const n = new Set<Find>();
-  const eat = Math.max(1, living().length);
+  const eat = Math.max(1, dailyFood());
   if (G.stores.food / eat < 3) n.add('food');
   if (G.stores.fuel < heatNeed() + 2) n.add('fuel');
   if (living().some((x) => x.wounds.length)) n.add('meds');
@@ -835,12 +835,21 @@ function armAll(report: string[]) {
   sfx.ui('stamp');
 }
 
+/** The food chip's tip: real use (appetites, rations), days left, and what half rations do. */
+function foodTip(eat: number, half: boolean) {
+  const big = living().filter((s) => hasTrait(s, 'bigeater')).map(first), light = living().filter((s) => hasTrait(s, 'ascetic')).map(first);
+  const days = eat > 0 ? Math.floor(G.stores.food / eat) : 0;
+  return `Eat ${eat}/day: ${days} day${days === 1 ? '' : 's'} in the pantry.${big.length ? ` Big eaters (×1.6): ${esc(big.join(', '))}.` : ''}${light.length ? ` Light eaters (×0.7): ${esc(light.join(', '))}.` : ''}${half ? '<br><b>Half rations:</b> half the food, but hunger falls a little every day (people starve slowly) and mood −5.' : ''}`;
+}
+
 let duskArmed = false; // first dusk press with carried-over plans only highlights them
 
 export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
   const ice = ICE_DAY - G.day;
   const fc = forecast();
-  const eat = living().length;
+  const eat = dailyFood();
+  const eatN = +eat.toFixed(1);
+  const half = halfRations();
   const sel = detail ? byId(detail) : null;
   const stale = living().filter((s) => canWork(s) && G.day > 1 && !planConfirmed(s) && !(onRunToday(s)));
   const heat = heatNeed();
@@ -868,14 +877,14 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
       <div class="hbtns"><button class="icon" data-act="help" aria-label="Help and controls" title="Help and controls">?</button><button class="icon" data-act="settings" aria-label="Settings" title="Settings">⚙</button></div>
       <div class="stores">${STORE_RES.filter((r) => isOpen('stores') || ['food', 'wood', 'scrap', 'fuel'].includes(r) || (r === 'molotov' && G.stores.molotov > 0)).map((r) => {
         const low = (r === 'food' && G.stores.food < eat * 2) || (r === 'fuel' && G.stores.fuel < heat);
-        const use = r === 'food' ? `Eat ${eat}/day.` : r === 'fuel' && heat ? `The stove burns ${heat} tonight.` : '';
-        return `<span data-res="${r}" class="chip lg ${low ? 'warn' : ''}"${tip(`<b>${RES_LABEL[r]}</b><br>${STORE_USE[r] ?? ''}${use ? `<br>${use}` : ''}`)}><img src="${spriteUrl(RES_ICON[r])}" alt="${RES_LABEL[r]}"><span class="n">${Math.floor(G.stores[r] ?? 0)}</span>${r === 'fuel' && heat ? `<em>−${heat}</em>` : r === 'food' && eat ? `<em>−${eat}</em>` : ''}</span>`;
+        const use = r === 'food' ? foodTip(eatN, half) : r === 'fuel' && heat ? `The stove burns ${heat} tonight.` : '';
+        return `<span data-res="${r}" class="chip lg ${low ? 'warn' : ''}"${tip(`<b>${RES_LABEL[r]}</b><br>${STORE_USE[r] ?? ''}${use ? `<br>${use}` : ''}`)}><img src="${spriteUrl(RES_ICON[r])}" alt="${RES_LABEL[r]}"><span class="n">${Math.floor(G.stores[r] ?? 0)}</span>${r === 'fuel' && heat ? `<em>−${heat}</em>` : r === 'food' && eat ? `<em>−${eatN}${half ? ' · ½' : ''}</em>` : ''}</span>`;
       }).join('')}${ammoChip()}</div>
     </header>
     ${strip}
     <main>
       <section class="people">
-        <h2 class="t-l">The house <span class="t-xs"${tip(`${living().length} living · eat ${eat}/day${G.flags.dog ? ` · and ${esc(String(G.flags.dog))}` : ''} · daylight ${clockLabel(0)}–${clockLabel(DAY_HOURS)}`)}>${living().length} living${G.flags.dog ? ' + dog' : ''}</span>${stale.length ? `<button class="mini keepbtn ${duskArmed ? 'flash' : ''}" data-act="keepplans"${tip(`Yesterday's job${stale.length === 1 ? '' : 's'} carried over (the gold edge): ${esc(stale.map(first).join(', '))}. Keep, or change each one.`)}>Keep ${stale.length === 1 ? `${esc(first(stale[0]))}'s job` : `all ${stale.length}`} ✓</button>` : ''}</h2>
+        <h2 class="t-l">The house <span class="t-xs"${tip(`${living().length} living · eat ${eatN}/day${G.flags.dog ? ` · and ${esc(String(G.flags.dog))}` : ''} · daylight ${clockLabel(0)}–${clockLabel(DAY_HOURS)}`)}>${living().length} living${G.flags.dog ? ' + dog' : ''}</span>${stale.length ? `<button class="mini keepbtn ${duskArmed ? 'flash' : ''}" data-act="keepplans"${tip(`Yesterday's job${stale.length === 1 ? '' : 's'} carried over (the gold edge): ${esc(stale.map(first).join(', '))}. Keep, or change each one.`)}>Keep ${stale.length === 1 ? `${esc(first(stale[0]))}'s job` : `all ${stale.length}`} ✓</button>` : ''}</h2>
         ${living().map((s) => survivorCard(s, dots)).join('')}
       </section>
       <section class="center">
@@ -1005,6 +1014,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
       const go = pickTodo(+el.dataset.i!);
       if (go.tab) { tab = go.tab; markSeen(go.tab); }
       if (go.act === 'armall') armAll(report);
+      else if (go.act === 'fullrations') { G.flags.rations = 'full'; report.unshift('Back to full rations.'); sfx.ui('stamp'); }
       else if (go.act?.startsWith('counsel:')) {
         const c = byId(go.act.slice(8));
         if (c) { c.job = 'counsel'; confirmPlan(c); sfx.ui('stamp'); }

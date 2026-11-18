@@ -530,6 +530,19 @@ export function queueRecipe(id: string) {
   return true;
 }
 
+// ---------- eating ----------
+export const halfRations = () => G.flags.rations === 'half';
+/** On half rations a meal restores this much of a full one; with the daily −0.25 that is −0.04 a day: a slow starve. */
+export const HALF_FED = 0.6;
+/** What one person eats at dawn: big eaters 1.6, ascetics 0.7, halved on half rations. */
+export function foodNeed(s: Survivor) {
+  return (hasTrait(s, 'bigeater') ? 1.6 : hasTrait(s, 'ascetic') ? 0.7 : 1) * (halfRations() ? 0.5 : 1);
+}
+/** The house's food use at dawn (the food chip's −N). */
+export function dailyFood(people = living()) {
+  return people.reduce((a, s) => a + foodNeed(s), 0);
+}
+
 // ---------- the dawn tick: needs, healing, infection, social, breaks ----------
 export function dawnTick(): string[] {
   const out: string[] = [];
@@ -538,10 +551,10 @@ export function dawnTick(): string[] {
   const people = living();
   // eating
   for (const s of people) {
-    const need = (hasTrait(s, 'bigeater') ? 1.6 : hasTrait(s, 'ascetic') ? 0.7 : 1) * (G.flags.rations === 'half' ? 0.5 : 1);
+    const need = foodNeed(s);
     if (G.stores.food >= need) {
       add('food', -need);
-      s.hunger = Math.min(1, s.hunger + 0.35 * (G.flags.rations === 'half' ? 0.6 : 1));
+      s.hunger = Math.min(1, s.hunger + 0.35 * (halfRations() ? HALF_FED : 1));
     } else {
       s.hunger = Math.max(0, s.hunger - 0.35);
     }
@@ -551,7 +564,7 @@ export function dawnTick(): string[] {
       wound(s, 'bruise', 0.2, 'torso');
       out.push(`${first(s)} is starving.`);
     }
-    if (G.flags.rations === 'half') addThought(s, { id: 'rations', label: 'Half rations', mood: -5, days: 1 }, 1);
+    if (halfRations()) addThought(s, { id: 'rations', label: 'Half rations', mood: -5, days: 1 }, 1);
     // drink
     if (hasTrait(s, 'drinker')) {
       delete G.flags[`drank_${s.id}`];
