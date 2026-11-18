@@ -216,10 +216,8 @@ export function resolveDayWork(): string[] {
     }
     const m = workMult(s);
     const f = hours / DEFAULT_HOURS; // yields are tuned for an 8-hour day
-    const gritF = 1.16 - attr(s, 'grit') * 0.04; // grit 4 = x1, grit 10 = x0.76
-    if (s.job !== 'rest') s.rest = Math.max(0, Math.min(1, s.rest - (DRAIN[s.job] ?? 0.03) * gritF * perkMul(s, 'drain') * hours + FREE_HOUR_REST * free));
-    if (hours > 8) gainXp(s, 'grit', (hours - 8) * 8);
-    if (hours > 0 && s.rest < 0.3) gainXp(s, 'grit', 10);
+    const toughF = hasTrait(s, 'tough') ? 0.75 : 1; // Tough: long shifts tire them a quarter less
+    if (s.job !== 'rest') s.rest = Math.max(0, Math.min(1, s.rest - (DRAIN[s.job] ?? 0.03) * toughF * perkMul(s, 'drain') * hours + FREE_HOUR_REST * free));
     if (s.job !== 'rest' && hours <= 0) continue;
     switch (s.job) {
       case 'repair': {

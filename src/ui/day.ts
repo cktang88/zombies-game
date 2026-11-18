@@ -277,7 +277,6 @@ function skillsMini(s: Survivor) {
   const at = (st: string, word: string, v: number, t: string) => `<span class="chip sv-attr"${tip(t)}>${icoFb(st, word)}<b>${v}</b></span>`;
   const attrs = [
     at('st_courage', 'nerve', attr(s, 'courage'), `<b>Courage ${attr(s, 'courage')}</b><br>Nerve on the wall: holds when it breaks.`),
-    at('st_grit', 'grit', attr(s, 'grit'), `<b>Grit ${attr(s, 'grit')}</b><br>Shrugs off fatigue and pain.`),
   ];
   return `<div class="skmini sv-skills">${top.join('')}<span class="sv-attrs">${attrs.join('')}</span></div>`;
 }
@@ -372,7 +371,7 @@ function detailHtml(s: Survivor) {
   const skills = fold(`<span class="t-l">Skills</span><span class="sv-meta">best ${esc(SKILL_NAMES[best])} ${s.skills[best]}</span>`,
     `${SKILLS.map((k) => progRow(s, k, SKILL_NAMES[k], 'skill_' + k, s.passions.includes(k))).join('')}
     <div class="t-xs sv-sub">Nerve and body</div>
-    ${progRow(s, 'courage', ATTR_NAMES.courage, 'st_courage')}${progRow(s, 'grit', ATTR_NAMES.grit, 'st_grit')}
+    ${progRow(s, 'courage', ATTR_NAMES.courage, 'st_courage')}
     ${s.fav ? `<div class="sv-chips"><span class="chip sv-gun good"${tip(`<b>Favourite: ${esc(CLASS_NAMES[s.fav])}</b><br>Handles one as if Shooting were ${FAV_BONUS} higher (${handling(s, s.fav)}): faster reloads, fewer jams${s.fav === 'heavy' ? ', a steadier gun nest' : ''}. Give them one.`)}><b>★ ${esc(CLASS_SHORT[s.fav])}</b></span></div>` : ''}`,
     { id: 'sv-skills', open: true, cls: 'sv-fold' });
 

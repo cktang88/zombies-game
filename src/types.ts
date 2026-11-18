@@ -83,8 +83,8 @@ export interface Survivor {
   // xp toward the NEXT level of a skill, attribute or training track, keyed by ProgressKey.
   // Level-up when xp >= 100 * (level + 1). Award it with gainXp(), never write it directly.
   xp?: Partial<Record<string, number>>;
-  // Attributes 0..10: courage (night nerve, panic/flee resistance) and grit (fatigue and pain tolerance).
-  attrs?: { courage: number; grit: number };
+  // Courage 0..10: night nerve, panic and flight. The one attribute. (Old saves also carry grit: the Tough trait now.)
+  attrs?: { courage: number; grit?: number };
   // Favourite kind of gun: handles it as if Shooting were FAV_BONUS higher (src/sim/survivors.ts handling()).
   // Fixed at arrival (the backstory's gun, else a roll). The one choice it makes: who gets which gun.
   fav?: WeaponClass;

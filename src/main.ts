@@ -170,7 +170,6 @@ function afterRun(r: ExpeditionResult) {
   const l = G.survivors.find((s) => s.isLeader && !s.dead);
   if (l && !r.died) {
     gainXp(l, 'scavenging', 40);
-    gainXp(l, 'grit', 15);
   }
   lines.push(...drainLevelUps());
   report.push(...lines);

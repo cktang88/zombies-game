@@ -119,6 +119,7 @@ export function makeSurvivor(opts: Partial<Survivor> = {}): Survivor {
     s.attrs = baseAttrs(s);
     for (const [k, v] of Object.entries(before.attrs ?? {})) s.attrs[k as AttrId] = Math.min(10, s.attrs[k as AttrId] + (v ?? 0));
   }
+  if (before.trait && !opts.traits && TRAITS[before.trait] && !s.traits.includes(before.trait) && !s.traits.some((x) => TRAITS[x].conflicts?.includes(before.trait!))) s.traits.push(before.trait);
   s.xp ??= {};
   if (!s.child && !opts.fav) s.fav = rollFav(before.prof);
   s.base ??= { ...s.skills, ...s.attrs };
@@ -198,7 +199,7 @@ export function moodWord(m: number) {
 export function workMult(s: Survivor) {
   let m = 1;
   for (const t of s.traits) m += TRAITS[t].work ?? 0;
-  m -= Math.min(0.7, pain(s) * 0.4 * (1.16 - attr(s, 'grit') * 0.04));
+  m -= Math.min(0.7, pain(s) * 0.4 * (hasTrait(s, 'tough') ? 0.6 : 1)); // Tough: pain slows them less
   for (const sc of s.scars) m += sc.work ?? 0;
   if (s.rest < 0.25) m -= 0.2;
   if (s.hunger < 0.15) m -= 0.25;
@@ -212,17 +213,17 @@ export function skillOf(s: Survivor, k: SkillId) {
 
 // ---------- progression: skills and courage grow with use ----------
 // API for other systems (night/combat, events, runs):
-//   gainXp(s, key, amount)  award XP. key = any SkillId, 'courage' or 'grit'.
+//   gainXp(s, key, amount)  award XP. key = any SkillId or 'courage'.
 //                           Passions give x1.5, Grim/Idle x0.8. Level-up at xp >= 100 * (level + 1), max 10.
 //                           Negative amounts shake it (a trauma can drop courage a level).
 //                           Level-ups queue a line for the report; drainLevelUps() collects them.
 //   level(s, key)           the current 0..10 value of a skill or attribute.
-//   attr(s, 'courage'|'grit')  attribute 0..10 (defaults derived from traits for old saves).
+//   attr(s, 'courage')      the one attribute, 0..10 (defaults derived from traits for old saves).
 //   xpProgress(s, key)      0..1 toward the next level (for UI bars).
 // Rough XP scale: a working hour ~ 6 XP, a kill ~ 3 shooting XP, a held hard night ~ 15-30 courage XP.
-// Effects here: grit cuts fatigue drain (sim/day.ts) and the pain penalty in workMult; courage shifts break
-// thresholds. Combat reads attr(s, 'courage') for panic/flee and handling(s, cls) for guns and gun nests.
-export type AttrId = 'courage' | 'grit';
+// Effects here: courage shifts break thresholds (the Tough trait took over grit: less fatigue and pain).
+// Combat reads attr(s, 'courage') for panic/flee and handling(s, cls) for guns and gun nests.
+export type AttrId = 'courage';
 export type ProgressKey = SkillId | AttrId;
 export const WEAPON_CLASSES: WeaponClass[] = ['handgun', 'smg', 'shotgun', 'rifle', 'assault', 'marksman', 'heavy', 'launcher', 'bow', 'improvised', 'melee'];
 // short labels for cards and sheets (data/weapons.ts CLASS_NAMES has the long ones)
@@ -248,36 +249,32 @@ function rollFav(grants: Partial<Record<WeaponClass, number>> = {}): WeaponClass
   if (top) return top[0] as WeaponClass;
   return R.weighted(FAV_ROLL, (x) => x[1])![0];
 }
-export const ATTRS: AttrId[] = ['courage', 'grit'];
-export const ATTR_NAMES: Record<AttrId, string> = { courage: 'Courage', grit: 'Grit' };
+export const ATTRS: AttrId[] = ['courage'];
+export const ATTR_NAMES: Record<AttrId, string> = { courage: 'Courage' };
 const levelUps: string[] = [];
 
-export function baseAttrs(s: Pick<Survivor, 'traits'>, roll = true): { courage: number; grit: number } {
-  let courage = roll ? R.gauss(4, 1.4) : 4, grit = roll ? R.gauss(4, 1.4) : 4;
+export function baseAttrs(s: Pick<Survivor, 'traits'>, roll = true): { courage: number } {
+  let courage = roll ? R.gauss(4, 1.4) : 4;
   const t = (id: string) => s.traits.includes(id);
   if (t('ironwill')) courage += 2;
   if (t('coward')) courage -= 3;
   if (t('fragile')) courage -= 1;
   if (t('jittery')) courage -= 1;
   if (t('bloodlust')) courage += 1;
-  if (t('tough')) grit += 2;
-  if (t('slowhealer')) grit -= 1;
-  if (t('hardworker')) grit += 1;
-  if (t('lazy')) grit -= 1;
   const c = (v: number) => Math.max(0, Math.min(10, Math.round(v)));
-  return { courage: c(courage), grit: c(grit) };
+  return { courage: c(courage) };
 }
 export function attr(s: Survivor, a: AttrId): number {
   if (!s.attrs) s.attrs = baseAttrs(s, false);
   return s.attrs[a] ?? 4;
 }
 export function level(s: Survivor, k: ProgressKey): number {
-  if (k === 'courage' || k === 'grit') return attr(s, k);
+  if (k === 'courage') return attr(s, k);
   return s.skills[k as SkillId] ?? 0;
 }
 function setLevel(s: Survivor, k: ProgressKey, v: number) {
   v = Math.max(0, Math.min(10, v));
-  if (k === 'courage' || k === 'grit') {
+  if (k === 'courage') {
     attr(s, k);
     s.attrs![k] = v;
   } else s.skills[k as SkillId] = v;
@@ -291,9 +288,9 @@ export function xpProgress(s: Survivor, k: ProgressKey) {
 }
 const LEVEL_WORDS: Partial<Record<ProgressKey, string>> = {
   shooting: 'shooting straight', building: 'building', medicine: 'stitching', scavenging: 'finding things',
-  social: 'talking to people', courage: 'standing the wall', grit: 'going without',
+  social: 'talking to people', courage: 'standing the wall',
 };
-const KEY_NAMES: Record<string, string> = { courage: 'Courage', grit: 'Grit' };
+const KEY_NAMES: Record<string, string> = { courage: 'Courage' };
 export function progressName(k: ProgressKey) {
   return KEY_NAMES[k] ?? k[0].toUpperCase() + k.slice(1);
 }
@@ -359,6 +356,13 @@ export function migrateSurvivor(s: Survivor) {
     if (s.xp) for (const k of Object.keys(s.xp)) if (k.startsWith('prof_') || k === 'heavy') delete s.xp[k];
   }
   if (!s.child && !s.fav) s.fav = rollFav();
+  // grit was an attribute: the grittiest become Tough
+  if (s.attrs && s.attrs.grit != null) {
+    if (s.attrs.grit >= 7 && !s.traits.includes('tough')) s.traits.push('tough');
+    delete s.attrs.grit;
+    if (s.xp) delete s.xp.grit;
+    if (s.base) delete s.base.grit;
+  }
   if (old.farming != null) { delete old.farming; if (s.xp) delete s.xp.farming; if (s.base) delete s.base.farming; }
   for (const k of SKILLS) old[k] ??= 0;
   s.passions = [...new Set(s.passions.map((p) => ({ crafting: 'building', psych: 'social' } as Record<string, SkillId>)[p] ?? p).filter((p) => (SKILLS as string[]).includes(p)))] as SkillId[];

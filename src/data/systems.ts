@@ -178,7 +178,7 @@ function build(): SystemDef[] {
       id: 'hours', group: 'day', icon: 'st_time', name: 'Work hours',
       what: `How much of the ${DAY_HOURS}-hour day each person works.`,
       spend: [tired, { i: 'st_mood_down', t: '"worked to the bone" when ragged' }],
-      get: [{ i: 'st_xp', t: 'yield scales with hours' }, { i: 'st_grit', t: `grit XP past ${DEFAULT_HOURS}h` }],
+      get: [{ i: 'st_xp', t: 'yield scales with hours' }, { i: 'st_grit', t: 'Tough: a quarter less tired' }],
       tradeoff: 'Long days yield more, but tired people break and work worse.',
       when: `Default ${DEFAULT_HOURS}h; cut it for anyone running ragged.`,
       key: `${DEFAULT_HOURS} of ${DAY_HOURS} hours`,

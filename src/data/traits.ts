@@ -30,7 +30,7 @@ export const TRAITS: Record<string, TraitDef> = {
   abrasive: { id: 'abrasive', name: 'Abrasive', desc: 'Says what he thinks. Starts fights.', conflicts: ['kind'] },
   bloodlust: { id: 'bloodlust', name: 'Bloodthirsty', desc: 'Feels better after a kill-heavy night. Unsettles others.', conflicts: ['gentle'] },
   gentle: { id: 'gentle', name: 'Gentle', desc: 'Every one of them was somebody. Killing weighs on them.', conflicts: ['bloodlust'] },
-  tough: { id: 'tough', name: 'Tough', desc: 'Takes a beating. Wounds are less severe.', healMul: 1.2 },
+  tough: { id: 'tough', name: 'Tough', desc: 'Wounds land lighter and heal faster; pain and long shifts slow them less. Send them where it hurts.', healMul: 1.2 },
   slowhealer: { id: 'slowhealer', name: 'Slow healer', desc: 'Old or sickly. Wounds heal slowly.', healMul: 0.6 },
   bigeater: { id: 'bigeater', name: 'Big eater', desc: 'Eats for two.', hungerMul: 1.6 },
   ascetic: { id: 'ascetic', name: 'Lean', desc: 'Gets by on little.', hungerMul: 0.7 },
