@@ -532,11 +532,10 @@ function wallHtml() {
     ['icon_mod_flashlight', f.lights, 'Floodlights: better aim, less dark. Burn fuel.'],
     ['icon_nailgun', f.turrets ?? 0, 'Nail turrets: auto-fire from the wall, eat scrap.'],
     ['icon_trap_nails', f.traps, 'Nail-bomb traps: one use each, out in the road.'],
-    ['icon_molotov', G.stores.molotov, 'Firebombs: [F] or right-click at night.'],
   ];
   return `<div class="wall">
     <div class="wallbar"${tip(frac > 0.8 ? 'The wall is sound.' : frac > 0.4 ? 'The wall is chewed. Planks split, the car door hangs.' : 'The wall is barely a wall.')}><div data-tw="wall" style="width:${frac * 100}%"></div><span>${Math.ceil(f.hp)} / ${f.maxHp}</span></div>
-    <div class="chips">${repairers.length ? chip('job_repair', repairers.map(first).join(', '), 'Repairing today') : chip('st_danger', 'no repairs', 'Nobody is assigned to repair it.', 'warn')}${chip('wood', G.stores.wood, 'Timber for repairs')}</div>
+    <div class="chips">${repairers.length ? chip('job_repair', repairers.map(first).join(', '), 'Repairing today') : chip('st_danger', 'no repairs', 'Nobody is assigned to repair it. Repairs use timber (the stores, top).', 'warn')}</div>
     <div class="fortgrid">${fortRow.filter(([, n]) => n > 0 || isOpen('workshop')).map(([icon, n, t]) => `<span class="ftile ${n ? '' : 'none'}"${tip(t)}>${pic(icon)}<b>${n}</b></span>`).join('')}</div>
     ${isOpen('chores') ? revealNote('chores') + choresHtml() : ''}
   </div>`;
