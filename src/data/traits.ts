@@ -16,11 +16,11 @@ export interface TraitDef {
 export const TRAITS: Record<string, TraitDef> = {
   // the wall
   steady: { id: 'steady', name: 'Steady hands', desc: 'Aims true, recoil barely moves them, and they see further into the dark. Give them the best gun and the loophole that matters.', accuracy: 0.12, conflicts: ['coward'] },
-  coward: { id: 'coward', name: 'Coward', desc: 'Breaks sooner and may flee the loophole when the wall goes. Keep them on the firestep.', accuracy: -0.04, breakAt: 6, conflicts: ['steady'] },
+  coward: { id: 'coward', name: 'Coward', desc: 'Breaks sooner and may flee the loophole when the wall goes. Keep them on the firestep.', accuracy: -0.04, breakAt: 6, conflicts: ['steady', 'ironwill'] },
   bloodlust: { id: 'bloodlust', name: 'Bloodthirsty', desc: 'Lifts after a kill-heavy night but may fire on a Hold order. The wall suits them; a quiet post does not.', conflicts: ['gentle'] },
   gentle: { id: 'gentle', name: 'Gentle', desc: 'Every one of them was somebody: kills and cruel choices weigh on them. Keep them off the wall when you can and counsel them after.', conflicts: ['bloodlust'] },
   // the mind
-  ironwill: { id: 'ironwill', name: 'Iron will', desc: 'Hardly ever breaks and holds when the wall buckles. Leave them on the worst post; they are the last to need counsel.', breakAt: -12, conflicts: ['fragile'] },
+  ironwill: { id: 'ironwill', name: 'Iron will', desc: 'Hardly ever breaks and holds when the wall buckles. Leave them on the worst post; they are the last to need counsel.', breakAt: -12, conflicts: ['fragile', 'coward'] },
   fragile: { id: 'fragile', name: 'Fragile', desc: 'Breaks sooner and worse. Counsel them first after a bad night.', breakAt: 10, conflicts: ['ironwill'] },
   drinker: { id: 'drinker', name: 'Drinker', desc: 'Mood falls without a round from the still, and they may binge when they break. Pour one, or counsel them.' },
   // the house
