@@ -277,9 +277,7 @@ const ART: Record<StationId, () => string> = {
     + (G.flags.dog ? img('dog', 352, 560, 84, 'hv-dog') : '')
     + (buildingLevel('still') ? pic('still', 238, 520, 58) : ''),
   rack: () => img('obj_cache', 462, 470, 118),
-  table: () => svg(606, 540, 134, 72, `<rect x="16" y="14" width="102" height="9" fill="#4a3c2c" ${INK}/><path d="M24 23 v46 M110 23 v46" stroke="#2a2119" stroke-width="6"/>
-      <path d="M2 30 v40 M2 40 h14 v30" fill="none" stroke="#3a2f24" stroke-width="5"/><path d="M132 30 v40 M132 40 h-14 v30" fill="none" stroke="#3a2f24" stroke-width="5"/>
-      <rect x="54" y="4" width="22" height="10" fill="#cbbf9f" stroke="#070605" stroke-width="2"/><circle cx="92" cy="9" r="5" fill="#6b5b45" stroke="#070605" stroke-width="2"/>`),
+  table: () => pic('table', 612, 526, 121),
   calendar: () => {
     const c = calendar(7);
     const red = (k: string) => k === 'tide' || k === 'crossing' || k === 'band' || k === 'horde' || k === 'raiders' || k === 'ice';
