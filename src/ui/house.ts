@@ -294,8 +294,7 @@ const ART: Record<StationId, () => string> = {
     + pic('workbench', 1048, 564, 120),
   board: () => pic('noticeboard', 1168, 512, 86),
   wall: () => img('emp_scaffold', 1252, 506, 150, 'hv-back') + img('fort_light', 1232, 430, 58, 'hv-back') + img('barricade', 1262, 450, 196),
-  gate: () => svg(1452, 470, 54, 172, `<path d="M6 0 v172 M48 0 v172" stroke="#1d1813" stroke-width="8"/><g ${INK} stroke-width="2"><rect x="8" y="20" width="38" height="150" fill="#54442f"/></g>
-      <path d="M8 40 L46 120 M8 120 L46 40" stroke="#3a2e20" stroke-width="5"/><path d="M18 20 v150 M28 20 v150 M38 20 v150" stroke="#2a2016" stroke-width="1.5"/><rect x="40" y="88" width="5" height="12" fill="#9a8f7a" stroke="#070605" stroke-width="1"/><path d="M8 60 h38 M8 100 h38 M8 140 h38" stroke="#070605" stroke-width="2"/>`)
+  gate: () => pic('gate', 1450, 482, 109)
     + img('obj_duffel', 1500, 606, 64) + img('obj_sign_stop', 1560, 514, 38),
   graves: () => G.graves.slice(0, 4).map((g, i) => svg(30 + i * 36, 572 - (i % 2) * 6, 30, 70, `<path d="M15 4 v62 M4 20 h22" stroke="#4a4235" stroke-width="6" stroke-linecap="round"/><path d="M15 4 v62 M4 20 h22" stroke="#070605" stroke-width="1.5"/>`)).join('')
     + svg(24, 628, 150, 16, '<ellipse cx="75" cy="10" rx="72" ry="6" fill="#241e18"/>'),
