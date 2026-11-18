@@ -64,6 +64,19 @@ const URL = process.argv[2] ?? 'http://localhost:4192/';
   await page.waitForTimeout(200);
   ok(!(await page.$('.overlay[data-act=closedetail]')), 'B closes the survivor sheet');
 
+  // the house view: A on a place zooms in (focus goes into its panel), B steps back out to the place
+  await page.keyboard.press('l');
+  await page.waitForSelector('.hv-scene');
+  await page.evaluate(() => document.querySelector('[data-hs=wall]').focus());
+  await tap(0);
+  await page.waitForTimeout(200);
+  ok(!!(await page.$('.hv-panel[data-panel=wall]')) && (await page.evaluate(() => !!document.activeElement?.closest('.hv-panel'))), 'A on the wall zooms in, focus in its panel');
+  await tap(1);
+  await page.waitForTimeout(200);
+  ok(!(await page.$('.hv-panel')) && (await page.evaluate(() => document.activeElement?.dataset.hs === 'wall')), 'B steps back out, focus on the wall');
+  await tap(15);
+  ok(await page.evaluate(() => { const a = document.activeElement; return !!a && (a.dataset.hs || a.dataset.sv) && a.dataset.hs !== 'wall'; }), 'D-pad right moves to the next place or person');
+
   // the wall
   await page.evaluate(() => __story.night(3));
   await page.waitForFunction(() => window.__battle && window.__battle.intro <= 0, null, { timeout: 30000 });

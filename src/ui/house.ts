@@ -480,7 +480,7 @@ function panelHtml(ctx: HouseCtx): string {
 
 // ---------------------------------------------------------------- render
 /** Every render of the day screen hands the house its builders (the L key works from the ledger too). */
-export function bindHouse(ctx: HouseCtx) { ctxRef = ctx; }
+export function bindHouse(ctx: HouseCtx) { ctxRef = ctx; installKeys(); }
 export function houseHtml(ctx: HouseCtx): string {
   ctxRef = ctx;
   if (focus?.kind === 'st' && !(ST(focus.id) && stationOpen(ST(focus.id)!))) focus = null;
@@ -552,7 +552,11 @@ export function mountHouse(root: HTMLElement) {
         panel.style.top = `${Math.round(Math.max(10, Math.min(wh - 64 - ph, cy - ph / 2)))}px`;
       }
     }
-    if (moved) panel.classList.add('enter');
+    if (moved) {
+      panel.classList.add('enter');
+      // keyboard and pad: focus goes into the panel (Tab walks it; Esc / B steps back out)
+      (panel.querySelector('.close') as HTMLElement | null)?.focus({ preventScroll: true });
+    }
     const body = panel.querySelector('.hv-pbody') as HTMLElement | null;
     if (body) {
       const k = panel.dataset.panel!;
@@ -566,8 +570,12 @@ export function mountHouse(root: HTMLElement) {
     if (r && moved) scroller.scrollTo({ left: Math.max(0, (r.x + r.w / 2) * cam.k - ww / 2), behavior: reduced() ? 'auto' : 'smooth' });
     scroller.addEventListener('scroll', () => scrollMem.set('wrap', scroller.scrollLeft), { passive: true });
   }
+  // stepping back out: focus returns to the place (or person) it was on
+  if (moved && !focus && backTo) (wrap.querySelector(`[data-hs="${backTo}"], [data-sv="${backTo}"]`) as HTMLElement | null)?.focus({ preventScroll: true });
+  backTo = '';
   mountRigs(wrap);
 }
+let backTo = '';
 const reduced = () => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
 
 // ---------------------------------------------------------------- people as rigs
@@ -634,6 +642,7 @@ function tick(t: number) {
 
 // ---------------------------------------------------------------- input
 function zoomTo(f: Focus) {
+  if (!f && focus) backTo = focus.id;
   focus = f;
   if (f?.kind === 'st') {
     const st = ST(f.id);
@@ -758,6 +767,11 @@ function installOnce(root: HTMLElement) {
     if (s && d.over && assign(s, d.over as StationId)) ctxRef?.rerender();
     else document.querySelectorAll('.hv-st.drop').forEach((x) => x.classList.remove('drop'));
   });
+}
+let keysOn = false;
+function installKeys() {
+  if (keysOn) return;
+  keysOn = true;
   window.addEventListener('keydown', (e) => {
     if (G.phase !== 'day' || e.altKey || e.ctrlKey || e.metaKey || e.repeat) return;
     if (document.querySelector('.overlay') || G.pendingEvent || !document.querySelector('.day')) return;
