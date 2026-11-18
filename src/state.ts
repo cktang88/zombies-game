@@ -51,14 +51,16 @@ export const STORE_FOLD: Record<string, [Res, number]> = {
   light: ['pistol', 1], light_hp: ['pistol', 1], r22: ['pistol', 0.5],
   shell_slug: ['shell', 1], shell_flech: ['shell', 1], shell_fire: ['shell', 1], flare: ['shell', 1],
   rifle_sp: ['rifle', 1], rifle_ap: ['rifle', 1], r556: ['rifle', 0.5], ball: ['rifle', 1],
-  bolt_fire: ['bolt', 1], g40_buck: ['g40', 1],
+  bolt_fire: ['bolt', 1],
+  // firebombs, pipe bombs, rockets and 40mm: one count of explosives (a rocket tube fires two)
+  molotov: ['explosive', 1], pipebomb: ['explosive', 1], g40: ['explosive', 1], g40_buck: ['explosive', 1], rocket: ['explosive', 2],
 };
 /** Old recipe ids still sitting in a craft queue -> the recipe that replaced them. */
 const RECIPE_FOLD: Record<string, string> = {
   liquor: 'drink', ammo_light_hp: 'ammo_light', ammo_r22: 'ammo_light',
   ammo_slug: 'ammo_shell', ammo_flech: 'ammo_shell', ammo_dragon: 'ammo_shell', ammo_flare: 'ammo_shell',
   ammo_rifle_sp: 'ammo_rifle', ammo_rifle_ap: 'ammo_rifle', ammo_r556: 'ammo_rifle', ammo_ball: 'ammo_rifle',
-  ammo_bolt_fire: 'ammo_bolt',
+  ammo_bolt_fire: 'ammo_bolt', ammo_pipebomb: 'molotov',
 };
 
 /** Bring an older save up to SAVE_VERSION in place, or null when it cannot be read. */
@@ -98,7 +100,7 @@ export function migrateSave(s: GameState | null): GameState | null {
   return s;
 }
 /** Every stores key, in header order. */
-export const STORE_KEYS: Res[] = ['food', 'salvage', 'fuel', 'meds', 'pistol', 'shell', 'rifle', 'molotov', 'bolt', 'rocket', 'g40', 'pipebomb'];
+export const STORE_KEYS: Res[] = ['food', 'salvage', 'fuel', 'meds', 'pistol', 'shell', 'rifle', 'explosive', 'bolt'];
 
 export function clearSave() {
   try {

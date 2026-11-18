@@ -10,7 +10,7 @@ export function newGame(mode = 'siege', seed = freshSeed()): GameState {
     seed,
     day: 1,
     phase: 'day',
-    stores: { food: 18, salvage: 40, meds: 2, fuel: 4, pistol: 70, shell: 20, rifle: 10, molotov: 0, bolt: 0, rocket: 0, g40: 0, pipebomb: 0 },
+    stores: { food: 18, salvage: 40, meds: 2, fuel: 4, pistol: 70, shell: 20, rifle: 10, explosive: 0, bolt: 0 },
     survivors: [],
     graves: [],
     weapons: [],

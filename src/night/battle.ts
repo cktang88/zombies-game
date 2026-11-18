@@ -508,7 +508,7 @@ export class Battle {
     this.duration = (plan.spawns[plan.spawns.length - 1]?.t ?? 30) + 5;
     this.wallStart = G.fort.hp;
     this.ammoStart = {};
-    for (const k of [...AMMO_RES, 'salvage', 'molotov'] as Res[]) this.ammoStart[k] = G.stores[k] ?? 0;
+    for (const k of [...AMMO_RES, 'salvage'] as Res[]) this.ammoStart[k] = G.stores[k] ?? 0;
     this.res = { kills: 0, deaths: [], wallHeld: true, wallLost: 0, ammoUsed: {}, killsBy: {}, headshots: 0, lines: [], fell: false };
     this.setupGuards();
     // last night's bodies, if nobody cleared them (G.flags.pileCarry: JSON number[4])
@@ -2784,13 +2784,13 @@ export class Battle {
     this.slowCd = 8;
   }
   throwMolotov() {
-    if (this.done || G.stores.molotov <= 0) {
-      if (G.stores.molotov <= 0) this.say('No firebombs. Make them at the still.', 2);
+    if (this.done || G.stores.explosive < 1) {
+      if (G.stores.explosive < 1) this.say('No explosives. Make firebombs at the still.', 2);
       return;
     }
     const p = this.player;
     if (!p) return;
-    add('molotov', -1);
+    add('explosive', -1);
     G.flags.coach_firebomb = true;
     const x = Math.max(WALL_X + 40, Math.min(W - 40, this.mouse.x));
     // it bursts on the lane under the crosshair and spreads about a lane either way
@@ -3155,7 +3155,7 @@ export class Battle {
       const k = l.t / l.dur;
       const x = l.x0 + (l.x1 - l.x0) * k;
       const y = l.y0 + (l.y1 - 20 - l.y0) * k - Math.sin(k * Math.PI) * (120 + Math.abs(l.x1 - l.x0) * 0.2);
-      this.vfx.drawLob(c, x, y, k, l.p.ammoRes === 'pipebomb');
+      this.vfx.drawLob(c, x, y, k, l.g?.w?.def === 'pipemortar');
     }
     this.drawGlobs(c);
     this.vfx.drawNormal(c); // smoke, blood, debris, brass, arrows in flight
@@ -4353,7 +4353,7 @@ export class Battle {
     }
     for (const h of this.hooks) out.push(...(h.hints?.() ?? []));
     if (this.rally > 0 && this.rallyT <= 0) out.push({ key: 'night.rally', label: 'rally', hot: true });
-    if (G.stores.molotov > 0 && this.laneQ.reduce((a, b) => a + b, 0) >= 4) out.push({ key: 'night.firebomb', label: '', icon: 'icon_molotov', n: G.stores.molotov });
+    if (G.stores.explosive >= 1 && this.laneQ.reduce((a, b) => a + b, 0) >= 4) out.push({ key: 'night.firebomb', label: '', icon: 'icon_molotov', n: Math.floor(G.stores.explosive) });
     if (this.selected()) out.push({ key: 'night.free', label: 'free' }, { key: 'night.hold', label: 'hold' }, { key: 'night.heads', label: 'heads' }, { key: 'night.wall', label: 'wall' });
     // the first nights teach the basics for the first half-minute
     if (G.day <= 2 && this.t < 30) {
@@ -4382,7 +4382,7 @@ export class Battle {
       const reserve = prof.ammoRes ? roundsInStores(prof, G.stores) : Infinity;
       if (reserve > 0 && mag <= Math.max(0, Math.floor(prof.mag * 0.3))) want('reload', 'night.reload', 'Reload before they reach the wall');
     }
-    if (G.stores.molotov > 0 && this.laneQ.reduce((a, b) => a + b, 0) >= 4) want('firebomb', 'night.firebomb', 'Firebomb the crowd at the wall');
+    if (G.stores.explosive >= 1 && this.laneQ.reduce((a, b) => a + b, 0) >= 4) want('firebomb', 'night.firebomb', 'Firebomb the crowd at the wall');
     if (G.fort.hp / G.fort.maxHp < 0.5 && this.guards.length > 1) want('wall', 'night.wall', 'Pick a guard (1-9), set them to the wall');
     if (this.t > 2) want('head', 'LMB', 'Aim for the head: one shot, one down');
     if (this.t > 25) want('focus', 'RMB', 'Hold to steady your aim');
@@ -4413,7 +4413,7 @@ export class Battle {
   keyGroups(): { title: string; rows: Hint[] }[] {
     return [
       { title: 'your gun', rows: [{ key: 'LMB', label: 'fire' }, { key: 'RMB', label: 'focus' }, { key: 'night.reload', label: 'reload (hold: speed)' }, { key: 'night.weapon', label: 'next gun' }, { key: 'night.selector', label: 'selector' }] },
-      { title: 'you', rows: [{ key: 'night.duck', label: 'duck' }, { key: 'night.firebomb', label: `firebomb ×${G.stores.molotov}` }, { key: 'night.melee', label: 'melee' }, { key: 'night.nest', label: 'gun nest' }, { key: 'night.rally', label: 'rally' }, { key: 'night.sally', label: 'sally' }] },
+      { title: 'you', rows: [{ key: 'night.duck', label: 'duck' }, { key: 'night.firebomb', label: `firebomb ×${Math.floor(G.stores.explosive)}` }, { key: 'night.melee', label: 'melee' }, { key: 'night.nest', label: 'gun nest' }, { key: 'night.rally', label: 'rally' }, { key: 'night.sally', label: 'sally' }] },
       { title: 'the guards', rows: [{ key: '1-9', label: 'select (Tab: next)' }, { key: 'night.free', label: 'free fire' }, { key: 'night.hold', label: 'hold' }, { key: 'night.heads', label: 'heads' }, { key: 'night.wall', label: 'wall (Shift: all)' }, { key: 'night.post', label: 'post' }] },
       { title: 'the night', rows: [{ key: 'night.lure', label: 'lure' }, { key: 'night.trap', label: 'spring trap' }, { key: 'night.mark', label: 'mark target' }, { key: 'night.hurry', label: 'hurry' }, { key: 'night.pause', label: 'pause' }, { key: 'F1', label: 'this sheet' }] },
     ];

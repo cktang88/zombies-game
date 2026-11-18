@@ -27,7 +27,7 @@ export const REVEAL: { id: RevealId; day: number; label: string; icon: string; w
   { id: 'chores', day: 2, label: 'Chores', icon: 'st_time', tab: 'wall', sel: '.chores', what: 'Oil the guns, clear the bodies: an hour of someone\'s day.' },
   { id: 'chronicle', day: 2, label: 'Chronicle', icon: 'st_xp', tab: 'chronicle', what: 'What happened, day by day.' },
   { id: 'armory', day: 3, label: 'Armory', icon: 'pistol', tab: 'armory', what: 'Every gun, its rounds and attachments. Hover a gun for its numbers.' },
-  { id: 'stores', day: 3, label: 'All the stores', icon: 'meds', what: 'Medicine and firebombs join the stores along the top.' },
+  { id: 'stores', day: 3, label: 'All the stores', icon: 'meds', what: 'Medicine joins the stores along the top.' },
   { id: 'jobs', day: 3, label: 'More jobs', icon: 'job_drill', what: 'Drill, Counsel and the Radio join the job list.' },
   { id: 'run', day: 4, label: 'Lead a run', icon: 'job_scavenge', sel: '.run', what: 'Your leader walks one street in daylight for loot. Back before dark.' },
   { id: 'town', day: 4, label: 'Town', icon: 'st_faction', tab: 'town', what: 'Vessey: the factions, and the papers you find on runs.' },

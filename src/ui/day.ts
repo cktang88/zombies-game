@@ -483,7 +483,7 @@ function makeGroup(r: (typeof RECIPES)[number]): MakeGroup {
   if (r.weapon || r.melee) return 'weapons';
   if (r.emplacement || r.empRepair || ['spikes', 'wire', 'light', 'turret', 'fortify', 'roofnest', 'trap'].includes(r.special ?? '')) return 'defence';
   const g = Object.keys(r.gives ?? {}) as Res[];
-  if (g.length && g.every((k) => AMMO_TYPES[k] || k === 'molotov')) return 'ammo';
+  if (g.length && g.every((k) => AMMO_TYPES[k])) return 'ammo';
   return 'gear';
 }
 const BUILD_ICON: Record<string, string> = { workbench: 'icon_job_craft', forge: 'icon_scrap', garden: 'icon_job_farm', infirmary: 'icon_job_doctor', still: 'icon_molotov', generator: 'icon_fuel', radio: 'icon_job_radio' };
@@ -783,11 +783,10 @@ function gravesHtml() {
     <div class="gd">${dateLabel(g.dead!.day)}</div></div></div>`).join('')}</div>`;
 }
 
-const STORE_RES: Res[] = ['food', 'salvage', 'fuel', 'meds', 'molotov'];
+const STORE_RES: Res[] = ['food', 'salvage', 'fuel', 'meds'];
 const STORE_USE: Partial<Record<Res, string>> = {
   food: 'One a day for every mouth. The still pours it into courage.', salvage: 'One pile for everything you build: patch the wall, make bullets, or build traps.',
   fuel: 'The stove at night, floodlights, powder and firebombs.', meds: 'The doctor heals and fights infection with these.',
-  molotov: 'Firebombs: [F] or right-click at night.',
 };
 
 // One chip per ammo pool the house uses: rounds on hand, what it feeds, how long it lasts.
@@ -847,7 +846,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
       <div class="date"${tip(`This town's seed: ${G.seed}${G.flags.daily ? ` · daily ${esc(String(G.flags.daily))}` : ''}. Start a new game from it on the title screen to replay the same Vessey.`)}><b class="t-xl">${dateLabel()}</b> <span class="t-xs">day ${G.day}</span> <span class="t-s wx">${WEATHER_LABEL[G.weather] ?? G.weather}</span></div>
       <div class="ice"${tip(ice > 0 ? `The river freezes in ${ice} day${ice === 1 ? '' : 's'}. Then the dead can cross.` : ice === 0 ? 'The river is freezing tonight.' : 'The river is ice.')}>${ico('st_cold')}<b>${ice > 0 ? `${ice}d` : ice === 0 ? 'tonight' : 'ice'}</b></div>
       <div class="hbtns"><button class="icon" data-act="help" aria-label="Help and controls" title="Help and controls">?</button><button class="icon" data-act="settings" aria-label="Settings" title="Settings">⚙</button></div>
-      <div class="stores">${STORE_RES.filter((r) => isOpen('stores') || ['food', 'salvage', 'fuel'].includes(r) || (r === 'molotov' && G.stores.molotov > 0)).map((r) => {
+      <div class="stores">${STORE_RES.filter((r) => isOpen('stores') || ['food', 'salvage', 'fuel'].includes(r)).map((r) => {
         const low = (r === 'food' && G.stores.food < eat * 2) || (r === 'fuel' && G.stores.fuel < heat);
         const use = r === 'food' ? foodTip(eatN, half) : r === 'fuel' && heat ? `The stove burns ${heat} tonight.` : '';
         return `<span data-res="${r}" class="chip lg ${low ? 'warn' : ''}"${tip(`<b>${RES_LABEL[r]}</b><br>${STORE_USE[r] ?? ''}${use ? `<br>${use}` : ''}`)}><img src="${spriteUrl(RES_ICON[r])}" alt="${RES_LABEL[r]}"><span class="n">${Math.floor(G.stores[r] ?? 0)}</span>${r === 'fuel' && heat ? `<em>−${heat}</em>` : r === 'food' && eat ? `<em>−${eatN}${half ? ' · ½' : ''}</em>` : ''}</span>`;

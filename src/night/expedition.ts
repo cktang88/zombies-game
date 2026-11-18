@@ -37,8 +37,8 @@ const ZONE_NAMES = ['the near houses', 'past the rail crossing', 'beyond the fou
 const RUN_YIELD = 0.22; // per-search loot scale: clearing the whole street ≈ 2–2.4× a scavenging job (before the pack cap)
 // how many of a resource fit in one pack slot (bulky things take more room)
 const STACK: Partial<Record<Res, number>> = {
-  food: 6, salvage: 8, meds: 3, fuel: 3, molotov: 2,
-  pistol: 20, shell: 8, rifle: 12, bolt: 12, rocket: 1, g40: 3, pipebomb: 2,
+  food: 6, salvage: 8, meds: 3, fuel: 3,
+  pistol: 20, shell: 8, rifle: 12, explosive: 2, bolt: 12,
 };
 type PackItem = { kind: 'res'; res: Res; n: number } | { kind: 'gun'; def: string; cond: number } | { kind: 'mod'; def: string; cond: number } | { kind: 'melee'; def: string; cond: number };
 const itemSlots = (it: PackItem) => (it.kind === 'gun' ? 3 : it.kind === 'melee' ? 2 : it.kind === 'mod' ? 1 : Math.ceil(it.n / (STACK[it.res] ?? 5)));

@@ -43,7 +43,7 @@ G.nextNight = null;
 // machinery and a stocked house
 const build = (id: string, level: number) => { const b = G.buildings.find((x) => x.id === id); if (b) b.level = Math.max(b.level, level); else G.buildings.push({ id, level }); };
 build('workbench', 2); build('forge', 1); build('generator', 1); build('radio', 1); build('infirmary', 1); build('garden', 1);
-Object.assign(G.stores, { food: Math.max(G.stores.food, 14), salvage: 48, fuel: 9, meds: 3, molotov: 4 });
+Object.assign(G.stores, { food: Math.max(G.stores.food, 14), salvage: 48, fuel: 9, meds: 3, explosive: 4 });
 G.fort.hp = Math.round(G.fort.maxHp * 0.82);
 G.fort.lights = 2;
 G.fort.spikes = Math.max(G.fort.spikes, 1);

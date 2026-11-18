@@ -123,7 +123,7 @@ export const INCIDENTS: Incident[] = [
       // sometimes something special from under the tarp: an attachment or a box of odd ammunition
       const special = R.chance(0.45) ? (R.chance(0.5)
         ? { kind: 'mod' as const, id: R.pick(['scope', 'reddot', 'suppressor', 'choke', 'extmag', 'speedloader', 'flashlight'].filter((m) => MODS[m])) }
-        : { kind: 'ammo' as const, ...R.pick([{ id: 'rifle', n: 30 }, { id: 'shell', n: 30 }]) }) : null;
+        : { kind: 'ammo' as const, ...R.pick([{ id: 'rifle', n: 30 }, { id: 'shell', n: 30 }, { id: 'explosive', n: 4 }]) }) : null;
       const specialPrice = special ? Math.max(1, Math.round(price * (special.kind === 'mod' ? 1.8 : 1.3))) : 0;
       const specialName = special ? (special.kind === 'mod' ? MODS[special.id]?.name.toLowerCase() ?? special.id : `${(special as { n: number }).n} ${RES_LABEL[special.id as Res].toLowerCase()}`) : '';
       const specialPitch = special ? (special.kind === 'mod'

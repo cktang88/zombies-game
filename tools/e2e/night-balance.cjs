@@ -37,7 +37,7 @@ const PREP = {
   13: { n: 6, sh: 5, stores: { light: 140, shell: 30, rifle: 40, r556: 60, r22: 120, scrap: 57, fuel: 18, parts: 14, molotov: 5 }, guns: ['service9', 'm1911', 'pump', 'lever', 'hunting', 'ar15'], fort: { maxHp: 480, lights: 2, wire: 2, spikes: 1 } },
 };
 // the snapshots keep their old numbers; fold them into today's pools (src/state.ts STORE_FOLD)
-const FOLD = { light: ['pistol', 1], r22: ['pistol', 0.5], r556: ['rifle', 0.5], scrap: ['salvage', 1], parts: ['salvage', 2] };
+const FOLD = { molotov: ['explosive', 1], light: ['pistol', 1], r22: ['pistol', 0.5], r556: ['rifle', 0.5], scrap: ['salvage', 1], parts: ['salvage', 2] };
 const folded = (st) => { const o = {}; for (const [k, v] of Object.entries(st)) { const [to, per] = FOLD[k] ?? [k, 1]; o[to] = (o[to] ?? 0) + v * per; } return o; };
 async function night(day, seed, mode) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
@@ -83,7 +83,7 @@ async function night(day, seed, mode) {
     cancelAnimationFrame(b.raf);
     b.ended = true; // the page's loop stops drawing; we step it ourselves
     b.intro = 0;
-    const ammo0 = {}; for (const k of ['pistol', 'shell', 'rifle', 'molotov']) ammo0[k] = G.stores[k] ?? 0;
+    const ammo0 = {}; for (const k of ['pistol', 'shell', 'rifle', 'explosive']) ammo0[k] = G.stores[k] ?? 0;
     const wall0 = G.fort.hp;
     const dt = 1 / 30;
     let shots = 0, autoHeld = 0, lastFire = -9, ax = 800, ay = 500, tid = -1, ready = 0;
@@ -132,7 +132,7 @@ async function night(day, seed, mode) {
             const n0 = b.shotsTonight; b.tryFire(true); if (b.shotsTonight > n0) { shots++; lastFire = b.t; }
           }
           const q = b.zombies.filter((o) => o.state === 'wall').length;
-          if (q >= 5 && G.stores.molotov > 0 && b.t - (b._mol ?? -9) > 6) { b._mol = b.t; b.mouse.x = WALL_X + 60; b.mouse.y = 640; b.throwMolotov(); }
+          if (q >= 5 && G.stores.explosive >= 1 && b.t - (b._mol ?? -9) > 6) { b._mol = b.t; b.mouse.x = WALL_X + 60; b.mouse.y = 640; b.throwMolotov(); }
           if (b.rally > 0 && (q >= 4 || b.nerve < b.nerveMax * 0.3)) b.useRally();
         } else b.mouse.down = false;
         // reload in the lulls

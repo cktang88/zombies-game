@@ -130,9 +130,9 @@ export const CALIBERS: Record<string, Caliber> = {
   ball: { id: 'ball', name: '.50 ball & black powder', types: ['rifle'], icon: 'icon_ball' },
   bolt: { id: 'bolt', name: 'Arrows & bolts', types: ['bolt'], icon: 'icon_bolts' },
   nails: { id: 'nails', name: 'Nails & rivets (salvage)', types: ['salvage'], icon: 'icon_scrap' },
-  rocket: { id: 'rocket', name: '66mm rockets', types: ['rocket'], icon: 'icon_rocket' },
-  g40: { id: 'g40', name: '40mm grenades', types: ['g40'], icon: 'icon_g40' },
-  pipebomb: { id: 'pipebomb', name: 'Pipe bombs', types: ['pipebomb'], icon: 'icon_pipebomb' },
+  rocket: { id: 'rocket', name: '66mm rockets', types: ['explosive'], icon: 'icon_rocket' },
+  g40: { id: 'g40', name: '40mm grenades', types: ['explosive'], icon: 'icon_g40' },
+  pipebomb: { id: 'pipebomb', name: 'Pipe bombs', types: ['explosive'], icon: 'icon_pipebomb' },
 };
 
 /** What one stores key of ammunition is, for labels and tips. */
@@ -142,13 +142,11 @@ export const AMMO_TYPES: Partial<Record<Res, AmmoType>> = {
   shell: { res: 'shell', name: 'Shotgun shells', short: 'shells', icon: 'icon_shells', desc: 'The close-range answer: a fistful of pellets and a shove off the wall.', guns: 'every 12-gauge and .410, the flare pistol (two a shot)' },
   rifle: { res: 'rifle', name: 'Rifle rounds', short: 'rifle', icon: 'icon_r556', desc: 'Through one and into the next, at any range. Careful work at the bench.', guns: 'hunting rifles, the muzzleloader, the AR, carbine and MG (half a round a shot)' },
   bolt: { res: 'bolt', name: 'Broadheads', short: 'broad', icon: 'icon_bolts', desc: 'Dowel shafts and saw-tooth heads. Most come back.', guns: 'bows and crossbows' },
-  rocket: { res: 'rocket', name: '66mm rocket', short: 'rocket', icon: 'icon_rocket', desc: 'A whole disposable launcher tube per shot.', guns: 'the M72' },
-  g40: { res: 'g40', name: '40mm HE', short: 'HE', icon: 'icon_g40', desc: 'High-explosive grenade. Lobbed; bursts where it lands.', guns: 'the thumper' },
-  pipebomb: { res: 'pipebomb', name: 'Pipe bomb', short: 'bomb', icon: 'icon_pipebomb', desc: 'Capped pipe, powder and roofing nails.', guns: 'the pipe mortar' },
+  explosive: { res: 'explosive', name: 'Explosives', short: 'bombs', icon: 'icon_molotov', desc: 'Firebombs and pipe bombs from the still, rockets and grenades off the Line: thrown at night, or fired from a launcher.', guns: 'the throw key (a firebomb), the M72 (two a shot), the thumper and the pipe mortar' },
   salvage: { res: 'salvage', name: 'Salvage (nails & rivets)', short: 'salvage', icon: 'icon_scrap', desc: 'Cut, headed and fed from the salvage pile.', guns: 'nail guns, the nail turret' },
 };
 /** The ammunition pools, in header order (salvage is a material, not counted here). */
-export const AMMO_RES: Res[] = ['pistol', 'shell', 'rifle', 'bolt', 'rocket', 'g40', 'pipebomb'];
+export const AMMO_RES: Res[] = ['pistol', 'shell', 'rifle', 'explosive', 'bolt'];
 
 export function ammoLabel(res: Res | null | undefined): string {
   if (!res) return '—';
@@ -304,21 +302,21 @@ export const WEAPONS: Record<string, WeaponDef> = {
   },
   // --- launchers ---
   law: {
-    id: 'law', cls: 'launcher', name: 'M72 rocket tube', icon: 'icon_law', ammo: 'rocket', caliber: 'rocket',
-    dmg: 80, rof: 0.5, mag: 1, reload: 3.5, spread: 0.012, pellets: 1, pierce: 0, knock: 90, auto: false, noise: 7, armorPen: 1, smoke: true, stagger: 1,
+    id: 'law', cls: 'launcher', name: 'M72 rocket tube', icon: 'icon_law', ammo: 'explosive', caliber: 'rocket',
+    dmg: 80, rof: 0.5, mag: 1, reload: 3.5, spread: 0.012, pellets: 1, pierce: 0, knock: 90, auto: false, noise: 7, armorPen: 1, smoke: true, stagger: 1, perShot: 2,
     explosive: { radius: 170, dmg: 340 },
-    niche: 'One rocket, one hole in the horde: the answer to a Ferryman and everything standing near it.',
+    niche: 'One rocket, one hole in the horde: the answer to a Ferryman and everything near it. Two explosives a shot.',
     desc: 'Disposable, olive drab, stencilled THE LINE HOLDS. Reloading means unslinging the next tube.',
   },
   m79: {
-    id: 'm79', cls: 'launcher', name: '40mm grenade launcher', icon: 'icon_m79', ammo: 'g40', caliber: 'g40',
+    id: 'm79', cls: 'launcher', name: '40mm grenade launcher', icon: 'icon_m79', ammo: 'explosive', caliber: 'g40',
     dmg: 40, rof: 0.8, mag: 1, reload: 2.2, spread: 0.02, pellets: 1, pierce: 0, knock: 50, auto: false, noise: 3.5, stagger: 1,
     explosive: { radius: 100, dmg: 150 }, arc: true,
-    niche: 'Lobs a grenade over the front rank into the middle of the pack; buckshot rounds for the wall.',
+    niche: 'Lobs a grenade over the front rank into the middle of the pack.',
     desc: 'A break-open thumper from the County armoury. Somebody wrote RIOT ONLY on it in marker.',
   },
   pipemortar: {
-    id: 'pipemortar', cls: 'launcher', name: 'Pipe-bomb mortar', icon: 'icon_pipemortar', ammo: 'pipebomb', caliber: 'pipebomb',
+    id: 'pipemortar', cls: 'launcher', name: 'Pipe-bomb mortar', icon: 'icon_pipemortar', ammo: 'explosive', caliber: 'pipebomb',
     dmg: 20, rof: 0.4, mag: 1, reload: 3.4, spread: 0.06, pellets: 1, pierce: 0, knock: 40, auto: false, noise: 4, jam: 0.08, craftable: true, stagger: 0.8,
     explosive: { radius: 85, dmg: 115 }, arc: true,
     niche: 'Cheap homemade area damage, lobbed; inaccurate, and one in twelve is a dud.',

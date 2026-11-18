@@ -4,7 +4,8 @@
 export type Res = 'food' | 'salvage' | 'meds' | 'fuel'
   // ammunition: three pools (src/data/weapons.ts AMMO_TYPES); every gun draws from one
   | 'pistol' | 'shell' | 'rifle'
-  | 'molotov' | 'bolt' | 'rocket' | 'g40' | 'pipebomb';
+  // explosives: one count, thrown at night (firebombs) or fired from a launcher
+  | 'explosive' | 'bolt';
 export type Stores = Record<Res, number>;
 
 // Five skills (docs/research/19b-simplify-survivors.md). Old saves had crafting, farming and psych: migrateSurvivor folds them in.

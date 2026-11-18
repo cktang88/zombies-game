@@ -30,8 +30,8 @@ export const SITES: Site[] = [
   { id: 'manor', name: 'St. Aubin Manor', desc: 'The nursing home. The residents are still in residence.', risk: 0.45, loot: { meds: 6, food: 3, salvage: 4 }, weaponChance: 0.02, weapons: ['service9', 'r22'], survivorChance: 0.12, minDay: 4, stock: 5 },
   { id: 'school', name: 'Vessey High', desc: 'The gym was the Parish kitchen until it wasn\'t. Chem lab upstairs.', risk: 0.35, loot: { food: 6, fuel: 2, salvage: 7, meds: 1, bolt: 6 }, weaponChance: 0.04, weapons: ['hunting', 'compound'], melee: ['bat', 'crowbar'], survivorChance: 0.18, minDay: 4, stock: 6 },
   { id: 'gunshop', name: 'Strand Sporting Goods', desc: 'Deer season opened the week everything ended. Shelves mostly bare.', risk: 0.4, loot: { pistol: 56, shell: 16, rifle: 19, bolt: 6, salvage: 2 }, weaponChance: 0.3, weapons: ['hunting', 'pump', 'revolver', 'lever', 'scoped', 'ar15', 'compound', 'coach', 'r22'], mods: ['scope', 'reddot', 'choke', 'extmag', 'bipod', 'sling', 'brake'], survivorChance: 0.06, minDay: 5, stock: 4 },
-  { id: 'courthouse', name: 'County courthouse', desc: 'The deputies held it with lists and quarantine. Now the lists are all that hold.', risk: 0.55, loot: { pistol: 32, rifle: 6, shell: 10, meds: 2, salvage: 4, g40: 1.2 }, weaponChance: 0.35, weapons: ['smg', 'service9', 'autoshot', 'mp93', 'scoped', 'pump', 'm79'], melee: ['crowbar'], mods: ['drum', 'extmag', 'flashlight', 'taped', 'speedloader', 'reddot'], survivorChance: 0.1, minDay: 8, stock: 4 },
-  { id: 'corliss', name: 'The Line at Corliss', desc: 'Thirty kilometres downriver. Sandbags, a dropped bridge, and whatever the Guard left behind.', risk: 0.7, loot: { rifle: 42, pistol: 16, shell: 4, meds: 4, salvage: 8, fuel: 4, rocket: 0.6, g40: 2 }, weaponChance: 0.5, weapons: ['carbine', 'carbine', 'lmg', 'smg', 'ar15', 'law', 'm79'], mods: ['reddot', 'reddot', 'drum', 'bipod', 'extmag', 'brake', 'taped'], survivorChance: 0.12, minDay: 12, stock: 3 },
+  { id: 'courthouse', name: 'County courthouse', desc: 'The deputies held it with lists and quarantine. Now the lists are all that hold.', risk: 0.55, loot: { pistol: 32, rifle: 6, shell: 10, meds: 2, salvage: 4, explosive: 1.2 }, weaponChance: 0.35, weapons: ['smg', 'service9', 'autoshot', 'mp93', 'scoped', 'pump', 'm79'], melee: ['crowbar'], mods: ['drum', 'extmag', 'flashlight', 'taped', 'speedloader', 'reddot'], survivorChance: 0.1, minDay: 8, stock: 4 },
+  { id: 'corliss', name: 'The Line at Corliss', desc: 'Thirty kilometres downriver. Sandbags, a dropped bridge, and whatever the Guard left behind.', risk: 0.7, loot: { rifle: 42, pistol: 16, shell: 4, meds: 4, salvage: 8, fuel: 4, explosive: 3 }, weaponChance: 0.5, weapons: ['carbine', 'carbine', 'lmg', 'smg', 'ar15', 'law', 'm79'], mods: ['reddot', 'reddot', 'drum', 'bipod', 'extmag', 'brake', 'taped'], survivorChance: 0.12, minDay: 12, stock: 3 },
 ];
 
 // ---------- workshop machinery ----------
@@ -70,7 +70,7 @@ export interface Recipe {
   emplacement?: string; // EMPLACEMENTS key (data/emplacements.ts): builds a crew-served gun into G.flags.emplacements
   empRepair?: boolean; // restores the worst emplacement's condition
   hidden?: boolean; // kept for old queues/saves, not offered in the craft list
-  special?: 'spikes' | 'wire' | 'light' | 'trap' | 'armor' | 'molotov' | 'drink' | 'fortify' | 'repair' | 'turret' | 'duffel' | 'repairMelee' | 'roofnest';
+  special?: 'spikes' | 'wire' | 'light' | 'trap' | 'armor' | 'drink' | 'fortify' | 'repair' | 'turret' | 'duffel' | 'repairMelee' | 'roofnest';
   desc: string;
 }
 
@@ -93,7 +93,6 @@ export const RECIPES: Recipe[] = [
   { id: 'mod_hatchet', name: 'Hatchet bayonet', needs: 'forge', cost: { salvage: 6 }, work: 3, mod: 'hatchet', desc: 'A hatchet head clamped under a long gun. Melee at the wall.' },
   { id: 'mod_bipod', name: 'Bipod', needs: 'forge', cost: { salvage: 6 }, work: 3, mod: 'bipod', desc: 'Folding legs for rifles and the LMG: steady on the wall.' },
   { id: 'mod_brake', name: 'Muzzle brake', needs: 'forge', level: 2, cost: { salvage: 8 }, work: 4, mod: 'brake', desc: 'Ported pipe coupling: less climb, more bark.' },
-  { id: 'ammo_pipebomb', name: 'Pipe bombs ×3', needs: 'workbench', cost: { salvage: 6, fuel: 2 }, work: 4, gives: { pipebomb: 3 }, desc: 'Capped pipe, powder, roofing nails, a fuse cut short. For the mortar.' },
   // --- improvised hand weapons ---
   { id: 'm_spear', name: 'Rebar spear', needs: 'forge', cost: { salvage: 4 }, work: 3, melee: 'spear', desc: 'Rebar ground to a point. Reach on the cheap.' },
   { id: 'm_nailbat', name: 'Nail bat', needs: 'workbench', cost: { salvage: 5 }, work: 2, melee: 'nailbat', desc: 'Nails through a bat. Shove and bleed.' },
@@ -104,7 +103,7 @@ export const RECIPES: Recipe[] = [
   { id: 'flaregun', name: 'Flare pistol', needs: 'workbench', level: 2, cost: { salvage: 12 }, work: 5, weapon: 'flaregun', desc: 'A drilled-out signal pistol body on a pipe barrel. Packs road-flare composition into two shotgun shells a shot.' },
   { id: 'crossbow', name: 'Crossbow', needs: 'forge', cost: { salvage: 18 }, work: 8, weapon: 'crossbow', desc: 'Leaf-spring limbs off a Ford, a winch, a walnut stock. Silent.' },
   { id: 'muzzle', name: '.50 muzzleloader', needs: 'forge', level: 2, cost: { salvage: 24 }, work: 10, weapon: 'muzzle', desc: 'A rifled barrel from a fence-post driver. One huge shot.' },
-  { id: 'pipemortar', name: 'Pipe-bomb mortar', needs: 'workbench', level: 2, cost: { salvage: 20 }, work: 8, weapon: 'pipemortar', desc: 'A fence-post tube on a shotgun stock. Lobs pipe bombs over the dead.' },
+  { id: 'pipemortar', name: 'Pipe-bomb mortar', needs: 'workbench', level: 2, cost: { salvage: 20 }, work: 8, weapon: 'pipemortar', desc: 'A fence-post tube on a shotgun stock. Lobs explosives from the still over the dead.' },
   { id: 'rivet', name: 'Rivet gun', needs: 'workbench', level: 3, cost: { salvage: 32, fuel: 2 }, work: 12, weapon: 'rivet', desc: 'A boiler-shop rivet hammer on a welding bottle. Quiet; punches plate.' },
   { id: 'repair_melee', name: 'Sharpen & re-haft', needs: 'workbench', cost: { salvage: 3 }, work: 2, special: 'repairMelee', desc: 'Grind the worst edge, re-wedge the loosest handle (+50% condition).' },
   { id: 'repair', name: 'Repair the worst gun', needs: 'workbench', cost: { salvage: 5 }, work: 3, special: 'repair', desc: 'Strip, clean, file, pray.' },
@@ -117,7 +116,7 @@ export const RECIPES: Recipe[] = [
   { id: 'armor', name: 'Mill-plate vest', needs: 'forge', cost: { salvage: 14 }, work: 6, special: 'armor', desc: 'Saw-blade steel sewn into a Carhartt. Lessens wounds. Not bites.' },
   { id: 'turret', name: 'Nail turret', needs: 'generator', cost: { salvage: 40, fuel: 2 }, work: 14, special: 'turret', desc: 'A framing nailer on a tractor-seat swivel, triggered by a doorbell relay. Fires at anything on the road. Eats salvage; needs the generator.' },
   { id: 'light', name: 'Floodlight', needs: 'generator', cost: { salvage: 9 }, work: 3, special: 'light', desc: 'A ballfield lamp on a pole. Burns fuel each night; you see them coming.' },
-  { id: 'molotov', name: 'Firebombs ×3', needs: 'still', cost: { fuel: 2, salvage: 1 }, work: 2, gives: { molotov: 3 }, desc: 'Throw with [F] / right click. Fire on the road.' },
+  { id: 'molotov', name: 'Firebombs & pipe bombs ×3', needs: 'still', cost: { fuel: 2, salvage: 2 }, work: 2, gives: { explosive: 3 }, desc: 'Three explosives: thrown with [F] / right click (fire on the road), or fed to a launcher.' },
   { id: 'drink', name: 'A round from the still', needs: 'still', cost: { food: 3 }, work: 2, special: 'drink', desc: 'Potato moonshine, poured when it is done: +mood for two days, anyone sulking comes back to work, and a Drinker is settled for two dawns.' },
   { id: 'fuel', name: 'Distill fuel ×4', needs: 'still', cost: { food: 3, salvage: 2 }, work: 3, gives: { fuel: 4 }, desc: 'Rot and sawdust to ethanol.' },
   { id: 'bandage', name: 'Field dressings', needs: 'infirmary', cost: { salvage: 3, fuel: 1 }, work: 2, gives: { meds: 1 }, desc: 'Boiled linen and moonshine.' },
@@ -140,10 +139,10 @@ RECIPES.push(
 export const FORT_CAP: Partial<Record<string, number>> = { light: 3, wire: 3, turret: 2 };
 
 export const RES_LABEL: Record<Res, string> = {
-  food: 'Food', salvage: 'Salvage', meds: 'Medicine', fuel: 'Fuel', pistol: 'Pistol rounds', shell: 'Shotgun shells', rifle: 'Rifle rounds', molotov: 'Firebombs',
-  bolt: 'Broadheads', rocket: 'Rockets', g40: '40mm HE', pipebomb: 'Pipe bombs',
+  food: 'Food', salvage: 'Salvage', meds: 'Medicine', fuel: 'Fuel', pistol: 'Pistol rounds', shell: 'Shotgun shells', rifle: 'Rifle rounds', explosive: 'Explosives',
+  bolt: 'Broadheads',
 };
 export const RES_ICON: Record<Res, string> = {
-  food: 'icon_food', salvage: 'icon_scrap', meds: 'icon_meds', fuel: 'icon_fuel', pistol: 'icon_ammo', shell: 'icon_shells', rifle: 'icon_r556', molotov: 'icon_molotov',
-  bolt: 'icon_bolts', rocket: 'icon_rocket', g40: 'icon_g40', pipebomb: 'icon_pipebomb',
+  food: 'icon_food', salvage: 'icon_scrap', meds: 'icon_meds', fuel: 'icon_fuel', pistol: 'icon_ammo', shell: 'icon_shells', rifle: 'icon_r556', explosive: 'icon_molotov',
+  bolt: 'icon_bolts',
 };

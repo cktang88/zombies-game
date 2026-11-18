@@ -25,7 +25,7 @@ export function siteFinds(site: Site): SiteFind[] {
   for (const k of ['food', 'salvage', 'meds', 'fuel'] as const) if (l[k]) amt[k] = l[k]!;
   let ammo = 0;
   for (const r of AMMO) ammo += (l[r] ?? 0) * (AMMO_W[r] ?? 1);
-  ammo += ((l.rocket ?? 0) + (l.g40 ?? 0)) * 15;
+  ammo += (l.explosive ?? 0) * 15;
   if (ammo) amt.ammo = ammo;
   const out: SiteFind[] = [];
   for (const [k, v] of Object.entries(amt) as [Exclude<Find, 'guns'>, number][]) {
