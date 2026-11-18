@@ -305,47 +305,23 @@ const ART: Record<StationId, () => string> = {
     + svg(24, 628, 150, 16, '<ellipse cx="75" cy="10" rx="72" ry="6" fill="#241e18"/>'),
 };
 
-/** The house shell: roof, two floors, room walls, windows, lamplight; the yard and the road. One SVG. */
+/** The house shell: the painted cut-away (roof, chimney, two floors, five empty rooms, the side door) over
+ *  the yard's soil, the lean-to over the bench, the mast; a CSS layer breathes over the six bulbs. */
+const BULBS: [number, number][] = [[328, 280], [560, 278], [781, 280], [298, 469], [560, 467], [761, 469]];
 function backdrop(): string {
-  const lamp = (cx: number, cy: number, r = 120) => `<circle cx="${cx}" cy="${cy}" r="${r}" fill="url(#hvLamp)"/>`;
   const radio = buildingLevel('radio') > 0;
   return `<svg class="hv-shell" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" aria-hidden="true">
     <defs>
-      <pattern id="hvPlank" width="30" height="40" patternUnits="userSpaceOnUse"><rect width="30" height="40" fill="#2a2018"/><path d="M0 0 v40" stroke="#130e0a" stroke-width="3"/><path d="M14 12 v6" stroke="#1d1611" stroke-width="2"/></pattern>
-      <pattern id="hvPlank2" width="34" height="40" patternUnits="userSpaceOnUse"><rect width="34" height="40" fill="#251d16"/><path d="M0 0 v40" stroke="#110c09" stroke-width="3"/></pattern>
-      <pattern id="hvShingle" width="40" height="16" patternUnits="userSpaceOnUse"><rect width="40" height="16" fill="#1b1815"/><path d="M0 15 h40 M20 0 v15" stroke="#0b0908" stroke-width="2"/></pattern>
-      <radialGradient id="hvLamp"><stop offset="0" stop-color="#f0b060" stop-opacity=".34"/><stop offset=".5" stop-color="#d08a40" stop-opacity=".12"/><stop offset="1" stop-color="#d08a40" stop-opacity="0"/></radialGradient>
       <linearGradient id="hvSoil" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a241c"/><stop offset="1" stop-color="#0f0d0b"/></linearGradient>
-      <linearGradient id="hvShade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity=".45"/><stop offset=".4" stop-color="#000" stop-opacity="0"/></linearGradient>
     </defs>
     <path d="M0 640 Q300 628 600 636 T1250 634 L1600 640 V720 H0Z" fill="url(#hvSoil)"/>
     <path d="M1436 646 L1600 640 V700 L1436 690Z" fill="#1d1a17" opacity=".9"/>
     <!-- lean-to over the bench -->
-    <path d="M926 452 L1176 476" stroke="#0a0806" stroke-width="12"/><path d="M926 452 L1176 476" stroke="#3a3128" stroke-width="7"/><path d="M1168 476 V640" stroke="#2a2119" stroke-width="7"/>
-    <!-- roof, chimney${radio ? ', mast' : ''} -->
-    <rect x="292" y="112" width="40" height="96" fill="#2a2119" stroke="#070605" stroke-width="4"/>
+    <path d="M946 452 L1176 476" stroke="#0a0806" stroke-width="12"/><path d="M946 452 L1176 476" stroke="#3a3128" stroke-width="7"/><path d="M1168 476 V640" stroke="#2a2119" stroke-width="7"/>
     ${radio ? '<path d="M820 160 V40 M808 70 L832 70 M812 100 L828 100 M820 40 L770 150 M820 40 L870 150" stroke="#0a0806" stroke-width="3" fill="none"/><circle cx="820" cy="38" r="3" fill="#a8462a"/>' : ''}
-    <path d="M160 252 L545 104 L930 252Z" fill="url(#hvShingle)" stroke="#070605" stroke-width="6" stroke-linejoin="round"/>
-    <path d="M330 220 h430 l-215 -86z" fill="#120f0c" opacity=".55"/>
-    <!-- rooms -->
-    <rect x="196" y="256" width="698" height="174" fill="url(#hvPlank)"/>
-    <rect x="196" y="444" width="698" height="170" fill="url(#hvPlank2)"/>
-    ${lamp(330, 300, 150)}${lamp(560, 300, 110)}${lamp(780, 300, 130)}${lamp(300, 480, 140)}${lamp(560, 480, 120)}${lamp(760, 480, 130)}
-    <rect x="196" y="256" width="698" height="174" fill="url(#hvShade)"/><rect x="196" y="444" width="698" height="170" fill="url(#hvShade)"/>
-    <!-- windows (boarded) -->
-    <g stroke="#070605" stroke-width="3"><rect x="590" y="290" width="54" height="64" fill="#2b3640"/><rect x="250" y="476" width="50" height="58" fill="#2b3640"/><rect x="684" y="292" width="52" height="60" fill="#2b3640"/></g>
-    <g stroke="#3a2f24" stroke-width="9"><path d="M586 308 L648 330 M586 336 L648 318"/><path d="M246 492 L304 516"/><path d="M680 306 L740 336"/></g>
-    <!-- hanging bulbs -->
-    <g stroke="#0a0806" stroke-width="2"><path d="M330 256 v22 M560 256 v18 M780 256 v20 M300 444 v20 M560 444 v18 M760 444 v20"/></g>
-    <g fill="#f3c27a"><circle cx="330" cy="282" r="5"/><circle cx="560" cy="278" r="4"/><circle cx="780" cy="280" r="5"/><circle cx="300" cy="468" r="5"/><circle cx="560" cy="466" r="4"/><circle cx="760" cy="468" r="5"/></g>
-    <!-- beams and floors -->
-    <g fill="#16110d" stroke="#070605" stroke-width="3">
-      <rect x="462" y="256" width="10" height="174"/><rect x="658" y="256" width="10" height="174"/><rect x="446" y="444" width="10" height="170"/>
-      <rect x="176" y="428" width="738" height="18"/><rect x="176" y="612" width="738" height="16"/>
-      <rect x="178" y="250" width="20" height="380"/><rect x="892" y="250" width="20" height="270"/><rect x="176" y="244" width="738" height="14"/>
-    </g>
-    <path d="M912 520 h22 v108 h-22z" fill="#0d0b09"/><path d="M912 628 h40 v-6 h-34z" fill="#2a2119" stroke="#070605" stroke-width="2"/>
-  </svg>`;
+  </svg>
+  <img class="hv-shell hv-house" src="${spriteUrl('house/house_cutaway')}" alt="" draggable="false" style="left:140px;top:94px;width:810px">
+  <div class="hv-shell hv-lamps">${BULBS.map(([x, y], i) => `<i style="left:${x}px;top:${y}px;animation-delay:${(-i * 1.37).toFixed(2)}s"></i>`).join('')}</div>`;
 }
 
 // ---------------------------------------------------------------- the scene

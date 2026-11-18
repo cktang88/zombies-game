@@ -137,3 +137,10 @@ p.hv-here { display: block; }
 .day.hv .hint { right: auto; left: 14px; top: 72px; bottom: auto; }
 .hv-people.hint-target { outline: 0; }
 .hv-people.hint-target .hv-sv { outline: calc(2px / var(--k)) dashed var(--ochre); outline-offset: -6px; }
+/* the painted house shell and the lamplight breathing over its bulbs */
+.hv-house { width: 810px; user-select: none; filter: brightness(.86) saturate(.9); }
+.hv-lamps { width: 1600px; height: 720px; mix-blend-mode: screen; }
+.hv-lamps i { position: absolute; width: 240px; height: 200px; margin: -70px 0 0 -120px; border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(240, 176, 96, .2), rgba(208, 138, 64, .07) 55%, rgba(208, 138, 64, 0)); animation: hvLamp 5.3s ease-in-out infinite; }
+@keyframes hvLamp { 0%, 100% { opacity: .85; } 47% { opacity: 1; } 52% { opacity: .7; } 56% { opacity: .95; } }
+@media (prefers-reduced-motion: reduce) { .hv-lamps i { animation: none; } }
