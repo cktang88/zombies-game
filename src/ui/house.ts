@@ -267,7 +267,6 @@ const svg = (x: number, y: number, w: number, h: number, body: string, cls = '')
 /** a painted prop from public/sprites/house/ (3× the scene's units), `w` scene units wide */
 const pic = (id: string, x: number, y: number, w: number, cls = '') => img(`house/${id}`, x, y, w, cls);
 const GRAVE: [string, number, number][] = [['grave_cross', 46, 66], ['grave_board', 34, 62], ['grave_stone', 33, 58]];
-const INK = 'stroke="#070605" stroke-width="3" stroke-linejoin="round"';
 const ART: Record<StationId, () => string> = {
   infirmary: () => pic('cot', 236, 340, 166)
     + pic('medcabinet', 410, 325, 45),

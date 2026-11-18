@@ -9,6 +9,8 @@
 .hv-shell { position: absolute; left: 0; top: 0; pointer-events: none; }
 .hv-art { position: absolute; pointer-events: none; user-select: none; overflow: visible; transition: filter .15s; }
 .hv-art.hv-back { filter: brightness(.8); }
+/* the painted props sit a step down, into the cut-away's lamplit tone (the white cabinet glared) */
+.hv-art[src*="sprites/house/"] { filter: brightness(.88) saturate(.88); }
 .hv-st.off .hv-art { filter: brightness(.55) saturate(.6); }
 
 /* stations: the hotspot over the art; hover / focus glows the art and shows the summary */
