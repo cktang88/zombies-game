@@ -279,10 +279,16 @@ const ART: Record<StationId, () => string> = {
   rack: () => img('obj_cache', 462, 470, 118),
   table: () => pic('table', 612, 526, 121),
   calendar: () => {
+    // the painted calendar's next seven blank days (after the crossed-out ones): danger nights ringed in red pencil
     const c = calendar(7);
     const red = (k: string) => k === 'tide' || k === 'crossing' || k === 'band' || k === 'horde' || k === 'raiders' || k === 'ice';
-    const cells = c.map((d, i) => `<rect x="${6 + (i % 4) * 16}" y="${26 + Math.floor(i / 4) * 16}" width="13" height="13" fill="${i === 0 ? '#e6dcc6' : '#cbbf9f'}" stroke="#4a4235" stroke-width="1"/>${red(d.kind) ? `<circle cx="${12.5 + (i % 4) * 16}" cy="${32.5 + Math.floor(i / 4) * 16}" r="4" fill="#a8322a"/>` : ''}`).join('');
-    return svg(784, 462, 76, 64, `<rect x="2" y="2" width="72" height="60" fill="#d8ccad" ${INK} stroke-width="2"/><rect x="2" y="2" width="72" height="18" fill="#7a2a20" ${INK} stroke-width="2"/><circle cx="38" cy="6" r="3" fill="#070605"/>${cells}`);
+    const cells: [number, number][] = [[36.2, 48.8], [41.7, 48.8], [47.1, 48.8], [12.9, 55.8], [18.8, 55.8], [24.8, 55.8], [30.8, 55.8]];
+    const rings = c.map((d, i) => {
+      const [x, y] = cells[i];
+      return red(d.kind) ? `<ellipse cx="${x}" cy="${y}" rx="2.9" ry="2.6" fill="none" stroke="#a8261e" stroke-width="1.1" opacity=".9"/>`
+        : i === 0 ? `<path d="M${x - 2.4} ${y + 2.4} h4.8" stroke="#2a2018" stroke-width=".8"/>` : '';
+    }).join('');
+    return pic('calendar', 788, 460, 58) + svg(788, 460, 58, 66, rings);
   },
   bench: () => img('obj_shed', 934, 492, 146)
     + svg(1062, 556, 112, 84, `<rect x="2" y="16" width="108" height="12" fill="#5a4630" ${INK}/><path d="M10 28 v54 M100 28 v54 M10 62 h90" fill="none" stroke="#2a2119" stroke-width="6"/>
