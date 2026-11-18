@@ -30,6 +30,7 @@ import { hintHtml, markHintTarget, nextHint, skipHints } from './onboarding';
 import { threadsHtml } from '../sim/threads';
 import { calendarHtml } from '../sim/calendar';
 import { juiceAfterRender } from './juice';
+import { siteFindsText } from './sites';
 import { sysTip, sysLine } from './guide';
 import { todayHtml, dotKeys, pickTodo, applyFlash, markSeen, setRevealAll, isOpen, revealNote, runOpen, JOB_REVEAL, type RevealId } from './today';
 
@@ -255,7 +256,7 @@ function survivorCard(s: Survivor, dots: Set<string> = new Set()) {
           const xs = siteStock(x.id);
           const walk = travelHours(x.id);
           const search = Math.max(0, jobHours(s) - walk);
-          return `<option value="${x.id}" ${site === x.id ? 'selected' : ''}>${x.name} · ${walk}h walk, ${search}h search · ${xs.left <= 0 ? 'picked clean' : `${xs.left}/${xs.max} left`} · ${riskWord(x.risk)} risk</option>`;
+          return `<option value="${x.id}" ${site === x.id ? 'selected' : ''}>${x.name}: ${siteFindsText(x)} · ${walk}h walk, ${search}h search · ${xs.left <= 0 ? 'picked clean' : `${xs.left}/${xs.max} left`} · ${riskWord(x.risk)} risk</option>`;
         }).join('')}</select>` : ''}
       </div>
       ${st ? `<div class="stock"${tip(`<b>${esc(SITES.find((x) => x.id === site)?.name ?? '')}</b>: ${st.left <= 0 ? 'picked clean' : `${st.left} of ${st.max} left`}<br>Every trip strips it further. ${Math.round(searchFactor(searchHours(s)) * 100)}% of a full search today.`)}>${st.pips}</div>` : ''}
@@ -399,7 +400,7 @@ function runHtml() {
   return `<div class="run"><div class="t-l rhead"${tip(why)}>Lead a run <span class="qm">?</span></div>
     <select data-act="runsite" aria-label="Run destination">${sites.map((x) => {
       const s2 = siteStock(x.id);
-      return `<option value="${x.id}" ${x.id === runSite ? 'selected' : ''}>${x.name} · ${travelHours(x.id)}h · ${s2.left <= 0 ? 'picked clean' : `${s2.left}/${s2.max}`} · ${riskWord(x.risk)} risk</option>`;
+      return `<option value="${x.id}" ${x.id === runSite ? 'selected' : ''}>${x.name}: ${siteFindsText(x)} · ${travelHours(x.id)}h · ${s2.left <= 0 ? 'picked clean' : `${s2.left}/${s2.max}`} · ${riskWord(x.risk)} risk</option>`;
     }).join('')}</select>
     <div class="runrow">
       <select data-act="runleave" aria-label="Leave at">${[0, 2, 4, 6].map((h) => `<option value="${h}" ${h === runLeave ? 'selected' : ''}>leave ${clockLabel(h)}</option>`).join('')}</select>
