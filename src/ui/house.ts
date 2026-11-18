@@ -273,7 +273,7 @@ const ART: Record<StationId, () => string> = {
     + pic('medcabinet', 410, 325, 45),
   bunks: () => pic('bunks', 490, 287, 154),
   radio: () => pic('radio', 774, 315, 92),
-  kitchen: () => pic('stove', 382, 486, 62)
+  kitchen: () => pic('stove', 382, 444, 62)
     + pic('pantry_shelf', 302, 478, 78)
     + (G.flags.dog ? img('dog', 352, 560, 84, 'hv-dog') : '')
     + (buildingLevel('still') ? pic('still', 238, 520, 58) : ''),
