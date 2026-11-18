@@ -109,7 +109,6 @@ a[data-act] { cursor: pointer; color: var(--ink); text-decoration: underline dot
 .grave ul { margin: 6px 0 0; padding-left: 16px; font-size: 13px; color: #cbbf9f; }
 .report .lines p { margin: 6px 0; line-height: 1.35; }
 .forecast { color: #c9a95a; font-style: italic; border-left: 2px solid #6a5426; padding-left: 8px; }
-.weather { margin: 14px 0; font-size: 14px; }
 .dusk { width: 100%; padding: 14px; font-size: 16px; background: #4a2a20; border-color: #8a4a30; }
 .dusk:hover { background: #5e3326 !important; }
 

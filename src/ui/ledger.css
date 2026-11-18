@@ -319,7 +319,6 @@ ul.fort li b { font-family: var(--type); font-weight: normal; color: #efe4cc; }
 .report .lines p { font-size: var(--fs-m); }
 .report .lines .fold { border: 0; }
 .report .lines .fold > summary { padding: 0; }
-.weather { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; cursor: default; }
 .pips.red i.on { background: #c0503c; }
 .threads { margin: 8px 0; display: grid; gap: 4px; }
 .thread { display: flex; align-items: center; gap: 6px; padding: 3px 6px; border-left: 2px solid rgba(200, 160, 90, .5); background: rgba(255, 255, 255, .02); cursor: default; font-size: var(--fs-s); }

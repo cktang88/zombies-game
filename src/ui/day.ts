@@ -806,10 +806,12 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
       <section class="report">
         <h2 class="t-l">This morning</h2>
         <div class="lines">${report.length ? report.slice(0, 2).map((l) => `<p>${esc(l)}</p>`).join('') + (report.length > 2 ? fold(`<span class="t-xs">+${report.length - 2} more</span>`, report.slice(2).map((l) => `<p>${esc(l)}</p>`).join('')) : '') : '<p class="t-s">A quiet morning.</p>'}</div>
-        ${fc ? `<p class="forecast">${esc(fc)}</p>` : ''}
-        ${isOpen('calendar') ? `<div class="calwrap"${dots.has('calendar') ? ' data-dot' : ''}>${revealNote('calendar')}${calendarHtml()}</div>` : ''}
+        ${fc && !isOpen('calendar') ? `<p class="forecast">${esc(fc)}</p>` : ''}
+        ${isOpen('calendar') ? `<div class="calwrap"${dots.has('calendar') ? ' data-dot' : ''}>${revealNote('calendar')}${calendarHtml({
+          flavour: fc,
+          tonight: { word: tp > 60 ? 'BIG' : tp > 30 ? 'bad' : 'light', big: tp > 60, tip: `How big: ${pips(Math.min(5, Math.ceil(tp / 20)), 5, tp > 60 ? 'red' : '')} (${tp > 60 ? 'a long one' : tp > 30 ? 'a bad one' : 'light'})<br>The season's pace: ${esc(persona().name)}.${heat ? `<br>The stove wants ${heat} fuel.` : ''}` },
+        })}</div>` : ''}
         ${threadsHtml()}
-        ${isOpen('calendar') ? `<div class="weather"${tip(`<b>How big tonight is</b>: the dots, out of 5.<br>The season's pace: ${esc(persona().name)}.${heat ? `<br>The stove will want ${heat} fuel.` : ''}`)}><span class="t-xs">Tonight</span> <b>${tp > 60 ? 'a long one' : tp > 30 ? 'a bad one' : 'light'}</b> ${pips(Math.min(5, Math.ceil(tp / 20)), 5, tp > 60 ? 'red' : '')}</div>` : ''}
         ${runOpen() ? `<div class="runwrap"${dots.has('run') ? ' data-dot' : ''}>${revealNote('run')}${runHtml()}</div>` : ''}
         <button class="dusk" data-act="dusk">${duskArmed && stale.length ? 'Go anyway ›' : 'Go to the wall at dusk ›'}<small>${esc(keyLabel(keyOf('day.dusk')))}</small></button>
       </section>
