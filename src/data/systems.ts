@@ -159,7 +159,7 @@ function build(): SystemDef[] {
       id: 'job_radio', group: 'jobs', icon: 'job_radio', name: 'Work the radio',
       what: 'Listens for what is coming tonight.',
       spend: [hours(DEFAULT_HOURS), ...costAmts(radio).map((a) => ({ ...a, t: `${a.t} (the mast, once)` }))],
-      get: [{ i: 'st_radio', t: 'tonight\'s threat: counts and timing' }, { i: 'st_faction', t: 'news, voices, the Guard\'s story' }],
+      get: [{ i: 'st_radio', t: 'tonight\'s threat: counts by wave; packs and timing on a clear signal (Social, Easy talker, The voice)' }, { i: 'st_faction', t: 'news, voices, the Guard\'s story' }],
       tradeoff: 'A worker sits at a dial, but you know what comes tonight.',
       when: 'Before a tide, or when you are guessing what to build.',
       key: 'Needs the radio mast',
