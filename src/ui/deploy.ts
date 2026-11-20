@@ -234,7 +234,7 @@ export function renderDeploy(root: HTMLElement, opts: DeployOpts): DeployHandle 
 
   function infoHtml(it: TrapDef, placedSel: boolean): string {
     const noise = it.noise >= 8 ? 'loud' : it.noise >= 3 ? 'audible' : 'quiet';
-    const back = it.retrieve === 'yes' ? 'reusable' : it.retrieve === 'partial' ? 'may return' : 'one use';
+    const back = it.retrieve === 'yes' ? (it.uses === 1 ? 'back if unused' : 'reusable') : it.retrieve === 'partial' ? 'may return' : 'one use';
     const upkeep = it.upkeep ? Object.entries(it.upkeep).map(([r, n]) => `<span class="chip"${tip(`Burns ${n} ${esc(r)} a night`)}><img class="ico" src="${spriteUrl(RES_ICON[r as keyof typeof RES_ICON] ?? 'icon_parts')}" alt="${esc(r)}"><b>${n}/night</b></span>`) : [];
     const chips = [
       chip('', TRIGGER_SHORT[it.trigger] + (it.key ? ` [${it.key}]` : ''), esc(TRIGGER_LABEL[it.trigger] + (it.autoWhen ? `; fires on its own when ${it.autoWhen}` : ''))),
