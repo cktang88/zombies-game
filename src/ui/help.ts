@@ -22,7 +22,7 @@ const card = (pic: string, name: string, line: string, more = '') =>
   `<div class="hcard"${tip(more)}>${pic}<div><b class="t-m">${name}</b><span class="t-s">${line}</span></div></div>`;
 const PAGES: Record<Page, { label: string; html: () => string }> = {
   // the day jobs live in the guide's cards (with what each costs and gives); the day keys sit under it
-  guide: { label: 'How it works', html: () => `${guideHtml()}<p class="t-s hkeys"><kbd>${esc(keyLabel(keyOf('day.dusk')))}</kbd> to the wall at dusk · <kbd>${esc(keyLabel(keyOf('day.help')))}</kbd> this ledger · hover anything for more.</p>` },
+  guide: { label: 'How it works', html: () => `${guideHtml()}<p class="t-s hkeys"><kbd>${esc(keyLabel(keyOf('day.dusk')))}</kbd> to the wall at dusk · <kbd>${esc(keyLabel(keyOf('day.help')))}</kbd> this ledger · <kbd>${esc(keyLabel(keyOf('day.codex')))}</kbd> the Compendium (every gun and how to get it) · hover anything for more.</p>` },
   night: {
     label: 'The wall',
     html: () => `

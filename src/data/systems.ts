@@ -8,7 +8,8 @@
 // module graph is still loading (battle.ts → pause → help → guide → here would be a cycle).
 import type { Res } from '../types';
 import { RECIPES, BUILDINGS, RES_ICON, RES_LABEL, FORT_CAP, SITES } from './world';
-import { AMMO_TYPES, ammoLabel, MELEE, MODS, MOD_SLOTS } from './weapons';
+import { AMMO_TYPES, ammoLabel, MELEE, MODS, MOD_SLOTS, WEAPONS, RARE_ORDER } from './weapons';
+import { LANDING_AMMO, RARE_PRICE, MERCHANT_NAME, MERCHANT_EVERY } from '../sim/landing';
 import { EMPLACEMENTS } from './emplacements';
 import { ZOMBIES } from './zombies';
 import { TRAPS, placementsAllowed } from './traps';
@@ -159,6 +160,7 @@ export function system(id: string): SystemDef | undefined {
 }
 
 function build(): SystemDef[] {
+  const gunRecipes = RECIPES.filter((r) => r.weapon && !r.hidden && ['service9', 'pump', 'hunting', 'smg', 'crossbow', 'pipemortar'].includes(r.weapon));
   const travel = Object.values(SITE_TRAVEL);
   const tMin = Math.min(...travel), tMax = Math.max(...travel);
   const radio = BUILDINGS.radio.cost[0];
@@ -461,12 +463,39 @@ function build(): SystemDef[] {
     },
     {
       id: 'armory', group: 'build', icon: 'rifle', name: 'Armory',
-      what: 'Who carries which gun, and what is fitted.',
+      what: 'Who carries which gun, and what is fitted; every other gun greyed, with how to get it.',
       spend: [{ i: 'st_break', t: 'condition: worn guns jam' }, { i: 'ammo', t: 'each gun draws on one pool: pistol, shells or rifle' }],
       get: [{ i: 'skill_shooting', t: 'the right gun for each shooter' }, { i: 'mod_scope', t: 'attachments' }],
       tradeoff: 'Spread the guns across the pools so one dry pool does not silence the wall; bows run forever but slowly.',
       when: 'Match guns to the rounds you can make or find.',
       key: '[Q] swap guns at the wall',
+    },
+    {
+      id: 'guns', group: 'build', icon: 'shotgun', name: 'Getting guns',
+      what: `${Object.keys(WEAPONS).length} guns in six kinds, and ${RARE_ORDER.length} rare ★ variants. Each kind has one you can make; the rest are found or bought.`,
+      spend: [{ i: 'scrap', t: 'salvage: make one at the bench, or buy one at the landing' }, { i: 'job_scavenge', t: 'runs: found at the sites' }],
+      get: [{ i: 'pistol', t: `made: ${gunRecipes.map((r) => `${WEAPONS[r.weapon!].name.toLowerCase()} (${r.level && r.level > 1 ? `${BUILDINGS[r.needs].name} Lv${r.level}` : BUILDINGS[r.needs].name})`).join(', ')}` }, { i: 'st_perk', t: 'rare: a better example, one gun in four at a site that has one, or from the merchant' }],
+      tradeoff: 'A new gun is a goal worth days of salvage; every one still eats rounds the house must make or buy.',
+      when: 'The gun rack (or the Compendium, [C]) shows every gun: yours in colour, the rest greyed with how to get one.',
+      key: '[C] Compendium',
+    },
+    {
+      id: 'landing', group: 'build', icon: 'scrap', name: 'The landing',
+      what: 'Peltier\'s boat below the house: a store, open every day while the Ferry families will trade.',
+      spend: [{ i: 'scrap', t: 'salvage, the one currency' }],
+      get: [{ i: 'ammo', n: LANDING_AMMO[0].n, s: `for ${LANDING_AMMO[0].price}`, t: 'pistol rounds (shells and rifle rounds too, a few lots a day)' }, { i: 'meds', t: 'medicine, food, fuel' }, { i: 'pistol', t: 'two plain guns and an attachment, new each day' }],
+      tradeoff: 'Rounds cost about two and a half times what the bench makes them for; surplus food, fuel and medicine sell back cheap.',
+      when: 'When the bench cannot keep up, or a night is coming you are short for. Friendly with the Ferry families: ×0.8; cold ×1.2; hostile: closed.',
+      key: 'The landing (left of the house)',
+    },
+    {
+      id: 'merchant', group: 'build', icon: 'st_perk', name: 'The merchant',
+      what: `${MERCHANT_NAME}, a peddler from upriver, ties up at the landing every ${MERCHANT_EVERY} days.`,
+      spend: [{ i: 'scrap', n: `${Math.min(...Object.values(RARE_PRICE))}–${Math.max(...Object.values(RARE_PRICE))}`, t: 'salvage for a rare gun' }],
+      get: [{ i: 'st_perk', n: 2, t: 'rare ★ variants' }, { i: 'lmg', n: 1, t: 'one of the wilder guns (scoped, auto-shotgun, AR, launchers…)' }, { i: 'mod_scope', n: 1, t: 'a good attachment' }],
+      tradeoff: 'Dearer than any way of making a gun; the price of not walking to the courthouse.',
+      when: 'The Today list says when he is here; the landing says when he is back.',
+      key: `every ${MERCHANT_EVERY} days`,
     },
     {
       id: 'mods', group: 'build', icon: 'mod_scope', name: 'Attachments',

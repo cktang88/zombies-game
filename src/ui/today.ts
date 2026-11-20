@@ -28,7 +28,7 @@ export const REVEAL: { id: RevealId; day: number; label: string; icon: string; w
   { id: 'calendar', day: 2, label: 'Calendar', icon: 'st_danger', sel: '.calendar', what: 'The week ahead. A red dot is a bad night: get ready for it.' },
   { id: 'chores', day: 2, label: 'Chores', icon: 'st_time', tab: 'wall', sel: '.chores', what: 'Oil the guns, clear the bodies: an hour of someone\'s day.' },
   { id: 'chronicle', day: 2, label: 'Chronicle', icon: 'st_xp', tab: 'chronicle', what: 'What happened, day by day.' },
-  { id: 'armory', day: 3, label: 'Armory', icon: 'pistol', tab: 'armory', what: 'Every gun, its rounds and attachments. Hover a gun for its numbers.' },
+  { id: 'armory', day: 3, label: 'Armory', icon: 'pistol', tab: 'armory', what: 'Every gun there is, by kind: yours in colour, the rest greyed with how to get one (make, buy at the landing, find). Hover a gun for its numbers.' },
   { id: 'stores', day: 3, label: 'All the stores', icon: 'meds', what: 'Medicine joins the stores along the top.' },
   { id: 'jobs', day: 3, label: 'More jobs', icon: 'job_drill', what: 'Drill, Counsel and the Radio join the job list.' },
   { id: 'run', day: 4, label: 'Lead a run', icon: 'job_scavenge', sel: '.run', what: 'Your leader walks one street in daylight for loot. Back before dark.' },
