@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="dark" />
+<meta name="robots" content="noindex" />
+<title>Vessey Anim Lab</title>
+<style>
+  :root { --bg: #111; --fg: #ddd; --mut: #888; --btn: #2a2622; --hi: #c9a24a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 12px; background: var(--bg); color: var(--fg); font: 13px/1.4 system-ui, sans-serif; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p { color: var(--mut); margin: 0 0 6px; }
+  canvas { display: block; width: 100%; max-width: 1280px; height: auto; background: #6f8a9a; border: 1px solid #333; cursor: crosshair; }
+  .bar { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin: 6px 0; }
+  .bar b { color: var(--hi); font-weight: 600; margin-right: 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+  button, select { background: var(--btn); color: var(--fg); border: 1px solid #3a342e; border-radius: 4px; padding: 4px 8px; font: inherit; cursor: pointer; }
+  button:hover { border-color: var(--hi); }
+  #log { font: 12px ui-monospace, monospace; color: #bba; white-space: pre; height: 92px; overflow: hidden; }
+  #status { font: 12px ui-monospace, monospace; color: #9c9; }
+</style>
+  <script type="module" crossorigin src="./assets/animlab-DsZzevgT.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/weapons-B3AlzZnB.js">
+  <link rel="modulepreload" crossorigin href="./assets/zombies-D3-xiq8c.js">
+  <link rel="modulepreload" crossorigin href="./assets/assets-CXZIKEmA.js">
+</head>
+<body>
+<h1>Vessey anim lab</h1>
+<p>Dev page for the cutout bone rig (src/anim). Mouse aims the survivor. <code>?dogs</code> shows the quadruped rig. <code>?bench=1</code> runs the 150 Turned + 6 survivors benchmark.</p>
+<canvas id="cv" width="1280" height="640"></canvas>
+<div id="ui"></div>
+<div id="status"></div>
+<div id="log"></div>
+</body>
+</html>

@@ -1,0 +1,42 @@
+{
+ "cutGunScale": {
+  "surv_f_mid": { "pump": 1.05 }, "surv_f_native": { "hunting": 1.05 }, "surv_f_old": { "hunting": 1.05 },
+  "surv_f_young": { "m1911": 1.3 }, "surv_idle": { "ar15": 1.2 }, "surv_m_mid": { "service9": 1.3 },
+  "surv_m_old": { "revolver": 1.35 }, "surv_pistol": { "revolver": 1.3 }, "surv_rifle": { "ar15": 1.1 },
+  "surv_shotgun": { "pump": 1.07 }, "z_raider2": { "pump": 1.05 }, "z_raider": { "lever": 1.08 }, "surv_m_young": { "lever": 1.03 }
+ },
+ "readyUnits": {
+  "surv_rifle": { "ar15": "unit_surv_rifle_ar15_ready" },
+  "surv_f_old": { "hunting": "unit_surv_f_old_hunting_ready" },
+  "surv_pistol": { "revolver": "unit_surv_pistol_revolver_ready" },
+  "z_raider": { "lever": "unit_z_raider_lever_ready" },
+  "z_raider2": { "pump": "unit_z_raider2_pump_ready" },
+  "surv_shotgun": { "pump": "unit_surv_shotgun_pump_ready" },
+  "surv_smg": { "smg": "unit_surv_smg_smg_ready" },
+  "surv_idle": { "ar15": "unit_surv_idle_ar15_ready" },
+  "surv_f_mid": { "pump": "unit_surv_f_mid_pump_ready" },
+  "surv_m_mid": { "service9": "unit_surv_m_mid_service9_ready" },
+  "surv_m_young": { "lever": "unit_surv_m_young_lever_ready" },
+  "surv_f_native": { "hunting": "unit_surv_f_native_hunting_ready" },
+  "surv_m_big": { "smg": "unit_surv_m_big_smg_ready" },
+  "surv_f_young": { "m1911": "unit_surv_f_young_m1911_ready" },
+  "surv_m_old": { "revolver": "unit_surv_m_old_revolver_ready" }
+ },
+ "reloadUnits": {
+  "surv_rifle": { "ar15": "unit_surv_rifle_ar15_reload" },
+  "surv_idle": { "ar15": "unit_surv_idle_ar15_reload" },
+  "surv_m_big": { "smg": "unit_surv_m_big_smg_reload" },
+  "surv_f_young": { "m1911": "unit_surv_f_young_m1911_reload" },
+  "surv_f_old": { "hunting": "unit_surv_f_old_hunting_reload" },
+  "surv_pistol": { "revolver": "unit_surv_pistol_revolver_reload" },
+  "z_raider": { "lever": "unit_z_raider_lever_reload" },
+  "z_raider2": { "pump": "unit_z_raider2_pump_reload" },
+  "surv_shotgun": { "pump": "unit_surv_shotgun_pump_reload" },
+  "surv_smg": { "smg": "unit_surv_smg_smg_reload" },
+  "surv_f_mid": { "pump": "unit_surv_f_mid_pump_reload" },
+  "surv_m_mid": { "service9": "unit_surv_m_mid_service9_reload" },
+  "surv_m_young": { "lever": "unit_surv_m_young_lever_reload" },
+  "surv_f_native": { "hunting": "unit_surv_f_native_hunting_reload" },
+  "surv_m_old": { "revolver": "unit_surv_m_old_revolver_reload" }
+ }
+}
