@@ -298,7 +298,7 @@ export class Traps implements BattleHook {
   // ---------------- hook: update ----------------
   update(dt: number) {
     const b = this.b;
-    this.hint = Math.max(0, this.hint - dt);
+    if (b.intro <= 0) this.hint = Math.max(0, this.hint - dt); // counted from when the HUD shows it (it ran out under the intro)
     this.timers(dt);
     this.checkIgnition();
     this.criers(dt);
