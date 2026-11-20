@@ -47,7 +47,12 @@ const URL = process.argv[2] ?? 'http://localhost:4192/';
   await page.waitForFunction(() => window.__battle && window.__battle.intro <= 0, null, { timeout: 30000 });
   step('night');
   for (let i = 0; i < 12; i++) { await page.mouse.click(700 + (i % 4) * 80, 420); await page.waitForTimeout(250); }
-  await page.keyboard.press('p'); await page.waitForTimeout(300); await page.keyboard.press('Escape');
+  await page.keyboard.press('p'); await page.waitForTimeout(300);
+  // the Compendium from the pause menu (read-only at night: no make or buy buttons), then back to the night
+  await page.click('.overlay.pause [data-p=codex]');
+  await page.waitForSelector('.overlay.codex .codexbook.ro .catgroup', { timeout: 5000 });
+  await page.keyboard.press('Escape'); await page.waitForTimeout(200);
+  await page.keyboard.press('Escape');
   await page.evaluate(() => { const b = window.__battle; b.t = b.duration + 1; for (const z of b.zombies) z.hp = 0; b.zombies.length = 0; b.spawnIdx = 1e9; });
   await page.waitForSelector('.dawnrep', { timeout: 40000 });
   step('dawn');
