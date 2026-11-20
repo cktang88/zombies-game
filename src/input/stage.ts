@@ -162,8 +162,8 @@ const NIGHT_BTNS: Btn[] = [
   { label: 'II', cls: 'tp', act: '@pause', aria: 'Pause' },
 ];
 const RUN_BTNS: Btn[] = [
-  { label: '◀', cls: 'l1', act: 'run.left', hold: true, aria: 'Walk left' },
-  { label: '▶', cls: 'l2', act: 'run.right', hold: true, aria: 'Walk right' },
+  { label: '◀', cls: 'w1', act: 'run.left', hold: true, aria: 'Walk left' },
+  { label: '▶', cls: 'w2', act: 'run.right', hold: true, aria: 'Walk right' },
   { label: 'Reload', cls: 'r1', act: 'run.reload', aria: 'Reload' },
   { label: 'Search', cls: 'r2', act: 'run.search', hold: true, aria: 'Search / revive (hold)' },
   { label: 'Swing', cls: 'r3', act: 'run.swing', hold: true, aria: 'Swing' },

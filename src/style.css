@@ -165,6 +165,8 @@ a[data-act] { cursor: pointer; color: var(--ink); text-decoration: underline dot
 .tbtns-pad .tb.on { background: rgba(200,150,70,.55); border-color: #f0d890; }
 /* stacked at the edges: the guards stand left of 12%, the ammo count sits in the bottom-right corner */
 .tbtns-pad .l1 { left: 1%; bottom: 18%; } .tbtns-pad .l2 { left: 1%; bottom: 36%; }
+/* a run's walk buttons side by side: left on the left (stacked, ▶ sat above ◀) */
+.tbtns-pad .w1 { left: 1%; bottom: 18%; } .tbtns-pad .w2 { left: 10%; bottom: 18%; }
 .tbtns-pad .r1 { right: 1%; bottom: 18%; } .tbtns-pad .r2 { right: 1%; bottom: 36%; }
 .tbtns-pad .r3 { right: 10%; bottom: 18%; } .tbtns-pad .r4 { right: 10%; bottom: 36%; }
 .tbtns-pad .tp { right: 1.5%; top: 11%; width: 6%; font-size: 13px; }
