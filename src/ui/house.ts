@@ -482,7 +482,8 @@ export function houseHtml(ctx: HouseCtx): string {
       <button class="hv-notehead" data-hs-act="note" aria-expanded="${noteOpen}"><span class="t-l">Today</span>${left ? `<b class="hv-n">${left}</b>` : '<span class="t-xs">done</span>'}<span class="hv-caret">${noteOpen ? '▾' : '▸'}</span></button>
       <div class="hv-notebody">${ctx.today}
         ${ctx.forecast && !isOpen('calendar') ? `<p class="forecast t-s">${esc(ctx.forecast)}</p>` : ''}
-        <details class="fold hv-morning"><summary><span class="t-s">This morning</span> <span class="t-xs">${ctx.report.length}</span></summary><div class="fold-body">${ctx.report.length ? ctx.report.map((l) => `<p class="t-s">${esc(l)}</p>`).join('') : '<p class="t-s">A quiet morning.</p>'}</div></details>
+        ${ctx.report.length ? `<p class="t-s hv-latest">${esc(ctx.report[0])}</p>` : ''}
+        ${ctx.report.length > 1 ? `<details class="fold hv-morning"><summary><span class="t-s">This morning</span> <span class="t-xs">+${ctx.report.length - 1}</span></summary><div class="fold-body">${ctx.report.slice(1).map((l) => `<p class="t-s">${esc(l)}</p>`).join('')}</div></details>` : ctx.report.length ? '' : '<p class="t-s dim">A quiet morning.</p>'}
         ${away.length ? `<p class="t-xs dim">Away: ${away.map((s) => esc(first(s))).join(', ')}</p>` : ''}
       </div>
     </div>

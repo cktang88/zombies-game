@@ -131,7 +131,7 @@ function day() {
       if (!ev) return;
       G.pendingEvent = null;
       const outcome = resolveEvent(ev, i);
-      if (outcome) report.push(outcome);
+      if (outcome) report.unshift(outcome); // newest first: the day screen shows the top line
       // an incident can end the story (the ferry, the mill)
       if (G.flags.ending) return epilogue();
       // events can chain (e.g. found survivor + a bite)
@@ -175,7 +175,7 @@ function afterRun(r: ExpeditionResult) {
     gainXp(l, 'scavenging', 40);
   }
   lines.push(...drainLevelUps());
-  report.push(...lines);
+  report.unshift(...lines);
   save();
   if (!living().length) return gameOver();
   day();

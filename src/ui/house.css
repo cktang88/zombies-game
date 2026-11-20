@@ -86,7 +86,8 @@
 .hv-note .today .td { width: 100%; justify-content: flex-start; text-align: left; white-space: normal; }
 .hv-note .today .td-all { align-self: flex-start; }
 .hv-note .forecast { margin: 8px 0 0; }
-.hv-note .hv-morning { margin-top: 8px; }
+.hv-note .hv-morning { margin-top: 4px; }
+.hv-note .hv-latest { margin: 8px 0 0; padding-top: 6px; border-top: 1px solid rgba(90, 79, 60, .5); }
 .hv-wrap.zoomed .hv-note { opacity: 0; pointer-events: none; }
 
 /* the panel beside what it is about */

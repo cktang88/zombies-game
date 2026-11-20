@@ -1022,7 +1022,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
       return;
     } else if (act === 'oil' || act === 'pile') {
       const line = act === 'oil' ? oilGuns() : clearPile(el.dataset.how === 'burn' ? 'burn' : 'haul');
-      if (line) report.push(line);
+      if (line) report.unshift(line);
       sfx.ui('stamp');
       h.rerender();
       return;
@@ -1067,7 +1067,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
     } else if (act === 'perk') {
       const s = byId(el.dataset.id!);
       const line = s ? choosePerk(s, el.dataset.perk!) : '';
-      if (line) { report.push(line); sfx.ui('stamp'); }
+      if (line) { report.unshift(line); sfx.ui('stamp'); }
     } else if (act === 'unarmor') {
       const s = byId(el.dataset.id!);
       if (s?.armor) { s.armor = null; G.flags.armorStock = ((G.flags.armorStock as number) ?? 0) + 1; }
