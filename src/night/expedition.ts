@@ -12,7 +12,8 @@ import { sfx, wind, gunSoundFor, type Surface } from '../audio';
 import { reduceGore, shakeScale, autoReload, hitMarkers, screenFx, fxQuality } from '../ui/settings';
 import { flashKind, gunFeel, voiceOf, panOf, isSuppressed, type FlashKind } from './gunfx';
 import { Vfx } from './vfx'; // gunfire & effects (docs/research/10-vfx.md)
-import { RunActors } from './actors'; // rigged bodies (src/anim)
+import { RunActors } from './actors';
+import { touchDevice } from '../input/stage'; // rigged bodies (src/anim)
 import { react, slideStep, classicPose, IMPACT, type Reaction, type HitIn } from './impact'; // hit reactions, as at night
 import type { Zombie } from './battle';
 
@@ -297,7 +298,7 @@ export class Expedition {
     wind(true);
     this.say(`${this.site.name}. ${this.site.desc}`, 6);
     // the opening keys in one short line; the rest on the [F1] sheet (17c: the full list ran over the status panel)
-    this.say(`[${keyLabel(keyOf('run.left'))}/${keyLabel(keyOf('run.right'))}] walk · ${keyCap('run.search')} search · hold [F1] for keys · home is the left edge.`, 6);
+    this.say(touchDevice() ? 'Walk with ◀ ▶ · hold Search at a door · home is the left edge.' : `[${keyLabel(keyOf('run.left'))}/${keyLabel(keyOf('run.right'))}] walk · ${keyCap('run.search')} search · hold [F1] for keys · home is the left edge.`, 6);
     if (this.mate) this.say(`${first(this.mate)} comes along. ${first(this.mate)} carries ${MATE_CAP} more and watches your back.`, 6);
   }
 
@@ -425,6 +426,8 @@ export class Expedition {
     if (k === keyOf('run.shove')) { this.shove(); e.preventDefault(); }
   }
   keySheetHeld = false;
+  /** a phone or tablet: no F1 to hold, the on-screen buttons instead */
+  touch = touchDevice();
   /** The full key sheet ([F1] held), grouped like the night's. */
   keyGroups(): { title: string; rows: Hint[] }[] {
     return [
@@ -1708,7 +1711,7 @@ export class Expedition {
       if (it.kind === 'res') { c.font = `13px ${FONT}`; c.textAlign = 'right'; c.fillStyle = '#efe2c2'; c.fillText(`${it.n}`, px + iw + 8, H - 15); c.textAlign = 'left'; }
       px += iw + 14;
     });
-    if (keyHintsOn()) hintRow(c, [{ key: 'F1', label: 'keys' }], 20 + packW + (used > cap ? 110 : 14), H - 50, 'left', 0.45);
+    if (keyHintsOn() && !this.touch) hintRow(c, [{ key: 'F1', label: 'keys' }], 20 + packW + (used > cap ? 110 : 14), H - 50, 'left', 0.45);
     if (this.pack.length) {
       const it = this.pack[selI];
       if (it) { c.font = `13px ${FONT}`; c.fillStyle = '#cfc3a6'; c.fillText(itemLabel(it), px + 6, H - 24); px += c.measureText(itemLabel(it)).width + 16; }
