@@ -399,7 +399,7 @@ function bunksPanel(ctx: HouseCtx, st: Station) {
   return `${here(st)}
     ${sec('Rest', '', 'A day on Rest sleeps off tiredness. Short hours help too (on a person\'s card).')}
     ${ppl.map((s) => `<div class="hv-person"><button class="hv-face sm" data-hs-sv="${s.id}">${portraitImg(s.sprite, 'portrait')}</button><span class="t-m">${esc(first(s))}</span><span class="t-s ${s.rest < 0.45 ? 'neg' : 'dim'}">rested ${Math.round(s.rest * 100)}%</span>${s.job === 'rest' ? '<span class="t-xs">resting</span>' : canWork(s) ? `<button class="mini" data-hs-act="setjob" data-id="${s.id}" data-job="rest">rest</button>` : ''}</div>`).join('')}
-    <p class="t-xs dim">${esc(ctx.jobOutlook(ppl[0] ?? living()[0], 'rest'))}</p>`;
+    <p class="t-s dim">A day on Rest: +40% rested; every night's sleep: +22%. Under 45%: tired (mood −6). Under 25%: worn out, works a fifth slower and shoots worse.</p>`;
 }
 function radioPanel(ctx: HouseCtx, st: Station) {
   const mast = buildingLevel('radio') > 0;
