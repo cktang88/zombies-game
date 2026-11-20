@@ -5,6 +5,7 @@
 import { sfx } from '../audio';
 import { openSettings } from './settings';
 import { openHelp } from './help';
+import { openCompendium } from './compendium';
 import { keyLabel, keyOf } from './keys';
 import { tip } from './kit';
 
@@ -23,6 +24,7 @@ export function openPause(host: HTMLElement, o: { where: 'night' | 'run'; resume
     <div class="pausebtns">
       <button class="go" data-p="resume"${tip(o.where === 'night' ? 'The road holds still.' : 'The street holds still.')}><i aria-hidden="true">▶</i>Resume <span class="pkeys"><kbd>${pk}</kbd><kbd>Esc</kbd></span></button>
       <button data-p="settings"><i aria-hidden="true">⚙</i>Settings</button>
+      <button data-p="codex"><i aria-hidden="true">❧</i>Compendium</button>
       <button data-p="help"><i aria-hidden="true">?</i>Help</button>
       <button data-p="quit"><i aria-hidden="true">✕</i>Quit to title</button>
     </div>
@@ -36,7 +38,7 @@ export function openPause(host: HTMLElement, o: { where: 'night' | 'run'; resume
   const resume = () => { close(); o.resume(); };
   // capture phase: nothing below (the battle, the run, the day screen) sees a key while paused
   const onKey = (e: KeyboardEvent) => {
-    if (document.querySelector('.overlay.settings, .overlay.help')) return; // their own Esc closes them
+    if (document.querySelector('.overlay.settings, .overlay.help, .overlay.codex')) return; // their own Esc closes them
     const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     if (e.key === 'Escape' || k === keyOf(o.where === 'night' ? 'night.pause' : 'run.pause')) { e.preventDefault(); e.stopPropagation(); if (!e.repeat) resume(); return; }
     if (e.key === 'Tab' || e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); return; } // focus moves / buttons work
@@ -56,6 +58,7 @@ export function openPause(host: HTMLElement, o: { where: 'night' | 'run'; resume
       case 'resume': return resume();
       case 'settings': return openSettings(host);
       case 'help': return openHelp(host, o.where === 'night' ? 'night' : 'runs');
+      case 'codex': return openCompendium(host);
       case 'quit': conf.hidden = false; (conf.querySelector('[data-p=quit-no]') as HTMLElement).focus(); return;
       case 'quit-no': conf.hidden = true; return;
       case 'quit-yes': close(); (o.quit ?? (() => {}))(); quitHandler?.(); return;

@@ -46,18 +46,18 @@ function howHtml(e: GunEntry): string {
   if (e.craft) {
     const c = e.craft;
     rows.push(c.unlocked
-      ? `<div class="how make"><span>Make · ${esc(c.where)}</span>${costTxt(c.recipe.cost)}<button class="mini" data-act="queue" data-id="${c.recipe.id}" ${c.afford ? '' : 'disabled'} aria-label="Make the ${esc(e.name)}">Make</button></div>`
-      : `<div class="how lock"><span>🔒 ${esc(c.where)}</span>${costTxt(c.recipe.cost)}</div>`);
+      ? `<div class="gway make"><span>Make · ${esc(c.where)}</span>${costTxt(c.recipe.cost)}<button class="mini" data-act="queue" data-id="${c.recipe.id}" ${c.afford ? '' : 'disabled'} aria-label="Make the ${esc(e.name)}">Make</button></div>`
+      : `<div class="gway lock"><span>🔒 ${esc(c.where)}</span>${costTxt(c.recipe.cost)}</div>`);
   }
   for (const o of [e.store, e.merchant]) {
     if (!o) continue;
-    rows.push(`<div class="how buy"><span>${o.merchant ? 'Merchant' : 'Landing'} today</span>${salv(o.cost.salvage)}<button class="mini" data-act="landbuy" data-key="${o.key}" ${o.left > 0 && has(o.cost) ? '' : 'disabled'}>${o.left > 0 ? 'Buy' : 'Sold'}</button></div>`);
+    rows.push(`<div class="gway buy"><span>${o.merchant ? 'Merchant' : 'Landing'} today</span>${salv(o.cost.salvage)}<button class="mini" data-act="landbuy" data-key="${o.key}" ${o.left > 0 && has(o.cost) ? '' : 'disabled'}>${o.left > 0 ? 'Buy' : 'Sold'}</button></div>`);
   }
-  if (!e.store && e.storeEver) rows.push('<div class="how">Landing, some days</div>');
-  if (!e.merchant && e.merchantEver) rows.push(`<div class="how">Merchant · ${esc(dateLabel(merchantNext(Math.max(G.day + (merchantOn() ? 1 : 0), e.rare ? rareMinDay(e.rare) : MERCHANT_GUNS[e.def]?.minDay ?? 1))))}</div>`);
+  if (!e.store && e.storeEver) rows.push('<div class="gway">Landing, some days</div>');
+  if (!e.merchant && e.merchantEver) rows.push(`<div class="gway">Merchant · ${esc(dateLabel(merchantNext(Math.max(G.day + (merchantOn() ? 1 : 0), e.rare ? rareMinDay(e.rare) : MERCHANT_GUNS[e.def]?.minDay ?? 1))))}</div>`);
   if (e.sites.length) {
     const n = SITES.find((x) => x.id === e.sites[0])?.name ?? e.sites[0];
-    rows.push(`<div class="how">Found · ${esc(n)}${e.sites.length > 1 ? ` +${e.sites.length - 1}` : ''}</div>`);
+    rows.push(`<div class="gway">Found · ${esc(n)}${e.sites.length > 1 ? ` +${e.sites.length - 1}` : ''}</div>`);
   }
   return rows.join('');
 }

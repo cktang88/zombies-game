@@ -47,6 +47,7 @@ export const ACTIONS: KeyAction[] = [
   { id: 'day.dusk', ctx: 'day', label: 'Go to the wall at dusk', def: 'Enter' },
   { id: 'day.help', ctx: 'day', label: 'Open the help ledger', def: '?' },
   { id: 'day.view', ctx: 'day', label: 'House view / ledger view', def: 'l' },
+  { id: 'day.codex', ctx: 'day', label: 'Open the Compendium', def: 'c' },
 ];
 
 /** Fixed inputs, listed beside the bindings (not rebindable). */

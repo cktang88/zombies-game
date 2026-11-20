@@ -186,7 +186,7 @@ export function turnedEntries(): CodexEntry[] {
   const c = ensureCodex();
   const seenNames = new Set<string>();
   return Object.values(ZOMBIES).filter((z) => { if (seenNames.has(z.name)) return false; seenNames.add(z.name); return true; }).map((z) => ({
-    key: z.id, name: z.name, icon: z.sprites[0], line: z.role ?? z.lore, known: c.z.includes(z.id),
+    key: z.id, name: z.name, icon: z.sprites[0], line: z.role ?? 'Comes once, on its own night.', known: c.z.includes(z.id),
     stats: `${z.hp} hp · ${z.speed} px/s${z.armor ? ` · armour ${z.armor}` : ''}`,
     how: z.special ? 'Only on a special night' : `From day ${z.minDay}`,
     extra: z.lore,

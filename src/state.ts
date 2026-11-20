@@ -3,6 +3,7 @@ import { Rng } from './rng';
 import { RECIPES } from './data/world';
 import { MELEE, MELEE_FOLD, MODS, MOD_FOLD, RARES } from './data/weapons';
 import { TRAPS, TRAP_FOLD } from './data/traps';
+import { ZOMBIES } from './data/zombies';
 
 const KEY = 'vessey-save-v1';
 
@@ -90,7 +91,8 @@ export function migrateSave(s: GameState | null): GameState | null {
   // a rare variant must name one that exists, for this gun
   for (const w of s.weapons ?? []) if (w.rare && RARES[w.rare]?.base !== w.def) delete w.rare;
   // the Compendium remembers what the house has owned: an older save starts it from the rack
-  s.codex ??= { guns: [...new Set((s.weapons ?? []).map((w) => w.def))], rares: [], z: [], seen: 0 };
+  // (and the Turned that could have come up the road on the nights already held)
+  s.codex ??= { guns: [...new Set((s.weapons ?? []).map((w) => w.def))], rares: [], z: Object.values(ZOMBIES).filter((z) => !z.special && z.minDay < (s.day ?? 1)).map((z) => z.id), seen: 0 };
   // an open event card may name old keys (Peltier's trades, costs and gains on the chips)
   const fold = (k: unknown) => (typeof k === 'string' && STORE_FOLD[k] ? STORE_FOLD[k][0] : k);
   const foldRec = (o?: Partial<Record<Res, number>>) => {

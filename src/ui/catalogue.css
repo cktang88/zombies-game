@@ -19,10 +19,10 @@
 .gcard.slot { opacity: .85; }
 .rare-b { color: #e8c25a; font-size: 13px; }
 .ghow { display: flex; flex-direction: column; gap: 3px; color: #a99c82; line-height: 1.25; font-size: 13px; text-align: left; align-self: stretch; }
-.ghow .how { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 4px; }
-.ghow .how.make > span:first-child, .ghow .how.buy > span:first-child { color: #d7caa9; }
-.ghow .how.lock { color: #8f8470; }
-.ghow .how button { margin-left: auto; }
+.ghow .gway { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 4px; }
+.ghow .gway.make > span:first-child, .ghow .gway.buy > span:first-child { color: #d7caa9; }
+.ghow .gway.lock { color: #8f8470; }
+.ghow .gway button { margin-left: auto; }
 /* the landing */
 .landing .oh { margin: 10px 0 4px; }
 .offer { display: grid; grid-template-columns: 34px 1fr auto auto auto; align-items: center; gap: 8px; padding: 3px 4px; border-bottom: 1px solid rgba(90, 79, 60, .35); }
@@ -38,3 +38,30 @@
 .wcard.recipe.locked .cname { color: #9a8e78; }
 .mkgroups .nextunlock { margin: 6px 2px 2px; }
 .landing .merch { border: 1px solid #7a6a48; background: rgba(232, 194, 90, .04); padding: 2px 4px; border-radius: 3px; }
+/* the Compendium (ui/compendium.ts): a full-screen book */
+.overlay.codex { z-index: 30; }
+.modal.ledger.codexbook { max-width: 1120px; width: 100%; height: calc(100vh - 40px); display: flex; flex-direction: column; padding-top: 18px; }
+.codexbook .htabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0 10px; }
+.codexbook .htabs button.on { background: #4a3f2c; border-color: #9a8458; }
+.codexbook .cx-body-wrap { flex: 1 1 auto; overflow: auto; padding-right: 6px; }
+.codexbook .gungrid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+.codexbook.ro button[data-act] { display: none; }
+.cx-intro { font-size: 14px; color: #b8ab90; }
+.cx-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+.cx-entry { display: flex; gap: 10px; padding: 8px; border: 1px solid rgba(90, 79, 60, .55); background: rgba(255, 255, 255, .025); border-radius: 3px; }
+.cx-entry .cx-pic { flex: 0 0 64px; height: 64px; display: grid; place-items: center; }
+.cx-entry .cx-pic img { max-width: 64px; max-height: 64px; object-fit: contain; filter: drop-shadow(0 0 1px rgba(232, 220, 196, .35)) drop-shadow(0 1px 1px rgba(0, 0, 0, .8)); }
+.cx-entry.cx-turned .cx-pic img { max-height: 64px; }
+.cx-entry .cx-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.cx-entry .cx-name { font-family: var(--type); font-size: 15px; }
+.cx-entry .cx-line { color: #d7caa9; }
+.cx-entry .cx-stats { color: #a99c82; }
+.cx-entry .cx-how { color: #b9cf86; }
+.cx-entry.unknown { border-style: dashed; background: rgba(0, 0, 0, .18); }
+.cx-entry.unknown .cx-pic img { filter: grayscale(1) brightness(.8); opacity: .55; }
+.cx-entry.unknown.cx-turned .cx-pic img { filter: brightness(0) drop-shadow(0 0 1px rgba(232, 220, 196, .4)); opacity: .7; }
+.cx-entry.unknown .cx-name, .cx-entry.unknown .cx-line { color: #9a8e78; }
+.cx-entry.unknown .cx-how { color: #a99c82; }
+.codexbtn { position: relative; }
+.codexbtn .cdot { position: absolute; top: 2px; right: 2px; width: 8px; height: 8px; border-radius: 50%; background: #e8c25a; box-shadow: 0 0 4px #e8c25a; }
+@media (max-width: 760px) { .modal.ledger.codexbook { height: auto; min-height: calc(100vh - 16px); } .cx-grid { grid-template-columns: 1fr; } }

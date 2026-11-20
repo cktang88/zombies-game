@@ -50,6 +50,7 @@ const JOBS: { id: JobId; label: string; hint: string }[] = [
 
 import { tip, ico, fold, chip, pips, sec, qi } from './kit';
 import { catalogueHtml, nextUnlockHtml, landingHtml } from './catalogue';
+import { openCompendium, codexButton } from './compendium';
 import { placeName } from '../sim/catalogue';
 import { buyOffer } from '../sim/landing';
 import './survivor.css';
@@ -827,9 +828,11 @@ function foodTip(eat: number, half: boolean) {
   return `Eat ${eat}/day: ${days} day${days === 1 ? '' : 's'} in the pantry.${big.length ? ` Big eaters (×1.6): ${esc(big.join(', '))}.` : ''}${light.length ? ` Light eaters (×0.7): ${esc(light.join(', '))}.` : ''}${half ? '<br><b>Half rations:</b> half the food, but hunger falls a little every day (people starve slowly) and mood −5.' : ''}`;
 }
 
-let duskArmed = false; // first dusk press with carried-over plans only highlights them
+let duskArmed = false;
+let rerenderDay: (() => void) | null = null; // the C key's Compendium redraws the day when it closes // first dusk press with carried-over plans only highlights them
 
 export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
+  rerenderDay = h.rerender;
   const ice = ICE_DAY - G.day;
   const fc = forecast();
   const eat = dailyFood();
@@ -874,7 +877,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
     <header>
       <div class="date"${tip(`This town's seed: ${G.seed}${G.flags.daily ? ` · daily ${esc(String(G.flags.daily))}` : ''}. Start a new game from it on the title screen to replay the same Vessey.`)}><b class="t-xl">${dateLabel()}</b> <span class="t-xs">day ${G.day}</span> <span class="t-s wx">${WEATHER_LABEL[G.weather] ?? G.weather}</span></div>
       <div class="ice"${tip(ice > 0 ? `The river freezes in ${ice} day${ice === 1 ? '' : 's'}. Then the dead can cross.` : ice === 0 ? 'The river is freezing tonight.' : 'The river is ice.')}>${ico('st_cold')}<b>${ice > 0 ? `${ice}d` : ice === 0 ? 'tonight' : 'ice'}</b></div>
-      <div class="hbtns">${viewButton()}<button class="icon" data-act="help" aria-label="Help and controls" title="Help and controls">?</button><button class="icon" data-act="settings" aria-label="Settings" title="Settings">⚙</button></div>
+      <div class="hbtns">${viewButton()}${codexButton()}<button class="icon" data-act="help" aria-label="Help and controls" title="Help and controls">?</button><button class="icon" data-act="settings" aria-label="Settings" title="Settings">⚙</button></div>
       <div class="stores">${STORE_RES.filter((r) => isOpen('stores') || ['food', 'salvage', 'fuel'].includes(r)).map((r) => {
         const low = (r === 'food' && G.stores.food < eat * 2) || (r === 'fuel' && G.stores.fuel < heat);
         const use = r === 'food' ? foodTip(eatN, half) : r === 'fuel' && heat ? `The stove burns ${heat} tonight.` : '';
@@ -1090,6 +1093,10 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
       sfx.ui();
       openHelp(root);
       return;
+    } else if (act === 'codex') {
+      sfx.ui('paper');
+      openCompendium(root, { onChange: h.rerender });
+      return;
     } else if (act === 'hint-next') nextHint();
     else if (act === 'hint-skip') skipHints();
     else if (act === 'run') {
@@ -1130,6 +1137,11 @@ function installKeys() {
     if (G.phase !== 'day' || !duskKey || e.repeat || e.altKey || e.ctrlKey || e.metaKey) return;
     if (!document.querySelector('.day') || document.querySelector('.overlay') || G.pendingEvent) return;
     const t = e.target as HTMLElement | null;
+    if (is(e, 'day.codex') && !(t && /^(SELECT|INPUT|TEXTAREA)$/.test(t.tagName))) {
+      e.preventDefault();
+      openCompendium((document.getElementById('app') as HTMLElement | null) ?? document.body, { onChange: () => rerenderDay?.() });
+      return;
+    }
     if (t && /^(SELECT|INPUT|TEXTAREA|BUTTON|A)$/.test(t.tagName)) return;
     if (is(e, 'day.dusk')) {
       e.preventDefault();
