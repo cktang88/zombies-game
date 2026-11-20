@@ -1,6 +1,6 @@
 import type { PendingEvent, Survivor, Res } from '../types';
 import { G, R, log, add, has, pay, newWeapon, rep, uid } from '../state';
-import { WEAPONS, MODS, AMMO_TYPES } from '../data/weapons';
+import { WEAPONS, MODS, AMMO_TYPES, RARES, gunModel } from '../data/weapons';
 import { RES_LABEL } from '../data/world';
 import {
   living, first, displayName, makeSurvivor, addThought, changeOpinion, setBond, wound, killSurvivor, isBitten, byId, tale,
@@ -112,14 +112,18 @@ export const INCIDENTS: Incident[] = [
   },
   {
     id: 'trader',
-    weight: () => (G.day > 2 ? 1.2 : 0),
+    // the landing (sim/landing.ts) is the everyday store now; this is Peltier coming up to the house with something special
+    weight: () => (G.day > 2 ? 0.6 : 0),
     make: () => {
       const wants: Res = R.pick(['fuel', 'food', 'meds', 'pistol'] as Res[]);
       const offers = R.pick([{ r: 'rifle', n: 18 }, { r: 'shell', n: 20 }, { r: 'salvage', n: 16 }, { r: 'meds', n: 3 }, { r: 'food', n: 12 }].filter((o) => o.r !== wants)) as { r: Res; n: number };
       // friends of the Ferry families get the family price
       const friend = rep('ferry') >= 40 ? 0.6 : rep('ferry') >= 10 ? 0.8 : rep('ferry') <= -40 ? 1.5 : 1;
       const price = Math.max(1, Math.round({ fuel: 6, food: 10, meds: 3, pistol: 40 }[wants as 'fuel'] * friend));
-      const gun = R.chance(0.3) ? R.pick(['revolver', 'pump', 'hunting', 'smg']) : null;
+      // a rare variant (data/weapons.ts RARES) he kept back for friends
+      const rare = R.chance(0.3) ? R.pick(['deputy357', 'duckpump', 'matchrifle', 'swatsmg']) : null;
+      const gun = rare ? RARES[rare].base : null;
+      const gunName = rare ? RARES[rare].name : '';
       // sometimes something special from under the tarp: an attachment or a box of odd ammunition
       const special = R.chance(0.45) ? (R.chance(0.5)
         ? { kind: 'mod' as const, id: R.pick(['scope', 'reddot', 'suppressor', 'extmag', 'flashlight'].filter((m) => MODS[m])) }
@@ -130,12 +134,12 @@ export const INCIDENTS: Incident[] = [
         ? R.pick([`a ${specialName} wrapped in an oily sock`, `a ${specialName} off a Guard rifle, "don't ask"`, `a ${specialName} from the Halvorsen gun cabinet`])
         : R.pick([`a box of ${specialName} with the Corliss inventory stamp scratched off`, `${specialName}, loose in a coffee can`, `${specialName} in a Strand Sporting Goods bag`])) : '';
       return {
-        id: 'trader', title: 'Peltier\'s boat',
-        text: `Old Peltier tied up at the landing below the house. Ferry families trade with whoever is still breathing.${friend < 1 ? ' He gives us the family price now.' : friend > 1 ? ' He keeps one hand near the shotgun under the tarp.' : ''} "${R.pick(['Ice is coming. After that I\'m nobody.', 'County boys pay in promises. You pay in goods.', 'Don\'t tell the Union I was here.'])}"\n\nHe wants ${price} ${lbl(wants)}. He offers ${offers.n} ${lbl(offers.r)}${gun ? `, or a ${WEAPONS[gun].name.toLowerCase()} for twice the price` : ''}.${special ? `\n\nUnder the tarp, for friends: ${specialPitch}. ${specialPrice} ${lbl(wants)}.` : ''}`,
-        data: { wants, price, offers, gun, special, specialPrice },
+        id: 'trader', title: 'Peltier comes up to the house',
+        text: `Old Peltier walked up from the landing instead of waiting at his boat: he has something special today. Ferry families trade with whoever is still breathing.${friend < 1 ? ' He gives us the family price now.' : friend > 1 ? ' He keeps one hand near the shotgun under the tarp.' : ''} "${R.pick(['Ice is coming. After that I\'m nobody.', 'County boys pay in promises. You pay in goods.', 'Don\'t tell the Union I was here.'])}"\n\nHe wants ${price} ${lbl(wants)}. He offers ${offers.n} ${lbl(offers.r)}${gun ? `, or the ${gunName} (a rare one) for twice the price` : ''}.${special ? `\n\nUnder the tarp, for friends: ${specialPitch}. ${specialPrice} ${lbl(wants)}.` : ''}`,
+        data: { wants, price, offers, gun, rare, special, specialPrice },
         choices: [
           { label: `Trade ${price} ${lbl(wants)} for ${offers.n} ${lbl(offers.r)}`, fx: { cost: { [wants]: price }, gain: { [offers.r]: offers.n }, rep: { ferry: 8 } }, effect: 'a' },
-          ...(gun ? [{ label: `Trade ${price * 2} ${lbl(wants)} for the ${WEAPONS[gun].name.toLowerCase()}`, fx: { cost: { [wants]: price * 2 }, gun, rep: { ferry: 12 } }, effect: 'b' }] : []),
+          ...(gun ? [{ label: `Trade ${price * 2} ${lbl(wants)} for the ${gunName}`, hint: rare ? RARES[rare].line : '', fx: { cost: { [wants]: price * 2 }, gun, rep: { ferry: 12 } }, effect: 'b' }] : []),
           ...(special ? [{ label: `Trade ${specialPrice} ${lbl(wants)} for the ${specialName}`, hint: special.kind === 'mod' ? (MODS[special.id]?.niche ?? '') : (AMMO_TYPES[special.id as Res]?.desc ?? ''), fx: { cost: { [wants]: specialPrice }, ...(special.kind === 'ammo' ? { gain: { [special.id]: (special as { n: number }).n } } : {}), rep: { ferry: 10 } }, effect: 's' }] : []),
           { label: 'Send him on his way', effect: 'c' },
         ],
@@ -162,8 +166,11 @@ export const INCIDENTS: Incident[] = [
       }
       if (pick === 'b' && gun) {
         if (G.stores[wants] < price * 2) return 'We did not have enough. Peltier laughed at us.';
-        add(wants, -price * 2); newWeapon(gun, R.range(0.6, 0.95));
-        log('event', `Bought a ${WEAPONS[gun].name.toLowerCase()} off the Peltier boat.`);
+        const w = newWeapon(gun, R.range(0.6, 0.95));
+        add(wants, -price * 2);
+        const rare = d.rare as string | null | undefined;
+        if (rare && RARES[rare]?.base === gun) w.rare = rare;
+        log('event', `Bought the ${gunModel(w)} off the Peltier boat.`);
         return 'He handed it over wrapped in a feed sack.' + shiftRep('ferry', 12);
       }
       return 'He pushed off into the brown water.';
