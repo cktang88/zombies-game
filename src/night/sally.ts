@@ -253,7 +253,7 @@ export class Sally implements BattleHook {
     const p = this.party[0]?.g;
     if (!p?.w || !R.chance(SALLY.loot)) return;
     const prof = fireProfile(p.w);
-    if (!prof.ammoRes) return;
+    if (prof.ammoRes !== 'pistol' && prof.ammoRes !== 'shell' && prof.ammoRes !== 'rifle') return; // cartridges off the dead, not rockets or nails
     const n = Math.round(R.range(SALLY.lootRounds[0], SALLY.lootRounds[1]));
     G.stores[prof.ammoRes] = (G.stores[prof.ammoRes] ?? 0) + n * prof.perShot;
     this.loot += n;
