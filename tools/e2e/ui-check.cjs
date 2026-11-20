@@ -47,6 +47,34 @@ const URL = process.argv[2] ?? 'http://localhost:4192/';
   await page.waitForTimeout(150);
   ok(!!(await page.$('.hv-scene')), 'L flips back to the house');
 
+  // the landing: always there, sells a lot of rounds for salvage; the gun rack shows the whole catalogue;
+  // C opens the Compendium and Esc closes it
+  await page.evaluate(() => { __G.stores.salvage = 80; document.querySelector('[data-act=revealall]')?.click(); });
+  await page.waitForTimeout(150);
+  await page.evaluate(() => document.querySelector('[data-hs=landing]').click());
+  await page.waitForSelector('.hv-panel[data-panel=landing] .offer');
+  const p0 = await page.evaluate(() => __G.stores.pistol);
+  await page.evaluate(() => document.querySelector('.hv-panel [data-act=landbuy][data-key=ammo_pistol]').click());
+  await page.waitForTimeout(150);
+  ok(await page.evaluate((p) => __G.stores.pistol > p && __G.stores.salvage < 80, p0), 'the landing sells pistol rounds for salvage');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(150);
+  await page.evaluate(() => document.querySelector('[data-hs=rack]').click());
+  await page.waitForSelector('.hv-panel[data-panel=rack] .catalogue');
+  const cat = await page.evaluate(() => ({ groups: document.querySelectorAll('.hv-panel .catgroup').length, missing: document.querySelectorAll('.hv-panel .gcard.missing').length, line: document.querySelector('.hv-panel .cat-top')?.textContent ?? '' }));
+  ok(cat.groups === 6 && cat.missing > 15 && /Guns \d+\/26/.test(cat.line), `the gun rack shows six kinds and the missing guns greyed (${cat.groups} kinds, ${cat.missing} missing)`);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(150);
+  await page.evaluate(() => document.activeElement?.blur());
+  await page.keyboard.press('c');
+  await page.waitForSelector('.overlay.codex .catgroup');
+  await page.evaluate(() => document.querySelector('.overlay.codex [data-c=turned]').click());
+  await page.waitForTimeout(100);
+  ok((await page.$$('.overlay.codex .cx-entry')).length >= 10, 'C opens the Compendium; the Turned page lists them');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(150);
+  ok(!(await page.$('.overlay.codex')), 'Esc closes the Compendium');
+
   // the survivor sheet: Esc closes it
   await page.evaluate(() => document.querySelector('[data-sv]').click());
   await page.click('.day a[data-act=detail]');
