@@ -377,7 +377,7 @@ h3 .dim { font-size: 13px; letter-spacing: .02em; }
 .mslot.full { border-style: solid; border-color: #6a5d45; }
 .mslot.avail { border-color: var(--ochre); }
 .mslot img { width: 22px; height: 16px; object-fit: contain; }
-.mslot i { font-style: normal; font-family: var(--type); font-size: 13px; color: var(--dim); text-transform: uppercase; }
+.mslot i { font-style: normal; font-family: var(--type); font-size: 12px; letter-spacing: -.5px; color: var(--dim); text-transform: uppercase; }
 .mslot select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 .calrow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 2px 0; }
 .calrow > .t-s { min-width: 110px; }

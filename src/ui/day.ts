@@ -631,6 +631,8 @@ function meleeSelect(s: Survivor) {
     ${free.map((k) => `<option value="${k.uid}" ${k.uid === s.melee ? 'selected' : ''}>${esc(MELEE[k.def].name)} ${Math.round(k.cond * 100)}%</option>`).join('')}</select>`;
 }
 
+/** An empty slot's letters (muzzle and magazine both start with M). */
+const SLOT_ABBR: Partial<Record<ModSlot, string>> = { optic: 'O', muzzle: 'Mz', under: 'U', mag: 'Mg', stock: 'S' };
 // Attachment slots for one gun: a small icon per slot; an invisible dropdown over it attaches/detaches.
 function modSlotsHtml(w: WeaponItem) {
   const slots = slotsFor(w.def);
@@ -643,7 +645,7 @@ function modSlotsHtml(w: WeaponItem) {
     const name = MOD_SLOTS.find((x) => x.id === slot)!.name;
     const t = md ? `<b>${esc(md.name)}</b> (${esc(name)})<br>${esc(md.niche)}` : `${esc(name)}: empty${spare.length ? ` · ${spare.length} spare fits` : ''}`;
     return `<span class="mslot ${md ? 'full' : ''} ${!md && spare.length ? 'avail' : ''}"${tip(t)}>
-      ${md ? `<img src="${spriteUrl(md.icon)}" alt="">` : `<i>${esc(name.slice(0, 1))}</i>`}
+      ${md ? `<img src="${spriteUrl(md.icon)}" alt="">` : `<i>${SLOT_ABBR[slot] ?? esc(name.slice(0, 1))}</i>`}
       <select data-act="mod" data-w="${w.uid}" data-slot="${slot}" aria-label="${esc(name)} slot">
         <option value="">${md ? '— detach —' : '— empty —'}</option>
         ${cur ? `<option value="${cur.uid}" selected>${esc(md!.name)}${cur.cond < 1 ? ` ${Math.round(cur.cond * 100)}%` : ''}</option>` : ''}
