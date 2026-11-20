@@ -40,6 +40,8 @@ const PUFF_TONES = PUFF_KEYS.map((k) => PUFF[k] as string);
 const GLOW_KEYS = Object.keys(GLOW) as GlowCol[];
 const pc = (k: PuffCol) => PUFF_KEYS.indexOf(k);
 const gc = (k: GlowCol) => GLOW_KEYS.indexOf(k);
+/** how long a round's streak stays after it lands (s): long enough to see the line */
+const ROUND_LINGER = 0.07;
 const STREAK_KEYS = ['warm', 'tracer', 'pale', 'fire', 'flare', 'green'] as const;
 type StreakKey = typeof STREAK_KEYS[number];
 const sc = (k: StreakKey) => STREAK_KEYS.indexOf(k);
@@ -699,7 +701,7 @@ export class Vfx {
         }
       }
       // done: the round (and its afterglow) has gone
-      const after = r.tracer ? 0.07 : 0.03;
+      const after = r.tracer ? 0.1 : ROUND_LINGER;
       if (r.arrived && r.t > r.len / r.speed + after) r.on = false;
       if (r.t > 3) r.on = false;
     }
@@ -1105,12 +1107,13 @@ export class Vfx {
       const d = Math.min(r.len, r.speed * r.t + 18);
       const ang = Math.atan2(r.dy, r.dx);
       const [hx, hy] = this.roundPos(r, d);
-      const gone = r.arrived ? Math.max(0, 1 - (r.t - r.len / r.speed) / (r.tracer ? 0.07 : 0.03)) : 1;
+      const gone = r.arrived ? Math.max(0, 1 - (r.t - r.len / r.speed) / (r.tracer ? 0.1 : ROUND_LINGER)) : 1;
       switch (r.kind) {
         case 'bullet': case 'slug': case 'ball': case 'pellet': case 'nail': case 'rivet': case 'dragon': {
           // motion blur: the streak is the distance the round covers in ~one frame (longer for tracers)
-          const blur = r.tracer ? 0.026 : r.kind === 'pellet' ? 0.011 : r.kind === 'dragon' ? 0.03 : 0.014;
-          const L = Math.min(d - 18 + 1, Math.min(r.tracer ? 230 : 120, r.speed * blur)) ;
+          // long, hot streaks: a round should read as a bolt of light, not a pea (player feedback)
+          const blur = r.tracer ? 0.045 : r.kind === 'pellet' ? 0.024 : r.kind === 'dragon' ? 0.04 : 0.036;
+          const L = Math.min(d - 18 + 1, Math.min(r.tracer ? 380 : r.kind === 'pellet' ? 150 : 300, r.speed * blur)) ;
           if (L <= 1) break;
           const s = r.s;
           if (r.tracer) {
@@ -1122,14 +1125,19 @@ export class Vfx {
             rot(c, m, S.streak.fire, hx, hy, L, 7 * s, ang, 1, 0.5, gone);
             rot(c, m, S.glow.orange, hx, hy, 18 * s, 18 * s, 0, 0.5, 0.5, 0.8 * gone);
           } else if (r.kind === 'pellet') {
-            rot(c, m, S.streak.warm, hx, hy, L, 4.4 * s, ang, 1, 0.5, 0.85 * gone);
-            rot(c, m, S.glow.warm, hx, hy, 9 * s, 7 * s, ang, 0.6, 0.5, 0.45 * gone);
+            rot(c, m, S.streak.warm, hx, hy, L, 6 * s, ang, 1, 0.5, gone);
+            rot(c, m, S.streak.pale, hx, hy, L * 0.8, 1.8 * s, ang, 1, 0.5, gone);
+            rot(c, m, S.glow.warm, hx, hy, 14 * s, 10 * s, ang, 0.6, 0.5, 0.7 * gone);
           } else if (r.kind === 'nail' || r.kind === 'rivet') {
             rot(c, m, S.streak.pale, hx, hy, L * 0.6, 2.4 * s, ang, 1, 0.5, 0.35 * gone);
           } else {
-            // an ordinary round: a faint hot thread with a brighter head, gone in a frame or two
-            rot(c, m, S.streak.warm, hx, hy, L, (3.5 + 2 * r.width) * s, ang, 1, 0.5, 0.75 * gone);
-            rot(c, m, S.glow.warm, hx, hy, 16 * s, 12 * s, ang, 0.6, 0.5, 0.7 * gone);
+            // an ordinary round: a warm streak with a white-hot core and a bright head; heavier calibres wider
+            const w = (4 + 2.6 * r.width) * s;
+            rot(c, m, S.streak.warm, hx, hy, L, w * 1.7, ang, 1, 0.5, 0.55 * gone);
+            rot(c, m, S.streak.warm, hx, hy, L, w, ang, 1, 0.5, gone);
+            rot(c, m, S.streak.pale, hx, hy, L * 0.85, Math.max(1.6, w * 0.32), ang, 1, 0.5, gone);
+            rot(c, m, S.glow.warm, hx, hy, 26 * s * r.width, 18 * s * r.width, ang, 0.6, 0.5, 0.85 * gone);
+            rot(c, m, S.glow.white, hx, hy, 7 * s, 7 * s, 0, 0.5, 0.5, gone);
           }
           break;
         }
