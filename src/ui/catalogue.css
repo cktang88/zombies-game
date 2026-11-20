@@ -8,7 +8,7 @@
 .cat-dots i { width: 8px; height: 8px; border-radius: 50%; border: 1px solid #7a6a48; }
 .cat-dots i.on { background: #c9a85e; border-color: #c9a85e; }
 .gcard.missing { border-style: dashed; background: rgba(0, 0, 0, .18); }
-.gcard.missing .gpic img { filter: grayscale(1) brightness(.55) contrast(.9); opacity: .8; }
+.gcard.missing .gpic img { filter: grayscale(1) brightness(.85) contrast(.9); opacity: .7; }
 .gcard.missing .gname { color: #9a8e78; }
 .gcard.missing.can { border-color: #8aa05a; border-style: solid; }
 .gcard.missing.can .gpic img { filter: grayscale(.6) brightness(.75); opacity: .95; }
@@ -32,3 +32,8 @@
 .offer .oprice { white-space: nowrap; }
 .offer.gone { opacity: .5; }
 .offer.rare { background: rgba(232, 194, 90, .06); }
+/* the workshop's Weapons group: guns waiting on machinery */
+.wcard.recipe.locked { border-style: dashed; opacity: .7; }
+.wcard.recipe.locked .pic { filter: grayscale(1) brightness(1.15); opacity: .8; }
+.wcard.recipe.locked .cname { color: #9a8e78; }
+.mkgroups .nextunlock { margin: 6px 2px 2px; }

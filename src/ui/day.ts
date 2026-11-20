@@ -49,7 +49,8 @@ const JOBS: { id: JobId; label: string; hint: string }[] = [
 ];
 
 import { tip, ico, fold, chip, pips, sec, qi } from './kit';
-import { catalogueHtml } from './catalogue';
+import { catalogueHtml, nextUnlockHtml } from './catalogue';
+import { placeName } from '../sim/catalogue';
 import { buyOffer } from '../sim/landing';
 import './survivor.css';
 
@@ -572,8 +573,11 @@ function workshopHtml() {
   const groupHtml = groups.map((g) => {
     const ready = g.rs.filter((r) => has(r.cost));
     const peek = ready.slice(0, 5).map((r) => pic(recipeIcon(r), 'sm')).join('');
+    // guns the bench cannot make yet: greyed, with the machinery each one waits on (the gun rack shows the rest)
+    const lockedGuns = g.id === 'weapons' ? locked.filter((r) => r.weapon).map((r) => `<div class="wcard recipe locked"${tip(`<b>${esc(r.name)}</b> · ${r.work} work<br>${esc(r.desc)}<br><b>Needs ${esc(placeName(r.needs, r.level ?? 1))}</b> (Machinery, below).`)}>
+      ${pic(recipeIcon(r))}<div class="cbody"><div class="cname">${r.name}</div><div class="ccost">${costHtml(r.cost)}</div><div class="cuse t-s">🔒 ${esc(placeName(r.needs, r.level ?? 1))}</div></div></div>`).join('') : '';
     return fold(`${pic(g.icon, 'sm')}<span class="mk-name">${g.label}</span> <span class="t-xs mk-n"${tip(`${ready.length} of ${g.rs.length} you can afford now`)}>${ready.length}/${g.rs.length}</span><span class="mk-peek">${peek}</span>`,
-      `<div class="cards">${g.rs.map(card).join('')}</div>`, { id: `ws-make-${g.id}`, open: g.id === 'ammo', cls: `mk${ready.length ? '' : ' none'}` });
+      `<div class="cards">${g.rs.map(card).join('')}${lockedGuns}</div>${g.id === 'weapons' ? nextUnlockHtml() : ''}`, { id: `ws-make-${g.id}`, open: g.id === 'ammo', cls: `mk${ready.length ? '' : ' none'}` });
   }).join('');
   return `<div class="ws">
     <div class="wsq"><span class="t-l">Queue</span> ${crafters.length ? chip('job_craft', crafters.map(first).join(', '), 'At the bench today') : chip('st_danger', 'nobody', 'Nobody on the Workshop job', 'warn')}
