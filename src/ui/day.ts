@@ -49,7 +49,7 @@ const JOBS: { id: JobId; label: string; hint: string }[] = [
 ];
 
 import { tip, ico, fold, chip, pips, sec, qi } from './kit';
-import { catalogueHtml, nextUnlockHtml } from './catalogue';
+import { catalogueHtml, nextUnlockHtml, landingHtml } from './catalogue';
 import { placeName } from '../sim/catalogue';
 import { buyOffer } from '../sim/landing';
 import './survivor.css';
@@ -850,7 +850,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
     window.setTimeout(() => { stinger('dread'); distant('dog', { delay: 1.2 }); distant('dog', { delay: 3.4, gain: 0.3 }); distant('dog', { delay: 7, gain: 0.35 }); }, 400);
   }
   // the tabs open over the first days (src/ui/today.ts REVEAL); the Wall is there from the start
-  const tabs = ['workshop', 'wall', 'armory', 'town', 'chronicle', 'graves'].filter((t) => t === 'wall' || isOpen(t as RevealId));
+  const tabs = ['workshop', 'wall', 'armory', 'landing', 'town', 'chronicle', 'graves'].filter((t) => t === 'wall' || t === 'landing' || isOpen(t as RevealId));
   if (!tabs.includes(tab)) tab = tabs.includes('workshop') ? 'workshop' : 'wall';
   const strip = todayHtml(keyLabel(keyOf('day.dusk')));
   const dots = dotKeys();
@@ -865,7 +865,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
     dots, today: strip, report, forecast: fc ?? '', calendar: calBlock, tonightSize: tp > 60 ? 'BIG' : tp > 30 ? 'bad' : 'light', threads: threadsHtml(), keep: keepBtn, dusk: duskBtn, armed: duskArmed && stale.length > 0,
     survivorCard, statusTags, moodChip, jobOutlook, jobs: JOBS, costHtml,
     siteButton: (s) => siteButton(survivorSite(s), s.id, Math.max(0, jobHours(s) - travelHours(survivorSite(s)))),
-    workshop: workshopHtml, wall: wallHtml, armory: armoryHtml, town: townHtml, chronicle: chronicleHtml, graves: gravesHtml, run: runHtml,
+    workshop: workshopHtml, wall: wallHtml, armory: armoryHtml, town: townHtml, chronicle: chronicleHtml, graves: gravesHtml, landing: landingHtml, run: runHtml,
     openSitePick: (id) => { sitePick = id; }, rerender: h.rerender,
   };
   bindHouse(hctx);
@@ -890,7 +890,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
       <section class="center">
         <nav>${tabs.map((t) => `<button class="${tab === t ? 'on' : ''}" data-act="tab" data-id="${t}"${sysTip(t)}${dots.has(`tab:${t}`) ? ' data-dot' : ''}>${t}</button>`).join('')}</nav>
         ${revealNote(tab as RevealId)}
-        <div class="tabbody">${tab === 'workshop' ? workshopHtml() : tab === 'wall' ? wallHtml() : tab === 'armory' ? armoryHtml() : tab === 'town' ? townHtml() : tab === 'chronicle' ? chronicleHtml() : gravesHtml()}</div>
+        <div class="tabbody">${tab === 'workshop' ? workshopHtml() : tab === 'wall' ? wallHtml() : tab === 'armory' ? armoryHtml() : tab === 'landing' ? landingHtml() : tab === 'town' ? townHtml() : tab === 'chronicle' ? chronicleHtml() : gravesHtml()}</div>
       </section>
       <section class="report">
         <h2 class="t-l">This morning</h2>
@@ -1023,6 +1023,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
     } else if (act === 'tab') {
       tab = el.dataset.id!;
       markSeen(tab);
+      if (tab === 'landing') G.flags.landingSeen = G.day;
       if (tab === 'chronicle') { sfx.ui('type'); window.setTimeout(() => sfx.ui('type'), 90); window.setTimeout(() => sfx.ui('type'), 210); } else sfx.ui('paper');
       h.rerender();
       return;

@@ -29,6 +29,8 @@ import { is, keyLabel, keyOf } from './keys';
 import { isOpen, markSeen, revealNote, runOpen, JOB_REVEAL, type RevealId } from './today';
 import { tip, ico, sec, chip } from './kit';
 import './house.css';
+import { collectionLine } from './catalogue';
+import { landingSummary, merchantOn } from '../sim/landing';
 
 export interface HouseCtx {
   dots: Set<string>;
@@ -58,6 +60,7 @@ export interface HouseCtx {
   town: () => string;
   chronicle: () => string;
   graves: () => string;
+  landing: () => string;
   run: () => string;
   openSitePick: (id: string) => void;
   rerender: () => void;
@@ -86,7 +89,7 @@ export function viewButton(): string {
 }
 
 // ---------------------------------------------------------------- stations
-type StationId = 'infirmary' | 'bunks' | 'radio' | 'kitchen' | 'rack' | 'table' | 'calendar' | 'bench' | 'board' | 'wall' | 'gate' | 'graves';
+type StationId = 'infirmary' | 'bunks' | 'radio' | 'kitchen' | 'rack' | 'table' | 'calendar' | 'bench' | 'board' | 'wall' | 'gate' | 'graves' | 'landing';
 interface Station {
   id: StationId; name: string; icon: string;
   /** hotspot rect in scene units */
@@ -112,12 +115,14 @@ const STATIONS: Station[] = [
   { id: 'wall', name: 'The wall', icon: 'st_wall', x: 1254, y: 400, w: 182, h: 242, feet: YARD, sx: [1270, 1330], job: 'repair', tab: 'wall', dot: 'tab:wall' },
   { id: 'gate', name: 'The gate', icon: 'job_scavenge', x: 1440, y: 430, w: 160, h: 212, feet: YARD, sx: [1470, 1560], job: 'scavenge', dot: 'run' },
   { id: 'graves', name: 'Graves', icon: 'st_dead', x: 24, y: 520, w: 150, h: 122, feet: YARD, sx: [90, 120], tab: 'graves', dot: 'tab:graves', reveal: 'graves' },
+  // Peltier's boat at the landing below the house (sim/landing.ts): the store, and the merchant every third day
+  { id: 'landing', name: 'The landing', icon: 'scrap', x: 2, y: 380, w: 168, h: 134, feet: YARD, sx: [60, 100], tab: 'landing', dot: 'tab:landing', wide: true },
 ];
 /** where a station's name plaque sits, from the top of its hotspot (inside rooms: the top-left corner, clear of heads; 0 = above it) */
-const LABEL_DY: Record<StationId, number> = { infirmary: 8, bunks: 8, radio: 8, kitchen: 8, rack: 8, table: 8, calendar: 0, bench: 0, board: 0, wall: 0, gate: 0, graves: 0 };
+const LABEL_DY: Record<StationId, number> = { infirmary: 8, bunks: 8, radio: 8, kitchen: 8, rack: 8, table: 8, calendar: 0, bench: 0, board: 0, wall: 0, gate: 0, graves: 0, landing: 0 };
 const ST = (id: string) => STATIONS.find((s) => s.id === id);
 const JOB_STATION: Record<string, StationId> = Object.fromEntries(STATIONS.filter((s) => s.job).map((s) => [s.job!, s.id]));
-const TAB_STATION: Record<string, StationId> = { workshop: 'bench', wall: 'wall', armory: 'rack', town: 'board', chronicle: 'table', graves: 'graves' };
+const TAB_STATION: Record<string, StationId> = { workshop: 'bench', wall: 'wall', armory: 'rack', town: 'board', chronicle: 'table', graves: 'graves', landing: 'landing' };
 
 function stationOpen(st: Station): boolean {
   if (st.id === 'graves') return G.graves.length > 0;
@@ -226,8 +231,9 @@ function summary(st: Station): string {
     }
     case 'rack': {
       const idle = wallLine().idle.length;
-      return `${plural(G.weapons.length, 'gun')} · ${rackGuns().length} on the rack${idle ? ` · ${idle} can't shoot` : ''}`;
+      return `${collectionLine()} · ${rackGuns().length} on the rack${idle ? ` · ${idle} can't shoot` : ''}`;
     }
+    case 'landing': return landingSummary();
     case 'kitchen': {
       const eat = dailyFood();
       const days = eat > 0 ? Math.floor(G.stores.food / eat) : 0;
@@ -312,11 +318,38 @@ const ART: Record<StationId, () => string> = {
   wall: () => img('emp_scaffold', 1252, 506, 150, 'hv-back') + img('fort_light', 1232, 430, 58, 'hv-back') + img('barricade', 1262, 450, 196),
   gate: () => pic('gate', 1450, 482, 109)
     + img('obj_duffel', 1500, 606, 64) + img('obj_sign_stop', 1560, 514, 38),
+  landing: () => landingArt(),
   graves: () => buried().slice(0, 4).map((g, i) => {
     const [id, w, h] = GRAVE[i % GRAVE.length];
     return pic(id, 46 + i * 38 - w / 2, 636 - h - (i % 2) * 3, w);
   }).join('') + (buried().length ? pic('mound', 22, 624, 150) : ''),
 };
+
+/** The landing: a plank dock on pilings over the river, Peltier's flat-bottomed boat under a tarp with a
+ *  lantern on a pole; on the merchant's days a second, longer boat ties up beside it with crates. */
+function landingArt(): string {
+  const m = merchantOn();
+  const ink = '#120d09', wood = '#4a3926', dark = '#2e241a', tarp = '#4a5236';
+  const body = `
+    <rect x="0" y="92" width="170" height="42" fill="#141b20" opacity=".75"/>
+    ${[100, 110, 121].map((y, i) => `<path d="M${6 + i * 9} ${y} h${40 - i * 6} M${80 + i * 7} ${y + 3} h${50 - i * 8}" stroke="#4a5a62" stroke-width="1.2" opacity=".55"/>`).join('')}
+    ${[14, 58, 102, 146].map((x) => `<rect x="${x}" y="58" width="8" height="58" fill="${ink}"/>`).join('')}
+    <rect x="2" y="52" width="164" height="10" fill="${wood}" stroke="${ink}" stroke-width="2.5"/>
+    ${[28, 56, 84, 112, 140].map((x) => `<path d="M${x} 53 v8" stroke="${ink}" stroke-width="1.4"/>`).join('')}
+    <circle cx="150" cy="22" r="13" fill="#e8b85a" opacity=".16"/>
+    <path d="M156 52 V12 h-8" stroke="${ink}" stroke-width="3" fill="none"/>
+    <rect x="144" y="15" width="9" height="12" rx="2" fill="#f0c066" stroke="${ink}" stroke-width="1.6"/>
+    <path d="M4 74 Q6 92 28 93 H118 Q138 92 144 74 Z" fill="${dark}" stroke="${ink}" stroke-width="2.5"/>
+    <path d="M8 78 H140" stroke="#5c4630" stroke-width="2"/>
+    <path d="M24 75 Q46 52 74 58 Q100 50 116 75 Z" fill="${tarp}" stroke="${ink}" stroke-width="2"/>
+    <path d="M40 66 l10 6 M66 60 l6 10 M92 60 l8 9" stroke="${ink}" stroke-width="1.2" opacity=".7"/>
+    ${m ? `<path d="M30 108 Q32 128 58 129 H156 Q168 128 170 108 Z" fill="#3a2c1f" stroke="${ink}" stroke-width="2.5"/>
+    <path d="M118 108 V70" stroke="${ink}" stroke-width="2.5"/><path d="M118 71 L138 77 L118 83 Z" fill="#8a3324" stroke="${ink}" stroke-width="1.4"/>
+    <rect x="58" y="94" width="24" height="15" fill="#6a5236" stroke="${ink}" stroke-width="2"/><path d="M58 101 h24" stroke="${ink}" stroke-width="1.2"/>
+    <rect x="86" y="99" width="20" height="10" fill="#5a4630" stroke="${ink}" stroke-width="2"/>
+    <rect x="132" y="98" width="14" height="11" fill="#3b4a2e" stroke="${ink}" stroke-width="2"/>` : ''}`;
+  return svg(2, 380, 170, 134, body);
+}
 
 /** The house shell: the painted cut-away (roof, chimney, two floors, five empty rooms, the side door) over
  *  the yard's soil, the lean-to over the bench, the mast on the roof once built; a CSS layer breathes over the six bulbs. */
@@ -448,6 +481,7 @@ function panelBody(st: Station, ctx: HouseCtx): string {
     case 'table': return tablePanel(ctx, st);
     case 'gate': return gatePanel(ctx, st);
     case 'calendar': return calendarPanel(ctx);
+    case 'landing': return ctx.landing();
   }
 }
 const REVEALS = new Set(['workshop', 'armory', 'town', 'chronicle', 'graves']);
@@ -639,6 +673,7 @@ function zoomTo(f: Focus) {
     const st = ST(f.id);
     if (st?.tab && REVEALS.has(st.tab)) markSeen(st.tab);
     if (f.id === 'calendar') markSeen('calendar');
+    if (f.id === 'landing') G.flags.landingSeen = G.day;
     if (f.id === 'gate') markSeen('run');
   }
   sfx.ui('paper');

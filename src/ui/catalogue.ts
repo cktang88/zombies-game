@@ -136,10 +136,12 @@ export function landingHtml(): string {
     return xs.length ? `<div class="oh t-l">${title}</div>${xs.map(offerRow).join('')}` : '';
   };
   const nd = merchantNext(G.day + 1);
+  const merchSec = `<div class="oh t-l">${esc(MERCHANT_NAME)}, the merchant</div>
+    ${merchantOn() ? `<p class="t-s">The peddler from upriver, <b>today only</b>: rare guns you cannot make, and the wilder ones. Back on ${dateLabel(nd)}.</p><div class="merch">${merch.map(offerRow).join('')}</div>` : `<p class="t-s">Comes every third day with rare guns and the wilder ones. <b>Back on ${dateLabel(merchantNext())}</b> (${merchantNext() - G.day === 1 ? 'tomorrow' : `in ${merchantNext() - G.day} days`}).</p>`}`;
   return `<div class="landing">
     <p class="t-s">${landingOpen() ? `Peltier's boat is tied up below the house. Prices in salvage; the Ferry families are <b>${standingWord()}</b>${mul !== 1 ? ` (×${mul})` : ''}.` : '<b>Peltier will not tie up</b>: the Ferry families are hostile. Help them (events, the ferry thread) to trade again.'}</p>
+    ${merchantOn() ? merchSec : ''}
     ${landingOpen() ? `${sec(['ammo'], 'Ammunition')}${sec(['supply'], 'Supplies')}${sec(['gun', 'mod'], 'On the boat today')}${sec(['sell'], 'Sell surplus')}` : ''}
-    <div class="oh t-l">${esc(MERCHANT_NAME)}, the merchant</div>
-    ${merchantOn() ? `<p class="t-s">The peddler from upriver, today only: rare guns you cannot make, and the wilder ones. Back on ${dateLabel(nd)}.</p>${merch.map(offerRow).join('')}` : `<p class="t-s">Comes every third day with rare guns and the wilder ones. <b>Back on ${dateLabel(merchantNext())}</b> (${merchantNext() - G.day === 1 ? 'tomorrow' : `in ${merchantNext() - G.day} days`}).</p>`}
+    ${merchantOn() ? '' : merchSec}
   </div>`;
 }

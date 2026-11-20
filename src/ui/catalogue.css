@@ -27,7 +27,7 @@
 .landing .oh { margin: 10px 0 4px; }
 .offer { display: grid; grid-template-columns: 34px 1fr auto auto auto; align-items: center; gap: 8px; padding: 3px 4px; border-bottom: 1px solid rgba(90, 79, 60, .35); }
 .offer .opic { position: relative; height: 28px; display: grid; place-items: center; }
-.offer .opic img { max-width: 34px; max-height: 28px; object-fit: contain; }
+.offer .opic img { max-width: 34px; max-height: 28px; object-fit: contain; filter: drop-shadow(0 0 1px rgba(232, 220, 196, .5)) drop-shadow(0 1px 1px rgba(0, 0, 0, .8)); }
 .offer .ostock { color: #a99c82; }
 .offer .oprice { white-space: nowrap; }
 .offer.gone { opacity: .5; }
@@ -37,3 +37,4 @@
 .wcard.recipe.locked .pic { filter: grayscale(1) brightness(1.15); opacity: .8; }
 .wcard.recipe.locked .cname { color: #9a8e78; }
 .mkgroups .nextunlock { margin: 6px 2px 2px; }
+.landing .merch { border: 1px solid #7a6a48; background: rgba(232, 194, 90, .04); padding: 2px 4px; border-radius: 3px; }
