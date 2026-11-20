@@ -4,7 +4,7 @@ import type { Res, Survivor } from '../types';
 import { G } from '../state';
 import { living, canFight, first, pain } from './survivors';
 import { fireProfile, ammoLabel } from '../data/weapons';
-import { cyclePos } from './director';
+import { calendar } from './calendar';
 
 export interface Advice { icon: string; text: string; tip: string }
 
@@ -12,7 +12,10 @@ export interface Advice { icon: string; text: string; tip: string }
 export function forTomorrow(r: { wallHeld: boolean; wallLost: number; fell: boolean }, panicked: Survivor[]): Advice[] {
   const out: Advice[] = [];
   const max = G.fort.maxHp, hp = Math.max(0, G.fort.hp);
-  const big = cyclePos(G.day).peak && G.day >= 5;
+  // tonight as the calendar shows it (a tide on the Siege, a likely one on the Quiet, the Crossing, the ice)
+  const BIG: Partial<Record<string, string>> = { tide: 'a tide', band: 'maybe a tide', crossing: 'the Crossing', ice: 'an ice night' };
+  const bigWord = BIG[calendar(1)[0].kind];
+  const big = !!bigWord;
   // the wall: breached, or going into the night under half
   if (!r.wallHeld || hp < max * 0.5) {
     const repairers = living().filter((s) => s.job === 'repair').length;
@@ -28,7 +31,7 @@ export function forTomorrow(r: { wallHeld: boolean; wallLost: number; fell: bool
   }
   const per = big ? 60 : 25;
   const short = [...guns].map(([res, n]) => ({ res, n, have: Math.floor(G.stores[res] ?? 0), need: n * per })).filter((a) => a.have < a.need).sort((a, b) => a.have / a.need - b.have / b.need)[0];
-  if (short) out.push({ icon: 'ammo', text: `${ammoLabel(short.res)}: ${short.have} left${big ? ', tonight is a tide' : ''} → make or find more`, tip: `${short.n} gun${short.n > 1 ? 's' : ''} on the wall fire${short.n > 1 ? '' : 's'} it: about ${per} rounds each ${big ? 'on a tide night' : 'a night'}. Queue it at the workbench, or scavenge.` });
+  if (short) out.push({ icon: 'ammo', text: `${ammoLabel(short.res)}: ${short.have} left${big ? `, tonight is ${bigWord}` : ''} → make or find more`, tip: `${short.n} gun${short.n > 1 ? 's' : ''} on the wall fire${short.n > 1 ? '' : 's'} it: about ${per} rounds each ${big ? 'on a big night' : 'a night'}. Queue it at the workbench, or scavenge.` });
   // unarmed on the wall
   const unarmed = fighters.filter((s) => !s.weapon);
   if (unarmed.length) out.push({ icon: 'pistol', text: `${unarmed.map(first).join(', ')} had no gun → hand one out at the gun rack`, tip: 'A guard without a gun takes a place on the wall and does nothing.' });
@@ -37,6 +40,6 @@ export function forTomorrow(r: { wallHeld: boolean; wallLost: number; fell: bool
   // hurt and not tended
   const hurt = living().filter((s) => s.wounds.some((w) => !w.hidden && !w.tended && w.severity > 0.25)).sort((a, b) => pain(b) - pain(a));
   if (hurt.length) out.push({ icon: 'job_doctor', text: `${hurt.slice(0, 2).map(first).join(', ')} hurt → someone on Tend wounded`, tip: 'Untended wounds bleed and fester. Tend wounded uses Medicine skill; meds help.' });
-  if (!out.length && big) out.push({ icon: 'st_danger', text: 'Tonight is a tide → stock rounds, mend the wall, set traps', tip: 'The middle of a tide night comes twice as thick.' });
+  if (!out.length && big) out.push({ icon: 'st_danger', text: `Tonight is ${bigWord} → stock rounds, mend the wall, set traps`, tip: 'A big night comes two to three times as thick.' });
   return out.slice(0, 3);
 }
