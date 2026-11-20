@@ -19,7 +19,7 @@ import { G, docsFound } from '../state';
 import { spriteUrl } from '../assets';
 import { portraitImg } from './portrait';
 import { living, first, displayName, canWork, byId, computeMood, moodWord, pain, isBitten } from '../sim/survivors';
-import { buildingLevel, onRunToday, ranToday, planConfirmed, confirmPlan, dailyFood, halfRations, heatNeed, breakChance, counselPlan } from '../sim/day';
+import { buildingLevel, onRunToday, sentToday, scavengersReady, scavBackToday, clockLabel, jobHours, ranToday, planConfirmed, confirmPlan, dailyFood, halfRations, heatNeed, breakChance, counselPlan } from '../sim/day';
 import { calendar } from '../sim/calendar';
 import { wallLine, rackGuns } from '../sim/readiness';
 import { RECIPES, SITES, RES_LABEL } from '../data/world';
@@ -265,6 +265,11 @@ function summary(st: Station): string {
       return `tonight ${t0}${c[1] ? ` · tomorrow ${CAL_WORD[c[1].kind] ?? c[1].kind}` : ''}`;
     }
     case 'gate': {
+      const ready = scavengersReady(), out = on('scavenge').filter(sentToday);
+      if (ready.length || out.length) {
+        const run = runOpen() ? (ranToday() ? 'run done' : 'a run waits') : '';
+        return [ready.length ? `${names(ready)} ready to go` : '', out.length ? `${names(out)} out` : '', run].filter(Boolean).join(' · ');
+      }
       const sc = on('scavenge');
       const run = runOpen() ? (ranToday() ? 'run done' : 'a run waits') : '';
       return [sc.length ? `${names(sc)} scavenging` : 'nobody out', run].filter(Boolean).join(' · ');
@@ -379,7 +384,7 @@ function personHtml(s: Survivor, dots: Set<string>, ctx: HouseCtx): string {
   const work = canWork(s) ? `${esc(job)} · ${esc(ctx.jobOutlook(s, s.job))}` : 'can\'t work today';
   const stale = canWork(s) && G.day > 1 && !planConfirmed(s) && !onRunToday(s);
   const sel = focus?.kind === 'sv' && focus.id === s.id;
-  return `<button class="hv-sv ${stale ? 'stale' : ''} ${sel ? 'on' : ''}" data-sv="${s.id}" style="left:${p.x - 55}px;top:${p.y - 172}px" aria-label="${esc(displayName(s))}: ${esc(job)}">
+  return `<button class="hv-sv ${stale ? 'stale' : ''} ${sel ? 'on' : ''} ${sentToday(s) ? 'out' : ''}" data-sv="${s.id}" style="left:${p.x - 55}px;top:${p.y - 172}px" aria-label="${esc(displayName(s))}: ${esc(job)}">
     <span class="hv-cv" data-cv="${s.id}"></span>
     ${dots.has(`surv:${s.id}`) ? '<span class="hv-pin"><i class="hv-dot"></i></span>' : ''}
     <span class="hv-tag"><span class="hv-lab"><b>${esc(first(s))}</b><span class="t-s">${work}</span>${ctx.moodChip(s)}${breakChip(s)}</span></span>
@@ -459,9 +464,16 @@ function tablePanel(ctx: HouseCtx, st: Station) {
 }
 function gatePanel(ctx: HouseCtx, st: Station) {
   const sc = living().filter((s) => s.job === 'scavenge' && canWork(s));
+  const ready = scavengersReady();
+  const back = scavBackToday();
+  const latest = Math.max(0, ...ready.map((s) => jobHours(s)));
+  const send = ready.length ? `<div class="hv-send"><button class="primary" data-act="sendscav">Send ${esc(ready.length === 1 ? first(ready[0]) : ready.length === 2 ? ready.map(first).join(' and ') : `all ${ready.length}`)} out ›</button>
+      <span class="t-s dim">They search now and are back by ${clockLabel(latest)}, before dark. What they find goes in the stores today.</span></div>` : '';
   return `${runOpen() ? `<div class="runwrap"${ctx.dots.has('run') ? ' data-dot' : ''}>${revealNote('run')}${ctx.run()}</div>` : ''}
     ${sec('Scavengers', sc.length, ctx.jobs.find((j) => j.id === 'scavenge')?.hint ?? '')}
-    ${sc.map((s) => `<div class="hv-scav"><button class="hv-face sm" data-hs-sv="${s.id}">${portraitImg(s.sprite, 'portrait')}</button><span class="t-m">${esc(first(s))}</span>${ctx.siteButton(s)}</div>`).join('') || `<p class="t-s dim">Nobody out today. Drag someone onto the gate to send them, then pick a place (${SITES.filter((x) => x.minDay <= G.day).length} known).</p>`}`;
+    ${sc.map((s) => `<div class="hv-scav"><button class="hv-face sm" data-hs-sv="${s.id}">${portraitImg(s.sprite, 'portrait')}</button><span class="t-m">${esc(first(s))}</span>${ctx.siteButton(s)}</div>`).join('') || `<p class="t-s dim">Nobody out today. Drag someone onto the gate, pick a place (${SITES.filter((x) => x.minDay <= G.day).length} known), then send them.</p>`}
+    ${send}
+    ${back.length ? `<div class="hv-back">${sec('Back from the road', back.length)}${back.map((l) => `<p class="t-s">${esc(l)}</p>`).join('')}</div>` : ''}`;
 }
 function calendarPanel(ctx: HouseCtx) {
   return `${ctx.calendar || (ctx.forecast ? `<p class="forecast">${esc(ctx.forecast)}</p>` : '')}${ctx.threads}`;
@@ -681,7 +693,7 @@ function zoomTo(f: Focus) {
 }
 function assign(s: Survivor, stId: StationId): boolean {
   const st = ST(stId);
-  if (!st?.job || !canWork(s) || !jobOpen(st.job)) return false;
+  if (!st?.job || !canWork(s) || !jobOpen(st.job) || sentToday(s)) return false;
   s.job = st.job;
   confirmPlan(s);
   sfx.ui('stamp');
@@ -701,7 +713,7 @@ export function houseClick(e: MouseEvent): boolean {
     if (a === 'back') { zoomTo(null); return true; }
     if (a === 'note') { noteOpen = !noteOpen; sfx.ui('paper'); ctxRef?.rerender(); return true; }
     if (a === 'rations') { G.flags.rations = act.dataset.v === 'half' ? 'half' : 'full'; sfx.ui('stamp'); ctxRef?.rerender(); return true; }
-    if (a === 'setjob') { const s = byId(act.dataset.id!); if (s) { s.job = act.dataset.job as JobId; confirmPlan(s); sfx.ui('stamp'); } ctxRef?.rerender(); return true; }
+    if (a === 'setjob') { const s = byId(act.dataset.id!); if (s && !sentToday(s)) { s.job = act.dataset.job as JobId; confirmPlan(s); sfx.ui('stamp'); } ctxRef?.rerender(); return true; }
     return false;
   }
   if (!houseView()) return false;

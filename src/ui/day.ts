@@ -18,7 +18,7 @@ import { PERKS } from '../data/perks';
 import { TRAPS } from '../data/traps';
 import {
   buildingLevel, queueRecipe, WEATHER_LABEL, DAY_HOURS, DEFAULT_HOURS, jobHours, setJobHours, hoursAvailable, travelHours, survivorSite,
-  searchHours, searchFactor, planConfirmed, confirmPlan, ranToday, onRunToday, runDaylightFor, prepareRun, clockLabel, heatNeed,
+  searchHours, searchFactor, sentToday, sendScavengers, scavengersReady, planConfirmed, confirmPlan, ranToday, onRunToday, runDaylightFor, prepareRun, clockLabel, heatNeed,
   drillPlan, emplacements, tomorrowTeaser, oilGuns, clearPile, choreHand, craftPoints, farmAmount, repairPlan, radioWorkOf, careCount, dailyFood, halfRations, fortCount, fortRoom, breakChance, counselPlan, COUNSEL_BREAK,
 } from '../sim/day';
 import { calendar } from '../sim/calendar';
@@ -214,6 +214,11 @@ function needs(): Set<Find> {
 const findIcons = (x: (typeof SITES)[number], n = 3) => siteFinds(x).filter((f) => f.level !== 'a little').slice(0, n)
   .map((f) => `<span class="sfind ${f.level === 'lots' ? 'lots' : ''}"${tip(`<b>${FIND_LABEL[f.k]}</b>: ${f.level}`)}>${ico(FIND_ICON[f.k])}</span>`).join('');
 /** The chosen place: its name, what it has (pictures), the hours, the risk and the stock left (pips). Click to change. */
+/** A scavenger already sent today: where, and that they are out until dusk. */
+function outTag(s: Survivor) {
+  const site = SITES.find((x) => x.id === survivorSite(s));
+  return `<span class="tag outtag"${tip(`${esc(first(s))} searched ${esc(site?.name ?? 'town')} this morning; the haul is in the stores. Back before dusk for the wall.`)}>${ico('job_scavenge', '', 'sm')}out at ${esc(site?.name ?? 'town')} · back by dusk</span>`;
+}
 function siteButton(id: string, who: string, hours: number, more = '') {
   const x = SITES.find((q) => q.id === id)!;
   const st = siteStock(id);
@@ -301,7 +306,7 @@ function survivorCard(s: Survivor, dots: Set<string> = new Set()) {
   const site = survivorSite(s);
   const sites = SITES.filter((x) => x.minDay <= G.day);
   const freeWeapons = G.weapons.filter((x) => x.uid === s.weapon || !living().some((o) => o.weapon === x.uid));
-  const disabled = !canWork(s);
+  const disabled = !canWork(s) || sentToday(s);
   const stale = !disabled && G.day > 1 && !planConfirmed(s) && !(onRunToday(s));
   const hp = heldGun(s);
   const jobDef = JOBS.find((j) => j.id === s.job);
@@ -317,7 +322,7 @@ function survivorCard(s: Survivor, dots: Set<string> = new Set()) {
         <select data-act="job" data-id="${s.id}" ${disabled ? 'disabled' : ''} aria-label="Job for ${esc(first(s))}"${sysTip('job_' + s.job)}>
           ${JOBS.filter((j) => j.id === s.job || !JOB_REVEAL[j.id] || isOpen(JOB_REVEAL[j.id]!)).map((j) => `<option value="${j.id}" ${s.job === j.id ? 'selected' : ''} title="${esc(sysLine('job_' + j.id))}">${j.label} — ${jobOutlook(s, j.id)}</option>`).join('')}
         </select>
-        ${s.job === 'scavenge' ? siteButton(site, s.id, Math.max(0, jobHours(s) - travelHours(site)), `<br>${Math.round(searchFactor(searchHours(s)) * 100)}% of a full search today.`) : ''}
+        ${s.job === 'scavenge' ? (sentToday(s) ? outTag(s) : `${siteButton(site, s.id, Math.max(0, jobHours(s) - travelHours(site)), `<br>${Math.round(searchFactor(searchHours(s)) * 100)}% of a full search today.`)}${canWork(s) && !onRunToday(s) ? `<button class="mini sendscav" data-act="sendscav"${tip('Every scavenger who is ready leaves now and is back before dusk with what they found.')}>Send out ›</button>` : ''}`) : ''}
       </div>
       ${fold(gearPeek(s), `${moodBar(s)}${skillsMini(s)}${disabled ? '' : hoursBar(s)}
       <div class="row small sv-gear">
@@ -918,7 +923,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
   const hctx: HouseCtx = {
     dots, today: strip, report, forecast: fc ?? '', calendar: calBlock, tonightSize: tp > 60 ? 'BIG' : tp > 30 ? 'bad' : 'light', threads: threadsHtml(), keep: keepBtn, dusk: duskBtn, armed: duskArmed && stale.length > 0,
     survivorCard, statusTags, moodChip, jobOutlook, jobs: JOBS, costHtml,
-    siteButton: (s) => siteButton(survivorSite(s), s.id, Math.max(0, jobHours(s) - travelHours(survivorSite(s)))),
+    siteButton: (s) => (sentToday(s) ? outTag(s) : siteButton(survivorSite(s), s.id, Math.max(0, jobHours(s) - travelHours(survivorSite(s))))),
     workshop: workshopHtml, wall: wallHtml, armory: armoryHtml, town: townHtml, chronicle: chronicleHtml, graves: gravesHtml, landing: landingHtml, run: runHtml,
     openSitePick: (id) => { sitePick = id; }, rerender: h.rerender,
   };
@@ -1023,6 +1028,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
     }
     const s = byId(t.dataset.id ?? '');
     if (!s) return;
+    if (sentToday(s) && (t.dataset.act === 'job' || t.dataset.act === 'site')) { h.rerender(); return; } // out at the site until dusk
     if (t.dataset.act === 'job') {
       s.job = t.value as JobId;
       confirmPlan(s);
@@ -1050,6 +1056,13 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
     if (!el) return;
     const act = el.dataset.act;
     if (el.tagName === 'SELECT') return;
+    if (act === 'sendscav') {
+      const lines = sendScavengers();
+      if (lines.length) report.unshift(...lines);
+      sfx.ui('stamp');
+      h.rerender();
+      return;
+    }
     if (act === 'dckclose') {
       if (e.target !== el && el.classList.contains('overlay')) return;
       duskCheck = false; h.rerender(); return;
@@ -1083,6 +1096,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
       if (go.tab) { tab = go.tab; markSeen(go.tab); }
       houseTodo(go);
       if (go.act === 'armall') armAll(report);
+      else if (go.act === 'sendscav') { report.unshift(...sendScavengers()); sfx.ui('stamp'); }
       else if (go.act === 'fullrations') { G.flags.rations = 'full'; report.unshift('Back to full rations.'); sfx.ui('stamp'); }
       else if (go.act?.startsWith('counsel:')) {
         const c = byId(go.act.slice(8));

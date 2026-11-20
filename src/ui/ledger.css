@@ -481,3 +481,5 @@ h3 .dim { font-size: 13px; letter-spacing: .02em; }
 .duskcheck .dck-list .warn { color: #e0a050; }
 .duskcheck .dck-fix { display: flex; flex-wrap: wrap; gap: 8px; }
 .duskcheck .dck-go { margin-top: 14px; text-align: right; }
+.outtag { display: inline-flex; align-items: center; gap: 4px; }
+button.mini.sendscav { margin-left: 6px; }

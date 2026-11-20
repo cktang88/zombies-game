@@ -149,3 +149,9 @@ p.hv-here { display: block; }
   background: radial-gradient(closest-side, rgba(240, 176, 96, .2), rgba(208, 138, 64, .07) 55%, rgba(208, 138, 64, 0)); animation: hvLamp 5.3s ease-in-out infinite; }
 @keyframes hvLamp { 0%, 100% { opacity: .85; } 47% { opacity: 1; } 52% { opacity: .7; } 56% { opacity: .95; } }
 @media (prefers-reduced-motion: reduce) { .hv-lamps i { animation: none; } }
+
+/* scavengers sent out from the gate: faded in the house (they are out until dusk), the send row and their haul */
+.hv-sv.out { opacity: .38; filter: saturate(.4); }
+.hv-send { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; margin: 10px 0 4px; }
+.hv-send .primary { font-size: 16px; padding: 8px 16px; }
+.hv-back p { margin: 4px 0; }

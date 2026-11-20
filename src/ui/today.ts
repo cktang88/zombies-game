@@ -9,7 +9,7 @@ import type { Survivor, Res, SkillId } from '../types';
 import { G } from '../state';
 import { living, first, canWork, isBitten, computeMood } from '../sim/survivors';
 import { RECIPES, RES_LABEL, SITES } from '../data/world';
-import { buildingLevel, survivorSite, onRunToday, ranToday, heatNeed, planConfirmed, dailyFood, halfRations, breakChance, counselPlan, COUNSEL_BREAK } from '../sim/day';
+import { buildingLevel, survivorSite, onRunToday, scavengersReady, sentToday, ranToday, heatNeed, planConfirmed, dailyFood, halfRations, breakChance, counselPlan, COUNSEL_BREAK } from '../sim/day';
 import { calendar } from '../sim/calendar';
 import { fireProfile, ammoLabel, AMMO_TYPES } from '../data/weapons';
 import { canFight } from '../sim/survivors';
@@ -206,8 +206,14 @@ function openTodos(): Todo[] {
     const s = bestFor('scavenge');
     t.push({ id: 'fuel', icon: 'fuel', text: `Find fuel · stove needs ${heat}`, tip: `The stove burns ${heat} tonight and there is ${Math.floor(G.stores.fuel)}. Scavengers bring ${RES_LABEL.fuel.toLowerCase()} home.`, sel: jobSel(s), dot: s ? `surv:${s.id}` : undefined, prio: 28 });
   }
+  // scavengers on the gate wait to be sent: the gate's "Send them out" (sim/day.ts sendScavengers)
+  const ready = scavengersReady();
+  if (ready.length) {
+    const sites = [...new Set(ready.map((s) => SITES.find((x) => x.id === survivorSite(s))?.name ?? 'town'))];
+    t.push({ id: 'sendscav', icon: 'job_scavenge', text: `Send ${ready.length === 1 ? first(ready[0]) : `${ready.length} scavengers`} out ›`, tip: `Ready at the gate for ${sites.join(', ')}. Click: they leave now and are back before dusk; the haul goes in the stores today. (Not sent, they still go when the day ends.)`, act: 'sendscav', dot: 'run', prio: 22 });
+  }
   // a scavenger sent to a place already picked clean brings home scraps (sim/day.ts scavenge: 15%)
-  for (const s of people.filter((x) => x.job === 'scavenge' && canWork(x) && !onRunToday(x))) {
+  for (const s of people.filter((x) => x.job === 'scavenge' && canWork(x) && !onRunToday(x) && !sentToday(x))) {
     const site = SITES.find((x) => x.id === survivorSite(s));
     if (!site || ((G.flags[`stock_${site.id}`] as number | undefined) ?? site.stock) > 0) continue;
     t.push({ id: `clean_${s.id}`, icon: 'job_scavenge', text: `${first(s)}'s place is picked clean`, tip: `${site.name} has nothing left worth the walk: ${first(s)} will bring home scraps. Pick another place.`, sel: `.sitebtn[data-id="${s.id}"]`, dot: `surv:${s.id}`, prio: 27 });
