@@ -4,7 +4,9 @@ import { newGame } from '../src/sim/newgame';
 import { resolveDayWork, dawnTick, nextWeather, queueRecipe, setJobHours, travelHours, heatNeed } from '../src/sim/day';
 import { Rng } from '../src/rng';
 import { SITES } from '../src/data/world';
-import { fireProfile } from '../src/data/weapons';
+import { fireProfile, RARE_ORDER } from '../src/data/weapons';
+import { landingStock, buyOffer, landingOpen, merchantOn, merchantNext, LANDING_AMMO } from '../src/sim/landing';
+import { gunCatalogue, nextUnlock } from '../src/sim/catalogue';
 import { planNight, afterNight, intelTier } from '../src/sim/director';
 import { rollIncident, resolveEvent, returnsTick, INCIDENTS } from '../src/sim/events';
 import { living, wound, killSurvivor, makeSurvivor, setBond, canFight, gainXp, choosePerk, settlePerkOffers, perkFx, aimFactor, breakThresholds, moodBreakdown, counsel, migrateSurvivor } from '../src/sim/survivors';
@@ -98,10 +100,10 @@ for (let r = 0; r < runs; r++) {
 // ammo queued at the bench when affordable, 8-hour days with a rest day when worn out. Nights spend rounds
 // in proportion to threat (about one round per threat point, split across the guns on the wall); a shortfall
 // hits the wall harder. Targets (06 doc #9): ammo and food should not trivially pile up.
-function economy(n: number) {
+function economy(n: number, shopper = false) {
   const at10: { ammoNights: number; foodDays: number }[] = [];
   const at15: { ammoNights: number; foodDays: number }[] = [];
-  let tightNights = 0, lateNights = 0, fuelShort = 0, fuelDays = 0;
+  let tightNights = 0, lateNights = 0, fuelShort = 0, fuelDays = 0, spent = 0;
   for (let r = 0; r < n; r++) {
     newGame(['siege', 'quiet', 'coin'][r % 3], 5000 + r);
     const rng = new Rng(9000 + r);
@@ -121,6 +123,15 @@ function economy(n: number) {
       if (G.craftQueue.length < 1 && G.stores.salvage >= 3 && G.stores.fuel >= 2) queueRecipe('ammo_light');
       const fuelBefore = G.stores.fuel;
       resolveDayWork();
+      // the shopper: salvage over a reserve of 15 goes on rounds at the landing, for the pools the wall draws on
+      if (shopper) {
+        const pools = new Set<string>(living().map((s) => G.weapons.find((x) => x.uid === s.weapon)).map((w) => (w ? fireProfile(w).ammoRes ?? '' : '')).filter((x) => x && x !== 'salvage'));
+        for (let k = 0; k < 12; k++) {
+          const o = landingStock().find((x) => x.kind === 'ammo' && pools.has(Object.keys(x.gives ?? {})[0]) && x.left > 0 && (G.stores.salvage - (x.cost.salvage ?? 0)) >= 15);
+          if (!o || !buyOffer(o.key)) break;
+          spent += o.cost.salvage ?? 0;
+        }
+      }
       if (G.day >= 12) { fuelDays++; if (G.stores.fuel <= 0 || fuelBefore - G.stores.fuel < heatNeed()) fuelShort++; }
       const plan = planNight();
       // night: spend rounds from each fighter's gun
@@ -169,12 +180,50 @@ function economy(n: number) {
   const f = (x: number) => x.toFixed(1);
   const a10 = avg(at10.map((x) => x.ammoNights)), f10 = avg(at10.map((x) => x.foodDays));
   const a15 = avg(at15.map((x) => x.ammoNights)), f15 = avg(at15.map((x) => x.foodDays));
-  console.log(`\neconomy (${n} houses): day 10 ammo ${f(a10)} nights, food ${f(f10)} days/person · day 15 ammo ${f(a15)} nights, food ${f(f15)} days/person (${at15.length} houses alive)`);
+  console.log(`\neconomy${shopper ? ' with the landing (salvage over 15 buys rounds)' : ''} (${n} houses): day 10 ammo ${f(a10)} nights, food ${f(f10)} days/person · day 15 ammo ${f(a15)} nights, food ${f(f15)} days/person (${at15.length} houses alive)`);
   console.log(`    nights from day 10 ending with <1 night of ammo: ${Math.round((tightNights / Math.max(1, lateNights)) * 100)}% (target >= 40%) · days 12+ where the stove went short: ${Math.round((fuelShort / Math.max(1, fuelDays)) * 100)}%`);
+  if (shopper) console.log(`    salvage spent at the landing: ${Math.round(spent / n)} a house over 15 days`);
   check(!(a15 > 6), `economy: ammo piles up (${f(a15)} nights in reserve at day 15; want <= 6)`);
   check(!(f15 > 12), `economy: food piles up (${f(f15)} days per person at day 15; want <= 12)`);
 }
 economy(+(process.argv[3] ?? 9));
+economy(+(process.argv[3] ?? 9), true);
+
+// ---------- the landing, the merchant, rare variants, the gun catalogue ----------
+{
+  newGame('siege', 6060);
+  G.day = 4; G.stores.salvage = 200;
+  const stock = landingStock();
+  const pistol = stock.find((o) => o.key === 'ammo_pistol')!;
+  check(!!pistol && pistol.left === pistol.stock, 'landing: pistol rounds on the shelf');
+  const before = G.stores.pistol;
+  check(!!buyOffer('ammo_pistol') && G.stores.pistol === before + (pistol.gives!.pistol ?? 0), 'landing: buying pistol rounds adds them');
+  check(landingStock().find((o) => o.key === 'ammo_pistol')!.left === pistol.stock - 1, 'landing: a bought lot leaves the shelf');
+  for (let i = 0; i < 10; i++) buyOffer('ammo_pistol');
+  check(landingStock().find((o) => o.key === 'ammo_pistol')!.left === 0 && !buyOffer('ammo_pistol'), 'landing: a sold-out lot cannot be bought');
+  check(landingStock().filter((o) => o.kind === 'gun' && !o.merchant).length === 2, 'landing: two guns on the boat');
+  check(JSON.stringify(landingStock().map((o) => o.key)) === JSON.stringify(landingStock().map((o) => o.key)), 'landing: the shelf is the same on every read');
+  addRep('ferry', -100);
+  check(!landingOpen() && !landingStock().some((o) => !o.merchant), 'landing: hostile Ferry families keep the boat away');
+  addRep('ferry', 200);
+  const friendly = landingStock().find((o) => o.key === 'ammo_rifle')!.cost.salvage!;
+  check(friendly < LANDING_AMMO.find((a) => a.res === 'rifle')!.price, `landing: friendly price is lower (${friendly})`);
+  G.day = 6;
+  check(merchantOn() && landingStock().some((o) => o.merchant && o.rare), 'merchant: here on day 6 with a rare gun');
+  const rare = landingStock().find((o) => o.merchant && o.rare)!;
+  const w0 = G.weapons.length;
+  buyOffer(rare.key);
+  const got = G.weapons[w0];
+  check(G.weapons.length === w0 + 1 && got.rare === rare.rare && got.def === rare.def, 'merchant: buying a rare variant gives that gun');
+  const base = fireProfile({ ...got, rare: undefined, mods: {} }), better = fireProfile({ ...got, mods: {} });
+  check(JSON.stringify(base) !== JSON.stringify(better), `rare: ${rare.rare} changes the gun's numbers`);
+  G.day = 7;
+  check(!merchantOn() && merchantNext() === 9, 'merchant: gone on day 7, back on day 9');
+  const cat = gunCatalogue();
+  check(cat.total === 26 && cat.rareTotal === RARE_ORDER.length && cat.groups.every((g) => g.entries.some((e) => e.craft)), 'catalogue: 26 guns in six kinds, each with one you can make');
+  check(cat.groups.every((g) => g.entries.every((e) => e.have.length || e.how.length)), 'catalogue: every missing gun says how to get it');
+  console.log(`landing: rare ${rare.name} for ${rare.cost.salvage}; next unlock ${nextUnlock()?.where} -> ${nextUnlock()?.guns.join(',')}; ${cat.owned}/${cat.total} guns, rare ${cat.rareOwned}/${cat.rareTotal}`);
+}
 
 // ---------- endings ----------
 function scenario(name: string, day: number, reps: Record<string, number>, want: string, extra?: () => void) {
