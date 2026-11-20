@@ -91,10 +91,10 @@ function prompt(s: NonNullable<typeof cur>) {
   d.innerHTML = `<div class="rotbox">
     <div class="rotphone" aria-hidden="true"></div>
     <h2>Turn your phone sideways</h2>
-    <p>The road is wide. Held upright the wall shrinks to a third.</p>
+    <p>${s.ctx === 'run' ? 'The street is wide. Held upright it shrinks to a third.' : 'The road is wide. Held upright the wall shrinks to a third.'}</p>
     <button class="go" data-rot="rotate">Play sideways</button>
     <button data-rot="small">Play small, upright</button>
-    <p class="dim small">With rotation locked, "Play sideways" turns the night for you: just turn the phone.</p>
+    <p class="dim small">With rotation locked, "Play sideways" turns the ${s.ctx === 'run' ? 'street' : 'night'} for you: just turn the phone.</p>
   </div>`;
   d.addEventListener('click', (e) => {
     const b = (e.target as HTMLElement).closest('[data-rot]') as HTMLElement | null;
