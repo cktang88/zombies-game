@@ -686,7 +686,7 @@ export class Battle {
       this.rDown = performance.now();
       this.rDone = false;
     }
-    else if (k === keyOf('night.firebomb')) this.throwMolotov();
+    else if (k === keyOf('night.firebomb')) { if (!e.repeat) this.throwMolotov(); } // a held key would throw the whole stock
     else if (/^[1-9]$/.test(k)) this.selectGuard(+k - 1);
     else if (k === 'Tab') { e.preventDefault(); this.selectGuard(e.shiftKey ? Math.max(0, this.sel) - 1 : this.sel + 1, true); }
     else if (k === keyOf('night.weapon')) this.cycleWeapon(1);
