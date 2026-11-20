@@ -76,7 +76,7 @@ function title() {
     const el = (e.target as HTMLElement).closest('[data-act]') as HTMLElement | null;
     if (!el) return;
     sfx.ui();
-    if (el.dataset.act === 'continue' && saved) {
+    if (el.dataset.act === 'continue' && saved && loadSave()) {
       setState(saved);
       for (const s of [...G.survivors, ...G.graves]) migrateSurvivor(s);
       migrateTraps();
@@ -105,7 +105,10 @@ function title() {
     } else if (el.dataset.act === 'mute') {
       setSetting('muted', !muted);
       title();
-    } else if (el.dataset.act === 'settings') openSettings(app);
+    } else if (el.dataset.act === 'settings') {
+      // Settings › Data can delete the save: then Continue must not bring it back from memory
+      openSettings(app, () => { if (!loadSave()) title(); });
+    }
     else if (el.dataset.act === 'help') openHelp(app, 'night');
     else if (el.dataset.act === 'ledger') openLedger();
   };
