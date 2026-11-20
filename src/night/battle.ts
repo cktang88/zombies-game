@@ -2818,7 +2818,7 @@ export class Battle {
     } else {
       c.translate(z.x + h * 0.35, z.y - 6);
       c.rotate(Math.PI / 2 * (R.chance(0.5) ? 1 : 0.92));
-      c.scale(1, 0.55);
+      c.scale(0.55, 1); // squash the body's thickness (local x, now vertical), not its length
       c.drawImage(bk.cv, -w / 2, -h * 0.1, w, h);
     }
     c.restore();
