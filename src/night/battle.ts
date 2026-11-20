@@ -473,7 +473,8 @@ export class Battle {
   hitstop = 0;
   lastHitstop = -1;
   // ---- orders and posts ----
-  sel = -1; // index into guards of the selected guard (-1 none)
+  selId = ''; // the selected guard, by survivor id (the line re-sorts when a post changes, so an index would jump to someone else)
+  get sel() { return this.selId ? this.orderable().findIndex((g) => g.s.id === this.selId) : -1; }
   mark: { id: number; t: number } | null = null;
   // ---- corpse piles per lane (research 05 §7) ----
   piles = [0, 0, 0, 0];
@@ -757,11 +758,11 @@ export class Battle {
     if (wrap) i = ((i % list.length) + list.length) % list.length;
     const g = list[i];
     if (!g) return;
-    this.sel = i;
+    this.selId = g.s.id;
     sfx.ui();
     // the selected guard's label opens to full words (drawGuardLabels); no banner
   }
-  selected(): Guard | undefined { return this.sel >= 0 ? this.orderable()[this.sel] : undefined; }
+  selected(): Guard | undefined { return this.selId ? this.orderable().find((g) => g.s.id === this.selId) : undefined; }
   giveOrder(o: Order, all: boolean) {
     const list = all ? this.orderable() : [this.selected()].filter((g): g is Guard => !!g);
     if (!list.length) { this.say('Select a guard first: [1-9] or [Tab]. Shift sets everyone.', 2.5); return; }
