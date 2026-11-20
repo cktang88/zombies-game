@@ -182,7 +182,7 @@ function afterRun(r: ExpeditionResult) {
   // the loot as chips (a picture and a number each, the name in its tip); the "Brought home" line only when there are none
   const lootChips = r.died ? '' : Object.entries(r.loot).filter(([, v]) => v).map(([k, v]) => chip((RES_ICON[k as Res] ?? 'icon_parts').replace('icon_', ''), v as number, `${v} ${esc((RES_LABEL[k as Res] ?? k).toLowerCase())}`)).join('');
   const rest = lootChips ? lines.slice(1) : lines;
-  overlay(`<h2>${r.died ? 'Lost' : 'Back before dark'}</h2>
+  overlay(`<h2>${r.died ? 'Lost' : r.late ? 'Back after dark' : 'Back before dark'}</h2>
     ${lootChips ? `<div class="duskchips">${lootChips}</div>` : ''}
     ${rest.length ? `<p class="t-l">${esc(rest[0])}</p>` : ''}
     ${rest.length > 1 ? fold('<span class="t-s">The rest of it</span>', rest.slice(1).map((x) => `<p>${esc(x)}</p>`).join(''), { open: rest.length <= 3, id: 'run-rest' }) : ''}`, () => day());

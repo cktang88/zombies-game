@@ -159,7 +159,7 @@ interface EZ {
 interface Spot { x: number; searched: boolean; kind: 'door' | 'car' | 'shed' | 'body' | 'kin' | 'cache' | 'truck' | 'drop'; label: string; loot: number; survivor?: boolean; zone: number; items?: PackItem[] }
 interface P { x: number; y: number; vx: number; vy: number; life: number; color: string; size: number; g: number; kind?: 'shell' | 'dust' | 'puff'; w?: number; h?: number; rot?: number; bounces?: number; max?: number }
 
-export interface ExpeditionResult { loot: Partial<Record<Res, number>>; weapons: string[]; died: boolean; found?: Survivor; lines: string[] }
+export interface ExpeditionResult { loot: Partial<Record<Res, number>>; weapons: string[]; died: boolean; found?: Survivor; lines: string[]; /** home after the light went */ late?: boolean }
 
 export class Expedition {
   c: CanvasRenderingContext2D;
@@ -1310,7 +1310,7 @@ export class Expedition {
       if (total > 40) tale(this.s, `Came back from ${this.site.name} loaded down.`);
       log('event', `${displayName(this.s)} led a run to ${this.site.name}${this.mate ? ` with ${displayName(this.mate)}` : ''} and came back.`);
     }
-    this.onEnd({ loot: this.loot, weapons: this.weapons, died, found: died ? undefined : this.found, lines: this.lines });
+    this.onEnd({ loot: this.loot, weapons: this.weapons, died, found: died ? undefined : this.found, lines: this.lines, late: this.daylight <= 0 });
   }
 
   // ---------- draw ----------
