@@ -152,6 +152,8 @@ export const PAD: Record<'night' | 'run', PadBind[]> = {
     { btn: 1, to: 'run.shove', label: 'Shove' },
     { btn: 3, to: 'run.pack', label: 'Next item in the pack' },
     { btn: 5, to: 'run.drop', label: 'Drop the selected item' },
+    { btn: 14, to: 'run.left', label: 'Walk left (or the left stick)' },
+    { btn: 15, to: 'run.right', label: 'Walk right (or the left stick)' },
     { btn: 9, to: '@pause', label: 'Pause' },
   ],
 };
