@@ -53,7 +53,13 @@ let fallback: string | null = null;
 let loadOk = 0, loadBad = 0;
 const badSprites = new Set<string>();
 /** Rigged animation is on (the setting, unless we fell back to Classic). */
-export function rigsOn(): boolean { return animationSetting() === 'rigged' && !fallback; }
+let lastSetting = animationSetting();
+export function rigsOn(): boolean {
+  // picking Rigged again in Settings is the player asking to try the rigs: clear an automatic fallback
+  const s = animationSetting();
+  if (s !== lastSetting) { lastSetting = s; if (s === 'rigged') { fallback = null; fullRigs = FULL_RIGS; } }
+  return s === 'rigged' && !fallback;
+}
 /** Switch to Classic for the rest of the session (logged once). */
 export function animFallback(reason: string) {
   if (fallback) return;
