@@ -66,7 +66,9 @@ function focusables(): HTMLElement[] {
   let root: HTMLElement = document.body, rz = -Infinity;
   for (const o of overlays) { const z = +getComputedStyle(o).zIndex || 0; if (z >= rz) { rz = z; root = o; } }
   return Array.from(root.querySelectorAll<HTMLElement>('button, summary, [href], input, select, [tabindex]:not([tabindex="-1"])'))
-    .filter((el) => !(el as HTMLButtonElement).disabled && el.offsetParent !== null && !el.closest('.tbtns-pad'));
+    .filter((el) => !(el as HTMLButtonElement).disabled && el.offsetParent !== null && !el.closest('.tbtns-pad')
+      // inside a closed fold (it still has a box here, but focus() on it does nothing: the pad got stuck)
+      && !el.closest('details:not([open]) > :not(summary)'));
 }
 function moveFocus(dx: number, dy: number) {
   const list = focusables();
