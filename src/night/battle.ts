@@ -229,8 +229,9 @@ export function autoPosts(others: { s: Survivor; w: WeaponItem | null }[], roofN
     if (roof) out[roof.s.id] = 'roof';
   }
   if (others.length >= 4 && !taken('runner')) {
-    const run = free.filter((g) => !out[g.s.id]).sort((a, b) => (a.w ? WEAPONS[a.w.def]?.dmg ?? 0 : 0) - (b.w ? WEAPONS[b.w.def]?.dmg ?? 0 : 0))[0];
-    if (run && (!run.w || WEAPONS[run.w.def]?.cls === 'handgun')) out[run.s.id] = 'runner';
+    // among the handguns and empty hands only (it took the lightest gun of all, and gave up when that was a rifle)
+    const run = free.filter((g) => !out[g.s.id] && (!g.w || WEAPONS[g.w.def]?.cls === 'handgun')).sort((a, b) => (a.w ? WEAPONS[a.w.def]?.dmg ?? 0 : 0) - (b.w ? WEAPONS[b.w.def]?.dmg ?? 0 : 0))[0];
+    if (run) out[run.s.id] = 'runner';
   }
   for (const g of free) out[g.s.id] ??= 'step';
   return out;
