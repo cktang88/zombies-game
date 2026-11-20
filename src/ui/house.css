@@ -122,6 +122,7 @@ p.hv-here { display: block; }
 .hv-bar .dusk { width: auto; margin-left: auto; padding: 8px 22px; }
 .hv-bar .dusk small { display: inline; margin: 0 0 0 10px; }
 .hv-hint { color: var(--dim); }
+.hv-hint.warn { color: #e8c040; }
 
 /* phones: the scene scrolls sideways; the panel is a sheet from the bottom */
 @media (max-width: 759px) {

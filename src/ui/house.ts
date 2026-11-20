@@ -43,6 +43,8 @@ export interface HouseCtx {
   threads: string;
   keep: string;
   dusk: string;
+  /** the first dusk press found jobs nobody looked at today (day.ts duskArmed) */
+  armed: boolean;
   survivorCard: (s: Survivor, dots: Set<string>) => string;
   statusTags: (s: Survivor) => string;
   moodChip: (s: Survivor) => string;
@@ -488,7 +490,7 @@ export function houseHtml(ctx: HouseCtx): string {
       </div>
     </div>
     ${panelHtml(ctx)}
-    <div class="hv-bar">${ctx.keep}<span class="hv-hint t-s">${focus ? `Esc to step back` : 'Click a place or a person · drag a person onto a place'}</span>${ctx.dusk}</div>
+    <div class="hv-bar">${ctx.keep}<span class="hv-hint t-s ${ctx.armed ? 'warn' : ''}">${ctx.armed ? 'Yesterday\'s jobs carried over (the ones glowing): keep them, change them, or go anyway' : focus ? 'Esc to step back' : 'Click a place or a person · drag a person onto a place'}</span>${ctx.dusk}</div>
   </div>`;
 }
 

@@ -856,7 +856,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
   const keepBtn = stale.length ? `<button class="mini keepbtn ${duskArmed ? 'flash' : ''}" data-act="keepplans"${tip(`Yesterday's job${stale.length === 1 ? '' : 's'} carried over (the gold edge): ${esc(stale.map(first).join(', '))}. Keep, or change each one.`)}>Keep ${stale.length === 1 ? `${esc(first(stale[0]))}'s job` : `all ${stale.length}`} ✓</button>` : '';
   const house = houseView();
   const hctx: HouseCtx = {
-    dots, today: strip, report, forecast: fc ?? '', calendar: calBlock, tonightSize: tp > 60 ? 'BIG' : tp > 30 ? 'bad' : 'light', threads: threadsHtml(), keep: keepBtn, dusk: duskBtn,
+    dots, today: strip, report, forecast: fc ?? '', calendar: calBlock, tonightSize: tp > 60 ? 'BIG' : tp > 30 ? 'bad' : 'light', threads: threadsHtml(), keep: keepBtn, dusk: duskBtn, armed: duskArmed && stale.length > 0,
     survivorCard, statusTags, moodChip, jobOutlook, jobs: JOBS, costHtml,
     siteButton: (s) => siteButton(survivorSite(s), s.id, Math.max(0, jobHours(s) - travelHours(survivorSite(s)))),
     workshop: workshopHtml, wall: wallHtml, armory: armoryHtml, town: townHtml, chronicle: chronicleHtml, graves: gravesHtml, run: runHtml,
