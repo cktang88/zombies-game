@@ -472,3 +472,12 @@ h3 .dim { font-size: 13px; letter-spacing: .02em; }
 :is(.modal.event, .doc, .hint) .tag.bad { color: #6e140c; border-color: #8e2a20; }
 :is(.modal.event, .doc, .hint) .intel { color: var(--ink); background: rgba(42, 36, 28, .07); border-left-color: #8a6a2a; }
 .modal.event .choices button.cant, .modal.event .choices button:disabled { opacity: 1; color: #5e523e; border-style: dashed; background: transparent; }
+
+/* the check before dusk: who can't shoot, and where to fix it */
+.modal.duskcheck { width: min(560px, 94vw); max-height: 90vh; overflow: auto; }
+.duskcheck .dck-list { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
+.duskcheck .dck-list > div { display: flex; align-items: center; gap: 10px; }
+.duskcheck .dck-list .portrait { width: 40px; height: 40px; }
+.duskcheck .dck-list .warn { color: #e0a050; }
+.duskcheck .dck-fix { display: flex; flex-wrap: wrap; gap: 8px; }
+.duskcheck .dck-go { margin-top: 14px; text-align: right; }

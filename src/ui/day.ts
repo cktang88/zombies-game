@@ -4,6 +4,7 @@ import { G, R, dateLabel, ICE_DAY, has, pay, ordinal, docsFound, rep } from '../
 import { DOCS, FACTIONS } from '../data/lore';
 import { spriteUrl } from '../assets';
 import { portraitImg } from './portrait';
+import { landingMul } from '../sim/landing';
 import { WEAPONS, RARES, gunModel, gunLabel, MELEE, meleeProfile, CLASS_NAMES, AMMO_TYPES, AMMO_RES, MODS, MOD_SLOTS, fireProfile, ammoLabel, selectedAmmo, slotsFor, attachMod, detachMod, type FireProfile } from '../data/weapons';
 import { TRAITS } from '../data/traits';
 import { SKILL_NAMES, SKILL_LINES, COURAGE_LINE } from '../data/names';
@@ -21,7 +22,7 @@ import {
   drillPlan, emplacements, tomorrowTeaser, oilGuns, clearPile, choreHand, craftPoints, farmAmount, repairPlan, radioWorkOf, careCount, dailyFood, halfRations, fortCount, fortRoom, breakChance, counselPlan, COUNSEL_BREAK,
 } from '../sim/day';
 import { calendar } from '../sim/calendar';
-import { armEveryone, wallLine, gunRounds, ammoUse, SHOTS_PER_GUN_NIGHT } from '../sim/readiness';
+import { armEveryone, armPreview, canArmAnyone, wallLine, gunRounds, ammoUse, SHOTS_PER_GUN_NIGHT } from '../sim/readiness';
 import { persona, forecast, threatPoints, RADIO_STRONG } from '../sim/director';
 import { sfx, music, stinger, distant } from '../audio';
 import { openSettings } from './settings';
@@ -821,6 +822,56 @@ function armAll(report: string[]) {
   sfx.ui('stamp');
 }
 
+/** Recipes the bench finishes by dusk with today's crafters (same sums as the workshop's "by dusk"). */
+function benchByDusk() {
+  const perDay = living().filter((s) => s.job === 'craft' && canWork(s)).reduce((a, s) => a + (onRunToday(s) ? 0 : craftPoints(s, workMult(s) * (jobHours(s) / DEFAULT_HOURS))), 0);
+  let left = 0;
+  const out: (typeof RECIPES)[number][] = [];
+  for (const q of G.craftQueue) {
+    const r = RECIPES.find((x) => x.id === q.recipe)!;
+    left += r.work - q.progress;
+    if (perDay > 0 && left <= perDay + 1e-6) out.push(r);
+  }
+  return out;
+}
+
+/**
+ * Before the night: who at the wall still can't shoot once the free rack guns and today's bench guns are
+ * handed out at dusk. Each with why, for the check that stops you walking into the night unarmed.
+ */
+function duskProblems() {
+  const handed = new Set(armPreview().map((x) => x.s));
+  let benchGuns = benchByDusk().filter((r) => r.weapon).length;
+  const out: { s: Survivor; why: string }[] = [];
+  for (const s of wallLine().idle) {
+    if (handed.has(s)) continue;
+    if (benchGuns > 0 && !s.weapon) { benchGuns--; continue; }
+    const w = G.weapons.find((x) => x.uid === s.weapon);
+    out.push({ s, why: w ? `no rounds for the ${(w.name ? `"${w.name}"` : WEAPONS[w.def].name).toLowerCase()}` : 'no gun' });
+  }
+  return out;
+}
+let duskCheck = false;
+function duskCheckHtml(): string {
+  const ps = duskProblems();
+  if (!ps.length) { duskCheck = false; return ''; }
+  const dry = ps.some((p) => p.s.weapon), bare = ps.some((p) => !p.s.weapon);
+  const fixes = [
+    canArmAnyone() ? `<button data-act="dckarm">Hand out rack guns</button>` : '',
+    isOpen('armory') ? `<button data-act="dckfix" data-tab="armory"${tip('Give someone a different gun, or see which guns you could get.')}>Gun rack</button>` : '',
+    isOpen('workshop') ? `<button data-act="dckfix" data-tab="workshop"${tip(bare ? 'Queue a gun and put someone on Craft: a gun finished by dusk goes to whoever needs it.' : 'Make rounds: finished by dusk if the crafters have the hours.')}>Workbench</button>` : '',
+    landingMul() !== null ? `<button data-act="dckfix" data-tab="landing"${tip('Buy rounds or a gun for salvage.')}>Landing</button>` : '',
+  ].filter(Boolean).join('');
+  return `<div class="overlay" data-act="dckclose"><div class="modal duskcheck" role="dialog" aria-label="Before dusk">
+    <button class="close" data-act="dckclose" aria-label="Close">×</button>
+    <h2 class="t-xl">Not everyone at the wall can shoot</h2>
+    <p class="t-s">${dry && bare ? 'Some have no gun, some no rounds.' : bare ? 'A gun for each of them can still be found before dark.' : 'Their guns are dry.'} Fix it now: once you go, the night starts.</p>
+    <div class="dck-list">${ps.map((p) => `<div class="hv-person">${portraitImg(p.s.sprite, 'portrait')}<span class="t-m">${esc(first(p.s))}</span><span class="t-s warn">${esc(p.why)}</span></div>`).join('')}</div>
+    <div class="dck-fix">${fixes}</div>
+    <div class="dck-go"><button class="mini" data-act="dckgo">Go anyway: they hold the line with what they have ›</button></div>
+  </div></div>`;
+}
+
 /** The food chip's tip: real use (appetites, rations), days left, and what half rations do. */
 function foodTip(eat: number, half: boolean) {
   const big = living().filter((s) => hasTrait(s, 'bigeater')).map(first), light = living().filter((s) => hasTrait(s, 'ascetic')).map(first);
@@ -908,6 +959,7 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
     ${G.pendingEvent ? eventModal(G.pendingEvent) : ''}
     ${sel ? `<div class="overlay" data-act="closedetail">${detailHtml(sel)}</div>` : ''}
     ${sitePick && !sel ? `<div class="overlay" data-act="closesite">${sitePickerHtml(sitePick)}</div>` : ''}
+    ${duskCheck && !sel && !sitePick && !G.pendingEvent ? duskCheckHtml() : ''}
     ${G.pendingEvent || sel ? '' : hintHtml()}
   </div>`;
   if (house) mountHouse(root);
@@ -915,14 +967,22 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
   juiceAfterRender(root);
   applyFlash(root);
   // Going to the wall with jobs nobody looked at today: the first press highlights them, the second goes.
-  const goDusk = () => {
+  const goDusk = (force = false) => {
     const left = living().filter((s) => canWork(s) && G.day > 1 && !planConfirmed(s) && !(onRunToday(s)));
-    if (left.length && !duskArmed) {
+    if (left.length && !duskArmed && !force) {
       duskArmed = true;
       sfx.ui();
       h.rerender();
       return;
     }
+    // nobody walks into the night unarmed by accident: the check lists who can't shoot and where to fix it
+    if (!force && duskProblems().length) {
+      duskCheck = true;
+      sfx.ui('paper');
+      h.rerender();
+      return;
+    }
+    duskCheck = false;
     duskArmed = false;
     for (const s of living()) confirmPlan(s);
     sfx.ui('stamp');
@@ -990,6 +1050,19 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
     if (!el) return;
     const act = el.dataset.act;
     if (el.tagName === 'SELECT') return;
+    if (act === 'dckclose') {
+      if (e.target !== el && el.classList.contains('overlay')) return;
+      duskCheck = false; h.rerender(); return;
+    }
+    if (act === 'dckgo') { goDusk(true); return; }
+    if (act === 'dckarm') { armAll(report); h.rerender(); return; }
+    if (act === 'dckfix') {
+      duskCheck = false;
+      const t = el.dataset.tab!;
+      tab = t; markSeen(t);
+      houseTodo({ tab: t });
+      sfx.ui('paper'); h.rerender(); return;
+    }
     if (act === 'sitepick') { sitePick = el.dataset.id!; sfx.ui('paper'); h.rerender(); return; }
     if (act === 'closesite') {
       if (e.target !== el && el.classList.contains('overlay')) return;
@@ -1128,7 +1201,7 @@ function installKeys() {
     if (e.key === 'Escape' && !e.defaultPrevented && G.phase === 'day') {
       const ovs = document.querySelectorAll('.overlay');
       const top = ovs[ovs.length - 1] as HTMLElement | undefined;
-      if ((top?.dataset.act === 'closedetail' || top?.dataset.act === 'closesite') && top.closest('.day')) {
+      if ((top?.dataset.act === 'closedetail' || top?.dataset.act === 'closesite' || top?.dataset.act === 'dckclose') && top.closest('.day')) {
         e.preventDefault();
         (top.querySelector(`.close[data-act=${top.dataset.act}]`) as HTMLElement | null)?.click();
         return;
