@@ -39,8 +39,9 @@ does not warn about, or a control that cannot be reached; **low** = wording, cli
 | 19 | low | The table's Talk list named the people near breaking with no chance shown. | `520305b` |
 | 20 | low | A fresh house scene showed everyone aiming their gun across the room for a moment (rigs ease from aim to low ready). | `8b11fbf` |
 | 21 | low | `__story.event('deliver_*')` threw without a running thread (test hook). | `abb5efa` |
+| 22 | low | pad-check "D-pad down from a fold head" failed at random: the held-D-pad step released and the next tap pressed with no frame between, so the pad read one long hold and did not move. A test race, not the game. | `e760202` |
 
-Count: 0 high, 6 med, 15 low fixed.
+Count: 0 high, 6 med, 16 low fixed.
 
 ## Checked, fine
 
@@ -53,8 +54,7 @@ Count: 0 high, 6 med, 15 low fixed.
 - Esc closes the sheet, then the site picker, then the panel; Enter on a focused place opens it; L flips
   views both ways; Enter goes to dusk (arms first with carried-over jobs).
 - Phone (390×844): ledger, house, panels as bottom sheets, event cards scroll, site picker.
-- `simtest 2`, `smoke`, `ui-check`, `pad-check` clean (the "D-pad down from a fold head" failure no longer
-  reproduces).
+- `simtest 2`, `smoke`, `ui-check`, `pad-check` clean (pad-check four runs in a row after #22).
 
 ## Left
 
