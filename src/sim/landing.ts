@@ -35,9 +35,9 @@ export interface Offer {
 
 /** Base prices in salvage before the Ferry standing. */
 export const LANDING_AMMO: { res: Res; n: number; price: number; stock: number; minDay?: number }[] = [
-  { res: 'pistol', n: 24, price: 6, stock: 4 },
-  { res: 'shell', n: 10, price: 6, stock: 3 },
-  { res: 'rifle', n: 10, price: 9, stock: 3 },
+  { res: 'pistol', n: 20, price: 9, stock: 2 },
+  { res: 'shell', n: 8, price: 8, stock: 2 },
+  { res: 'rifle', n: 8, price: 12, stock: 2 },
   { res: 'explosive', n: 2, price: 8, stock: 1, minDay: 5 },
 ];
 export const LANDING_SUPPLY: { res: Res; n: number; price: number; stock: number }[] = [
