@@ -38,6 +38,8 @@ export interface HouseCtx {
   forecast: string;
   /** the calendar block as the ledger shows it ('' before it opens) */
   calendar: string;
+  /** tonight's size as the calendar says it ('BIG', 'bad', 'light') */
+  tonightSize: string;
   threads: string;
   keep: string;
   dusk: string;
@@ -244,7 +246,8 @@ function summary(st: Station): string {
     }
     case 'calendar': {
       const c = calendar(2);
-      return `tonight ${CAL_WORD[c[0].kind] ?? c[0].kind}${c[1] ? ` · tomorrow ${CAL_WORD[c[1].kind] ?? c[1].kind}` : ''}`;
+      const t0 = c[0].kind === 'night' ? (ctxRef?.tonightSize ?? 'ordinary') : CAL_WORD[c[0].kind] ?? c[0].kind;
+      return `tonight ${t0}${c[1] ? ` · tomorrow ${CAL_WORD[c[1].kind] ?? c[1].kind}` : ''}`;
     }
     case 'gate': {
       const sc = on('scavenge');
