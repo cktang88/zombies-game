@@ -42,6 +42,7 @@ const URL = process.argv[2] ?? 'http://localhost:4192/';
   await page.evaluate(() => __press(13, true));
   for (let i = 0; i < 12; i++) { await page.waitForTimeout(100); seen.add(await page.evaluate(() => document.activeElement && [...document.querySelectorAll('*')].indexOf(document.activeElement))); }
   await page.evaluate(() => __press(13, false));
+  await frames(3); // let the pad see the release, or the next tap reads as the same hold and does not move
   ok(seen.size >= 4, `D-pad held repeats focus moves (${seen.size} distinct stops in 1.2 s)`);
 
   // a fold head (<summary>) is a focus stop: from it, D-pad down moves on to the next thing below (a stop
