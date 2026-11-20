@@ -18,7 +18,7 @@ import { TRAPS } from '../data/traps';
 import {
   buildingLevel, queueRecipe, WEATHER_LABEL, DAY_HOURS, DEFAULT_HOURS, jobHours, setJobHours, hoursAvailable, travelHours, survivorSite,
   searchHours, searchFactor, planConfirmed, confirmPlan, ranToday, onRunToday, runDaylightFor, prepareRun, clockLabel, heatNeed,
-  drillPlan, emplacements, tomorrowTeaser, oilGuns, clearPile, choreHand, craftPoints, farmAmount, repairPlan, radioWorkOf, dailyFood, halfRations, fortCount, fortRoom, breakChance, counselPlan, COUNSEL_BREAK,
+  drillPlan, emplacements, tomorrowTeaser, oilGuns, clearPile, choreHand, craftPoints, farmAmount, repairPlan, radioWorkOf, careCount, dailyFood, halfRations, fortCount, fortRoom, breakChance, counselPlan, COUNSEL_BREAK,
 } from '../sim/day';
 import { calendar } from '../sim/calendar';
 import { armEveryone, wallLine, gunRounds, ammoUse, SHOTS_PER_GUN_NIGHT } from '../sim/readiness';
@@ -69,7 +69,7 @@ function jobOutlook(s: Survivor, j: JobId): string {
       return `~${farmAmount(s, m * f)} food${hasTrait(s, 'greenthumb') ? ' · green thumb' : ''}`;
     case 'doctor': {
       const hurt = living().reduce((a, p) => a + p.wounds.filter((w) => !w.tended && !w.hidden).length, 0);
-      return hurt ? `tends ${Math.min(hurt, Math.max(1, Math.round((2 + skillOf(s, 'medicine')) * m * f)))} of ${hurt} wounds` : 'nobody needs tending';
+      return hurt ? `tends ${Math.min(hurt, careCount(s, m * f))} of ${hurt} wounds` : 'nobody needs tending';
     }
     case 'scavenge':
       return `skill ${s.skills.scavenging}/10${siteStock(survivorSite(s)).left <= 0 ? ' · picked clean' : ''}`;
