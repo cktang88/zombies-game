@@ -180,18 +180,21 @@ export class Ticker {
     if (m.life <= 0) this.q.shift();
   }
   get length() { return this.q.length; }
-  draw(c: CanvasRenderingContext2D, W: number, y: number, size = 16) {
+  /** maxW: the room between the corner panels; a long line steps its type down (to 3/4) before it squeezes. */
+  draw(c: CanvasRenderingContext2D, W: number, y: number, size = 16, maxW = W - 60) {
     const m = this.q[0];
     if (!m) return;
     const a = Math.min(1, (m.max - m.life) * 5, m.life * 2);
     c.save();
     c.font = `${size}px ${FONT}`;
     c.textAlign = 'center';
-    const tw = Math.min(W - 60, c.measureText(m.text).width);
+    let tw = c.measureText(m.text).width;
+    if (tw > maxW) { size = Math.max(Math.round(size * 0.75), Math.floor((size * maxW) / tw)); c.font = `${size}px ${FONT}`; tw = c.measureText(m.text).width; }
+    tw = Math.min(maxW, tw);
     c.fillStyle = `rgba(10,9,8,${0.55 * a})`;
     c.beginPath(); c.roundRect(W / 2 - tw / 2 - 12, y - size, tw + 24, size + 10, 4); c.fill();
     c.fillStyle = `rgba(236,224,196,${a})`;
-    c.fillText(m.text, W / 2, y, W - 60);
+    c.fillText(m.text, W / 2, y, maxW);
     if (this.q.length > 1) { c.fillStyle = `rgba(200,180,140,${0.6 * a})`; c.font = `13px ${FONT}`; c.fillText('•'.repeat(Math.min(3, this.q.length - 1)), W / 2, y + 12); }
     c.restore();
   }

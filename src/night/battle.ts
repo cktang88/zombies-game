@@ -4589,7 +4589,8 @@ export class Battle {
         hintRow(c, [{ key: 'F1', label: 'keys' }], x, H - 14, 'left', 0.45);
       }
     }
-    this.messages.draw(c, W, 104, narrow ? 30 : 17);
+    // the news line keeps between the wall panel and the weapon panel (it ran over the ammo count)
+    this.messages.draw(c, W, 104, narrow ? 30 : 17, 2 * (weaponPanel(W, coarsePointer()).rx - 330 - W / 2 - 14));
     if (!narrow) this.drawCoach(c, coach);
     // crosshair: circle sized by real spread, at where the hand points
     if (p && p.w && !this.done) {
