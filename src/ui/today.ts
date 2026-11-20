@@ -224,8 +224,9 @@ function openTodos(): Todo[] {
   for (const s of people) {
     if (s.perkOffers?.length && !s.dead) t.push({ id: `perk_${s.id}`, icon: 'st_perk', text: `Pick ${first(s)}'s perk`, tip: 'A skill grew. Choose one perk on their sheet (or they choose at the second dawn).', sel: `.sv-card[data-id="${s.id}"] [data-act=detail]`, dot: `surv:${s.id}`, prio: 70 });
     if (!canWork(s) || onRunToday(s) || stale.includes(s)) continue;
-    const idle = (s.job === 'rest' && s.rest > 0.6) || (s.job === 'craft' && !G.craftQueue.length && ws);
-    if (idle) t.push({ id: `idle_${s.id}`, icon: 'job_rest', text: `Give ${first(s)} a job`, tip: s.job === 'craft' ? 'The bench is empty: queue something, or give them other work.' : `${first(s)} is rested and doing nothing today.`, sel: jobSel(s), dot: `surv:${s.id}`, prio: 40 });
+    const whole = s.job === 'repair' && G.fort.hp >= G.fort.maxHp;
+    const idle = (s.job === 'rest' && s.rest > 0.6) || (s.job === 'craft' && !G.craftQueue.length && ws) || whole;
+    if (idle) t.push({ id: `idle_${s.id}`, icon: 'job_rest', text: `Give ${first(s)} a job`, tip: s.job === 'craft' ? 'The bench is empty: queue something, or give them other work.' : whole ? `The wall is whole: ${first(s)} has nothing to patch today.` : `${first(s)} is rested and doing nothing today.`, sel: jobSel(s), dot: `surv:${s.id}`, prio: 40 });
     if (s.rest < 0.25 && s.job !== 'rest') t.push({ id: `worn_${s.id}`, icon: 'st_tired', text: `Rest ${first(s)} · worn out`, tip: 'Give them the Rest job, or short hours.', sel: jobSel(s), dot: `surv:${s.id}`, prio: 45 });
   }
   for (const r of REVEAL) {
