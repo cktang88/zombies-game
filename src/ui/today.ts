@@ -17,6 +17,8 @@ import { wallLine, rackGuns, canArmAnyone, armPreview, SHOTS_PER_GUN_NIGHT } fro
 import { WEAPONS } from '../data/weapons';
 import { tip, ico } from './kit';
 import './today.css';
+import { nextUnlock } from '../sim/catalogue';
+import { merchantOn, landingStock, MERCHANT_NAME, MERCHANT_EVERY } from '../sim/landing';
 
 export type RevealId = 'workshop' | 'chronicle' | 'calendar' | 'chores' | 'armory' | 'stores' | 'jobs' | 'run' | 'town' | 'graves';
 
@@ -228,6 +230,17 @@ function openTodos(): Todo[] {
     const idle = (s.job === 'rest' && s.rest > 0.6) || (s.job === 'craft' && !G.craftQueue.length && ws) || whole;
     if (idle) t.push({ id: `idle_${s.id}`, icon: 'job_rest', text: `Give ${first(s)} a job`, tip: s.job === 'craft' ? 'The bench is empty: queue something, or give them other work.' : whole ? `The wall is whole: ${first(s)} has nothing to patch today.` : `${first(s)} is rested and doing nothing today.`, sel: jobSel(s), dot: `surv:${s.id}`, prio: 40 });
     if (s.rest < 0.25 && s.job !== 'rest') t.push({ id: `worn_${s.id}`, icon: 'st_tired', text: `Rest ${first(s)} · worn out`, tip: 'Give them the Rest job, or short hours.', sel: jobSel(s), dot: `surv:${s.id}`, prio: 45 });
+  }
+  // the next gun unlock, once the house can pay for it (sim/catalogue.ts nextUnlock)
+  const nu = ws ? nextUnlock() : null;
+  if (nu?.afford) {
+    const n = nu.guns.length;
+    t.push({ id: 'unlock', icon: 'job_craft', text: `You can build the ${nu.where} · unlocks ${n} gun${n === 1 ? '' : 's'}`, tip: `${nu.guns.map((g) => WEAPONS[g].name).join(', ')}: the bench can make ${n === 1 ? 'it' : 'them'} once the ${nu.where.toLowerCase()} is up. Workshop › Machinery.`, tab: 'workshop', sel: `[data-act=build][data-id=${nu.building}]`, dot: 'tab:workshop', prio: 50 });
+  }
+  // the merchant ties up every third day (sim/landing.ts)
+  if (merchantOn() && G.flags.landingSeen !== G.day) {
+    const rares = landingStock().filter((o) => o.merchant && o.rare && o.left > 0);
+    t.push({ id: 'merchant', icon: 'scrap', text: `${MERCHANT_NAME} at the landing today${rares.length ? ` · ${rares.length} rare gun${rares.length === 1 ? '' : 's'}` : ''}`, tip: `Today only: ${landingStock().filter((o) => o.merchant && o.left > 0).map((o) => `${o.name} (${o.cost.salvage} salvage)`).join(', ') || 'sold out'}. Back in ${MERCHANT_EVERY} days.`, tab: 'landing', dot: 'tab:landing', prio: 55 });
   }
   for (const r of REVEAL) {
     if (!isNew(r.id)) continue;
