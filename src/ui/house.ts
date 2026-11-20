@@ -414,7 +414,7 @@ function tablePanel(ctx: HouseCtx, st: Station) {
   const risky = living().filter((s) => { computeMood(s); return breakChance(s, false) > 0 || s.breakState; }).sort((a, b) => breakChance(b, false) - breakChance(a, false));
   return `${here(st)}
     ${isOpen('jobs') ? `${sec('Talk', risky.length ? `${risky.length} near breaking` : 'all holding', ctx.jobs.find((j) => j.id === 'counsel')?.hint ?? '')}
-    ${risky.map((s) => `<div class="hv-person"><button class="hv-face sm" data-hs-sv="${s.id}">${portraitImg(s.sprite, 'portrait')}</button><span class="t-m">${esc(first(s))}</span>${ctx.moodChip(s)}<span class="t-s dim">${esc(moodWord(s.mood))}${plan.get(s) ? ` · ${esc(first(plan.get(s)!))} talks to ${s.sex === 'm' ? 'him' : 'her'}` : ''}</span></div>`).join('') || '<p class="t-s">Nobody near breaking.</p>'}` : ''}
+    ${risky.map((s) => `<div class="hv-person"><button class="hv-face sm" data-hs-sv="${s.id}">${portraitImg(s.sprite, 'portrait')}</button><span class="t-m">${esc(first(s))}</span>${ctx.moodChip(s)}${breakChip(s)}<span class="t-s dim">${esc(moodWord(s.mood))}${plan.get(s) ? ` · ${esc(first(plan.get(s)!))} talks to ${s.sex === 'm' ? 'him' : 'her'}` : ''}</span></div>`).join('') || '<p class="t-s">Nobody near breaking.</p>'}` : ''}
     ${isOpen('chronicle') ? `${sec('The journal', G.chronicle.length)}${ctx.chronicle()}` : ''}`;
 }
 function gatePanel(ctx: HouseCtx, st: Station) {
