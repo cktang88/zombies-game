@@ -574,6 +574,7 @@ function bodyFor(s: Survivor): Body {
   const fb = new Image();
   fb.src = spriteUrl(s.sprite);
   const rig = SPRITE_RIGS[s.sprite] ? createRig('survivor', s.sprite, { seed: s.id.length * 977 + s.age * 13 }) : null;
+  if (rig) rig.lowW = 1; // start at low ready (it eases there from aiming, so a fresh scene showed everyone aiming)
   b = { rig, cv, fb, sprite: s.sprite, next: 2 + Math.random() * 5 };
   bodies.set(s.id, b);
   return b;
