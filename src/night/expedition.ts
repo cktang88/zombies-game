@@ -410,7 +410,11 @@ export class Expedition {
     c.oncontextmenu = (e) => e.preventDefault();
     window.addEventListener('keydown', this.kh);
     window.addEventListener('keyup', this.ku);
+    // the window loses focus (alt-tab) with a key held: its keyup never comes and the leader walked on
+    // alone, so stop the street under the pause menu
+    window.addEventListener('blur', this.onBlur);
   }
+  onBlur = () => { if (!this.ended) this.pause(); };
 
   key(e: KeyboardEvent, down: boolean) {
     const k = normKey(e);
@@ -475,6 +479,7 @@ export class Expedition {
     cancelAnimationFrame(this.raf);
     window.removeEventListener('keydown', this.kh);
     window.removeEventListener('keyup', this.ku);
+    window.removeEventListener('blur', this.onBlur);
     const c = this.canvas;
     c.onmousemove = c.onmousedown = c.onmouseup = null;
     this.reloadSfx?.cancel();
