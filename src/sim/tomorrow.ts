@@ -16,7 +16,7 @@ export function forTomorrow(r: { wallHeld: boolean; wallLost: number; fell: bool
   // the wall: breached, or going into the night under half
   if (!r.wallHeld || hp < max * 0.5) {
     const repairers = living().filter((s) => s.job === 'repair').length;
-    out.push({ icon: 'job_repair', text: `Wall ${Math.ceil(hp)}/${max} → ${repairers >= 2 ? 'keep' : 'put'} two on Repair`, tip: `${!r.wallHeld ? 'They came over the wall last night. ' : ''}${Math.round(r.wallLost)} lost. Repair the wall is the day job that mends it; timber helps.` });
+    out.push({ icon: 'job_repair', text: `Wall ${Math.ceil(hp)}/${max} → ${repairers >= 2 ? 'keep' : 'put'} two on Repair`, tip: `${!r.wallHeld ? 'They came over the wall last night. ' : ''}${Math.round(r.wallLost)} lost. Repair the wall is the day job that mends it; each salvage patches 25.` });
   }
   // rounds for the guns we carry, against about 25 a gun a night (more on a tide)
   const guns = new Map<Res, number>();
@@ -31,7 +31,7 @@ export function forTomorrow(r: { wallHeld: boolean; wallLost: number; fell: bool
   if (short) out.push({ icon: 'ammo', text: `${ammoLabel(short.res)}: ${short.have} left${big ? ', tonight is a tide' : ''} → make or find more`, tip: `${short.n} gun${short.n > 1 ? 's' : ''} on the wall fire${short.n > 1 ? '' : 's'} it: about ${per} rounds each ${big ? 'on a tide night' : 'a night'}. Queue it at the workbench, or scavenge.` });
   // unarmed on the wall
   const unarmed = fighters.filter((s) => !s.weapon);
-  if (unarmed.length) out.push({ icon: 'pistol', text: `${unarmed.map(first).join(', ')} had no gun → hand one out in the Armory`, tip: 'A guard without a gun takes a place on the wall and does nothing.' });
+  if (unarmed.length) out.push({ icon: 'pistol', text: `${unarmed.map(first).join(', ')} had no gun → hand one out at the gun rack`, tip: 'A guard without a gun takes a place on the wall and does nothing.' });
   // came apart on the wall
   if (panicked.length) out.push({ icon: 'job_counsel', text: `${panicked.map(first).join(', ')} panicked → Counsel or Rest today`, tip: 'Low mood makes guards break on the wall. Counsel lifts it; so does rest.' });
   // hurt and not tended
