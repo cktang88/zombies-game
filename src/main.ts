@@ -11,7 +11,7 @@ import { POST_NAMES, autoPosts, gunSuits, type Post as GuardPost } from './night
 import { rollIncident, resolveEvent, returnsTick, INCIDENTS } from './sim/events';
 import { Battle, W, H, type NightResult } from './night/battle';
 import { Expedition, type ExpeditionResult } from './night/expedition';
-import { wallLine } from './sim/readiness';
+import { wallLine, armEveryone } from './sim/readiness';
 import { living, displayName, first, byId, canFight, migrateSurvivor, gainXp, handling, closeTo, drainLevelUps, makeSurvivor } from './sim/survivors';
 import { showDawnReport } from './ui/dawn';
 import { forTomorrow } from './sim/tomorrow';
@@ -218,6 +218,9 @@ function intelStrip(): string {
 
 function dusk() {
   const lines = resolveDayWork();
+  // a gun off the bench today, or one left on the rack, goes to whoever at the wall can't shoot
+  const armed = armEveryone();
+  if (armed.length) lines.push(`Handed out at dusk: ${armed.map(({ s, w }) => `${first(s)} the ${(w.name ? `"${w.name}"` : WEAPONS[w.def].name).toLowerCase()}`).join(', ')}.`);
   const plan = planNight();
   G.nextNight = plan;
   G.flags.wallAtDusk = G.fort.hp;
