@@ -8,8 +8,8 @@
 import type { Survivor, Res, SkillId } from '../types';
 import { G } from '../state';
 import { living, first, canWork, isBitten, computeMood } from '../sim/survivors';
-import { RECIPES, RES_LABEL } from '../data/world';
-import { buildingLevel, onRunToday, ranToday, heatNeed, planConfirmed, dailyFood, halfRations, breakChance, counselPlan, COUNSEL_BREAK } from '../sim/day';
+import { RECIPES, RES_LABEL, SITES } from '../data/world';
+import { buildingLevel, survivorSite, onRunToday, ranToday, heatNeed, planConfirmed, dailyFood, halfRations, breakChance, counselPlan, COUNSEL_BREAK } from '../sim/day';
 import { calendar } from '../sim/calendar';
 import { fireProfile, ammoLabel, AMMO_TYPES } from '../data/weapons';
 import { canFight } from '../sim/survivors';
@@ -203,6 +203,12 @@ function openTodos(): Todo[] {
   if (heat > G.stores.fuel && !on('scavenge')) {
     const s = bestFor('scavenge');
     t.push({ id: 'fuel', icon: 'fuel', text: `Find fuel · stove needs ${heat}`, tip: `The stove burns ${heat} tonight and there is ${Math.floor(G.stores.fuel)}. Scavengers bring ${RES_LABEL.fuel.toLowerCase()} home.`, sel: jobSel(s), dot: s ? `surv:${s.id}` : undefined, prio: 28 });
+  }
+  // a scavenger sent to a place already picked clean brings home scraps (sim/day.ts scavenge: 15%)
+  for (const s of people.filter((x) => x.job === 'scavenge' && canWork(x) && !onRunToday(x))) {
+    const site = SITES.find((x) => x.id === survivorSite(s));
+    if (!site || ((G.flags[`stock_${site.id}`] as number | undefined) ?? site.stock) > 0) continue;
+    t.push({ id: `clean_${s.id}`, icon: 'job_scavenge', text: `${first(s)}'s place is picked clean`, tip: `${site.name} has nothing left worth the walk: ${first(s)} will bring home scraps. Pick another place.`, sel: `.sitebtn[data-id="${s.id}"]`, dot: `surv:${s.id}`, prio: 27 });
   }
   if (G.craftQueue.length && !on('craft') && ws) {
     const s = bestFor('craft');

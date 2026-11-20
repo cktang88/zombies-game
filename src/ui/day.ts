@@ -72,7 +72,7 @@ function jobOutlook(s: Survivor, j: JobId): string {
       return hurt ? `tends ${Math.min(hurt, Math.max(1, Math.round((2 + skillOf(s, 'medicine')) * m * f)))} of ${hurt} wounds` : 'nobody needs tending';
     }
     case 'scavenge':
-      return `skill ${s.skills.scavenging}/10`;
+      return `skill ${s.skills.scavenging}/10${siteStock(survivorSite(s)).left <= 0 ? ' · picked clean' : ''}`;
     case 'drill': {
       const it = G.weapons.find((x) => x.uid === s.weapon);
       if (!it) return 'needs a gun';
@@ -434,6 +434,7 @@ function runMateSelect(l: Survivor) {
 
 let runLeave = 0;
 let runSite = 'route9';
+let runSiteDay = -1;
 function runHtml() {
   const l = living().find((s) => s.isLeader);
   if (!l) return '';
@@ -441,6 +442,11 @@ function runHtml() {
   if (!canWork(l)) return `<div class="run dim t-s">${esc(first(l))} is in no shape to go out.</div>`;
   const sites = SITES.filter((x) => x.minDay <= G.day);
   if (!sites.some((x) => x.id === runSite)) runSite = sites[0].id;
+  // a new day: don't default the run to a place already picked clean
+  if (runSiteDay !== G.day) {
+    runSiteDay = G.day;
+    if (siteStock(runSite).left <= 0) runSite = sites.find((x) => siteStock(x.id).left > 0)?.id ?? runSite;
+  }
   const secs = runDaylightFor(runSite, runLeave);
   const streetH = Math.max(0, DAY_HOURS - runLeave - travelHours(runSite));
   const why = `${esc(first(l))} walks one place in daylight, alone or with one other. Leaving late leaves less light. ${runLeave ? `Works ${runLeave}h at home first.` : 'No other work today.'}`;
