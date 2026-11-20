@@ -716,3 +716,68 @@ bot, which builds nothing (the old bot's scrap+timber+cloth+2×parts was ~163).
 and fall as before; day 23 (Crossing) still falls for passive and decent; day 13 (tide/tunnel) now just
 holds for the decent leader (−375 and −391 of 420, deaths 2 and 1) where it fell before (the leader's pistol
 pool carries some of the old .22 bricks). Ammo stays the thing that runs out.
+
+## 13. Gun catalogue: make one of each kind, buy or find the rest (the landing, the merchant, rare variants)
+
+Player feedback: it was not clear how to get new guns. Now every gun shows on the gun rack (and in the
+Compendium, [C]) by kind, greyed with how to get it; each kind has **one solid gun the bench can make**, the
+wilder ones are found or bought, and eight **rare ★ variants** (a named, slightly better base gun) are found or
+sold by the merchant. Data: `src/data/world.ts` RECIPES, `src/data/weapons.ts` RARES, `src/sim/landing.ts`,
+`src/sim/catalogue.ts`.
+
+**What the bench makes** (machinery: Workbench Lv2 23 salvage, Lv3 50; Barrel forge 30, Lv2 42):
+
+| kind | made at the bench | needs | cost | work |
+|---|---|---|---|---|
+| Handguns | **service pistol** (new) · flare pistol | Workbench Lv2 | 22 salvage + 1 fuel · 12 | 8 · 5 |
+| Shotguns | pipe shotgun · **pump** (new) | Workbench · Workbench Lv2 | 12 · 30 + 2 fuel | 4 · 10 |
+| Rifles | **bolt hunting rifle** (new) · .50 muzzleloader | Barrel forge · forge Lv2 | 36 + 2 fuel · 24 | 12 · 10 |
+| Automatics | **submachine gun** (new) | Barrel forge Lv2 | 50 + 4 fuel | 16 |
+| Bows | crossbow | Barrel forge | 18 | 8 |
+| Heavy | pipe-bomb mortar · nail driver · rivet gun | Workbench Lv2 · Lv2 · Lv3 | 20 · 30 + 2 fuel · 32 + 2 fuel | 8 · 12 · 12 |
+
+Found or bought only: .357, 1911, burst pistol, coach gun, .410, auto-shotgun, farm .22, lever .30-30,
+scoped .308, AR-15, Guard carbine, LMG, compound bow, 40 mm, M72. The SMG to the hands by forge Lv2 is
+30 + 42 + 50 = 122 salvage and 4 fuel plus two days of a crafter: a goal, not a gift.
+
+**Rare variants** (one gun in four found at a site that has one for it; or the merchant): Deputy's .357
+(reload ×0.5; Legion, courthouse) 62 · Match 9mm (spread ×0.6, dmg ×1.1; Rexall, courthouse) 56 · Halvorsen
+duck pump (dmg ×1.15, rate ×1.2; boathouse, gun shop) 72 · Magnum coach gun (dmg ×1.2, shove ×1.25; Legion,
+boathouse) 66 · Nils's match rifle (spread ×0.5, rate ×1.15; deer camp, gun shop) 84 · Saddle-ring .30-30
+(rate ×1.2, reload ×0.75; deer camp, gun shop) 78 · County SWAT SMG (mag +10, spread ×0.75; courthouse) 92 ·
+Guard-armory AR (dmg ×1.1, pierce +1; Corliss) 118 salvage at the merchant.
+
+**The landing (Peltier, every day; prices × Ferry standing: friendly 0.8, warm 0.9, cold 1.2, hostile closed):**
+pistol rounds ×20 for 9 salvage, shells ×8 for 8, rifle rounds ×8 for 12 (two lots of each a day; the bench
+makes them for about 0.4× that), explosives ×2 for 8 (one lot, from day 5); medicine ×1 for 6, food ×8 for 5,
+fuel ×3 for 5 (two lots); two plain guns a day (pipe 16, flare pistol 20, .22 22, .410 24, service pistol 30,
+crossbow 32, .357 / 1911 / compound 34, coach 36, pump 40, lever 44, hunting rifle 48) and one plain
+attachment (flashlight / sling 10, suppressor 14). Sells back: 8 food → 3 salvage, 3 fuel → 2, 1 medicine → 3.
+**The merchant (Vic Mercier, days 3, 6, 9 …):** two rare variants (above), one wilder gun (burst pistol 50,
+muzzleloader 44, nailer 44, rivet 50, scoped 70, auto-shotgun 72, SMG 60, AR 80, 40 mm 75, M72 70, carbine 90,
+LMG 110, each from its own day) and a good attachment (scope 22, red dot 20, extended mag 18, suppressor 14).
+Peltier's old trade card now comes half as often, as "Peltier comes up to the house", and his gun is a rare.
+
+**Economy (simtest 2, 9 houses, days 1–15):**
+
+| | ammo at day 10 | ammo at day 15 | nights from day 10 with <1 night of ammo |
+|---|---|---|---|
+| before (no landing) | 1.7 nights | 1.5 | 65% |
+| after, bot never shops | 1.6 | 1.7 | 64% |
+| after, bot spends all salvage over 15 on rounds (first prices: 24/6, 10/6, 10/9, 3–4 lots) | 10.8 | 8.0 (FAIL > 6) | 19% |
+| after, shipped prices (20/9, 8/8, 8/12, 2 lots) | 5.7 | 5.7 | 32% |
+
+The shopper bot builds nothing and spends ~145 salvage on rounds over 15 days; a real house also pays for
+machinery, guns and the wall, so it sits between the two rows. Ammo stays the limiter.
+
+**Real nights (night-balance.cjs, 2 seeds, passive / decent; wall lost of max, F = fell):**
+
+| loadout | day 8 | day 13 |
+|---|---|---|
+| the usual snapshot (before) | passive F, −25 · decent 0, 0 | passive F, F · decent −237, 0 |
+| the usual snapshot (after: night code unchanged) | passive F, 0 · decent 0, 0 | passive F, F · decent −272, −80 |
+| early guns: a made SMG and hunting rifle by day 8; SWAT SMG, duck pump, match rifle by day 13 (`GUNS=`) | passive F, 0 · decent 0, 0 | passive F, F · decent −403, F |
+
+An SMG in a guard's hands drinks 107–125 pistol rounds a night, so the better guns empty the pistol pool
+faster and the wall does no better: early guns do not trivialize the nights. (Day 3 passive seed 1 fell in
+the "after" run where it held before; the battle code did not change, so it is the run's spread.)
