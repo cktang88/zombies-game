@@ -195,7 +195,7 @@ a[data-act] { cursor: pointer; color: var(--ink); text-decoration: underline dot
 /* ---------- accessibility ---------- */
 :focus-visible { outline: 2px solid var(--ochre); outline-offset: 2px; }
 button:focus:not(:focus-visible) { outline: none; }
-kbd { font-family: var(--type); font-size: .85em; border: 1px solid #5a4f3c; border-bottom-width: 2px; padding: 0 4px; background: #15130f; border-radius: 2px; white-space: nowrap; }
+kbd { font-family: var(--type); font-size: max(13px, .85em); border: 1px solid #5a4f3c; border-bottom-width: 2px; padding: 0 4px; background: #15130f; border-radius: 2px; white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 
 /* ---------- title ---------- */
