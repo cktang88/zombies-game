@@ -5,6 +5,7 @@ import { G } from '../state';
 import { living, canFight, first, pain } from './survivors';
 import { fireProfile, ammoLabel } from '../data/weapons';
 import { calendar } from './calendar';
+import { rackGuns } from './readiness';
 
 export interface Advice { icon: string; text: string; tip: string }
 
@@ -34,7 +35,8 @@ export function forTomorrow(r: { wallHeld: boolean; wallLost: number; fell: bool
   if (short) out.push({ icon: 'ammo', text: `${ammoLabel(short.res)}: ${short.have} left${big ? `, tonight is ${bigWord}` : ''} → make or find more`, tip: `${short.n} gun${short.n > 1 ? 's' : ''} on the wall fire${short.n > 1 ? '' : 's'} it: about ${per} rounds each ${big ? 'on a big night' : 'a night'}. Queue it at the workbench, or scavenge.` });
   // unarmed on the wall
   const unarmed = fighters.filter((s) => !s.weapon);
-  if (unarmed.length) out.push({ icon: 'pistol', text: `${unarmed.map(first).join(', ')} had no gun → hand one out at the gun rack`, tip: 'A guard without a gun takes a place on the wall and does nothing.' });
+  const spare = rackGuns().length > 0;
+  if (unarmed.length) out.push({ icon: 'pistol', text: `${unarmed.map(first).join(', ')} had no gun → ${spare ? 'hand one out at the gun rack' : 'find or make one'}`, tip: `A guard without a gun takes a place on the wall and does nothing.${spare ? '' : ' The rack is empty: scavengers and runs turn guns up, and the forge makes a few.'}` });
   // came apart on the wall
   if (panicked.length) out.push({ icon: 'job_counsel', text: `${panicked.map(first).join(', ')} panicked → Counsel or Rest today`, tip: 'Low mood makes guards break on the wall. Counsel lifts it; so does rest.' });
   // hurt and not tended
