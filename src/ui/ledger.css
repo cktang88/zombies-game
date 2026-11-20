@@ -483,3 +483,9 @@ h3 .dim { font-size: 13px; letter-spacing: .02em; }
 .duskcheck .dck-go { margin-top: 14px; text-align: right; }
 .outtag { display: inline-flex; align-items: center; gap: 4px; }
 button.mini.sendscav { margin-left: 6px; }
+
+/* spare guns on the rack, first in the catalogue; one that came in today is marked new */
+.cat-spare { margin: 8px 0 12px; padding: 8px 10px; border: 1px solid rgba(201, 169, 90, .35); background: rgba(201, 169, 90, .05); }
+.cat-spare .gspare { position: relative; }
+.cat-spare .gspare.isnew > .gcard { border-color: #c9a95a; box-shadow: 0 0 0 1px #c9a95a; }
+.cat-spare .newb { position: absolute; z-index: 2; top: -8px; left: 8px; padding: 1px 6px; background: #c9a95a; color: #1a140c; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; }

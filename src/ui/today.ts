@@ -5,15 +5,15 @@
 //   dots       — a yellow dot on the corner of a tab / card / panel with an open item or something new
 // Seen-state lives in G.flags (seen_<id>), so it travels with the save. A save already past a day
 // in the table shows that system without a "new" dot.
-import type { Survivor, Res, SkillId } from '../types';
+import type { Survivor, Res, SkillId, WeaponItem } from '../types';
 import { G } from '../state';
 import { living, first, canWork, isBitten, computeMood } from '../sim/survivors';
 import { RECIPES, RES_LABEL, SITES } from '../data/world';
 import { buildingLevel, survivorSite, onRunToday, scavengersReady, sentToday, ranToday, heatNeed, planConfirmed, dailyFood, halfRations, breakChance, counselPlan, COUNSEL_BREAK } from '../sim/day';
 import { calendar } from '../sim/calendar';
-import { fireProfile, ammoLabel, AMMO_TYPES } from '../data/weapons';
+import { fireProfile, ammoLabel, AMMO_TYPES, gunModel } from '../data/weapons';
 import { canFight } from '../sim/survivors';
-import { wallLine, rackGuns, canArmAnyone, armPreview, SHOTS_PER_GUN_NIGHT } from '../sim/readiness';
+import { wallLine, rackGuns, newOnRack, canArmAnyone, armPreview, SHOTS_PER_GUN_NIGHT } from '../sim/readiness';
 import { WEAPONS } from '../data/weapons';
 import { tip, ico } from './kit';
 import './today.css';
@@ -205,6 +205,12 @@ function openTodos(): Todo[] {
   if (heat > G.stores.fuel && !on('scavenge')) {
     const s = bestFor('scavenge');
     t.push({ id: 'fuel', icon: 'fuel', text: `Find fuel · stove needs ${heat}`, tip: `The stove burns ${heat} tonight and there is ${Math.floor(G.stores.fuel)}. Scavengers bring ${RES_LABEL.fuel.toLowerCase()} home.`, sel: jobSel(s), dot: s ? `surv:${s.id}` : undefined, prio: 28 });
+  }
+  // a gun that came in today and sits on the rack: say what it is and where (a traded one used to vanish into the rack)
+  const fresh = newOnRack();
+  if (fresh.length) {
+    const nm = (w: WeaponItem) => gunModel(w);
+    t.push({ id: 'newgun', icon: 'pistol', text: fresh.length === 1 ? `New on the rack: the ${nm(fresh[0])} · give it to someone` : `${fresh.length} new guns on the rack · give them out`, tip: `${fresh.map(nm).join(', ')}: nobody carries ${fresh.length === 1 ? 'it' : 'them'} yet. Gun rack: pick who gets ${fresh.length === 1 ? 'it' : 'them'}.`, tab: 'armory', dot: 'tab:armory', prio: 18 });
   }
   // scavengers on the gate wait to be sent: the gate's "Send them out" (sim/day.ts sendScavengers)
   const ready = scavengersReady();

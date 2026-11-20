@@ -8,6 +8,7 @@ import { landingStock, landingOpen, landingMul, standingWord, merchantOn, mercha
 import { SITES } from '../data/world';
 import { dateLabel } from '../state';
 import { tip, fold } from './kit';
+import { rackGuns } from '../sim/readiness';
 import './catalogue.css';
 
 /* The gun catalogue and the landing's shelves as HTML: the gun rack (day.ts armoryHtml), the Compendium
@@ -107,8 +108,13 @@ export function catalogueHtml(owned: (w: WeaponItem) => string = ownedCardRO, o:
     const head = `<span class="t-l">${esc(g.name)}</span> <span class="t-xs cat-n ${g.owned === g.total ? 'pos' : ''}">${g.owned}/${g.total} owned</span><span class="cat-dots">${g.entries.filter((e) => !e.rare).map((e) => `<i class="${e.have.length ? 'on' : ''}"></i>`).join('')}</span>`;
     return fold(head, `<div class="gungrid">${cards.join('')}</div>`, { id: `${o.foldPrefix ?? 'cat'}-${g.id}`, open: true, cls: 'catgroup' });
   }).join('');
+  // spare guns first, so one just bought or traded for is not buried under its kind
+  const spare = rackGuns().sort((a, b) => (b.got ?? 0) - (a.got ?? 0));
+  const spareHtml = spare.length ? `<div class="cat-spare"><div class="t-m">On the rack, nobody carries ${spare.length === 1 ? 'it' : 'them'} <span class="t-xs dim">${spare.length}</span></div>
+    <div class="gungrid">${spare.map((w) => `<div class="gspare ${w.got === G.day ? 'isnew' : ''}">${w.got === G.day ? '<span class="newb">new</span>' : ''}${owned(w)}</div>`).join('')}</div></div>` : '';
   return `<div class="catalogue">
     <div class="cat-top"><span class="t-l">${collectionLine(c)}</span>${nextUnlockHtml()}</div>
+    ${spareHtml}
     ${groups}
   </div>`;
 }

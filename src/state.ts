@@ -181,7 +181,7 @@ export function pay(cost: Partial<Record<Res, number>>) {
 }
 
 export function newWeapon(def: string, cond = 1): WeaponItem {
-  const w: WeaponItem = { uid: uid('w'), def, cond, kills: 0 };
+  const w: WeaponItem = { uid: uid('w'), def, cond, kills: 0, got: G.day };
   G.weapons.push(w);
   return w;
 }

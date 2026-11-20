@@ -161,7 +161,7 @@ export function buyOffer(key: string): string | null {
   if (o.def) {
     const w = newWeapon(o.def, o.merchant ? 0.9 : 0.85);
     if (o.rare) w.rare = o.rare;
-    line = `Bought the ${gunModel(w)} at the landing.`;
+    line = `Bought the ${gunModel(w)} at the landing. It is on the gun rack: give it to someone there.`;
     log('event', `Bought a ${gunModel(w).toLowerCase()} off ${o.merchant ? MERCHANT_NAME : 'Peltier'} at the landing.`);
   } else if (o.mod) {
     (G.modStock ??= []).push({ uid: uid('m'), def: o.mod, cond: 1 });

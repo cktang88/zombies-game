@@ -148,6 +148,7 @@ export interface WeaponItem {
   name?: string; // given a name after a memorable event
   kills: number;
   mods?: Partial<Record<ModSlot, ModItem>>; // attachments (see MODS in data/weapons.ts)
+  got?: number; // the day it came into the house (a spare one got today is flagged "new" on the rack)
   rare?: string; // RARES key (data/weapons.ts): a named, slightly better example of def, found or bought, never made
 }
 

@@ -171,7 +171,7 @@ export const INCIDENTS: Incident[] = [
         const rare = d.rare as string | null | undefined;
         if (rare && RARES[rare]?.base === gun) w.rare = rare;
         log('event', `Bought the ${gunModel(w)} off the Peltier boat.`);
-        return 'He handed it over wrapped in a feed sack.' + shiftRep('ferry', 12);
+        return `He handed it over wrapped in a feed sack. The ${gunModel(w)} is on the gun rack: give it to someone there.` + shiftRep('ferry', 12);
       }
       return 'He pushed off into the brown water.';
     },

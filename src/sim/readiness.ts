@@ -33,6 +33,11 @@ export function wallLine() {
   return { at, idle: at.filter((s) => cantShoot(s)), sitOut: fighters.slice(WALL_SLOTS) };
 }
 
+/** Spare guns that came in today (bought, traded, found, made): the rack and the Today list point at them. */
+export function newOnRack(): WeaponItem[] {
+  return rackGuns().filter((w) => w.got === G.day);
+}
+
 /** Guns nobody carries. */
 export function rackGuns(): WeaponItem[] {
   const held = new Set(living().map((s) => s.weapon).filter(Boolean));
