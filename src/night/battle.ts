@@ -2582,7 +2582,7 @@ export class Battle {
     killSurvivor(s, cause);
     this.res.deaths.push(first(s));
     this.nerveHit(35);
-    this.say(g.downed ? `They got to ${first(s)}. ${first(s)} is gone.` : `${first(s).toUpperCase()} IS DOWN.`, 6);
+    this.say(g.downed ? `They got to ${first(s)}. ${first(s)} is gone.` : `${first(s).toUpperCase()} IS DEAD.`, 6); // (it said 'IS DOWN', the line for a guard who can still be dragged out)
     for (const o of this.guards) {
       if (o.s.dead || o.fled || o === g || o.downed) continue;
       const r = o.s.rel[s.id];
