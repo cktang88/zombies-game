@@ -89,7 +89,7 @@ function entry(def: string, rare: string | undefined, shelf: Offer[]): GunEntry 
     const from = rare ? rareMinDay(rare) : MERCHANT_GUNS[def].minDay;
     how.push(`Sold by the merchant · next visit ${dateLabel(merchantNext(Math.max(G.day + (merchantOn() ? 1 : 0), from)))}`);
   }
-  if (sites.length) how.push(`Found${craft || storeEver ? '' : ' only'} · ${siteNames(sites).slice(0, 3).join(', ')}`);
+  if (sites.length) how.push(`Found${craft || storeEver || merchantEver ? '' : ' only'} · ${siteNames(sites).join(', ')}`);
   return {
     key: rare ?? def, def, rare,
     name: rv?.name ?? d.name, icon: d.icon, line: rv?.line ?? d.niche ?? d.desc,

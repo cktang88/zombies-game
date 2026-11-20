@@ -4,7 +4,7 @@ import { G, R, dateLabel, ICE_DAY, has, pay, ordinal, docsFound, rep } from '../
 import { DOCS, FACTIONS } from '../data/lore';
 import { spriteUrl } from '../assets';
 import { portraitImg } from './portrait';
-import { WEAPONS, MELEE, meleeProfile, CLASS_NAMES, AMMO_TYPES, AMMO_RES, MODS, MOD_SLOTS, fireProfile, ammoLabel, selectedAmmo, slotsFor, attachMod, detachMod, type FireProfile } from '../data/weapons';
+import { WEAPONS, RARES, gunModel, gunLabel, MELEE, meleeProfile, CLASS_NAMES, AMMO_TYPES, AMMO_RES, MODS, MOD_SLOTS, fireProfile, ammoLabel, selectedAmmo, slotsFor, attachMod, detachMod, type FireProfile } from '../data/weapons';
 import { TRAITS } from '../data/traits';
 import { SKILL_NAMES, SKILL_LINES, COURAGE_LINE } from '../data/names';
 import { SITES, BUILDINGS, RECIPES, RES_LABEL, RES_ICON, FORT_CAP } from '../data/world';
@@ -49,6 +49,8 @@ const JOBS: { id: JobId; label: string; hint: string }[] = [
 ];
 
 import { tip, ico, fold, chip, pips, sec, qi } from './kit';
+import { catalogueHtml } from './catalogue';
+import { buyOffer } from '../sim/landing';
 import './survivor.css';
 
 // What a job is likely to yield today for this survivor (mirrors sim/day.ts resolveDayWork).
@@ -693,6 +695,38 @@ function giveSelect(w: WeaponItem) {
 
 const condBar = (c: number) => `<span class="cond ${c < 0.4 ? 'bad' : c < 0.7 ? 'mid' : ''}"><i style="width:${Math.round(c * 100)}%"></i></span>`;
 
+/** One gun in the house on the rack catalogue: condition, who carries it (or give it), ammo on hand, attachment slots. */
+function rackCard(w: WeaponItem) {
+  const d = WEAPONS[w.def];
+  const p = fireProfile(w);
+  const holder = living().find((s) => s.weapon === w.uid);
+  const tags: string[] = [];
+  if (p.auto) tags.push('full-auto');
+  if (p.burst > 1) tags.push(p.burstGap <= 0 ? `${p.burst} barrels at once` : `${p.burst}-round burst`);
+  if (p.reloadPerRound) tags.push('loads one at a time');
+  if (p.armorPen > 0.3) tags.push('cracks plate');
+  if (p.armorPen < 0) tags.push('poor vs plate');
+  if (p.incendiary) tags.push('incendiary');
+  if (p.flare) tags.push('lights the road');
+  if (p.smoke) tags.push('smoke');
+  if (p.explosive) tags.push(`blast ${p.explosive.dmg} r${p.explosive.radius}`);
+  if (p.arc) tags.push('lobbed');
+  if (!p.ammoRes) tags.push('no ammo: arrows come back at dawn');
+  if (p.noise <= 0.6) tags.push('quiet');
+  else if (p.noise >= 2.5) tags.push('loud');
+  if (p.jam >= 0.02) tags.push(`jams ${Math.round(p.jam * 100)}%`);
+  const stats = `dmg ${Math.round(p.dmg)}${p.pellets > 1 ? `×${p.pellets}` : ''} · ${+p.rof.toFixed(2)}/s · mag ${p.mag} · reload ${p.reloadPerRound ? `${p.reload.toFixed(2)}s/round` : `${+p.reload.toFixed(1)}s`}${p.pierce ? ` · pierce ${p.pierce}` : ''}${p.perShot !== 1 ? ` · ${p.perShot} ${ammoLabel(p.ammoRes).toLowerCase()}/shot` : ''}`;
+  const t = `<b>${esc(gunModel(w))}</b>${w.rare ? ' <span class="rare-b">★ rare</span>' : ''} · ${esc(CLASS_NAMES[d.cls].toLowerCase())}${w.rare ? `<br><i>${esc(RARES[w.rare].line)}</i>` : d.niche ? `<br><i>${esc(d.niche)}</i>` : ''}<br>${stats}${tags.length ? `<br>${tags.join(' · ')}` : ''}${modDeltaHtml(w)}<br><span class="dim">${esc(d.desc)}</span>`;
+  const n = p.ammoRes ? Math.floor(G.stores[p.ammoRes] ?? 0) : 0;
+  const ammo = p.ammoRes ? `<span class="chip ${n ? '' : 'warn'}"${tip(`${esc(ammoLabel(p.ammoRes))}${AMMO_TYPES[p.ammoRes] ? `<br>${esc(AMMO_TYPES[p.ammoRes]!.desc)}` : ''}`)}><img src="${spriteUrl(RES_ICON[p.ammoRes] ?? 'icon_ammo')}" alt=""><b>${n}</b></span>` : '';
+  return `<div class="gcard ${holder ? 'held' : ''} ${w.rare ? 'rare' : ''}">
+    <div class="gpic"${tip(t)}><img src="${spriteUrl(d.icon)}" alt="${esc(gunModel(w))}">${w.rare ? '<span class="rstar">★</span>' : ''}</div>
+    <div class="gname"${tip(t)}>${esc(gunLabel(w))}</div>
+    <div class="gmeta">${condBar(w.cond)}${holder ? `<span class="t-xs"${tip(`${Math.round(w.cond * 100)}% condition · ${w.kills} kills`)}>${esc(first(holder))}</span>` : giveSelect(w)}</div>
+    <div class="gfoot">${ammo}${modSlotsHtml(w)}</div>
+  </div>`;
+}
+
 function armoryHtml() {
   let total = 0;
   const stock = AMMO_RES.filter((t) => (G.stores[t] ?? 0) >= 1 || ['pistol', 'shell', 'rifle'].includes(t)).map((t) => {
@@ -701,39 +735,7 @@ function armoryHtml() {
     const a = AMMO_TYPES[t]!;
     return `<div class="calrow"><span class="t-s">${esc(a.name)}</span><span class="chip ${n ? '' : 'none'}"${tip(`<b>${esc(a.name)}</b><br>${esc(a.desc)}<br><span class="dim">Feeds ${esc(a.guns)}.</span>`)}><img src="${spriteUrl(a.icon)}" alt=""><b>${n}</b></span></div>`;
   }).join('');
-  const order = Object.keys(WEAPONS);
-  const guns = [...G.weapons].sort((a, b) => order.indexOf(a.def) - order.indexOf(b.def));
   const spare = G.modStock ?? [];
-  const gunCards = guns.map((w) => {
-    const d = WEAPONS[w.def];
-    const p = fireProfile(w);
-    const holder = living().find((s) => s.weapon === w.uid);
-    const tags: string[] = [];
-    if (p.auto) tags.push('full-auto');
-    if (p.burst > 1) tags.push(p.burstGap <= 0 ? `${p.burst} barrels at once` : `${p.burst}-round burst`);
-    if (p.reloadPerRound) tags.push('loads one at a time');
-    if (p.armorPen > 0.3) tags.push('cracks plate');
-    if (p.armorPen < 0) tags.push('poor vs plate');
-    if (p.incendiary) tags.push('incendiary');
-    if (p.flare) tags.push('lights the road');
-    if (p.smoke) tags.push('smoke');
-    if (p.explosive) tags.push(`blast ${p.explosive.dmg} r${p.explosive.radius}`);
-    if (p.arc) tags.push('lobbed');
-    if (!p.ammoRes) tags.push('no ammo: arrows come back at dawn');
-    if (p.noise <= 0.6) tags.push('quiet');
-    else if (p.noise >= 2.5) tags.push('loud');
-    if (p.jam >= 0.02) tags.push(`jams ${Math.round(p.jam * 100)}%`);
-    const stats = `dmg ${Math.round(p.dmg)}${p.pellets > 1 ? `×${p.pellets}` : ''} · ${+p.rof.toFixed(2)}/s · mag ${p.mag} · reload ${p.reloadPerRound ? `${p.reload.toFixed(2)}s/round` : `${+p.reload.toFixed(1)}s`}${p.pierce ? ` · pierce ${p.pierce}` : ''}${p.perShot !== 1 ? ` · ${p.perShot} ${ammoLabel(p.ammoRes).toLowerCase()}/shot` : ''}`;
-    const t = `<b>${esc(d.name)}</b> · ${esc(CLASS_NAMES[d.cls].toLowerCase())}${d.niche ? `<br><i>${esc(d.niche)}</i>` : ''}<br>${stats}${tags.length ? `<br>${tags.join(' · ')}` : ''}${modDeltaHtml(w)}<br><span class="dim">${esc(d.desc)}</span>`;
-    const n = p.ammoRes ? Math.floor(G.stores[p.ammoRes] ?? 0) : 0;
-    const ammo = p.ammoRes ? `<span class="chip ${n ? '' : 'warn'}"${tip(`${esc(ammoLabel(p.ammoRes))}${AMMO_TYPES[p.ammoRes] ? `<br>${esc(AMMO_TYPES[p.ammoRes]!.desc)}` : ''}`)}><img src="${spriteUrl(RES_ICON[p.ammoRes] ?? 'icon_ammo')}" alt=""><b>${n}</b></span>` : '';
-    return `<div class="gcard ${holder ? 'held' : ''}">
-      <div class="gpic"${tip(t)}><img src="${spriteUrl(d.icon)}" alt="${esc(d.name)}"></div>
-      <div class="gname"${tip(t)}>${w.name ? `"${esc(w.name)}"` : esc(d.name)}</div>
-      <div class="gmeta">${condBar(w.cond)}${holder ? `<span class="t-xs"${tip(`${Math.round(w.cond * 100)}% condition · ${w.kills} kills`)}>${esc(first(holder))}</span>` : giveSelect(w)}</div>
-      <div class="gfoot">${ammo}${modSlotsHtml(w)}</div>
-    </div>`;
-  }).join('');
   const melee = (G.melee ?? []).map((k) => {
     const d = MELEE[k.def];
     const p = meleeProfile(k);
@@ -751,8 +753,8 @@ function armoryHtml() {
       <div class="gmeta">${condBar(k.cond)}<span class="t-xs">${holder ? esc(first(holder)) : 'rack'}</span></div></div>`;
   }).join('');
   return `<div class="armory">
-  <div class="sechead"><span class="t-l">Guns</span> <span class="t-xs">${guns.length}</span><span class="qi"${tip('Weapons on the rack can be picked up on the wall at night with [Q] or number keys. Worn guns jam. On a daylight run, [T] switches bullet type. Hover a gun for its numbers; click a slot to fit an attachment.')}>i</span></div>
-  <div class="gungrid">${gunCards}</div>
+  <div class="sechead"><span class="t-l">Guns</span> <span class="t-xs">${G.weapons.length} in the house</span><span class="qi"${tip('Every gun there is, by kind. Yours in full colour (give one to someone, fit attachments in the slots); the rest greyed, with exactly how to get one: make it at the bench, buy it at the landing, or find it on a run. ★ = a rare, better example, found or sold by the merchant. Hover any gun for its numbers.')}>i</span></div>
+  ${catalogueHtml(rackCard, { foldPrefix: 'arm' })}
   ${fold(`<span class="t-l">Ammunition</span> <span class="t-xs">${total} rounds</span>`, stock, { id: 'arm-ammo' })}
   ${fold(`<span class="t-l">Spare attachments</span> <span class="t-xs">${spare.length}</span>`, `<div class="chips">${spare.length ? spare.map((m) => `<span class="chip"${tip(`<b>${esc(MODS[m.def].name)}</b><br>${esc(MODS[m.def].niche)}`)}><img src="${spriteUrl(MODS[m.def].icon)}" alt=""><b>${esc(MODS[m.def].name.toLowerCase())}</b>${m.cond < 1 ? ` ${Math.round(m.cond * 100)}%` : ''}</span>`).join('') : '<span class="t-s">None. Craft them or find them on runs.</span>'}</div>`, { id: 'arm-mods' })}
   ${fold(`<span class="t-l">Hand weapons</span> <span class="t-xs">${(G.melee ?? []).length}</span>`, melee ? `<div class="gungrid">${melee}</div>` : '<p class="t-s">None. Hatchets and crowbars turn up at the hardware store and the mill; the forge can make a few.</p>', { id: 'arm-melee' })}
@@ -1028,6 +1030,10 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
       return;
     }
     else if (act === 'queue') queueRecipe(el.dataset.id!);
+    else if (act === 'landbuy') {
+      const line = buyOffer(el.dataset.key!);
+      if (line) { report.unshift(line); sfx.ui('stamp'); h.rerender(); return; }
+    }
     else if (act === 'unqueue') {
       const i = +el.dataset.i!;
       const q = G.craftQueue[i];

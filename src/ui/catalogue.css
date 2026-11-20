@@ -1,0 +1,34 @@
+/* the gun catalogue (ui/catalogue.ts): the rack, the Compendium and the landing */
+.catalogue .cat-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin: 2px 0 6px; }
+.nextunlock { font-size: 13px; color: var(--ink-dim, #b8ab90); }
+.nextunlock.pos { color: #b9cf86; }
+.nextunlock .cost img, .ghow .cost img, .offer .cost img { width: 14px; height: 14px; vertical-align: -2px; }
+.catgroup .cat-n.pos { color: #b9cf86; }
+.cat-dots { display: inline-flex; gap: 3px; margin-left: 8px; vertical-align: middle; }
+.cat-dots i { width: 8px; height: 8px; border-radius: 50%; border: 1px solid #7a6a48; }
+.cat-dots i.on { background: #c9a85e; border-color: #c9a85e; }
+.gcard.missing { border-style: dashed; background: rgba(0, 0, 0, .18); }
+.gcard.missing .gpic img { filter: grayscale(1) brightness(.55) contrast(.9); opacity: .8; }
+.gcard.missing .gname { color: #9a8e78; }
+.gcard.missing.can { border-color: #8aa05a; border-style: solid; }
+.gcard.missing.can .gpic img { filter: grayscale(.6) brightness(.75); opacity: .95; }
+.gcard .gpic { position: relative; }
+.rstar { position: absolute; top: 0; right: 2px; color: #e8c25a; font-size: 14px; text-shadow: 0 1px 2px #000; }
+.gcard.missing .rstar { color: #8a7a52; }
+.gcard.rare:not(.missing) { border-color: #b79a4a; box-shadow: inset 0 0 0 1px rgba(232, 194, 90, .25); }
+.gcard.slot { opacity: .85; }
+.rare-b { color: #e8c25a; font-size: 13px; }
+.ghow { display: flex; flex-direction: column; gap: 3px; color: #a99c82; line-height: 1.25; font-size: 13px; text-align: left; align-self: stretch; }
+.ghow .how { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 4px; }
+.ghow .how.make > span:first-child, .ghow .how.buy > span:first-child { color: #d7caa9; }
+.ghow .how.lock { color: #8f8470; }
+.ghow .how button { margin-left: auto; }
+/* the landing */
+.landing .oh { margin: 10px 0 4px; }
+.offer { display: grid; grid-template-columns: 34px 1fr auto auto auto; align-items: center; gap: 8px; padding: 3px 4px; border-bottom: 1px solid rgba(90, 79, 60, .35); }
+.offer .opic { position: relative; height: 28px; display: grid; place-items: center; }
+.offer .opic img { max-width: 34px; max-height: 28px; object-fit: contain; }
+.offer .ostock { color: #a99c82; }
+.offer .oprice { white-space: nowrap; }
+.offer.gone { opacity: .5; }
+.offer.rare { background: rgba(232, 194, 90, .06); }
