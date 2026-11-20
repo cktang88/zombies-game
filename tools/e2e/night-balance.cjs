@@ -2,7 +2,9 @@
 // with mid-game stores (docs/balance.md §6f PATCH means), a passive leader and a decent bot leader.
 // usage: npx vite build && npx vite preview --port 4198 &
 //        PORT=4198 node tools/e2e/night-balance.cjs [days=3,8,13,18,23] [seeds=2] [modes=passive,decent,prep]
-// env: TUNE / DTUNE / IMP = JSON merged into Battle.tune / DIRECTOR_TUNE / impact.ts IMPACT (deep for objects)
+// env: GUNS = JSON {day: ["service9", "pump:duckpump", ...]} replaces that day's loadout (def:rare for a rare variant),
+//      e.g. the guns a house could make or buy by then (docs/balance.md §Gun catalogue)
+//      TUNE / DTUNE / IMP = JSON merged into Battle.tune / DIRECTOR_TUNE / impact.ts IMPACT (deep for objects)
 //      TRAPS=1 lays one of each of the six kits on the road (or TRAPS = JSON [{trap,x,lane}]); the row adds
 //      kills per kit and whether it was used or spent (traps: ...)
 // Columns: wall lost / max, deaths, leader shots, guard kills, stun% = share of on-screen body-seconds
@@ -54,7 +56,8 @@ async function night(day, seed, mode) {
   await page.click('[data-act=new][data-id=siege]');
   await page.waitForSelector('.dusk', { timeout: 10000 });
   const snap0 = (mode === 'prep' && PREP[day]) || SNAP[day] || SNAP[13];
-  const snap = { ...snap0, stores: folded(snap0.stores) };
+  const gunsEnv = JSON.parse(process.env.GUNS || '{}');
+  const snap = { ...snap0, stores: folded(snap0.stores), ...(gunsEnv[day] ? { guns: gunsEnv[day] } : {}) };
   await page.evaluate((dt) => Object.assign(globalThis.__directorTune, dt), JSON.parse(process.env.DTUNE || "{}"));
   await page.evaluate((im) => { const I = globalThis.__impact; for (const [k, v] of Object.entries(im)) { if (v && typeof v === 'object' && !Array.isArray(v)) Object.assign(I[k], v); else I[k] = v; } }, JSON.parse(process.env.IMP || "{}"));
   await page.evaluate(([day, snap, traps]) => {
@@ -64,7 +67,7 @@ async function night(day, seed, mode) {
     while (G.survivors.filter((s) => !s.dead).length < snap.n) globalThis.__story.addSurvivor();
     const ppl = G.survivors.filter((s) => !s.dead);
     G.weapons = [];
-    snap.guns.forEach((d, i) => { const uid = `bw${i}`; G.weapons.push({ uid, def: d, cond: 0.85, kills: 0 }); if (ppl[i]) ppl[i].weapon = uid; });
+    snap.guns.forEach((g, i) => { const [d, rare] = g.split(':'); const uid = `bw${i}`; G.weapons.push({ uid, def: d, cond: 0.85, kills: 0, ...(rare ? { rare } : {}) }); if (ppl[i]) ppl[i].weapon = uid; });
     for (const s of ppl) { s.skills.shooting = snap.sh + (s.isLeader ? 0 : -1); s.wounds = []; s.infection = 0; s.mood = 60; s.thoughts = []; s.breakState = null; s.job = 'rest'; }
     for (const k of Object.keys(G.stores)) if (!['food', 'meds'].includes(k)) G.stores[k] = 0;
     Object.assign(G.stores, snap.stores);
