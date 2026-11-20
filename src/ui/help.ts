@@ -41,7 +41,7 @@ const PAGES: Record<Page, { label: string; html: () => string }> = {
       <div class="hcards">
         ${card(ico('st_tired'), 'Sleepers', 'Wake if you get close.', 'They stand still until you get near or loud.')}
         ${card(ico('st_time'), 'The light', 'About 2½ minutes.', 'After that the dead wake everywhere.')}
-        ${card(ico('st_dead'), 'Dying out there', 'The loot stays.', 'What you carried stays in the road.')}
+        ${card(ico('st_dead'), 'Dying out there', 'The pack is lost.', 'Whatever you carried stays in the road for good. With someone along, they can drag you home, but most of the pack stays behind.')}
       </div>
       ${fold('<span class="t-s">Keys</span>', keyList('run'), { id: 'help-keys-run' })}`,
   },
