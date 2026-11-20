@@ -193,6 +193,8 @@ export interface GameState {
   nextNight: NightPlan | null;
   weather: string;
   uid: number;
+  /** the Compendium's memory (sim/catalogue.ts): every gun model and rare ever owned, Turned met, entries known when last opened */
+  codex?: { guns: string[]; rares: string[]; z: string[]; seen: number };
 }
 
 export interface EventChoice {

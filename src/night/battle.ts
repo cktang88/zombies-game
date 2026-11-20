@@ -31,6 +31,7 @@ import { Sally, SALLY } from './sally';
 import { Ticker, caps, hintRow, keySheet, keyHintsOn, coarsePointer, dot, weaponPanel, panel, worldLabel, FONT, type Hint } from './hud'; // the sortie over the wall
 import { react, slideStep, classicPose, IMPACT, type Reaction } from './impact'; // flinch / stagger / stumble / knockdown
 import { FORT_CAP } from '../data/world';
+import { noteTurned } from '../sim/catalogue';
 
 export const W = 1280, H = 720;
 export const WALL_X = 372; // front face of the barricade (near lane)
@@ -947,6 +948,7 @@ export class Battle {
 
   spawn(type: string, straggler = false, name?: string, dark = false) {
     const def = ZOMBIES[type];
+    noteTurned(type);
     if (!def) return;
     // a big wave forms up out in the dark, close in: past what the guards and the floodlights make out (balance.md §10)
     const darkX = dark && !def.boss && !def.tunnel && !def.ranged ? this.darkBand() : 0;

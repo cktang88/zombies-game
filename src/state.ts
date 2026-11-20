@@ -89,6 +89,8 @@ export function migrateSave(s: GameState | null): GameState | null {
   for (const w of s.weapons ?? []) delete (w as { ammoType?: unknown }).ammoType;
   // a rare variant must name one that exists, for this gun
   for (const w of s.weapons ?? []) if (w.rare && RARES[w.rare]?.base !== w.def) delete w.rare;
+  // the Compendium remembers what the house has owned: an older save starts it from the rack
+  s.codex ??= { guns: [...new Set((s.weapons ?? []).map((w) => w.def))], rares: [], z: [], seen: 0 };
   // an open event card may name old keys (Peltier's trades, costs and gains on the chips)
   const fold = (k: unknown) => (typeof k === 'string' && STORE_FOLD[k] ? STORE_FOLD[k][0] : k);
   const foldRec = (o?: Partial<Record<Res, number>>) => {
