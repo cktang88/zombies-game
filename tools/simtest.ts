@@ -1,7 +1,7 @@
 // Headless soak test of the sim layer: runs N days with a crude night model.
 import { G, setState, addRep } from '../src/state';
 import { newGame } from '../src/sim/newgame';
-import { resolveDayWork, dawnTick, nextWeather, queueRecipe, setJobHours, travelHours, heatNeed } from '../src/sim/day';
+import { resolveDayWork, dawnTick, nextWeather, queueRecipe, travelHours, heatNeed } from '../src/sim/day';
 import { Rng } from '../src/rng';
 import { SITES } from '../src/data/world';
 import { fireProfile, RARE_ORDER } from '../src/data/weapons';
@@ -114,7 +114,6 @@ function economy(n: number, shopper = false) {
         .sort((a, b) => ((G.flags[`stock_${b.id}`] as number) ?? b.stock) - ((G.flags[`stock_${a.id}`] as number) ?? a.stock));
       ppl.forEach((s, i) => {
         if (s.rest < 0.3) { s.job = 'rest'; return; }
-        setJobHours(s, 8);
         if (i === 0 && G.fort.hp < G.fort.maxHp * 0.8) s.job = 'repair';
         else if (i === 1) s.job = 'farm';
         else if (i === 2 && G.craftQueue.length) s.job = 'craft';

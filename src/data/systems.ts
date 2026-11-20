@@ -335,15 +335,6 @@ function build(): SystemDef[] {
     },
     // ---------------- the day ----------------
     {
-      id: 'hours', group: 'day', icon: 'st_time', name: 'Work hours',
-      what: `How much of the ${DAY_HOURS}-hour day each person works.`,
-      spend: [tired, { i: 'st_mood_down', t: '"worked to the bone" when ragged' }],
-      get: [{ i: 'st_xp', t: 'yield scales with hours' }, { i: 'st_grit', t: 'Tough: a quarter less tired' }],
-      tradeoff: 'Long days yield more, but tired people break and work worse.',
-      when: `Default ${DEFAULT_HOURS}h; cut it for anyone running ragged.`,
-      key: `${DEFAULT_HOURS} of ${DAY_HOURS} hours`,
-    },
-    {
       id: 'run', group: 'day', icon: 'st_danger', name: 'Lead a run',
       what: 'You walk one street in daylight and pick what to carry.',
       spend: [{ i: 'st_time', n: `${DAY_HOURS}h`, t: 'the leader\'s day (or leave later)' }, { i: 'ammo', t: 'rounds you fire' }, { i: 'st_dead', t: 'the leader can die' }],

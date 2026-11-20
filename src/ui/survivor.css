@@ -31,10 +31,6 @@
 .sv-job { flex: none; display: inline-flex; width: 28px; height: 28px; align-items: center; justify-content: center; border: 1px solid var(--line); background: rgba(255,255,255,.03); }
 .sv-job .ico { width: 24px; height: 24px; }
 .sv-job:not(:has(.ico:not([style*="none"]))) { display: none; }
-.sv-hours { flex-direction: row; align-items: center; gap: 6px; }
-.sv-hours .hstrip { flex: 1; max-width: 260px; height: 9px; }
-.sv-hours .hlabel { min-width: 2.2em; font-family: var(--type); }
-.sv-hours .hlabel.bad { color: #f08070; }
 .sv-gear .chip { font-size: var(--fs-xs); }
 
 /* ---- the sheet */

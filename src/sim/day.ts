@@ -121,14 +121,13 @@ export function clearPile(how: 'haul' | 'burn'): string | null {
   G.flags.pileBurnt = G.day;
   return `${first(s)} burned the pile against the wall. The smoke hung over Ferry Road all morning.`;
 }
-/** Hours booked on the survivor's job (Rest books none: the whole day is rest). */
+/**
+ * Hours on the survivor's job: a full working day, less any chores or the run's early start (Rest books
+ * none). There is no per-person hours setting any more: it was a knob nobody wanted to turn.
+ */
 export function jobHours(s: Survivor) {
   if (s.job === 'rest') return 0;
-  const h = (G.flags[`hours_${s.id}`] as number) ?? DEFAULT_HOURS;
-  return Math.max(0, Math.min(hoursAvailable(s), h));
-}
-export function setJobHours(s: Survivor, h: number) {
-  G.flags[`hours_${s.id}`] = Math.max(1, Math.min(DAY_HOURS, Math.round(h)));
+  return Math.max(0, Math.min(hoursAvailable(s), DEFAULT_HOURS));
 }
 export function survivorSite(s: Survivor) {
   return (G.flags[`site_${s.id}`] as string) ?? 'route9';

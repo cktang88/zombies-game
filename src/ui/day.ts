@@ -17,7 +17,7 @@ import {
 import { PERKS } from '../data/perks';
 import { TRAPS } from '../data/traps';
 import {
-  buildingLevel, queueRecipe, WEATHER_LABEL, DAY_HOURS, DEFAULT_HOURS, jobHours, setJobHours, hoursAvailable, travelHours, survivorSite,
+  buildingLevel, queueRecipe, WEATHER_LABEL, DAY_HOURS, DEFAULT_HOURS, jobHours, hoursAvailable, travelHours, survivorSite,
   searchHours, searchFactor, sentToday, sendScavengers, scavengersReady, planConfirmed, confirmPlan, ranToday, onRunToday, runDaylightFor, prepareRun, clockLabel, heatNeed,
   drillPlan, emplacements, tomorrowTeaser, oilGuns, clearPile, choreHand, craftPoints, farmAmount, repairPlan, radioWorkOf, careCount, dailyFood, halfRations, fortCount, fortRoom, breakChance, counselPlan, COUNSEL_BREAK,
 } from '../sim/day';
@@ -182,7 +182,7 @@ function statusTags(s: Survivor) {
   if (p > 0.05) t.push(stChip('wound', wounds.length > 1 ? String(wounds.length) : p > 1 ? 'bad' : p > 0.5 ? 'hurt' : 'cut', `<b>${p > 1 ? 'Badly hurt' : p > 0.5 ? 'Hurt' : 'Scratched up'}</b><br>${wounds.map((w) => `${esc(woundLabel(w))} ${Math.round(w.severity * 100)}%${w.tended ? ' · tended' : ''}${w.bleeding ? ' · bleeding' : ''}`).join('<br>')}`, p > 0.8 ? 'bad' : 'warn'));
   if (isBitten(s) && !s.wounds.some((w) => w.hidden)) t.push(stChip('bite', 'bitten', '<b>Bitten</b><br>The Turn is coming. Nobody has walked one back.', 'bad bite'));
   if (s.infection > 0.3 && s.wounds.some((w) => w.hidden)) t.push(stChip('sick', '?', '<b>Feverish?</b><br>Sweating, keeping a sleeve down. Something is wrong.', 'warn'));
-  if (s.rest < 0.45) t.push(stChip('tired', `${Math.round(s.rest * 100)}%`, `<b>${s.rest < 0.25 ? 'Worn out' : 'Tired'}</b> · rested ${Math.round(s.rest * 100)}%<br>Short hours or a day of rest.`, s.rest < 0.25 ? 'warn' : ''));
+  if (s.rest < 0.45) t.push(stChip('tired', `${Math.round(s.rest * 100)}%`, `<b>${s.rest < 0.25 ? 'Worn out' : 'Tired'}</b> · rested ${Math.round(s.rest * 100)}%<br>A day on Rest.`, s.rest < 0.25 ? 'warn' : ''));
   if (s.hunger < 0.35) t.push(stChip('hungry', s.hunger < 0.1 ? 'starving' : 'hungry', `<b>${s.hunger < 0.1 ? 'Starving' : 'Hungry'}</b><br>Fed ${Math.round(s.hunger * 100)}%. Food comes from the stores at dusk.`, s.hunger < 0.1 ? 'bad' : 'warn'));
   if (G.flags[`inspired_${s.id}`]) t.push(stChip('mood_up', 'inspired', '<b>Inspired</b><br>Works and fights better today.', 'good'));
   for (const sc of s.scars) if (sc.label.startsWith('lost')) t.push(stChip('wound', esc(sc.label.replace(/^lost /, '−')), `<b>${esc(sc.label)}</b><br>For good.`));
@@ -251,32 +251,6 @@ function sitePickerHtml(who: string) {
     <div class="sitegrid">${cards}</div></div>`;
 }
 
-// 07:00–17:00 strip: walking (hatched), working, resting, away on a run. The words are in its tooltip.
-function hoursBar(s: Survivor) {
-  const avail = hoursAvailable(s);
-  const h = jobHours(s);
-  const travel = s.job === 'scavenge' ? Math.min(h, travelHours(survivorSite(s))) : 0;
-  const cells: string[] = [];
-  for (let i = 0; i < DAY_HOURS; i++) {
-    const k = i < travel / 2 ? 'tr' : i < h - travel / 2 ? 'wk' : i < h ? 'tr' : i < avail ? 'rs' : 'aw';
-    cells.push(`<i class="${k}"></i>`);
-  }
-  const job = JOBS.find((j) => j.id === s.job)?.label ?? s.job;
-  const away = onRunToday(s);
-  const noSearch = s.job === 'scavenge' && h - travel <= 0;
-  let label: string;
-  if (s.job === 'rest') label = away ? `Out on a run from ${clockLabel(avail)}` : 'Rest all day';
-  else if (s.job === 'scavenge') label = `${travel}h walking · ${Math.max(0, h - travel)}h searching${avail - h > 0 ? ` · rest ${avail - h}h` : ''}${noSearch ? '<br><b>No time left to search.</b>' : ''}`;
-  else label = `${esc(job)} ${h}h${avail - h > 0 ? ` + rest ${avail - h}h` : ''}${away ? ` · run from ${clockLabel(avail)}` : ''}`;
-  const legend = '<span class="dim">07:00–17:00 · ▨ walking · ■ work · □ rest</span>';
-  const can = s.job !== 'rest' && canWork(s) && avail > 0;
-  const short = s.job === 'rest' ? (away ? `run ${clockLabel(avail)}` : 'rest') : `${h}h`;
-  return `<div class="hours sv-hours" aria-label="Day plan for ${esc(first(s))}">
-    <div class="hstrip"${tip(`${label}<br>${legend}`)}>${cells.join('')}</div>
-    <span class="hlabel t-s ${noSearch ? 'bad' : ''}">${short}</span>${can ? `<button class="mini" data-act="hrs" data-d="-1" data-id="${s.id}" aria-label="Fewer hours" ${h <= 1 ? 'disabled' : ''}>−</button><button class="mini" data-act="hrs" data-d="1" data-id="${s.id}" aria-label="More hours" ${h >= avail ? 'disabled' : ''}>+</button>` : ''}
-  </div>`;
-}
-
 /** one skill as icon + pips; the name and numbers on hover */
 function skillPip(s: Survivor, k: SkillId) {
   const pas = s.passions.includes(k);
@@ -324,7 +298,7 @@ function survivorCard(s: Survivor, dots: Set<string> = new Set()) {
         </select>
         ${s.job === 'scavenge' ? (sentToday(s) ? outTag(s) : `${siteButton(site, s.id, Math.max(0, jobHours(s) - travelHours(site)), `<br>${Math.round(searchFactor(searchHours(s)) * 100)}% of a full search today.`)}${canWork(s) && !onRunToday(s) ? `<button class="mini sendscav" data-act="sendscav"${tip('Every scavenger who is ready leaves now and is back before dusk with what they found.')}>Send out ›</button>` : ''}`) : ''}
       </div>
-      ${fold(gearPeek(s), `${moodBar(s)}${skillsMini(s)}${disabled ? '' : hoursBar(s)}
+      ${fold(gearPeek(s), `${moodBar(s)}${skillsMini(s)}
       <div class="row small sv-gear">
         <select data-act="weapon" data-id="${s.id}" aria-label="Gun for ${esc(first(s))}">
           <option value="">— unarmed —</option>
@@ -1153,12 +1127,6 @@ export function renderDay(root: HTMLElement, h: DayHandlers, report: string[]) {
     } else if (act === 'choice') {
       h.onChoice(+el.dataset.i!);
       return;
-    } else if (act === 'hrs') {
-      const s = byId(el.dataset.id!);
-      if (s) {
-        setJobHours(s, jobHours(s) + +el.dataset.d!);
-        confirmPlan(s);
-      }
     } else if (act === 'keepplans') {
       for (const s of living()) confirmPlan(s);
       duskArmed = false;
