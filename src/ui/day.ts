@@ -391,8 +391,8 @@ function detailHtml(s: Survivor) {
     rels.map(({ id, o, r }) => {
       const about = s.thoughts.filter((t) => t.about === id);
       const back = o!.rel[s.id]?.opinion;
-      const t = `<b>${esc(first(o!))}</b>${r.bond ? ` · ${r.bond}` : ''}${o!.dead ? ' · dead' : ''}<br>${esc(first(s))}'s opinion ${signed(r.opinion)} (−100…+100)${back !== undefined ? `<br>${esc(first(o!))} thinks ${signed(back)} back` : ''}${about.length ? `<br>${about.map((a) => `${esc(a.label)} ${signed(Math.round(a.mood))}`).join('<br>')}` : ''}`;
-      return `<div class="rel sv-rel"${tip(t)}>${ico(o!.dead ? 'st_dead' : r.opinion >= 0 ? 'st_love' : 'st_hate', '', 'sm')}<span>${esc(first(o!))}${o!.dead ? ' †' : ''}</span>${r.bond ? `<em>${r.bond}</em>` : ''}<b class="${r.opinion >= 0 ? 'pos' : 'neg'}">${signed(r.opinion)}</b></div>`;
+      const t = `<b>${esc(first(o!))}</b>${r.bond ? ` · ${r.bond}` : ''}${o!.dead ? (o!.dead.cause === 'deserted' ? ' · gone' : ' · dead') : ''}<br>${esc(first(s))}'s opinion ${signed(r.opinion)} (−100…+100)${back !== undefined ? `<br>${esc(first(o!))} thinks ${signed(back)} back` : ''}${about.length ? `<br>${about.map((a) => `${esc(a.label)} ${signed(Math.round(a.mood))}`).join('<br>')}` : ''}`;
+      return `<div class="rel sv-rel"${tip(t)}>${ico(o!.dead ? 'st_dead' : r.opinion >= 0 ? 'st_love' : 'st_hate', '', 'sm')}<span>${esc(first(o!))}${o!.dead ? (o!.dead.cause === 'deserted' ? ' (gone)' : ' †') : ''}</span>${r.bond ? `<em>${r.bond}</em>` : ''}<b class="${r.opinion >= 0 ? 'pos' : 'neg'}">${signed(r.opinion)}</b></div>`;
     }).join('') || '<div class="t-s">Keeps to themself.</div>',
     { id: 'sv-people', open: true, cls: 'sv-fold' });
 
@@ -410,7 +410,7 @@ function detailHtml(s: Survivor) {
       <div class="sv-id">
         <h2 class="t-xl">${esc(displayName(s))}</h2>
         ${s.titles?.length ? `<div class="titles t-s">${s.titles.map((t) => `<span>“${esc(t)}”</span>`).join(' ')}</div>` : ''}
-        <div class="t-s sv-line"><span${tip(`${s.sex === 'm' ? 'Man' : 'Woman'}, ${s.age}`)}>${s.age}</span> · <span${tip('Arrived at the house')}>since ${dateLabel(s.arrivedDay)}</span> · <span${tip('Turned put down, all told')}>${s.kills} put down</span>${s.dead ? ` · <b>died ${dateLabel(s.dead.day)}</b>` : ''}</div>
+        <div class="t-s sv-line"><span${tip(`${s.sex === 'm' ? 'Man' : 'Woman'}, ${s.age}`)}>${s.age}</span> · <span${tip('Arrived at the house')}>since ${dateLabel(s.arrivedDay)}</span> · <span${tip('Turned put down, all told')}>${s.kills} put down</span>${s.dead ? ` · <b>${s.dead.cause === 'deserted' ? 'left' : 'died'} ${dateLabel(s.dead.day)}</b>` : ''}</div>
         ${s.dead ? '' : `<div class="sv-state">${statusTags(s)}</div>`}
         ${s.dead ? `<p class="story epitaph">${esc(s.dead.cause)}. <i>${esc(s.dead.epitaph)}</i></p>` : ''}
       </div>
@@ -786,7 +786,7 @@ function gravesHtml() {
   if (!G.graves.length) return '<p class="t-s">No graves yet behind the house.</p>';
   return `<div class="graves">${G.graves.map((g) => `<div class="grave" data-act="detail" data-id="${g.id}"${tip(`<b>${esc(displayName(g))}</b>, ${g.age}<br>${dateLabel(g.arrivedDay)} – ${dateLabel(g.dead!.day)}<br>${esc(g.dead!.cause)}<br><i>${esc(g.dead!.epitaph)}</i>`)}>
     ${portraitImg(g.sprite, 'portrait dead')}<div class="gtext"><div class="gn">${esc(displayName(g))}</div>
-    <div class="gd">${dateLabel(g.dead!.day)}</div></div></div>`).join('')}</div>`;
+    <div class="gd">${g.dead!.cause === 'deserted' ? `left ${dateLabel(g.dead!.day)}` : dateLabel(g.dead!.day)}</div></div></div>`).join('')}</div>`;
 }
 
 const STORE_RES: Res[] = ['food', 'salvage', 'fuel', 'meds'];
