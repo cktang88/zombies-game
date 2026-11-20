@@ -140,6 +140,42 @@ export function searchHours(s: Survivor) {
 export function searchFactor(h: number) {
   return h <= 0 ? 0 : Math.pow(h / SEARCH_NORM, 0.85);
 }
+/** Sent out from the gate today: the search is already done (sendScavengers), they are out until dusk. */
+export function sentToday(s: Survivor) {
+  return G.flags[`sent_${s.id}`] === G.day;
+}
+/** Scavengers at the gate who can still be sent today (a site walk that leaves time to search). */
+export function scavengersReady(): Survivor[] {
+  return living().filter((s) => s.job === 'scavenge' && canWork(s) && !onRunToday(s) && !sentToday(s));
+}
+/**
+ * The gate's "Send them out": every ready scavenger goes now, teams by site, and the search is
+ * rolled at once (the same scavenge() dusk used to run), so the haul is in the stores today.
+ * They count as out for the day: dusk skips them. Returns the lines for the report.
+ */
+export function sendScavengers(): string[] {
+  const out: string[] = [];
+  const teams: Record<string, Survivor[]> = {};
+  for (const s of scavengersReady()) {
+    G.flags[`sent_${s.id}`] = G.day;
+    confirmPlan(s);
+    const site = survivorSite(s);
+    if (searchHours(s) <= 0) {
+      out.push(`${first(s)} set out for ${SITES.find((x) => x.id === site)?.name ?? 'town'} and had to turn back to beat the dark.`);
+      continue;
+    }
+    (teams[site] ??= []).push(s);
+  }
+  for (const [siteId, team] of Object.entries(teams)) out.push(...scavenge(siteId, team));
+  const back = out.join('\n');
+  G.flags.scavBack = G.flags.scavBackDay === G.day && G.flags.scavBack ? `${G.flags.scavBack}\n${back}` : back;
+  G.flags.scavBackDay = G.day;
+  return out;
+}
+/** What today's scavengers brought back (lines), once sent. */
+export function scavBackToday(): string[] {
+  return G.flags.scavBackDay === G.day && G.flags.scavBack ? String(G.flags.scavBack).split('\n') : [];
+}
 /** Plans carry over from yesterday, but the day screen flags them until the player touches them. */
 export function planConfirmed(s: Survivor) {
   return G.flags[`plan_${s.id}`] === G.day;
@@ -206,6 +242,7 @@ export function resolveDayWork(): string[] {
   G.flags.radioWork = 0;
   G.flags.radioDay = G.day;
   for (const s of workers) {
+    if (sentToday(s)) s.job = 'scavenge'; // out at the site all day, whatever the job list says now
     const away = onRunToday(s);
     const hours = jobHours(s);
     const free = Math.max(0, hoursAvailable(s) - hours);
@@ -279,6 +316,7 @@ export function resolveDayWork(): string[] {
         break;
       }
       case 'scavenge': {
+        if (sentToday(s)) break; // searched already: sent out from the gate this morning
         const site = survivorSite(s);
         if (searchHours(s) <= 0) {
           out.push(`${first(s)} set out for ${SITES.find((x) => x.id === site)?.name ?? 'town'} and had to turn back to beat the dark.`);
