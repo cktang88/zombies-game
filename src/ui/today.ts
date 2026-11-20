@@ -60,8 +60,9 @@ export function isNew(id: RevealId): boolean {
   return G.day - rev(id).day <= 1;
 }
 export function markSeen(id: string) {
-  // the day it was first looked at: its one-line note stays up for the rest of that day
-  if (REVEAL.some((r) => r.id === id) && !G.flags[`seen_${id}`]) G.flags[`seen_${id}`] = G.day;
+  // the day it was first looked at: its one-line note stays up for the rest of that day (only while it
+  // was new: a save already past its day records -1, so the "New." note does not appear on first look)
+  if (REVEAL.some((r) => r.id === id) && !G.flags[`seen_${id}`]) G.flags[`seen_${id}`] = isNew(id as RevealId) ? G.day : -1;
 }
 
 // ---------------------------------------------------------------- the list
