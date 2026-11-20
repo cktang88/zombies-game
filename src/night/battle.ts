@@ -1994,7 +1994,7 @@ export class Battle {
     // the leader's nerve is everyone's: shaking hands on the line spread; a steady one holds the frayed
     const lowNerve = this.nerve < 25;
     if (lowNerve && g.panicAt === undefined && !g.mode && R.chance(dt * 0.004 * (1 - attr(g.s, 'courage') / 12))) g.panicAt = this.t + R.range(2, 8);
-    if (g.panicAt !== undefined && this.t > g.panicAt && !g.mode) {
+    if (g.panicAt !== undefined && this.t > g.panicAt && !g.mode && this.rallyT <= 0) { // a rally holds them while it rings
       if (this.nerve > this.nerveMax * 0.6 && R.chance(0.3)) { g.panicAt = undefined; this.text(g.x, g.y - 150, 'steadies', '#9db070', 10); }
       else {
         g.mode = 'panic';
@@ -2002,7 +2002,7 @@ export class Battle {
         log('break', `${displayName(g.s)} panicked on the wall on night ${G.day}, burning through ammunition.`);
       }
     }
-    if (this.rallyT > 0 && g.mode === 'panic') g.mode = undefined;
+    if (this.rallyT > 0 && g.mode === 'panic') { g.mode = undefined; g.panicAt = undefined; }
     // the loophole is in their teeth: a Ferryman or a Deputy at the wall reaches through
     if (g.post === 'loop') {
       g.holdT += dt;
