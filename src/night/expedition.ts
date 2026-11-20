@@ -3,7 +3,7 @@ import { keyOf, normKey, keyCap, keyLabel } from '../ui/keys';
 import { openPause } from '../ui/pause';
 import { G, R, log, add, newWeapon, findDoc, uid } from '../state';
 import { ZOMBIES, type ZombieDef } from '../data/zombies';
-import { WEAPONS, fireProfile, ammoLabel, AMMO_TYPES, armorDamage, roundsInStores, shotSound, BURN, FLARE_LIGHT, MODS, wearMods, blastDamage, MELEE, meleeProfile, FISTS, BLEED_TIME, type FireProfile, type MeleeProfile } from '../data/weapons';
+import { WEAPONS, rollRare, gunModel, fireProfile, ammoLabel, AMMO_TYPES, armorDamage, roundsInStores, shotSound, BURN, FLARE_LIGHT, MODS, wearMods, blastDamage, MELEE, meleeProfile, FISTS, BLEED_TIME, type FireProfile, type MeleeProfile } from '../data/weapons';
 import { SITES, RES_LABEL, RES_ICON, type Site } from '../data/world';
 import { Ticker, caps, hintRow, keycap, capOf, dot, panel, worldLabel, keySheet, keyHintsOn, FONT, type Hint } from './hud';
 import { img, flashImg, shadeImg } from '../assets';
@@ -41,9 +41,9 @@ const STACK: Partial<Record<Res, number>> = {
   food: 6, salvage: 8, meds: 3, fuel: 3,
   pistol: 20, shell: 8, rifle: 12, explosive: 2,
 };
-type PackItem = { kind: 'res'; res: Res; n: number } | { kind: 'gun'; def: string; cond: number } | { kind: 'mod'; def: string; cond: number } | { kind: 'melee'; def: string; cond: number };
+type PackItem = { kind: 'res'; res: Res; n: number } | { kind: 'gun'; def: string; cond: number; rare?: string } | { kind: 'mod'; def: string; cond: number } | { kind: 'melee'; def: string; cond: number };
 const itemSlots = (it: PackItem) => (it.kind === 'gun' ? 3 : it.kind === 'melee' ? 2 : it.kind === 'mod' ? 1 : Math.ceil(it.n / (STACK[it.res] ?? 5)));
-const itemLabel = (it: PackItem) => (it.kind === 'gun' ? WEAPONS[it.def].name.toLowerCase() : it.kind === 'melee' ? MELEE[it.def].name.toLowerCase() : it.kind === 'mod' ? MODS[it.def].name.toLowerCase() : `${it.n} ${RES_LABEL[it.res].toLowerCase()}`);
+const itemLabel = (it: PackItem) => (it.kind === 'gun' ? gunModel(it).toLowerCase() : it.kind === 'melee' ? MELEE[it.def].name.toLowerCase() : it.kind === 'mod' ? MODS[it.def].name.toLowerCase() : `${it.n} ${RES_LABEL[it.res].toLowerCase()}`);
 const GROUND = 664;
 const DECAL_TOP = 560, DECAL_H = 200; // the run's decal band (world y)
 const SH = 158;
@@ -1251,8 +1251,9 @@ export class Expedition {
     }
     if (R.chance(cache ? 0.7 : this.site.weaponChance * 0.5 * sp.loot * ZONE_LOOT[sp.zone])) {
       const wd = R.pick(this.site.weapons);
-      this.toPack({ kind: 'gun', def: wd, cond: R.range(0.5, 1) });
-      got.push(`a ${WEAPONS[wd].name.toLowerCase()}`);
+      const rare = rollRare(wd, this.site.id, (p) => R.chance(p), (a) => R.pick(a));
+      this.toPack({ kind: 'gun', def: wd, cond: R.range(0.5, 1), ...(rare ? { rare } : {}) });
+      got.push(rare ? `a rare one: the ${gunModel({ def: wd, rare }).toLowerCase()}` : `a ${WEAPONS[wd].name.toLowerCase()}`);
     }
     if (this.slots() > this.cap()) got.push(`— the pack is overfull, you are slowed (${keyCap('run.pack')}/${keyCap('run.drop')} to leave something)`);
     this.say(got.length ? `${sp.label[0].toUpperCase() + sp.label.slice(1)}: ${got.join(', ')}.` : `${sp.label[0].toUpperCase() + sp.label.slice(1)}: nothing. Somebody got here first.`, 3.5);
@@ -1290,7 +1291,7 @@ export class Expedition {
       // empty the pack into the house
       for (const it of this.pack) {
         if (it.kind === 'res') { add(it.res, it.n); this.loot[it.res] = (this.loot[it.res] ?? 0) + it.n; }
-        else if (it.kind === 'gun') { newWeapon(it.def, it.cond); this.weapons.push(it.def); this.lines.push(`Brought home a ${WEAPONS[it.def].name.toLowerCase()}.`); }
+        else if (it.kind === 'gun') { const w = newWeapon(it.def, it.cond); if (it.rare) w.rare = it.rare; this.weapons.push(it.def); this.lines.push(`Brought home a ${it.rare ? 'rare ' : ''}${gunModel(w).toLowerCase()}.`); }
         else if (it.kind === 'melee') { (G.melee ??= []).push({ uid: uid('k'), def: it.def, cond: it.cond, kills: 0 }); this.lines.push(`Brought home a ${MELEE[it.def].name.toLowerCase()}.`); }
         else { (G.modStock ??= []).push({ uid: uid('m'), def: it.def, cond: it.cond }); this.lines.push(`Brought home a ${MODS[it.def].name.toLowerCase()}.`); }
       }

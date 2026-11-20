@@ -361,6 +361,13 @@ export function gunLabel(w: Pick<WeaponItem, 'def' | 'rare' | 'name'>): string {
 }
 /** The rare variants of one base gun. */
 export const raresOf = (base: string) => RARE_ORDER.filter((r) => RARES[r].base === base);
+/** A gun found at a site is a rare variant this often, when the site has one for it. */
+export const RARE_FIND = 0.25;
+/** Roll whether a gun found at `site` is a rare variant (pass the run's chance function). */
+export function rollRare(def: string, site: string, chance: (p: number) => boolean, pick: <T>(a: readonly T[]) => T): string | undefined {
+  const c = raresOf(def).filter((r) => RARES[r].sites.includes(site));
+  return c.length && chance(RARE_FIND) ? pick(c) : undefined;
+}
 
 export const CLASS_NAMES: Record<WeaponClass, string> = {
   handgun: 'Handguns', smg: 'Submachine guns', rifle: 'Rifles', assault: 'Assault rifles', marksman: 'Marksman rifles',

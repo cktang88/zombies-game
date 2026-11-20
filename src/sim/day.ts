@@ -4,7 +4,7 @@ import { Rng } from '../rng';
 import { cyclePos, persona } from './director';
 import { SITES, RECIPES, RES_LABEL, FORT_CAP } from '../data/world';
 import { addEmplacement, repairEmplacement } from '../data/emplacements';
-import { WEAPONS, MODS, modFits, slotsFor, selectedAmmo } from '../data/weapons';
+import { WEAPONS, MODS, modFits, slotsFor, selectedAmmo, rollRare, gunModel } from '../data/weapons';
 import {
   living, first, displayName, workMult, skillOf, addThought, wound, canWork, rel, changeOpinion, setBond, hasTrait,
   computeMood, breakThresholds, killSurvivor, pain, they, their, tale, isBitten, PART_NAMES, closeTo, them, checkTitles,
@@ -415,9 +415,11 @@ function scavenge(siteId: string, team: Survivor[]): string[] {
   const pity = ((G.flags.weaponPity as number) ?? 0) + 1;
   if (R.chance(site.weaponChance * fullness + pity * 0.015)) {
     const w = newWeapon(R.pick(site.weapons), R.range(0.45, 1));
-    got.push(`a ${WEAPONS[w.def].name.toLowerCase()}`);
+    w.rare = rollRare(w.def, site.id, (p) => R.chance(p), (a) => R.pick(a));
+    if (!w.rare) delete w.rare;
+    got.push(`${w.rare ? 'a rare one: the ' : 'a '}${gunModel(w).toLowerCase()}`);
     G.flags.weaponPity = 0;
-    log('event', `${names} came back from ${site.name} with a ${WEAPONS[w.def].name.toLowerCase()}.`);
+    log('event', `${names} came back from ${site.name} with a ${w.rare ? 'rare ' : ''}${gunModel(w).toLowerCase()}.`);
   } else G.flags.weaponPity = pity;
   // attachments turn up now and then (daylight runs find them more often)
   if (site.mods?.length && R.chance(0.07 * fullness * Math.min(1.3, search))) {
