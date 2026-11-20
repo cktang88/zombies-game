@@ -260,9 +260,10 @@ function dusk() {
 
 /** The day's work at dusk, sorted into folds by job (a line per worker; read on demand). */
 const DUSK_CATS: [string, string, RegExp][] = [
+  // scavenging first: a haul line lists food and salvage, and would land under Food
+  ['job_scavenge', 'Scavenging', /searched |set out for|scaveng|picked clean/i],
   ['job_repair', 'The wall', /wall|patch|barricade|board/i],
   ['job_farm', 'Food', /food|frames|snare|kale|ate|hungry|starv|cook/i],
-  ['job_scavenge', 'Scavenging', /search|scaveng|brought in|picked clean|site|houses/i],
   ['job_doctor', 'The wounded', /tend|wound|fever|septic|stitch|medic|bite/i],
   ['job_craft', 'Workshop', /bench|craft|queue|built|made|workshop|finished/i],
   ['job_radio', 'The radio', /radio|voice|signal|contact/i],
