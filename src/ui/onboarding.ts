@@ -3,6 +3,7 @@
 // (a step number, or 'done'). resetHints() brings them back.
 
 import { tip, ico } from './kit';
+import { keyCap, keyLabel, keyOf } from './keys';
 
 const KEY = 'vessey-onboarding-v1';
 
@@ -84,7 +85,7 @@ export function hintHtml(): string {
     <div class="hint-clip" aria-hidden="true"></div>
     <div class="hint-n">${s + 1} / ${HINTS.length}</div>
     <h3 id="hint-h">${ico(h.icon)}${h.title}</h3>
-    <p>${h.short}<span class="qi"${tip(h.text)} aria-label="More">?</span></p>
+    <p>${h.short.replace('[Enter]', keyCap('day.dusk'))}<span class="qi"${tip(h.text.replace('press Enter', `press ${keyLabel(keyOf('day.dusk'))}`))} aria-label="More">?</span></p>
     <div class="hint-b"><button class="mini link" data-act="hint-skip">Don't show these</button><button data-act="hint-next">${s + 1 === HINTS.length ? 'Got it' : 'Next ›'}</button></div>
   </aside>`;
 }
