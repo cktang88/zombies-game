@@ -4415,7 +4415,7 @@ export class Battle {
       { title: 'your gun', rows: [{ key: 'LMB', label: 'fire' }, { key: 'RMB', label: 'focus' }, { key: 'night.reload', label: 'reload (hold: speed)' }, { key: 'night.weapon', label: 'next gun' }, { key: 'night.selector', label: 'selector' }] },
       { title: 'you', rows: [{ key: 'night.duck', label: 'duck' }, { key: 'night.firebomb', label: `firebomb ×${Math.floor(G.stores.explosive)}` }, { key: 'night.melee', label: 'melee' }, { key: 'night.nest', label: 'gun nest' }, { key: 'night.rally', label: 'rally' }, { key: 'night.sally', label: 'sally' }] },
       { title: 'the guards', rows: [{ key: '1-9', label: 'select (Tab: next)' }, { key: 'night.free', label: 'free fire' }, { key: 'night.hold', label: 'hold' }, { key: 'night.heads', label: 'heads' }, { key: 'night.wall', label: 'wall (Shift: all)' }, { key: 'night.post', label: 'post' }] },
-      { title: 'the night', rows: [{ key: 'night.lure', label: 'lure' }, { key: 'night.trap', label: 'spring trap' }, { key: 'night.mark', label: 'mark target' }, { key: 'night.hurry', label: 'hurry' }, { key: 'night.pause', label: 'pause' }, { key: 'F1', label: 'this sheet' }] },
+      { title: 'the night', rows: [{ key: 'night.lure', label: 'lure' }, { key: 'night.trap', label: 'light oil' }, { key: 'night.mark', label: 'mark target' }, { key: 'night.hurry', label: 'hurry' }, { key: 'night.pause', label: 'pause' }, { key: 'F1', label: 'this sheet' }] },
     ];
   }
   drawHud(c: CanvasRenderingContext2D) {
