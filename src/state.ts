@@ -1,7 +1,7 @@
 import type { GameState, ChronicleEntry, Res, WeaponItem } from './types';
 import { Rng } from './rng';
 import { RECIPES } from './data/world';
-import { MELEE, MELEE_FOLD, MODS, MOD_FOLD } from './data/weapons';
+import { MELEE, MELEE_FOLD, MODS, MOD_FOLD, RARES } from './data/weapons';
 import { TRAPS, TRAP_FOLD } from './data/traps';
 
 const KEY = 'vessey-save-v1';
@@ -87,6 +87,8 @@ export function migrateSave(s: GameState | null): GameState | null {
   for (const k of Object.keys(st)) if (!(STORE_KEYS as string[]).includes(k)) delete st[k];
   // the load choice is gone: each gun draws from its own pool
   for (const w of s.weapons ?? []) delete (w as { ammoType?: unknown }).ammoType;
+  // a rare variant must name one that exists, for this gun
+  for (const w of s.weapons ?? []) if (w.rare && RARES[w.rare]?.base !== w.def) delete w.rare;
   // an open event card may name old keys (Peltier's trades, costs and gains on the chips)
   const fold = (k: unknown) => (typeof k === 'string' && STORE_FOLD[k] ? STORE_FOLD[k][0] : k);
   const foldRec = (o?: Partial<Record<Res, number>>) => {

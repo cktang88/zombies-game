@@ -330,6 +330,38 @@ export const WEAPON_ORDER = [
   'law', 'm79', 'pipemortar',
 ];
 
+/**
+ * RARE VARIANTS: a named, slightly better example of a base gun (one or two clear bumps each). The item
+ * keeps the base `def`, so rigs, aim, sounds and ammo pools are the base gun's; fireProfile folds the
+ * bonus in. Never crafted: found on runs at `sites` (a run that turns up the base gun there may turn up
+ * this one instead) or bought from the travelling merchant at the landing (sim/landing.ts).
+ */
+export interface RareDef {
+  id: string; base: string; name: string; line: string; sites: string[];
+  dmgMul?: number; rofMul?: number; reloadMul?: number; spreadMul?: number; magAdd?: number; pierceAdd?: number; knockMul?: number;
+}
+export const RARES: Record<string, RareDef> = {
+  deputy357: { id: 'deputy357', base: 'revolver', name: 'Deputy\'s .357', line: 'A speed-loader on a lanyard: reloads in half the time.', sites: ['legion', 'courthouse'], reloadMul: 0.5 },
+  match9: { id: 'match9', base: 'service9', name: 'Match 9mm', line: 'A competition barrel and trigger: tighter, and hits a little harder.', sites: ['rexall', 'courthouse'], spreadMul: 0.6, dmgMul: 1.1 },
+  duckpump: { id: 'duckpump', base: 'pump', name: 'Halvorsen duck pump', line: 'Long barrel, slick action: +15% damage and a faster pump.', sites: ['boathouse', 'gunshop'], dmgMul: 1.15, rofMul: 1.2 },
+  magcoach: { id: 'magcoach', base: 'coach', name: 'Magnum coach gun', line: '3-inch chambers: +20% damage per barrel, more shove.', sites: ['legion', 'boathouse'], dmgMul: 1.2, knockMul: 1.25 },
+  matchrifle: { id: 'matchrifle', base: 'hunting', name: 'Nils\'s match rifle', line: 'Bedded and floated: half the spread, a quicker bolt.', sites: ['deercamp', 'gunshop'], spreadMul: 0.5, rofMul: 1.15 },
+  saddle3030: { id: 'saddle3030', base: 'lever', name: 'Saddle-ring .30-30', line: 'A smooth old action: faster follow-ups and a quicker tube.', sites: ['deercamp', 'gunshop'], rofMul: 1.2, reloadMul: 0.75 },
+  swatsmg: { id: 'swatsmg', base: 'smg', name: 'County SWAT SMG', line: 'Ten more in the magazine and a tighter group.', sites: ['courthouse'], magAdd: 10, spreadMul: 0.75 },
+  guardar: { id: 'guardar', base: 'ar15', name: 'Guard-armory AR', line: 'A heavy barrel off the Line: +10% damage, pierces one more.', sites: ['corliss'], dmgMul: 1.1, pierceAdd: 1 },
+};
+export const RARE_ORDER = Object.keys(RARES);
+/** The gun's model name: the rare variant's when it is one. */
+export function gunModel(w: Pick<WeaponItem, 'def' | 'rare'>): string {
+  return (w.rare && RARES[w.rare]?.name) || WEAPONS[w.def]?.name || w.def;
+}
+/** What a player sees on the rack: the given nickname in quotes, else the model. */
+export function gunLabel(w: Pick<WeaponItem, 'def' | 'rare' | 'name'>): string {
+  return w.name ? `"${w.name}"` : gunModel(w);
+}
+/** The rare variants of one base gun. */
+export const raresOf = (base: string) => RARE_ORDER.filter((r) => RARES[r].base === base);
+
 export const CLASS_NAMES: Record<WeaponClass, string> = {
   handgun: 'Handguns', smg: 'Submachine guns', rifle: 'Rifles', assault: 'Assault rifles', marksman: 'Marksman rifles',
   shotgun: 'Shotguns', heavy: 'Heavy machine guns', launcher: 'Launchers', bow: 'Bows', improvised: 'Improvised', melee: 'Melee',
@@ -624,6 +656,19 @@ export function fireProfile(w: WeaponItem, opts: { noMods?: boolean; shooter?: S
 }
 
 function baseProfile(w: WeaponItem): FireProfile {
+  const p = rawProfile(w);
+  const rv = w.rare ? RARES[w.rare] : undefined;
+  if (!rv || rv.base !== w.def) return p;
+  p.dmg = Math.round(p.dmg * (rv.dmgMul ?? 1) * 10) / 10;
+  p.rof *= rv.rofMul ?? 1;
+  p.reload *= rv.reloadMul ?? 1;
+  p.spread *= rv.spreadMul ?? 1;
+  p.mag += rv.magAdd ?? 0;
+  p.pierce += rv.pierceAdd ?? 0;
+  p.knock *= rv.knockMul ?? 1;
+  return p;
+}
+function rawProfile(w: WeaponItem): FireProfile {
   const d = WEAPONS[w.def];
   const res = selectedAmmo(w);
   const cond = Math.max(0, Math.min(1, w.cond));
