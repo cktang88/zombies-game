@@ -95,6 +95,11 @@ export const RECIPES: Recipe[] = [
   { id: 'muzzle', name: '.50 muzzleloader', needs: 'forge', level: 2, cost: { salvage: 24 }, work: 10, weapon: 'muzzle', desc: 'A rifled barrel from a fence-post driver. One huge shot.' },
   { id: 'pipemortar', name: 'Pipe-bomb mortar', needs: 'workbench', level: 2, cost: { salvage: 20 }, work: 8, weapon: 'pipemortar', desc: 'A fence-post tube on a shotgun stock. Lobs explosives from the still over the dead.' },
   { id: 'rivet', name: 'Rivet gun', needs: 'workbench', level: 3, cost: { salvage: 32, fuel: 2 }, work: 12, weapon: 'rivet', desc: 'A boiler-shop rivet hammer on a welding bottle. Quiet; punches plate.' },
+  // --- one solid base gun per kind (docs/balance.md §Gun catalogue): the bench at level 2, the forge for the heavier ---
+  { id: 'g_service9', name: 'Service pistol', needs: 'workbench', level: 2, cost: { salvage: 22, fuel: 1 }, work: 8, weapon: 'service9', desc: 'A slide milled from bar stock, a barrel from the courthouse armorer\'s spares box. Fifteen rounds, never jams.' },
+  { id: 'g_pump', name: 'Pump shotgun', needs: 'workbench', level: 2, cost: { salvage: 30, fuel: 2 }, work: 10, weapon: 'pump', desc: 'A duck gun\'s action rebuilt around a new tube and a sawn walnut stock. The house\'s close-range answer.' },
+  { id: 'g_hunting', name: 'Bolt hunting rifle', needs: 'forge', cost: { salvage: 36, fuel: 2 }, work: 12, weapon: 'hunting', desc: 'A forged bolt, a re-crowned .30-06 barrel and a laminate stock. Through three in a line.' },
+  { id: 'g_smg', name: 'Submachine gun', needs: 'forge', level: 2, cost: { salvage: 50, fuel: 4 }, work: 16, weapon: 'smg', desc: 'Stamped sheet steel, an open bolt, a magazine from a broken carbine. Eats pistol rounds by the box.' },
   { id: 'repair_melee', name: 'Sharpen & re-haft', needs: 'workbench', cost: { salvage: 3 }, work: 2, special: 'repairMelee', desc: 'Grind the worst edge, re-wedge the loosest handle (+50% condition).' },
   { id: 'repair', name: 'Repair the worst gun', needs: 'workbench', cost: { salvage: 5 }, work: 3, special: 'repair', desc: 'Strip, clean, file, pray.' },
   { id: 'nailer', name: 'Nail driver', needs: 'workbench', level: 2, cost: { salvage: 30, fuel: 2 }, work: 12, weapon: 'nailer', desc: 'A framing nailer fed from a welding bottle. Quiet. Eats salvage.' },
