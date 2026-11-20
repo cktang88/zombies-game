@@ -159,6 +159,9 @@ const NIGHT_BTNS: Btn[] = [
   { label: 'Focus', cls: 'l2', act: '@alt', hold: true, aria: 'Focus (hold)' },
   { label: 'Reload', cls: 'r1', act: 'night.reload', hold: true, aria: 'Reload (hold: speed reload)' },
   { label: 'Gun', cls: 'r2', act: 'night.weapon', aria: 'Next gun' },
+  // a firebomb lands where the last tap aimed; a rally banked from a headshot streak (no keys on a phone)
+  { label: 'Bomb', cls: 'r3', act: 'night.firebomb', aria: 'Throw a firebomb where you last aimed' },
+  { label: 'Rally', cls: 'r4', act: 'night.rally', aria: 'Rally the line' },
   { label: 'II', cls: 'tp', act: '@pause', aria: 'Pause' },
 ];
 const RUN_BTNS: Btn[] = [
