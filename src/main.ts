@@ -735,7 +735,12 @@ function openLedger() {
 (globalThis as unknown as { __story: object }).__story = {
   roll: () => { G.pendingEvent = rollIncident(); day(); return G.pendingEvent?.id ?? null; },
   /** tests: open one incident by id (null if it declines today), and the list of ids */
-  event: (id: string) => { G.pendingEvent = INCIDENTS.find((i) => i.id === id)?.make() ?? null; day(); return G.pendingEvent?.id ?? null; },
+  event: (id: string) => {
+    // a delivery needs its thread running: declines (null) instead of throwing when there is none
+    try { G.pendingEvent = INCIDENTS.find((i) => i.id === id)?.make() ?? null; } catch { G.pendingEvent = null; }
+    day();
+    return G.pendingEvent?.id ?? null;
+  },
   events: () => INCIDENTS.map((i) => i.id),
   addSurvivor: () => { const s = makeSurvivor(); s.arrivedDay = 1; G.survivors.push(s); return s.id; },
   crossing: () => crossing(false),
