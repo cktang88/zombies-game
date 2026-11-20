@@ -38,6 +38,7 @@
 .hv-wrap.zoomed .hv-lab { opacity: 0; }
 .hv-wrap.zoomed .hv-st:has(.hv-hs:hover) .hv-lab, .hv-wrap.zoomed .hv-st:has(.hv-hs:focus-visible) .hv-lab { opacity: 1; }
 .hv-wrap.zoomed .hv-st.on .hv-lab { opacity: 0; }
+.hv-wrap.picking .hv-lab { opacity: .8; } /* the whole scene is up beside the person's card: name the places */
 /* a person is picked: the places with a job say what they would do there */
 .hv-wrap.picking .hv-st:has(.hv-hs:hover) .hv-sum { display: none; }
 .hv-wrap.picking .hv-st:has(.hv-hs:hover) .hv-assign { display: inline; }

@@ -163,8 +163,15 @@ function camFor(f: Focus, ww: number, wh: number): { cam: Cam; side: 'l' | 'r'; 
   const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
   const side: 'l' | 'r' = b.tx + cx * b.k > ww / 2 ? 'l' : 'r';
   const freeW = ww - pw - 36;
-  const want = f!.kind === 'sv' ? 1.5 : Math.min(freeW * 0.62 / r.w, (wh - 80) * 0.62 / r.h);
-  const k = Math.max(b.k * 1.15, Math.min(f!.kind === 'sv' ? b.k * 1.6 : b.k * 1.9, f!.kind === 'sv' ? b.k * want : want));
+  if (f!.kind === 'sv') {
+    // a person picked: the whole scene beside their card, so every place is there to click (zooming in on
+    // them pushed the yard off the screen, and "click a place" could not reach the gate or the wall)
+    const k = Math.min(b.k, freeW / W);
+    const left = side === 'r' ? 12 : pw + 24;
+    return { cam: { k, tx: left + (freeW - W * k) / 2, ty: Math.max(0, (wh - 64 - H * k) / 2) }, side, pw };
+  }
+  const want = Math.min(freeW * 0.62 / r.w, (wh - 80) * 0.62 / r.h);
+  const k = Math.max(b.k * 1.15, Math.min(b.k * 1.9, want));
   const freeCx = side === 'r' ? freeW / 2 + 12 : pw + 24 + freeW / 2;
   let tx = freeCx - cx * k, ty = (wh - 64) / 2 - cy * k;
   // keep the scene over the screen where it can (no empty band above the roofline or past the yard)
